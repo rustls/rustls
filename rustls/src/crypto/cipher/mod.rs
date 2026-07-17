@@ -12,7 +12,8 @@ use crate::suites::ConnectionTrafficSecrets;
 
 mod messages;
 pub use messages::{
-    EncodedMessage, InboundOpaque, MessageError, OutboundOpaque, OutboundPlain, Payload,
+    EncodedMessage, EncodingContext, InboundOpaque, MessageError, OutboundOpaque, OutboundPlain,
+    Payload, VersionEncoding,
 };
 
 mod record_layer;
@@ -163,6 +164,7 @@ pub trait MessageEncrypter: Send + Sync {
         &mut self,
         msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
+        cx: EncodingContext,
     ) -> Result<EncodedMessage<OutboundOpaque>, Error>;
 
     /// Return the length of the ciphertext that results from encrypting plaintext of

@@ -2,7 +2,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use crate::crypto::cipher::{
-    EncodedMessage, EncryptionState, MessageEncrypter, OutboundPlain, Payload, PreEncryptAction,
+    EncodedMessage, EncodingContext, EncryptionState, MessageEncrypter, OutboundPlain, Payload,
+    PreEncryptAction, VersionEncoding,
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
@@ -62,6 +63,7 @@ impl SendPath {
         self.send_msg(
             Message::build_alert(level, desc),
             self.encrypt_state.is_encrypting(),
+            VersionEncoding::Compatible,
         );
     }
 
@@ -249,7 +251,7 @@ impl SendOutput for SendPath {
     }
 
     /// Send a raw TLS message, fragmenting it if needed.
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, ve: VersionEncoding) {
         let encoded = EncodedMessage::from(m);
         if must_encrypt {
             self.send_messages(
@@ -264,8 +266,10 @@ impl SendOutput for SendPath {
             .fragment_message(&encoded);
         self.perhaps_write_key_update();
         for m in iter {
-            self.sendable_tls
-                .append(m.to_unencrypted_opaque().encode());
+            self.sendable_tls.append(
+                m.to_unencrypted_opaque(EncodingContext::new(ve))
+                    .encode(),
+            );
         }
     }
 }
@@ -301,7 +305,7 @@ pub(crate) trait SendOutput {
 
     fn start_traffic(&mut self);
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool);
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, ve: VersionEncoding);
 }
 
 pub(super) const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;

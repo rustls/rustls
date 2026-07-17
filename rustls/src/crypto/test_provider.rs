@@ -5,8 +5,8 @@ use core::time::Duration;
 use std::borrow::Cow;
 
 use crate::crypto::cipher::{
-    AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
-    OutboundOpaque, OutboundPlain, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
+    AeadKey, EncodedMessage, EncodingContext, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter,
+    MessageEncrypter, OutboundOpaque, OutboundPlain, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
     UnsupportedOperationError,
 };
 use crate::crypto::kx::{
@@ -16,7 +16,7 @@ use crate::crypto::{
     self, CipherSuite, CipherSuiteCommon, GetRandomFailed, HashAlgorithm, SignatureScheme,
     TicketProducer, WebPkiSupportedAlgorithms, hash, hmac, tls12, tls13,
 };
-use crate::enums::{ContentType, ProtocolVersion};
+use crate::enums::ContentType;
 use crate::error::PeerMisbehaved;
 use crate::pki_types::{
     AlgorithmIdentifier, InvalidSignature, PrivateKeyDer, SignatureVerificationAlgorithm,
@@ -370,9 +370,10 @@ impl MessageEncrypter for Tls13Cipher {
         &mut self,
         m: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
+        cx: EncodingContext,
     ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
-        let mut payload = OutboundOpaque::with_capacity(total_len);
+        let mut payload = OutboundOpaque::with_capacity(cx, total_len);
 
         payload.extend_from_chunks(&m.payload);
         payload.extend_from_slice(&m.typ.to_array());
@@ -390,7 +391,7 @@ impl MessageEncrypter for Tls13Cipher {
 
         Ok(EncodedMessage {
             typ: ContentType::ApplicationData,
-            version: ProtocolVersion::TLSv1_2,
+            version: m.version,
             payload,
         })
     }
@@ -439,9 +440,10 @@ impl MessageEncrypter for Tls12Cipher {
         &mut self,
         m: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
+        cx: EncodingContext,
     ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
-        let mut payload = OutboundOpaque::with_capacity(total_len);
+        let mut payload = OutboundOpaque::with_capacity(cx, total_len);
         payload.extend_from_chunks(&m.payload);
 
         for (p, mask) in payload

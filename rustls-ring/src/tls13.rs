@@ -5,11 +5,12 @@ use ring::hkdf::{self, KeyType};
 use ring::{aead, hmac};
 use rustls::crypto::CipherSuite;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, Nonce,
-    OutboundOpaque, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, EncodedMessage, EncodingContext, InboundOpaque, Iv, MessageDecrypter,
+    MessageEncrypter, Nonce, OutboundOpaque, OutboundPlain, Tls13AeadAlgorithm,
+    UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
-use rustls::enums::{ContentType, ProtocolVersion};
+use rustls::enums::ContentType;
 use rustls::error::Error;
 use rustls::version::TLS13_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite, crypto};
@@ -199,9 +200,10 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         &mut self,
         msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
+        cx: EncodingContext,
     ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
-        let mut payload = OutboundOpaque::with_capacity(total_len);
+        let mut payload = OutboundOpaque::with_capacity(cx, total_len);
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
         let aad = aead::Aad::from(make_tls13_aad(total_len));
@@ -214,9 +216,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
 
         Ok(EncodedMessage {
             typ: ContentType::ApplicationData,
-            // Note: all TLS 1.3 application data records use TLSv1_2 (0x0303) as the legacy record
-            // protocol version, see https://www.rfc-editor.org/rfc/rfc8446#section-5.1
-            version: ProtocolVersion::TLSv1_2,
+            version: msg.version,
             payload,
         })
     }

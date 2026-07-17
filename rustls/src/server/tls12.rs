@@ -14,7 +14,7 @@ use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
 use crate::conn::{ConnectionRandoms, Input};
-use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
+use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload, VersionEncoding};
 use crate::crypto::kx::{ActiveKeyExchange, SupportedKxGroup};
 use crate::crypto::{Identity, TicketProducer};
 use crate::enums::{
@@ -898,7 +898,7 @@ fn emit_ticket(
     };
 
     transcript.add_message(&m);
-    output.send_msg(m, false);
+    output.send_msg(m, false, VersionEncoding::Compatible);
     Ok(())
 }
 
@@ -909,6 +909,7 @@ fn emit_ccs(output: &mut dyn Output<'_>) {
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         },
         false,
+        VersionEncoding::Compatible,
     );
 }
 
@@ -930,7 +931,7 @@ fn emit_finished(
     };
 
     transcript.add_message(&f);
-    output.send_msg(f, true);
+    output.send_msg(f, true, VersionEncoding::Compatible);
 }
 
 pub(super) struct ExpectFinished {

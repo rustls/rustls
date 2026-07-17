@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use pki_types::{DnsName, FipsStatus, SubjectPublicKeyInfoDer};
 use provider::cipher_suite;
 use rustls::client::Resumption;
-use rustls::crypto::cipher::{EncodedMessage, Payload};
+use rustls::crypto::cipher::{EncodedMessage, Payload, VersionEncoding};
 use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{
     CipherSuite, Credentials, CryptoProvider, Identity, InconsistentKeys, SelectedCredential,
@@ -673,6 +673,7 @@ fn server_rejects_empty_post_handshake_alert_fragment() {
             payload: Payload::new(vec![]),
         },
         &mut server_input,
+        VersionEncoding::Compatible,
     );
     assert_eq!(
         server.process_new_packets(&mut server_input),
@@ -1666,7 +1667,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls13_handshake() {
             vec![],
         )),
     };
-    raw_server.encrypt_and_send(&msg, &mut client_input);
+    raw_server.encrypt_and_send(&msg, &mut client_input, VersionEncoding::InitialClientHello);
     let err = client
         .process_new_packets(&mut client_input)
         .unwrap_err();
@@ -1700,7 +1701,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
 
     let msg = EncodedMessage {
         typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_3,
+        version: ProtocolVersion::TLSv1_2,
         payload: Payload::new(encoding::handshake_framing(
             HandshakeType::HelloRequest,
             vec![],
@@ -1708,7 +1709,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
     };
 
     // one is allowed (and elicits a warning alert)
-    raw_server.encrypt_and_send(&msg, &mut client_input);
+    raw_server.encrypt_and_send(&msg, &mut client_input, VersionEncoding::Compatible);
     client
         .process_new_packets(&mut client_input)
         .unwrap();
@@ -1719,7 +1720,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
     });
 
     // second is fatal
-    raw_server.encrypt_and_send(&msg, &mut client_input);
+    raw_server.encrypt_and_send(&msg, &mut client_input, VersionEncoding::Compatible);
     assert_eq!(
         client
             .process_new_packets(&mut client_input)
@@ -1752,7 +1753,7 @@ fn test_illegal_client_renegotiation_attempt_after_tls13_handshake() {
         version: ProtocolVersion::TLSv1_3,
         payload: Payload::new(encoding::basic_client_hello(vec![])),
     };
-    raw_client.encrypt_and_send(&msg, &mut server_input);
+    raw_client.encrypt_and_send(&msg, &mut server_input, VersionEncoding::Compatible);
     let err = server
         .process_new_packets(&mut server_input)
         .unwrap_err();

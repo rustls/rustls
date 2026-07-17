@@ -8,7 +8,7 @@ use super::receive::{Discard, JoinOutput};
 use crate::client::ClientSide;
 use crate::common_state::UnborrowedPayload;
 use crate::conn::{ConnectionCore, MessageIter, ReceivePath, SendOutput, SendPath, TlsInputBuffer};
-use crate::crypto::cipher::{MessageEncrypter, OutboundPlain};
+use crate::crypto::cipher::{MessageEncrypter, OutboundPlain, VersionEncoding};
 use crate::enums::ProtocolVersion;
 use crate::error::{AlertDescription, ErrorWithAlert};
 use crate::lock::Mutex;
@@ -472,9 +472,9 @@ impl SendOutput for SendAdapter<'_> {
         self.as_locked(false).start_traffic();
     }
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, ve: VersionEncoding) {
         self.as_locked(true)
-            .send_msg(m, must_encrypt)
+            .send_msg(m, must_encrypt, ve)
     }
 }
 
@@ -498,9 +498,11 @@ mod tests {
             AlertDescription::CertificateUnknown
         )));
         assert!(!send_flag_for(|adapter| adapter.start_traffic()));
-        assert!(send_flag_for(
-            |adapter| adapter.send_msg(Message::build_key_update_notify(), false)
-        ));
+        assert!(send_flag_for(|adapter| adapter.send_msg(
+            Message::build_key_update_notify(),
+            false,
+            VersionEncoding::Compatible,
+        )));
     }
 
     fn send_flag_for(f: impl FnOnce(&mut SendAdapter<'_>)) -> bool {

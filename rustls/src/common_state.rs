@@ -8,7 +8,7 @@ use pki_types::{DnsName, FipsStatus};
 use crate::client::EchStatus;
 use crate::conn::{Exporter, ReceivePath, SendOutput, SendPath};
 use crate::crypto::Identity;
-use crate::crypto::cipher::Payload;
+use crate::crypto::cipher::{Payload, VersionEncoding};
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ApplicationProtocol, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
@@ -283,7 +283,7 @@ pub(crate) trait Output<'m> {
 
     fn output(&mut self, ev: OutputEvent<'_>);
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool);
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, ve: VersionEncoding);
 
     fn quic(&mut self) -> Option<&mut dyn QuicOutput> {
         None
@@ -428,7 +428,7 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
             payload: MessagePayload::HandshakeFlight(Payload::new(self.body)),
         };
 
-        output.send_msg(m, TLS13);
+        output.send_msg(m, TLS13, VersionEncoding::Compatible);
     }
 }
 

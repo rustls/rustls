@@ -14,6 +14,8 @@ pub struct EncodedMessage<P> {
     /// The content type of this message.
     pub typ: ContentType,
     /// The protocol version of this message.
+    ///
+    /// The actual protocol version that gets encoded on the wire may differ.
     pub version: ProtocolVersion,
     /// The payload of this message.
     pub payload: P,
@@ -50,11 +52,11 @@ impl<'a> EncodedMessage<Payload<'a>> {
     }
 
     /// Convert into an unencrypted [`EncodedMessage<OutboundOpaque>`] (without decrypting).
-    pub fn into_unencrypted_opaque(self) -> EncodedMessage<OutboundOpaque> {
+    pub fn into_unencrypted_opaque(self, cx: EncodingContext) -> EncodedMessage<OutboundOpaque> {
         EncodedMessage {
             typ: self.typ,
             version: self.version,
-            payload: OutboundOpaque::from_byte_slice(self.payload.bytes()),
+            payload: OutboundOpaque::from_byte_slice(cx, self.payload.bytes()),
         }
     }
 
@@ -144,8 +146,11 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
 }
 
 impl EncodedMessage<OutboundPlain<'_>> {
-    pub(crate) fn to_unencrypted_opaque(&self) -> EncodedMessage<OutboundOpaque> {
-        let mut payload = OutboundOpaque::with_capacity(self.payload.len());
+    pub(crate) fn to_unencrypted_opaque(
+        &self,
+        cx: EncodingContext,
+    ) -> EncodedMessage<OutboundOpaque> {
+        let mut payload = OutboundOpaque::with_capacity(cx, self.payload.len());
         payload.extend_from_chunks(&self.payload);
         EncodedMessage {
             typ: self.typ,
@@ -166,7 +171,23 @@ impl EncodedMessage<OutboundOpaque> {
         let length = self.payload.len() as u16;
         let mut encoded_payload = self.payload.payload;
         encoded_payload[0] = self.typ.into();
-        encoded_payload[1..3].copy_from_slice(&self.version.to_array());
+
+        let encoded_version = match self
+            .payload
+            .encoding_context
+            .version_encoding
+        {
+            VersionEncoding::TestVectors => self.version,
+            // <https://datatracker.ietf.org/doc/html/rfc8446#section-5.1>:
+            // "This value MUST be set to 0x0303 for all records generated
+            //  by a TLS 1.3 implementation ..."
+            VersionEncoding::Compatible => ProtocolVersion::TLSv1_2,
+            // "... other than an initial ClientHello (i.e., one not
+            // generated after a HelloRetryRequest), where it MAY also be
+            // 0x0301 for compatibility purposes"
+            VersionEncoding::InitialClientHello => ProtocolVersion::TLSv1_0,
+        };
+        encoded_payload[1..3].copy_from_slice(&encoded_version.to_array());
         encoded_payload[3..5].copy_from_slice(&(length).to_be_bytes());
         encoded_payload
     }
@@ -302,22 +323,27 @@ impl<'a> From<&'a [u8]> for OutboundPlain<'a> {
 pub struct OutboundOpaque {
     /// Encoded payload of the record.
     payload: Vec<u8>,
+    /// Contextual information needed to encode the record.
+    encoding_context: EncodingContext,
 }
 
 impl OutboundOpaque {
     /// Create a new value with the given payload capacity.
     ///
     /// (The actual capacity of the returned value will be at least `HEADER_SIZE + capacity`.)
-    pub fn with_capacity(capacity: usize) -> Self {
+    pub fn with_capacity(cx: EncodingContext, capacity: usize) -> Self {
         let mut payload = Vec::with_capacity(HEADER_SIZE + capacity);
         payload.resize(HEADER_SIZE, 0);
-        Self { payload }
+        Self {
+            payload,
+            encoding_context: cx,
+        }
     }
 
-    /// Create a new value containing the given bytes. The capacity will be
-    /// sufficient for `content` plus the record header.
-    pub(crate) fn from_byte_slice(content: &[u8]) -> Self {
-        let mut value = Self::with_capacity(content.len());
+    /// Create a new value containing the given bytes. The capacity will be sufficient for `content`
+    /// plus the record header.
+    pub(crate) fn from_byte_slice(cx: EncodingContext, content: &[u8]) -> Self {
+        let mut value = Self::with_capacity(cx, content.len());
         value.payload.extend(content);
         value
     }
@@ -468,6 +494,48 @@ impl DerefMut for InboundOpaque<'_> {
     }
 }
 
+/// Contextual information for encoding messages.
+#[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
+pub struct EncodingContext {
+    /// How to encode the protocol version.
+    version_encoding: VersionEncoding,
+}
+
+impl EncodingContext {
+    /// Create an `EncodingContext`.
+    pub fn new(ve: VersionEncoding) -> Self {
+        Self {
+            version_encoding: ve,
+        }
+    }
+}
+
+/// How to encode a [`ProtocolVersion`] when encoding an [`EncodedMessage`].
+#[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
+pub enum VersionEncoding {
+    /// Encode the message without changing anything.
+    ///
+    /// This preserves whatever version is in the enclosing `EncodedMessage`. This is intended for
+    /// use in tests that load encoded messages from test vectors and want them preserved
+    /// byte-for-byte.
+    TestVectors,
+    /// Encode the message as an initial `ClientHello`.
+    ///
+    /// Protocol version 1.0 is used, regardless of the original message's version ([1]).
+    ///
+    /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-5.1
+    InitialClientHello,
+    /// Use the backward compatible protocol version.
+    ///
+    /// For example, if the `version` value of the enclosing [`EncodedMessage`] is
+    /// `ProtocolVersion::TLSv1_3`, `ProtocolVersion::TLSv1_2` is used instead ([1]).
+    ///
+    /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-5.1
+    Compatible,
+}
+
 /// Decode a TLS1.3 `TLSInnerPlaintext` encoding.
 ///
 /// `p` is a message payload, immediately post-decryption.  This function
@@ -609,6 +677,31 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn encoded_message_encoding_version() {
+        let encoded_message = EncodedMessage {
+            typ: ContentType::Handshake,
+            version: ProtocolVersion::TLSv1_3,
+            payload: Payload::new(vec![0, 1, 2, 3, 4]),
+        };
+
+        for (ve, expect) in [
+            (VersionEncoding::TestVectors, ProtocolVersion::TLSv1_3),
+            (
+                VersionEncoding::InitialClientHello,
+                ProtocolVersion::TLSv1_0,
+            ),
+            (VersionEncoding::Compatible, ProtocolVersion::TLSv1_2),
+        ] {
+            let encoded = encoded_message
+                .clone()
+                .into_unencrypted_opaque(EncodingContext::new(ve))
+                .encode();
+            let decoded = EncodedMessage::<Payload<'_>>::read(&mut Reader::new(&encoded)).unwrap();
+            assert_eq!(decoded.version, expect);
         }
     }
 }
