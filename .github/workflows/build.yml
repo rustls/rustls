@@ -72,7 +72,7 @@ jobs:
 
       - name: Install golang for aws-lc-fips-sys on macos
         if: runner.os == 'MacOS'
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: "stable"
 
@@ -190,7 +190,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install golang toolchain
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: "stable"
 
