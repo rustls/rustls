@@ -39,7 +39,7 @@ use crate::tls13::key_schedule::{
 use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
-use crate::verify::ClientIdentity;
+use crate::verify::{ClientIdentity, PeerVerified};
 use crate::{ConnectionTrafficSecrets, compress, verify};
 
 #[expect(private_interfaces)]
@@ -1066,7 +1066,8 @@ impl ExpectCertificate {
             return Err(PeerMisbehaved::NoCertificatesPresented.into());
         };
 
-        self.hs
+        let peer_verified = self
+            .hs
             .config
             .verifier
             .verify_identity(&ClientIdentity {
@@ -1078,6 +1079,7 @@ impl ExpectCertificate {
             hs: self.hs,
             key_schedule: self.key_schedule,
             peer_identity: peer_identity.into_owned(),
+            _peer_verified: peer_verified,
         })
         .into())
     }
@@ -1103,6 +1105,7 @@ struct ExpectCertificateVerify {
     hs: HandshakeState,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     peer_identity: Identity<'static>,
+    _peer_verified: PeerVerified,
 }
 
 impl ExpectCertificateVerify {
