@@ -29,7 +29,7 @@ impl MessageFragmenter {
     pub(crate) fn fragment_message<'a>(
         &self,
         msg: &'a EncodedMessage<Payload<'_>>,
-    ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> + 'a {
+    ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> + 'a + use<'a> {
         self.fragment_payload(msg.typ, msg.version, msg.payload.bytes().into())
     }
 
@@ -45,7 +45,7 @@ impl MessageFragmenter {
         typ: ContentType,
         version: ProtocolVersion,
         payload: OutboundPlain<'a>,
-    ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> {
+    ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> + use<'a> {
         Chunker::new(payload, self.max_frag).map(move |payload| EncodedMessage {
             typ,
             version,

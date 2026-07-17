@@ -198,21 +198,22 @@ fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMem
             read_all_bytes(opts, &mut input, &mut sess, &mut conn);
         }
 
-        if opts.side == Side::Server && opts.enable_early_data {
-            if let Some(ed) = &mut server(&mut sess).early_data() {
-                let mut data = Vec::new();
-                let data_len = ed
-                    .read_to_end(&mut data)
-                    .expect("cannot read early_data");
+        if opts.side == Side::Server
+            && opts.enable_early_data
+            && let Some(ed) = &mut server(&mut sess).early_data()
+        {
+            let mut data = Vec::new();
+            let data_len = ed
+                .read_to_end(&mut data)
+                .expect("cannot read early_data");
 
-                for b in data.iter_mut() {
-                    *b ^= 0xff;
-                }
-
-                sess.writer()
-                    .write_all(&data[..data_len])
-                    .expect("cannot echo early_data in 1rtt data");
+            for b in data.iter_mut() {
+                *b ^= 0xff;
             }
+
+            sess.writer()
+                .write_all(&data[..data_len])
+                .expect("cannot echo early_data in 1rtt data");
         }
 
         if !sess.is_handshaking() && opts.export_keying_material > 0 && !sent_exporter {
@@ -324,31 +325,33 @@ fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMem
             }
         }
 
-        if let Some(curve_id) = &opts.on_initial_expect_curve_id {
-            if !sess.is_handshaking() && count == 0 {
-                assert_eq!(sess.handshake_kind().unwrap(), HandshakeKind::Full);
-                assert_eq!(
-                    sess.negotiated_key_exchange_group()
-                        .expect("no kx with -on-initial-expect-curve-id")
-                        .name(),
-                    *curve_id
-                );
-            }
+        if let Some(curve_id) = &opts.on_initial_expect_curve_id
+            && !sess.is_handshaking()
+            && count == 0
+        {
+            assert_eq!(sess.handshake_kind().unwrap(), HandshakeKind::Full);
+            assert_eq!(
+                sess.negotiated_key_exchange_group()
+                    .expect("no kx with -on-initial-expect-curve-id")
+                    .name(),
+                *curve_id
+            );
         }
 
-        if let Some(curve_id) = &opts.on_resume_expect_curve_id {
-            if !sess.is_handshaking() && count > 0 {
-                assert!(matches!(
-                    sess.handshake_kind().unwrap(),
-                    HandshakeKind::Resumed | HandshakeKind::ResumedWithHelloRetryRequest
-                ));
-                assert_eq!(
-                    sess.negotiated_key_exchange_group()
-                        .expect("no kx with -on-resume-expect-curve-id")
-                        .name(),
-                    *curve_id
-                );
-            }
+        if let Some(curve_id) = &opts.on_resume_expect_curve_id
+            && !sess.is_handshaking()
+            && count > 0
+        {
+            assert!(matches!(
+                sess.handshake_kind().unwrap(),
+                HandshakeKind::Resumed | HandshakeKind::ResumedWithHelloRetryRequest
+            ));
+            assert_eq!(
+                sess.negotiated_key_exchange_group()
+                    .expect("no kx with -on-resume-expect-curve-id")
+                    .name(),
+                *curve_id
+            );
         }
 
         {
@@ -1492,11 +1495,11 @@ impl client::ClientCredentialResolver for MultipleClientCredentialResolver {
             }
         }
 
-        if let Some(cert) = &self.default {
-            if let Some(signer) = cert.certkey.signer(sig_schemes) {
-                assert!(matches!(self.expect_selected, Some(-1) | None));
-                return Some(signer);
-            }
+        if let Some(cert) = &self.default
+            && let Some(signer) = cert.certkey.signer(sig_schemes)
+        {
+            assert!(matches!(self.expect_selected, Some(-1) | None));
+            return Some(signer);
         }
 
         assert_eq!(self.expect_selected, None);
