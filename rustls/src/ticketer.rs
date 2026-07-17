@@ -268,14 +268,14 @@ mod tests {
 
     #[derive(Debug)]
     struct FakeTicketer {
-        gen: u8,
+        generation: u8,
     }
 
     impl FakeTicketer {
         #[expect(clippy::new_ret_no_self)]
         fn new() -> Result<Box<dyn TicketProducer>, Error> {
             Ok(Box::new(Self {
-                gen: std::dbg!(FAKE_GEN.fetch_add(1, Ordering::SeqCst)),
+                generation: std::dbg!(FAKE_GEN.fetch_add(1, Ordering::SeqCst)),
             }))
         }
     }
@@ -283,18 +283,18 @@ mod tests {
     impl TicketProducer for FakeTicketer {
         fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
             let mut v = Vec::with_capacity(1 + message.len());
-            v.push(self.gen);
+            v.push(self.generation);
             v.extend(
                 message
                     .iter()
                     .copied()
-                    .map(|b| b ^ self.gen),
+                    .map(|b| b ^ self.generation),
             );
             Some(v)
         }
 
         fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
-            if ciphertext.first()? != &self.gen {
+            if ciphertext.first()? != &self.generation {
                 return None;
             }
 
@@ -302,7 +302,7 @@ mod tests {
                 ciphertext[1..]
                     .iter()
                     .copied()
-                    .map(|b| b ^ self.gen)
+                    .map(|b| b ^ self.generation)
                     .collect(),
             )
         }
