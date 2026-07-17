@@ -551,42 +551,67 @@ impl ExpectCertificate {
 
         trace!("certs {cert_chain:?}");
 
-        let peer_identity = match Identity::from_peer(cert_chain.0, CertificateType::X509)? {
-            None if mandatory => {
-                return Err(PeerMisbehaved::NoCertificatesPresented.into());
-            }
+        match Identity::from_peer(cert_chain.0, CertificateType::X509)? {
+            None if mandatory => Err(PeerMisbehaved::NoCertificatesPresented.into()),
             None => {
                 debug!("client auth requested but no certificate supplied");
                 self.hs.transcript.abandon_client_auth();
-                None
-            }
-            Some(identity) => {
-                let identity = self
-                    .hs
-                    .config
-                    .verifier
-                    .verify_identity(&ClientIdentity {
-                        identity: &identity,
-                        now: self.hs.config.current_time()?,
-                    })?;
-                Some(identity.into_owned())
-            }
-        };
 
-        Ok(Box::new(ExpectClientKx {
-            hs: self.hs,
-            randoms: self.randoms,
-            suite: self.suite,
-            server_kx: self.server_kx,
-            peer_identity,
-        })
-        .into())
+                Ok(Box::new(ExpectClientKx {
+                    hs: self.hs,
+                    randoms: self.randoms,
+                    suite: self.suite,
+                    server_kx: self.server_kx,
+                    peer_identity: None,
+                })
+                .into())
+            }
+            Some(identity) => AwaitClientIdentityVerification {
+                hs: self.hs,
+                randoms: self.randoms,
+                suite: self.suite,
+                server_kx: self.server_kx,
+                peer_identity: identity.into_owned(),
+            }
+            .with_config(),
+        }
     }
 }
 
 impl From<Box<ExpectCertificate>> for ServerState {
     fn from(value: Box<ExpectCertificate>) -> Self {
         Self::Tls12(Tls12State::Certificate(value))
+    }
+}
+
+// --- Verify the client's identity
+struct AwaitClientIdentityVerification {
+    hs: HandshakeState,
+    randoms: ConnectionRandoms,
+    suite: &'static Tls12CipherSuite,
+    server_kx: GroupAndKeyExchange,
+    peer_identity: Identity<'static>,
+}
+
+impl AwaitClientIdentityVerification {
+    fn with_config(self) -> Result<ServerState, Error> {
+        let peer_identity = self
+            .hs
+            .config
+            .verifier
+            .verify_identity(&ClientIdentity {
+                identity: &self.peer_identity,
+                now: self.hs.config.current_time()?,
+            })?;
+
+        Ok(Box::new(ExpectClientKx {
+            hs: self.hs,
+            randoms: self.randoms,
+            suite: self.suite,
+            server_kx: self.server_kx,
+            peer_identity: Some(peer_identity),
+        })
+        .into())
     }
 }
 
