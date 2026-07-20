@@ -361,10 +361,10 @@ impl Exporter for Tls12Exporter {
         randoms.extend_from_slice(&self.randoms.client);
         randoms.extend_from_slice(&self.randoms.server);
         if let Some(context) = context {
-            match u16::try_from(context.len()) {
-                Ok(len) => len.encode(&mut randoms),
-                Err(_) => return Err(ApiMisuse::ExporterContextTooLong.into()),
-            }
+            let Ok(len) = u16::try_from(context.len()) else {
+                return Err(ApiMisuse::ExporterContextTooLong.into());
+            };
+            len.encode(&mut randoms);
             randoms.extend_from_slice(context);
         }
 
