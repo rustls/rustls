@@ -28,6 +28,7 @@ use crate::msgs::{
     HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload, Message, MessagePayload,
     NewSessionTicketPayload, NewSessionTicketPayloadTls13, Reader, SessionId,
 };
+use crate::server::hs::{VerifyClientIdentity, VerifyClientIdentityInternal};
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
@@ -566,14 +567,14 @@ impl ExpectCertificate {
                 })
                 .into())
             }
-            Some(identity) => AwaitClientIdentityVerification {
+            Some(identity) => Ok(Box::new(AwaitClientIdentityVerification {
                 hs: self.hs,
                 randoms: self.randoms,
                 suite: self.suite,
                 server_kx: self.server_kx,
                 peer_identity: identity.into_owned(),
-            }
-            .with_config(),
+            })
+            .into()),
         }
     }
 }
@@ -593,17 +594,28 @@ struct AwaitClientIdentityVerification {
     peer_identity: Identity<'static>,
 }
 
-impl AwaitClientIdentityVerification {
-    fn with_config(self) -> Result<ServerState, Error> {
+impl VerifyClientIdentityInternal for AwaitClientIdentityVerification {
+    fn presented_identity(&self) -> Result<ClientIdentity<'static, '_>, Error> {
+        Ok(ClientIdentity {
+            identity: &self.peer_identity,
+            now: self.hs.config.current_time()?,
+        })
+    }
+
+    fn with_config(self: Box<Self>) -> Result<ServerState, Error> {
         let peer_identity = self
             .hs
             .config
             .verifier
-            .verify_identity(&ClientIdentity {
-                identity: &self.peer_identity,
-                now: self.hs.config.current_time()?,
-            })?;
+            .verify_identity(&self.presented_identity()?)?;
 
+        self.continue_with(peer_identity)
+    }
+
+    fn continue_with(
+        self: Box<Self>,
+        peer_identity: VerifiedIdentity<'static>,
+    ) -> Result<ServerState, Error> {
         Ok(Box::new(ExpectClientKx {
             hs: self.hs,
             randoms: self.randoms,
@@ -612,6 +624,14 @@ impl AwaitClientIdentityVerification {
             peer_identity: Some(peer_identity),
         })
         .into())
+    }
+}
+
+impl From<Box<AwaitClientIdentityVerification>> for ServerState {
+    fn from(value: Box<AwaitClientIdentityVerification>) -> Self {
+        Self::VerifyClientIdentity(VerifyClientIdentity::from(
+            value as Box<dyn VerifyClientIdentityInternal>,
+        ))
     }
 }
 

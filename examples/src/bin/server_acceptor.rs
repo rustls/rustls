@@ -87,8 +87,13 @@ fn main() {
             handshake = match handshake {
                 // Read TLS packets until we've completed the handshake.
                 ServerHandshake::NeedsInput(receive) => {
-                    input.read(&mut stream).unwrap();
                     match receive.process(&mut input, &mut output) {
+                        Ok(next @ ServerHandshake::NeedsInput(_)) => {
+                            stream.write_all(&output).unwrap();
+                            output.clear();
+                            input.read(&mut stream).unwrap();
+                            next
+                        }
                         Ok(next) => next,
                         Err(error) => panic!("error completing handshake: {error}"),
                     }
@@ -102,6 +107,10 @@ fn main() {
                         .choose_config(config, &mut output)
                         .expect("error choosing configuration for connection")
                 }
+
+                ServerHandshake::VerifyClientIdentity(verify) => verify
+                    .use_verifier_trait(&mut output)
+                    .expect("error verifying client certificate for connection"),
 
                 ServerHandshake::Complete(connection) => break connection,
 

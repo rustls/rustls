@@ -596,7 +596,13 @@ impl<Side: SideData> QuicCommon<Side> {
             .input_quic(input.slice_mut())?;
 
         let mut tls = Vec::new();
-        let mut iter = MessageIter::new(input, &mut tls, Some(&mut self.quic), &mut self.common);
+        let mut iter = MessageIter::new(
+            input,
+            &mut tls,
+            Some(&mut self.quic),
+            &mut self.common,
+            true,
+        );
         let result = match iter.next() {
             Some(Ok(_)) | None => Ok(()),
             Some(Err(e)) => Err(e),
