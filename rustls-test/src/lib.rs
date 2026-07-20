@@ -306,11 +306,12 @@ where
     total
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum KeyType {
     Rsa2048,
     Rsa3072,
     Rsa4096,
+    #[default]
     EcdsaP256,
     EcdsaP384,
     EcdsaP521,
@@ -2205,7 +2206,8 @@ pub mod encoding {
                 typ: Self::SIGNATURE_ALGORITHMS,
                 body: len_u16(vector_of(
                     [
-                        SignatureScheme::RSA_PKCS1_SHA256,
+                        SignatureScheme::ED25519,
+                        SignatureScheme::RSA_PSS_SHA256,
                         SignatureScheme::ECDSA_NISTP256_SHA256,
                     ]
                     .map(|s| s.to_array()),
