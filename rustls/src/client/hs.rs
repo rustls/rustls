@@ -304,14 +304,10 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
-        match hrr.supported_versions {
-            Some(ProtocolVersion::TLSv1_3) => {
-                output.output(OutputEvent::ProtocolVersion(ProtocolVersion::TLSv1_3));
-            }
-            _ => {
-                return Err(PeerMisbehaved::IllegalHelloRetryRequestWithUnsupportedVersion.into());
-            }
-        }
+        let Some(ProtocolVersion::TLSv1_3) = hrr.supported_versions else {
+            return Err(PeerMisbehaved::IllegalHelloRetryRequestWithUnsupportedVersion.into());
+        };
+        output.output(OutputEvent::ProtocolVersion(ProtocolVersion::TLSv1_3));
 
         // Or asks us to use a ciphersuite we didn't offer.
         let Some(cs) = config.find_cipher_suite(hrr.cipher_suite) else {
