@@ -679,26 +679,23 @@ impl ExpectCertificateVerify {
             HandshakePayload::CertificateVerify
         )?;
 
-        match self.hs.transcript.take_handshake_buf() {
-            Some(msgs) => {
-                self.hs
-                    .config
-                    .verifier
-                    .verify_tls12_signature(&SignatureVerificationInput {
-                        message: &msgs,
-                        signer: &self.peer_identity.as_signer(),
-                        signature,
-                    })?;
-            }
-            None => {
-                // This should be unreachable; the handshake buffer was initialized with
-                // client authentication if the verifier wants to offer it.
-                // `transcript.abandon_client_auth()` can extract it, but its only caller in
-                // this flow will also set `ExpectClientKx::client_cert` to `None`, making it
-                // impossible to reach this state.
-                return Err(Error::Unreachable("client authentication not set up"));
-            }
-        }
+        let Some(msgs) = self.hs.transcript.take_handshake_buf() else {
+            // This should be unreachable; the handshake buffer was initialized with
+            // client authentication if the verifier wants to offer it.
+            // `transcript.abandon_client_auth()` can extract it, but its only caller in
+            // this flow will also set `ExpectClientKx::client_cert` to `None`, making it
+            // impossible to reach this state.
+            return Err(Error::Unreachable("client authentication not set up"));
+        };
+
+        self.hs
+            .config
+            .verifier
+            .verify_tls12_signature(&SignatureVerificationInput {
+                message: &msgs,
+                signer: &self.peer_identity.as_signer(),
+                signature,
+            })?;
 
         trace!("client CertificateVerify OK");
 
