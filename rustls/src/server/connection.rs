@@ -21,11 +21,12 @@ use crate::crypto;
 use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::error::Error;
 use crate::msgs::ServerExtensionsInput;
-use crate::server::hs::{ChooseConfig, ExpectClientHello, ReadClientHello, ServerState};
+use crate::server::hs::{self, ChooseConfig, ExpectClientHello, ReadClientHello, ServerState};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::tracing::trace;
 use crate::vecbuf::ChunkVecBuffer;
+use crate::verify::{ClientIdentity, VerifiedIdentity};
 
 /// This represents a single TLS server connection.
 ///
@@ -209,6 +210,11 @@ pub enum ServerHandshake {
     /// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
     Accepted(Accepted),
 
+    /// The client's presented identity must be verified.
+    ///
+    /// See [`VerifyClientIdentity`] for how to proceed.
+    VerifyClientIdentity(VerifyClientIdentity),
+
     /// The handshake is complete.
     ///
     /// Now see [`SplitConnection`] to continue the connection.
@@ -244,6 +250,13 @@ impl TryFrom<ConnectionCommon<ServerSide>> for ServerHandshake {
                 choose_config,
             }),
 
+            ServerState::VerifyClientIdentity(verify_identity) => {
+                Self::VerifyClientIdentity(VerifyClientIdentity {
+                    inner,
+                    verify_identity,
+                })
+            }
+
             state if state.is_traffic() => {
                 inner.state = Ok(state);
                 Self::Complete(SplitConnection::try_from(inner)?)
@@ -257,7 +270,7 @@ impl TryFrom<ConnectionCommon<ServerSide>> for ServerHandshake {
     }
 }
 
-/// More data needs to be received to make progress.
+/// More data needs to be supplied to make progress.
 ///
 /// Provide the data to [`Self::process()`].
 pub struct NeedsInput {
@@ -274,18 +287,15 @@ impl NeedsInput {
     /// An error from this function is otherwise fatal to the connection, as it consumes
     /// the [`NeedsInput`] object.
     ///
-    /// On success, this returns:
-    ///
-    /// - a [`ServerHandshake::NeedsInput`] if more data is required.
-    /// - a [`ServerHandshake::Accepted`] if a whole `ClientHello` has been received, requiring
-    ///   and a choice of [`ServerConfig`] is required to continue.
-    /// - a [`ServerHandshake::Complete`] if the handshake is complete.
+    /// On success, this returns a [`ServerHandshake`] specifying what to do to progress
+    /// the connection.  If this is a [`ServerHandshake::NeedsInput`] then obtaining more
+    /// input (eg, from a socket or other source) is certainly necessary.
     pub fn process(
         mut self,
         input: &mut dyn TlsInputBuffer,
         tls: &mut Vec<u8>,
     ) -> Result<ServerHandshake, Error> {
-        let mut iter = MessageIter::new(input, tls, None, &mut self.inner);
+        let mut iter = MessageIter::new(input, tls, None, &mut self.inner, false);
         let r = loop {
             match iter.next() {
                 Some(Ok(_)) => {}
@@ -384,6 +394,89 @@ impl Accepted {
 impl fmt::Debug for Accepted {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Accepted")
+            .finish_non_exhaustive()
+    }
+}
+
+/// The client's presented identity must be verified.
+///
+/// The caller has three choices:
+///
+/// - Call [`Self::use_verifier_trait()`].  This calls [`ClientVerifier::verify_identity()`][]
+///   synchronously.
+///
+/// - Call [`Self::presented_identity()`] to obtain the peer's presented identity,
+///   verify that outside the library (perhaps asynchronously), and then continue the handshake with
+///   [`Self::continue_with()`].
+///
+///   If the verification fails, the error can be passed into [`Self::continue_with()`] to follow
+///   a uniform error handling path.
+///
+/// - Abandon the handshake by discarding this object.
+///
+/// The returned object is a further [`ServerHandshake`].  Commonly this will be a
+/// [`ServerHandshake::NeedsInput`] which will accept and process further data.
+///
+/// [`ClientVerifier::verify_identity()`]: crate::verify::ClientVerifier::verify_identity
+pub struct VerifyClientIdentity {
+    // invariant: `inner.state` is `Err(_)` and requires restoring
+    inner: ConnectionCommon<ServerSide>,
+    verify_identity: hs::VerifyClientIdentity,
+}
+
+impl VerifyClientIdentity {
+    /// Progress the handshake by calling the pre-configured certificate verification trait.
+    pub fn use_verifier_trait(self, tls: &mut Vec<u8>) -> Result<ServerHandshake, Error> {
+        Self::next(
+            self.inner,
+            self.verify_identity
+                .use_verifier_trait(),
+            tls,
+        )
+    }
+
+    /// Progress the handshake by incorporating the result of an external verification.
+    ///
+    /// If `verification_result` is an error, this error is returned and the handshake terminates.
+    /// An alert may be appended to `tls` for sending to the peer.
+    pub fn continue_with(
+        self,
+        verification_result: Result<VerifiedIdentity<'static>, Error>,
+        tls: &mut Vec<u8>,
+    ) -> Result<ServerHandshake, Error> {
+        Self::next(
+            self.inner,
+            verification_result.and_then(|verified| {
+                self.verify_identity
+                    .continue_with(verified)
+            }),
+            tls,
+        )
+    }
+
+    /// Inspect the identity that the client has provided.
+    pub fn presented_identity(&self) -> Result<ClientIdentity<'static, '_>, Error> {
+        self.verify_identity
+            .presented_identity()
+    }
+
+    fn next(
+        mut inner: ConnectionCommon<ServerSide>,
+        result: Result<ServerState, Error>,
+        tls: &mut Vec<u8>,
+    ) -> Result<ServerHandshake, Error> {
+        if let Err(err) = &result {
+            maybe_send_fatal_alert(&mut inner.common.send, err, tls);
+        }
+
+        inner.state = result;
+        ServerHandshake::try_from(inner)
+    }
+}
+
+impl fmt::Debug for VerifyClientIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VerifyClientIdentity")
             .finish_non_exhaustive()
     }
 }
