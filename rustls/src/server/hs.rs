@@ -20,9 +20,9 @@ use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::kernel::KernelState;
 use crate::log::{debug, trace};
 use crate::msgs::{
-    ClientHelloPayload, Compression, HandshakeAlignedProof, HandshakePayload, Message,
-    MessagePayload, Random, ServerExtensions, ServerExtensionsInput, ServerNamePayload, SessionId,
-    SingleProtocolName, TransportParameters,
+    ClientHelloPayload, Compression, HandshakeAlignedProof, HandshakeMessagePayload,
+    HandshakePayload, Message, MessagePayload, Random, ServerExtensions, ServerExtensionsInput,
+    ServerNamePayload, SessionId, SingleProtocolName, TransportParameters,
 };
 use crate::sealed::Sealed;
 use crate::suites::{PartiallyExtractedSecrets, Suite};
@@ -415,12 +415,12 @@ impl ChooseConfig {
     }
 
     pub(crate) fn client_hello(&self) -> ClientHello<'_> {
-        let client_hello = match &self.client_hello.message.payload {
-            MessagePayload::Handshake { parsed, .. } => match &parsed.0 {
-                HandshakePayload::ClientHello(ch) => ch,
-                _ => unreachable!(),
-            },
-            _ => unreachable!(),
+        let MessagePayload::Handshake {
+            parsed: HandshakeMessagePayload(HandshakePayload::ClientHello(client_hello)),
+            ..
+        } = &self.client_hello.message.payload
+        else {
+            unreachable!();
         };
 
         let server_name = client_hello
