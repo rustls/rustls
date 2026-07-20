@@ -14,7 +14,7 @@ use rustls_test::{KeyType, do_handshake, make_pair};
 #[test]
 fn split_pairwise() {
     let (mut client, mut server) =
-        make_pair(KeyType::EcdsaP256, &super::provider::DEFAULT_PROVIDER);
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
@@ -91,7 +91,7 @@ fn split_pairwise() {
 #[test]
 fn split_incremental() {
     let (mut client, mut server) =
-        make_pair(KeyType::EcdsaP256, &super::provider::DEFAULT_PROVIDER);
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
@@ -239,7 +239,7 @@ fn split_write_tls_into_limited_space() {
 #[test]
 fn split_client_tickets_received() {
     let (mut client, mut server) =
-        make_pair(KeyType::EcdsaP256, &super::provider::DEFAULT_PROVIDER);
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
@@ -260,7 +260,7 @@ fn split_client_tickets_received() {
 
 #[test]
 fn split_fails_during_handshake() {
-    let (client, server) = make_pair(KeyType::EcdsaP256, &super::provider::DEFAULT_PROVIDER);
+    let (client, server) = make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     assert_eq!(
         client.split().err(),
         Some(Error::ApiMisuse(ApiMisuse::SplitDuringHandshake))
@@ -274,7 +274,7 @@ fn split_fails_during_handshake() {
 #[test]
 fn split_fails_with_pending_plaintext() {
     let (mut client, mut server) =
-        make_pair(KeyType::EcdsaP256, &super::provider::DEFAULT_PROVIDER);
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     assert_eq!(client.writer().write(b"huh").unwrap(), 3);
     assert_eq!(server.writer().write(b"hmm").unwrap(), 3);
 
@@ -299,7 +299,7 @@ fn split_fails_with_pending_plaintext() {
 #[test]
 fn key_update() {
     let (mut client, mut server) =
-        make_pair(KeyType::EcdsaP256, &super::provider::DEFAULT_PROVIDER);
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
@@ -355,7 +355,7 @@ fn key_update() {
 #[test]
 fn key_update_alongside_data() {
     let (mut client, mut server) =
-        make_pair(KeyType::EcdsaP256, &super::provider::DEFAULT_PROVIDER);
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
@@ -394,7 +394,7 @@ fn key_update_alongside_data() {
 #[test]
 fn close_alongside_data() {
     let (mut client, mut server) =
-        make_pair(KeyType::EcdsaP256, &super::provider::DEFAULT_PROVIDER);
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
@@ -433,7 +433,7 @@ fn close_alongside_data() {
 #[test]
 fn read_invalid_data_and_send_alert() {
     let (mut client, mut server) =
-        make_pair(KeyType::EcdsaP256, &super::provider::DEFAULT_PROVIDER);
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,

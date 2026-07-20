@@ -218,17 +218,17 @@ fn expected_kx_for_version(version: ProtocolVersion) -> NamedGroup {
 #[test]
 fn test_client_tls12_no_resume_after_server_downgrade() {
     let provider = provider::DEFAULT_PROVIDER;
-    let mut client_config = make_client_config(KeyType::Ed25519, &provider);
+    let mut client_config = make_client_config(KeyType::default(), &provider);
     let client_storage = Arc::new(ClientStorage::new());
     client_config.resumption = Resumption::store(client_storage.clone());
     let client_config = Arc::new(client_config);
 
     let server_config_1 = Arc::new(
-        ServerConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into()).finish(KeyType::Ed25519),
+        ServerConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into()).finish(KeyType::default()),
     );
 
     let mut server_config_2 =
-        ServerConfig::builder(provider::DEFAULT_TLS12_PROVIDER.into()).finish(KeyType::Ed25519);
+        ServerConfig::builder(provider::DEFAULT_TLS12_PROVIDER.into()).finish(KeyType::default());
     server_config_2.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
 
     let mut client_input = VecInput::default();
@@ -292,11 +292,11 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
     let shared_storage = Arc::new(ClientStorage::new());
     let provider = provider::DEFAULT_PROVIDER;
 
-    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config(KeyType::default(), &provider);
     client_config.resumption = Resumption::store(shared_storage.clone());
     let client_config = Arc::new(client_config);
 
-    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let mut server_config = make_server_config(KeyType::default(), &provider);
     server_config.send_tls13_tickets = Tls13Tickets { default: 5, max: 5 };
     let server_config = Arc::new(server_config);
 
@@ -355,7 +355,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
 
 #[test]
 fn tls13_stateful_resumption() {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let client_config = make_client_config(kt, &provider);
     let client_config = Arc::new(client_config);
@@ -445,7 +445,7 @@ fn tls13_stateful_resumption() {
 
 #[test]
 fn tls13_stateless_resumption() {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let client_config = make_client_config(kt, &provider);
     let client_config = Arc::new(client_config);
@@ -540,12 +540,12 @@ fn tls13_stateless_resumption() {
 
 #[test]
 fn early_data_not_available() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, _) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     assert!(client.early_data().is_none());
 }
 
 fn early_data_configs() -> (Arc<ClientConfig>, Arc<ServerConfig>) {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_PROVIDER;
     let mut client_config = make_client_config(kt, &provider);
     client_config.enable_early_data = true;
@@ -657,7 +657,7 @@ fn early_data_is_available_on_resumption() {
 #[test]
 fn early_data_not_available_on_server_before_client_hello() {
     let mut server = ServerConnection::new(Arc::new(make_server_config(
-        KeyType::Rsa2048,
+        KeyType::default(),
         &provider::DEFAULT_PROVIDER,
     )))
     .unwrap();
@@ -913,7 +913,7 @@ fn tls13_ticket_request_new_vs_resumed() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let shared_storage = Arc::new(ClientStorage::new());
 
-    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config(KeyType::default(), &provider);
     client_config.resumption = Resumption::store(shared_storage.clone());
     client_config.send_ticket_request = Some(TicketRequest {
         new_session_count: 3,
@@ -921,7 +921,7 @@ fn tls13_ticket_request_new_vs_resumed() {
     });
     let client_config = Arc::new(client_config);
 
-    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let mut server_config = make_server_config(KeyType::default(), &provider);
     // default is 2, but the client may request up to 5
     server_config.send_tls13_tickets = Tls13Tickets { default: 2, max: 5 };
     let server_config = Arc::new(server_config);
@@ -970,7 +970,7 @@ fn tls13_ticket_request_zero_means_no_tickets() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let shared_storage = Arc::new(ClientStorage::new());
 
-    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config(KeyType::default(), &provider);
     client_config.resumption = Resumption::store(shared_storage.clone());
     client_config.send_ticket_request = Some(TicketRequest {
         new_session_count: 0,
@@ -978,7 +978,7 @@ fn tls13_ticket_request_zero_means_no_tickets() {
     });
     let client_config = Arc::new(client_config);
 
-    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let mut server_config = make_server_config(KeyType::default(), &provider);
     // server would send 5 by default, but the client requests 0
     server_config.send_tls13_tickets = Tls13Tickets { default: 5, max: 5 };
     let server_config = Arc::new(server_config);
@@ -1007,7 +1007,7 @@ fn tls13_ticket_request_capped_by_server() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let shared_storage = Arc::new(ClientStorage::new());
 
-    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config(KeyType::default(), &provider);
     client_config.resumption = Resumption::store(shared_storage.clone());
     client_config.send_ticket_request = Some(TicketRequest {
         new_session_count: 10,
@@ -1015,7 +1015,7 @@ fn tls13_ticket_request_capped_by_server() {
     });
     let client_config = Arc::new(client_config);
 
-    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let mut server_config = make_server_config(KeyType::default(), &provider);
     // client requests 10, but the server's max is 3
     server_config.send_tls13_tickets = Tls13Tickets { default: 2, max: 3 };
     let server_config = Arc::new(server_config);
@@ -1044,12 +1044,12 @@ fn tls13_ticket_request_not_sent_when_none() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let shared_storage = Arc::new(ClientStorage::new());
 
-    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config(KeyType::default(), &provider);
     client_config.resumption = Resumption::store(shared_storage.clone());
     client_config.send_ticket_request = None;
     let client_config = Arc::new(client_config);
 
-    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let mut server_config = make_server_config(KeyType::default(), &provider);
     server_config.send_tls13_tickets = Tls13Tickets { default: 4, max: 8 };
     let server_config = Arc::new(server_config);
 
@@ -1080,7 +1080,7 @@ fn tls13_ticket_request_survives_hello_retry_request() {
 
     // client offers secp384r1 first, server only accepts x25519 -> triggers HRR
     let mut client_config = make_client_config_with_kx_groups(
-        KeyType::Rsa2048,
+        KeyType::default(),
         vec![provider::kx_group::SECP384R1, provider::kx_group::X25519],
         &provider,
     );
@@ -1092,7 +1092,7 @@ fn tls13_ticket_request_survives_hello_retry_request() {
     let client_config = Arc::new(client_config);
 
     let server_config = Arc::new(make_server_config_with_kx_groups(
-        KeyType::Rsa2048,
+        KeyType::default(),
         vec![provider::kx_group::X25519],
         &provider,
     ));
