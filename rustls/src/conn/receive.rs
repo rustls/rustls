@@ -14,12 +14,12 @@ use crate::conn::{ConnectionCore, StateMachine};
 use crate::crypto::cipher::{Decrypted, DecryptionState, EncodedMessage, Payload};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
-use crate::log::{trace, warn};
 use crate::msgs::{
     AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, Delocator,
     HandshakeAlignedProof, Locator, Message, MessagePayload,
 };
 use crate::quic::QuicOutput;
+use crate::tracing::{trace, warn};
 
 pub(crate) struct MessageIter<'a, 'm, Side: SideData> {
     input: &'m mut dyn TlsInputBuffer,

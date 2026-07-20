@@ -22,7 +22,6 @@ use crate::enums::{
 };
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
-use crate::log::{debug, trace};
 use crate::msgs::{
     CertificateChain, ChangeCipherSpecPayload, ClientKeyExchangeParams, Codec,
     HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload, Message, MessagePayload,
@@ -32,6 +31,7 @@ use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
+use crate::tracing::{debug, trace};
 use crate::verify::{ClientIdentity, SignatureVerificationInput};
 use crate::{ConnectionTrafficSecrets, verify};
 

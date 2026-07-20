@@ -1313,7 +1313,7 @@ fn test_no_warning_logging_during_successful_sessions() {
         }
     }
 
-    if cfg!(feature = "log") {
+    if cfg!(feature = "tracing") {
         COUNTS.with(|c| {
             println!("After tests: {:?}", c.borrow());
             assert!(c.borrow().warn.is_empty());

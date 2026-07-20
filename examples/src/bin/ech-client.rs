@@ -41,7 +41,6 @@ use hickory_resolver::net::runtime::TokioRuntimeProvider;
 use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_resolver::proto::rr::{RData, RecordType};
 use hickory_resolver::{Resolver, TokioResolver};
-use log::trace;
 use rustls::client::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
 use rustls::crypto::hpke::Hpke;
 use rustls::pki_types::pem::PemObject;
@@ -49,6 +48,7 @@ use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
 use rustls::{ClientConfig, Connection, RootCertStore, VecInput};
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls_util::{KeyLogFile, Stream};
+use tracing::trace;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

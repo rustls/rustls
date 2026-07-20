@@ -274,10 +274,12 @@
 //! - `std` (enabled by default): enable the high-level (buffered) Connection API and other functionality
 //!   which relies on the `std` library.
 //!
-//! - `log` (enabled by default): make the rustls crate depend on the `log` crate.
-//!   rustls outputs interesting protocol-level messages at `trace!` and `debug!` level,
-//!   and protocol-level errors at `warn!` and `error!` level.  The log messages do not
-//!   contain secret key data, and so are safe to archive without affecting session security.
+//! - `tracing` (enabled by default): make the rustls crate depend on the `tracing` crate,
+//!   using its `"log"` feature so that log records are emitted when no `tracing`
+//!   subscriber is installed. rustls outputs interesting protocol-level messages at
+//!   `trace!` and `debug!` level, and protocol-level errors at `warn!` and `error!`
+//!   level.  The log messages do not contain secret key data, and so are safe to
+//!   archive without affecting session security.
 //!
 //! - `webpki` (enabled by default): make the rustls crate depend on the `rustls-webpki` crate, which
 //!   is used by default to provide built-in certificate verification.  Without this feature, users must
@@ -318,17 +320,16 @@ use crate::crypto::CryptoProvider;
 #[allow(unused_extern_crates)]
 extern crate test;
 
-// log for logging (optional).
-#[cfg(feature = "log")]
+#[cfg(feature = "tracing")]
 #[expect(clippy::single_component_path_imports)]
-use log;
+use tracing;
 
-#[cfg(not(feature = "log"))]
-mod log {
-    macro_rules! trace    ( ($($tt:tt)*) => { crate::log::_used!($($tt)*) } );
-    macro_rules! debug    ( ($($tt:tt)*) => { crate::log::_used!($($tt)*) } );
-    macro_rules! error    ( ($($tt:tt)*) => { crate::log::_used!($($tt)*) } );
-    macro_rules! _warn    ( ($($tt:tt)*) => { crate::log::_used!($($tt)*) } );
+#[cfg(not(feature = "tracing"))]
+mod tracing {
+    macro_rules! trace    ( ($($tt:tt)*) => { crate::tracing::_used!($($tt)*) } );
+    macro_rules! debug    ( ($($tt:tt)*) => { crate::tracing::_used!($($tt)*) } );
+    macro_rules! error    ( ($($tt:tt)*) => { crate::tracing::_used!($($tt)*) } );
+    macro_rules! _warn    ( ($($tt:tt)*) => { crate::tracing::_used!($($tt)*) } );
     macro_rules! _used    ( ($($tt:tt)*) => { { let _ = format_args!($($tt)*); } } );
     pub(crate) use _used;
     pub(crate) use _warn as warn;

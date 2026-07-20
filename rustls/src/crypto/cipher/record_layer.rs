@@ -6,8 +6,8 @@ use crate::crypto::cipher::{
     OutboundPlain,
 };
 use crate::error::Error;
-use crate::log::trace;
 use crate::msgs::HandshakeAlignedProof;
+use crate::tracing::trace;
 
 /// Record layer that tracks encryption keys.
 pub(crate) struct EncryptionState {

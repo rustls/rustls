@@ -5,7 +5,7 @@ edition.workspace = true
 publish = false
 
 [dependencies]
-rustls = { path = "../rustls", default-features = false, features = ["log", "webpki"] }
+rustls = { path = "../rustls", default-features = false, features = ["tracing", "webpki"] }
 
 [dev-dependencies]
 env_logger = { workspace = true }

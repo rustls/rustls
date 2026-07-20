@@ -23,7 +23,6 @@ use crate::enums::{
 };
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
-use crate::log::{debug, trace, warn};
 use crate::msgs::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, Codec, HandshakeMessagePayload,
     HandshakePayload, KeyUpdateRequest, Message, MessagePayload, NewSessionTicketPayloadTls13,
@@ -39,6 +38,7 @@ use crate::tls13::key_schedule::{
 use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
+use crate::tracing::{debug, trace, warn};
 use crate::verify::ClientIdentity;
 use crate::{ConnectionTrafficSecrets, compress, verify};
 

@@ -20,11 +20,11 @@ use crate::conn::{
 use crate::crypto;
 use crate::crypto::cipher::Payload;
 use crate::error::Error;
-use crate::log::trace;
 use crate::msgs::ServerExtensionsInput;
 use crate::server::hs::{ChooseConfig, ExpectClientHello, ReadClientHello, ServerState};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
+use crate::tracing::trace;
 use crate::vecbuf::ChunkVecBuffer;
 
 /// This represents a single TLS server connection.

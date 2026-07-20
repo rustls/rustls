@@ -1854,6 +1854,7 @@ dependencies = [
  "rustls-webpki 0.104.0-alpha.7",
  "subtle",
  "time",
+ "tracing",
  "webpki-roots",
  "zeroize",
  "zlib-rs",
@@ -1924,7 +1925,6 @@ dependencies = [
  "clap",
  "env_logger",
  "hickory-resolver",
- "log",
  "mio",
  "rcgen",
  "rustls 0.24.0-dev.0",
@@ -1932,6 +1932,7 @@ dependencies = [
  "rustls-util",
  "serde",
  "tokio",
+ "tracing",
  "webpki-roots",
 ]
 
@@ -2038,8 +2039,8 @@ name = "rustls-util"
 version = "0.1.0"
 dependencies = [
  "env_logger",
- "log",
  "rustls 0.24.0-dev.0",
+ "tracing",
 ]
 
 [[package]]
