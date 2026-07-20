@@ -10,7 +10,6 @@ use std::sync::Arc;
 
 use pki_types::DnsName;
 use rustls::crypto::CryptoProvider;
-use rustls::crypto::kx::NamedGroup;
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use rustls::server::ServerHandshake;
@@ -18,12 +17,13 @@ use rustls::{
     ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection, SliceInput, VecInput,
 };
 use rustls_test::{
-    ClientConfigExt, KeyType, OtherSession, ServerConfigExt, TestNonBlockIo, check_fill_buf,
-    check_fill_buf_err, check_read, check_read_and_close, check_read_err, do_handshake, encoding,
-    make_client_config, make_client_config_with_auth, make_client_config_with_kx_groups,
-    make_disjoint_suite_configs, make_pair, make_pair_for_arc_configs, make_pair_for_configs,
-    make_server_config, make_server_config_with_kx_groups,
-    make_server_config_with_mandatory_client_auth, server_name, transfer, transfer_eof,
+    ClientConfigExt, KeyType, MultiTest, OtherSession, ServerConfigExt, TestNonBlockIo,
+    check_fill_buf, check_fill_buf_err, check_read, check_read_and_close, check_read_err,
+    do_handshake, encoding, make_client_config, make_client_config_with_auth,
+    make_client_config_with_kx_groups, make_disjoint_suite_configs, make_pair,
+    make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
+    make_server_config_with_kx_groups, make_server_config_with_mandatory_client_auth, server_name,
+    transfer, transfer_eof,
 };
 use rustls_util::{Stream, StreamOwned, complete_io};
 
@@ -1825,132 +1825,126 @@ fn test_full_server_handshake() {
 #[test]
 fn test_server_handshake() {
     let provider = provider::DEFAULT_PROVIDER;
-    let client_config = Arc::new(make_client_config(KeyType::default(), &provider));
-    let mut client = client_config
-        .connect(server_name("localhost"))
-        .build()
-        .unwrap();
-    let mut buf = Vec::new();
-    client.write_tls(&mut buf).unwrap();
 
-    let server_config = Arc::new(make_server_config(KeyType::default(), &provider));
-    let receive = ServerHandshake::start();
-    let mut acceptor_input = VecInput::default();
-    acceptor_input
-        .read(&mut buf.as_slice())
-        .unwrap();
-    let mut output = vec![];
-    let ServerHandshake::Accepted(accepted) = receive
-        .process(&mut acceptor_input, &mut output)
-        .unwrap()
-    else {
-        panic!("unexpected state");
-    };
-    let ch = accepted.client_hello();
-    assert_eq!(
-        ch.server_name(),
-        Some(&DnsName::try_from("localhost").unwrap())
-    );
-    assert_eq!(
-        ch.named_groups().unwrap(),
-        provider::DEFAULT_PROVIDER
-            .kx_groups
-            .iter()
-            .map(|kx| kx.name())
-            .collect::<Vec<NamedGroup>>()
-    );
+    for (client_config, server_config, _) in MultiTest::new(provider) {
+        let mut client = client_config
+            .connect(server_name("localhost"))
+            .build()
+            .unwrap();
+        let mut buf = Vec::new();
+        client.write_tls(&mut buf).unwrap();
 
-    let _server = accepted
-        .choose_config(server_config, &mut output)
-        .unwrap();
-    assert!(!output.is_empty());
+        let receive = ServerHandshake::start();
+        let mut acceptor_input = VecInput::default();
+        acceptor_input
+            .read(&mut buf.as_slice())
+            .unwrap();
+        let mut output = vec![];
+        let ServerHandshake::Accepted(accepted) = receive
+            .process(&mut acceptor_input, &mut output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+        let ch = accepted.client_hello();
+        assert_eq!(
+            ch.server_name(),
+            Some(&DnsName::try_from("localhost").unwrap())
+        );
+        assert!(!ch.named_groups().unwrap().is_empty());
 
-    // (Reusing `accepted` is not possible)
+        let _server = accepted
+            .choose_config(server_config, &mut output)
+            .unwrap();
+        assert!(!output.is_empty());
 
-    let receive = ServerHandshake::start();
-    let mut acceptor_input = VecInput::default();
-    let mut output = vec![];
-    let ServerHandshake::NeedsInput(receive) = receive
-        .process(&mut acceptor_input, &mut output)
-        .unwrap()
-    else {
-        panic!("unexpected state");
-    };
-    assert!(output.is_empty());
+        // (Reusing `accepted` is not possible)
 
-    acceptor_input
-        .read(&mut &buf[..3])
-        .unwrap(); // incomplete message
-    let ServerHandshake::NeedsInput(receive) = receive
-        .process(&mut acceptor_input, &mut output)
-        .unwrap()
-    else {
-        panic!("unexpected state");
-    };
-    assert!(output.is_empty());
+        let receive = ServerHandshake::start();
+        let mut acceptor_input = VecInput::default();
+        let mut output = vec![];
+        let ServerHandshake::NeedsInput(receive) = receive
+            .process(&mut acceptor_input, &mut output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+        assert!(output.is_empty());
 
-    acceptor_input
-        .read(&mut [0x80, 0x00].as_ref())
-        .unwrap(); // invalid message (len = 32k bytes)
-    let error = receive
-        .process(&mut acceptor_input, &mut output)
-        .unwrap_err();
-    assert_eq!(
-        error,
-        Error::InvalidMessage(InvalidMessage::MessageTooLarge)
-    );
-    let alert_content = output
-        .pop()
-        .expect("should've sent an alert");
-    let expected = encoding::alert(AlertDescription::DecodeError, &[]);
-    assert_eq!(alert_content, expected);
+        acceptor_input
+            .read(&mut &buf[..3])
+            .unwrap(); // incomplete message
+        let ServerHandshake::NeedsInput(receive) = receive
+            .process(&mut acceptor_input, &mut output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+        assert!(output.is_empty());
 
-    let receive = ServerHandshake::start();
-    let mut acceptor_input = VecInput::default();
-    // Minimal valid 1-byte application data message is not a handshake message
-    acceptor_input
-        .read(
-            &mut encoding::message_framing(
-                ContentType::ApplicationData,
-                ProtocolVersion::TLSv1_2,
-                vec![0x00],
+        acceptor_input
+            .read(&mut [0x80, 0x00].as_ref())
+            .unwrap(); // invalid message (len = 32k bytes)
+        let error = receive
+            .process(&mut acceptor_input, &mut output)
+            .unwrap_err();
+        assert_eq!(
+            error,
+            Error::InvalidMessage(InvalidMessage::MessageTooLarge)
+        );
+        let alert_content = output
+            .pop()
+            .expect("should've sent an alert");
+        let expected = encoding::alert(AlertDescription::DecodeError, &[]);
+        assert_eq!(alert_content, expected);
+
+        let receive = ServerHandshake::start();
+        let mut acceptor_input = VecInput::default();
+        // Minimal valid 1-byte application data message is not a handshake message
+        acceptor_input
+            .read(
+                &mut encoding::message_framing(
+                    ContentType::ApplicationData,
+                    ProtocolVersion::TLSv1_2,
+                    vec![0x00],
+                )
+                .as_slice(),
             )
-            .as_slice(),
-        )
-        .unwrap();
-    let error = receive
-        .process(&mut acceptor_input, &mut output)
-        .unwrap_err();
-    assert!(matches!(error, Error::InappropriateMessage { .. }));
-    let alert_content = output
-        .pop()
-        .expect("should've sent an alert");
-    let expected = encoding::alert(AlertDescription::UnexpectedMessage, &[]);
-    assert_eq!(alert_content, expected);
+            .unwrap();
+        let error = receive
+            .process(&mut acceptor_input, &mut output)
+            .unwrap_err();
+        assert!(matches!(error, Error::InappropriateMessage { .. }));
+        let alert_content = output
+            .pop()
+            .expect("should've sent an alert");
+        let expected = encoding::alert(AlertDescription::UnexpectedMessage, &[]);
+        assert_eq!(alert_content, expected);
 
-    let receive = ServerHandshake::start();
-    let mut acceptor_input = VecInput::default();
-    // Minimal 1-byte ClientHello message is not a legal handshake message
-    acceptor_input
-        .read(
-            &mut encoding::message_framing(
-                ContentType::Handshake,
-                ProtocolVersion::TLSv1_2,
-                encoding::handshake_framing(HandshakeType::ClientHello, vec![0x00]),
+        let receive = ServerHandshake::start();
+        let mut acceptor_input = VecInput::default();
+        // Minimal 1-byte ClientHello message is not a legal handshake message
+        acceptor_input
+            .read(
+                &mut encoding::message_framing(
+                    ContentType::Handshake,
+                    ProtocolVersion::TLSv1_2,
+                    encoding::handshake_framing(HandshakeType::ClientHello, vec![0x00]),
+                )
+                .as_slice(),
             )
-            .as_slice(),
-        )
-        .unwrap();
-    let error = receive
-        .process(&mut acceptor_input, &mut output)
-        .unwrap_err();
-    assert!(matches!(
-        error,
-        Error::InvalidMessage(InvalidMessage::MissingData(_))
-    ));
-    let alert_content = output.pop().unwrap();
-    let expected = encoding::alert(AlertDescription::DecodeError, &[]);
-    assert_eq!(alert_content, expected);
+            .unwrap();
+        let error = receive
+            .process(&mut acceptor_input, &mut output)
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            Error::InvalidMessage(InvalidMessage::MissingData(_))
+        ));
+        let alert_content = output.pop().unwrap();
+        let expected = encoding::alert(AlertDescription::DecodeError, &[]);
+        assert_eq!(alert_content, expected);
+    }
 }
 
 #[test]

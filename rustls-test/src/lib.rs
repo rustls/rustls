@@ -507,6 +507,94 @@ impl KeyType {
     }
 }
 
+/// A iterator for testing several combinations of config
+///
+/// By default the iterator goes over compatible pairs of client/server configs
+/// alongside the expected `KeyType`:
+///
+/// - for the provider as-is
+/// - for the provider reduced to only support TLS1.2 and 1.3 alone
+/// - for each key type supported by the provider
+/// - for server authentication and mutual authentication
+pub struct MultiTest {
+    providers: Vec<(ProtocolVersion, Arc<CryptoProvider>)>,
+    anon_client: bool,
+    client_auth: bool,
+    key_types: Vec<KeyType>,
+}
+
+impl MultiTest {
+    pub fn new(provider: CryptoProvider) -> Self {
+        let key_types = KeyType::all_for_provider(&provider).to_vec();
+        let mut providers = vec![(ProtocolVersion::TLSv1_3, Arc::new(provider.clone()))];
+        providers.push((
+            ProtocolVersion::TLSv1_3,
+            Arc::new(CryptoProvider {
+                tls12_cipher_suites: Cow::Borrowed(&[]),
+                ..provider.clone()
+            }),
+        ));
+        providers.push((
+            ProtocolVersion::TLSv1_2,
+            Arc::new(CryptoProvider {
+                tls13_cipher_suites: Cow::Borrowed(&[]),
+                ..provider
+            }),
+        ));
+
+        Self {
+            providers,
+            anon_client: true,
+            client_auth: true,
+            key_types,
+        }
+    }
+}
+
+impl IntoIterator for MultiTest {
+    type Item = (Arc<ClientConfig>, Arc<ServerConfig>, Expectation);
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let mut options = vec![];
+
+        for (_, provider) in self.providers {
+            for kt in &self.key_types {
+                if self.anon_client {
+                    options.push((
+                        Arc::new(make_client_config(*kt, &provider)),
+                        Arc::new(make_server_config(*kt, &provider)),
+                        Expectation {
+                            key_type: *kt,
+                            client_auth: false,
+                        },
+                    ));
+                }
+
+                if self.client_auth {
+                    options.push((
+                        Arc::new(make_client_config_with_auth(*kt, &provider)),
+                        Arc::new(make_server_config_with_mandatory_client_auth(
+                            *kt, &provider,
+                        )),
+                        Expectation {
+                            key_type: *kt,
+                            client_auth: true,
+                        },
+                    ));
+                }
+            }
+        }
+
+        options.into_iter()
+    }
+}
+
+pub struct Expectation {
+    pub key_type: KeyType,
+    pub client_auth: bool,
+}
+
 pub trait ServerConfigExt {
     fn finish(self, kt: KeyType) -> ServerConfig;
 }
