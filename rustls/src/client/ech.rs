@@ -753,10 +753,10 @@ impl EchState {
         for ident in psk_offer.identities.iter_mut() {
             // "For each PSK identity advertised in the ClientHelloInner, the
             // client generates a random PSK identity with the same length."
-            match ident.identity.as_mut() {
-                Some(ident) => self.secure_random.fill(ident)?,
-                None => unreachable!(),
-            }
+            let Some(identity) = ident.identity.as_mut() else {
+                unreachable!();
+            };
+            self.secure_random.fill(identity)?;
 
             // "It also generates a random, 32-bit, unsigned integer to use as
             // the obfuscated_ticket_age."
