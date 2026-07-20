@@ -480,7 +480,7 @@ fn client_cert_resolve_server_added_hint() {
 
 #[test]
 fn server_exposes_offered_sni_even_if_resolver_fails() {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_PROVIDER;
     let resolver = ServerNameResolver::new();
 
@@ -512,7 +512,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
 
 #[test]
 fn sni_resolver_works() {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_PROVIDER;
     let mut resolver = ServerNameResolver::new();
     let signing_key = kt.load_key(&provider);
@@ -563,7 +563,7 @@ fn sni_resolver_works() {
 
 #[test]
 fn sni_resolver_rejects_wrong_names() {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let mut resolver = ServerNameResolver::new();
 
     assert_eq!(
@@ -588,7 +588,7 @@ fn sni_resolver_rejects_wrong_names() {
 
 #[test]
 fn sni_resolver_lower_cases_configured_names() {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_PROVIDER;
     let mut resolver = ServerNameResolver::new();
     let signing_key = kt.load_key(&provider);
@@ -624,7 +624,7 @@ fn sni_resolver_lower_cases_configured_names() {
 #[test]
 fn sni_resolver_lower_cases_queried_names() {
     // actually, the handshake parser does this, but the effect is the same.
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_PROVIDER;
     let mut resolver = ServerNameResolver::new();
     let signing_key = kt.load_key(&provider);
@@ -659,7 +659,7 @@ fn sni_resolver_lower_cases_queried_names() {
 
 #[test]
 fn sni_resolver_rejects_bad_certs() {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let mut resolver = ServerNameResolver::new();
 
     let bad_chain =

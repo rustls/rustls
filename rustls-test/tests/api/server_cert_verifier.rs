@@ -207,7 +207,7 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
 #[test]
 fn test_pinned_ocsp_response_given_to_custom_server_cert_verifier() {
     let ocsp_response = b"hello-ocsp-world!";
-    let kt = KeyType::EcdsaP256;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_PROVIDER;
 
     for version_provider in ALL_VERSIONS {
@@ -719,7 +719,7 @@ fn client_check_server_certificate_helper_api() {
 
 #[test]
 fn client_check_server_valid_purpose() {
-    let Identity::X509(identity) = &*KeyType::EcdsaP256.client_identity() else {
+    let Identity::X509(identity) = &*KeyType::default().client_identity() else {
         panic!("expected X509 identity");
     };
 

@@ -180,7 +180,7 @@ fn client_verifier_fails_properly() {
 #[test]
 fn server_allow_any_anonymous_or_authenticated_client() {
     let provider = Arc::new(provider::DEFAULT_PROVIDER);
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     for client_cert_chain in [None, Some(kt.client_identity())] {
         let client_auth = Arc::new(
             webpki_client_verifier_builder(kt.client_root_store(), &provider)

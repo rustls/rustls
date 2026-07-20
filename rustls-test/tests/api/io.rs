@@ -32,12 +32,12 @@ use super::{ALL_VERSIONS, provider};
 #[test]
 fn buffered_client_data_sent() {
     let server_config = Arc::new(make_server_config(
-        KeyType::Rsa2048,
+        KeyType::default(),
         &provider::DEFAULT_PROVIDER,
     ));
 
     for version_provider in ALL_VERSIONS {
-        let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
+        let client_config = make_client_config(KeyType::default(), &version_provider);
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
         let mut client_input = VecInput::default();
@@ -64,12 +64,12 @@ fn buffered_client_data_sent() {
 #[test]
 fn buffered_server_data_sent() {
     let server_config = Arc::new(make_server_config(
-        KeyType::Rsa2048,
+        KeyType::default(),
         &provider::DEFAULT_PROVIDER,
     ));
 
     for version_provider in ALL_VERSIONS {
-        let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
+        let client_config = make_client_config(KeyType::default(), &version_provider);
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
         let mut client_input = VecInput::default();
@@ -96,12 +96,12 @@ fn buffered_server_data_sent() {
 #[test]
 fn buffered_both_data_sent() {
     let server_config = Arc::new(make_server_config(
-        KeyType::Rsa2048,
+        KeyType::default(),
         &provider::DEFAULT_PROVIDER,
     ));
 
     for version_provider in ALL_VERSIONS {
-        let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
+        let client_config = make_client_config(KeyType::default(), &version_provider);
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
         let mut client_input = VecInput::default();
@@ -145,7 +145,7 @@ fn buffered_both_data_sent() {
 
 #[test]
 fn server_respects_buffer_limit_pre_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -182,7 +182,7 @@ fn server_respects_buffer_limit_pre_handshake() {
 
 #[test]
 fn server_respects_buffer_limit_pre_handshake_with_vectored_write() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -215,7 +215,7 @@ fn server_respects_buffer_limit_pre_handshake_with_vectored_write() {
 
 #[test]
 fn server_respects_buffer_limit_post_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -253,7 +253,7 @@ fn server_respects_buffer_limit_post_handshake() {
 
 #[test]
 fn client_respects_buffer_limit_pre_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -290,7 +290,7 @@ fn client_respects_buffer_limit_pre_handshake() {
 
 #[test]
 fn client_respects_buffer_limit_pre_handshake_with_vectored_write() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -323,7 +323,7 @@ fn client_respects_buffer_limit_pre_handshake_with_vectored_write() {
 
 #[test]
 fn client_respects_buffer_limit_post_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -361,7 +361,7 @@ fn client_respects_buffer_limit_post_handshake() {
 #[test]
 fn client_detects_broken_write_vectored_impl() {
     // see https://github.com/rustls/rustls/issues/2316
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, _) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let err = client
         .write_tls(&mut BrokenWriteVectored)
         .unwrap_err();
@@ -389,7 +389,7 @@ fn client_detects_broken_write_vectored_impl() {
 
 #[test]
 fn buf_read() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -431,35 +431,35 @@ fn buf_read() {
 
 #[test]
 fn server_read_returns_wouldblock_when_no_data() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (_, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     assert!(matches!(server.reader().read(&mut [0u8; 1]),
                      Err(err) if err.kind() == io::ErrorKind::WouldBlock));
 }
 
 #[test]
 fn client_read_returns_wouldblock_when_no_data() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, _) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     assert!(matches!(client.reader().read(&mut [0u8; 1]),
                      Err(err) if err.kind() == io::ErrorKind::WouldBlock));
 }
 
 #[test]
 fn server_fill_buf_returns_wouldblock_when_no_data() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (_, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     assert!(matches!(server.reader().fill_buf(),
                      Err(err) if err.kind() == io::ErrorKind::WouldBlock));
 }
 
 #[test]
 fn client_fill_buf_returns_wouldblock_when_no_data() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, _) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     assert!(matches!(client.reader().fill_buf(),
                      Err(err) if err.kind() == io::ErrorKind::WouldBlock));
 }
 
 #[test]
 fn new_server_returns_initial_io_state() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (_, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut server_input = VecInput::default();
     let io_state = server
         .process_new_packets(&mut server_input)
@@ -472,7 +472,7 @@ fn new_server_returns_initial_io_state() {
 
 #[test]
 fn new_client_returns_initial_io_state() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, _) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let io_state = client
         .process_new_packets(&mut client_input)
@@ -485,7 +485,7 @@ fn new_client_returns_initial_io_state() {
 
 #[test]
 fn client_complete_io_for_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -503,7 +503,7 @@ fn client_complete_io_for_handshake() {
 
 #[test]
 fn buffered_client_complete_io_for_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -521,7 +521,7 @@ fn buffered_client_complete_io_for_handshake() {
 
 #[test]
 fn client_complete_io_for_handshake_eof() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, _) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut input = io::Cursor::new(Vec::new());
 
@@ -569,7 +569,7 @@ fn client_complete_io_for_write() {
 
 #[test]
 fn client_complete_io_with_nonblocking_io() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, _) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
 
     // absolutely no progress writing ClientHello
@@ -585,7 +585,7 @@ fn client_complete_io_with_nonblocking_io() {
     );
 
     // a little progress writing ClientHello
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, _) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     assert_eq!(
         complete_io(
@@ -601,7 +601,7 @@ fn client_complete_io_with_nonblocking_io() {
     );
 
     // complete writing ClientHello
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, _) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     assert_eq!(
         complete_io(
@@ -618,7 +618,7 @@ fn client_complete_io_with_nonblocking_io() {
     );
 
     // complete writing ClientHello, partial read of ServerHello
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, _) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let (rd, wr) = dbg!(complete_io(
         &mut TestNonBlockIo {
@@ -633,7 +633,7 @@ fn client_complete_io_with_nonblocking_io() {
     assert!(wr > 1);
 
     // data phase:
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(
@@ -782,7 +782,7 @@ fn server_complete_io_for_handshake() {
 
 #[test]
 fn server_complete_io_for_handshake_eof() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (_, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut server_input = VecInput::default();
     let mut input = io::Cursor::new(Vec::new());
 
@@ -1077,7 +1077,7 @@ fn test_server_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
 
 #[test]
 fn test_client_write_and_vectored_write_equivalence() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(
@@ -1111,7 +1111,7 @@ fn test_client_write_and_vectored_write_equivalence() {
 
 #[test]
 fn test_write_vectored_degenerate_cases() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(
@@ -1186,7 +1186,7 @@ impl Write for FailsWrites {
 
 #[test]
 fn stream_write_reports_underlying_io_error_before_plaintext_processed() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(
@@ -1213,7 +1213,7 @@ fn stream_write_reports_underlying_io_error_before_plaintext_processed() {
 
 #[test]
 fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(
@@ -1334,7 +1334,7 @@ fn server_streamowned_handshake_error() {
 
 #[test]
 fn vectored_write_for_server_appdata() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(
@@ -1366,7 +1366,7 @@ fn vectored_write_for_server_appdata() {
 
 #[test]
 fn vectored_write_for_client_appdata() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(
@@ -1523,7 +1523,7 @@ fn vectored_write_for_server_handshake_no_half_rtt_by_default() {
 
 #[test]
 fn vectored_write_for_client_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -1564,7 +1564,7 @@ fn vectored_write_for_client_handshake() {
 
 #[test]
 fn vectored_write_with_slow_client() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -1607,7 +1607,7 @@ fn test_client_mtu_reduction() {
         client_config.max_fragment_size = Some(64);
         let (mut client, mut server) = make_pair_for_configs(
             client_config,
-            make_server_config(KeyType::Rsa2048, &provider),
+            make_server_config(KeyType::default(), &provider),
         );
 
         {
@@ -1627,11 +1627,11 @@ fn test_client_mtu_reduction() {
 #[test]
 fn test_server_mtu_reduction() {
     let provider = provider::DEFAULT_PROVIDER;
-    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let mut server_config = make_server_config(KeyType::default(), &provider);
     server_config.max_fragment_size = Some(64);
     server_config.send_half_rtt_data = true;
     let (mut client, mut server) = make_pair_for_configs(
-        make_client_config(KeyType::Rsa2048, &provider),
+        make_client_config(KeyType::default(), &provider),
         server_config,
     );
     let mut client_input = VecInput::default();
@@ -1686,7 +1686,7 @@ fn test_server_mtu_reduction() {
 
 fn check_client_max_fragment_size(size: usize) -> Option<Error> {
     let provider = provider::DEFAULT_PROVIDER;
-    let mut client_config = make_client_config(KeyType::Ed25519, &provider);
+    let mut client_config = make_client_config(KeyType::default(), &provider);
     client_config.max_fragment_size = Some(size);
     Arc::new(client_config)
         .connect(server_name("localhost"))
@@ -1763,7 +1763,7 @@ fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
 #[test]
 fn test_full_server_handshake() {
     let provider = provider::DEFAULT_PROVIDER;
-    let client_config = Arc::new(make_client_config(KeyType::Ed25519, &provider));
+    let client_config = Arc::new(make_client_config(KeyType::default(), &provider));
     let mut client = client_config
         .connect(server_name("localhost"))
         .build()
@@ -1788,7 +1788,7 @@ fn test_full_server_handshake() {
     };
     let mut server = accepted
         .choose_config(
-            Arc::new(make_server_config(KeyType::Ed25519, &provider)),
+            Arc::new(make_server_config(KeyType::default(), &provider)),
             &mut server_output,
         )
         .unwrap();
@@ -1825,7 +1825,7 @@ fn test_full_server_handshake() {
 #[test]
 fn test_server_handshake() {
     let provider = provider::DEFAULT_PROVIDER;
-    let client_config = Arc::new(make_client_config(KeyType::Ed25519, &provider));
+    let client_config = Arc::new(make_client_config(KeyType::default(), &provider));
     let mut client = client_config
         .connect(server_name("localhost"))
         .build()
@@ -1833,7 +1833,7 @@ fn test_server_handshake() {
     let mut buf = Vec::new();
     client.write_tls(&mut buf).unwrap();
 
-    let server_config = Arc::new(make_server_config(KeyType::Ed25519, &provider));
+    let server_config = Arc::new(make_server_config(KeyType::default(), &provider));
     let receive = ServerHandshake::start();
     let mut acceptor_input = VecInput::default();
     acceptor_input
@@ -1957,7 +1957,7 @@ fn test_server_handshake() {
 fn test_acceptor_continues_tls13_hrr_with_compatibility_ccs() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let client_config = Arc::new(make_client_config_with_kx_groups(
-        KeyType::Rsa2048,
+        KeyType::default(),
         vec![provider::kx_group::SECP384R1, provider::kx_group::X25519],
         &provider,
     ));
@@ -1972,7 +1972,7 @@ fn test_acceptor_continues_tls13_hrr_with_compatibility_ccs() {
         .unwrap();
 
     let server_config = Arc::new(make_server_config_with_kx_groups(
-        KeyType::Rsa2048,
+        KeyType::default(),
         vec![provider::kx_group::X25519],
         &provider,
     ));
@@ -2024,7 +2024,7 @@ fn test_acceptor_continues_tls13_hrr_with_compatibility_ccs() {
 #[test]
 fn test_acceptor_rejected_handshake() {
     let client_config =
-        ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into()).finish(KeyType::Ed25519);
+        ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into()).finish(KeyType::default());
     let mut client = Arc::new(client_config)
         .connect(server_name("localhost"))
         .build()
@@ -2033,7 +2033,7 @@ fn test_acceptor_rejected_handshake() {
     client.write_tls(&mut buf).unwrap();
 
     let server_config =
-        ServerConfig::builder(provider::DEFAULT_TLS12_PROVIDER.into()).finish(KeyType::Ed25519);
+        ServerConfig::builder(provider::DEFAULT_TLS12_PROVIDER.into()).finish(KeyType::default());
     let receive = ServerHandshake::start();
     let mut acceptor_input = VecInput::default();
     acceptor_input
@@ -2075,7 +2075,7 @@ fn test_received_plaintext_backpressure() {
 
 fn test_plaintext_buffer_limit(limit: Option<usize>, plaintext_limit: usize) {
     dbg!(plaintext_limit);
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_PROVIDER;
 
     let server_config = Arc::new(
@@ -2182,20 +2182,20 @@ fn test_plaintext_buffer_limit(limit: Option<usize>, plaintext_limit: usize) {
 
 #[test]
 fn server_flush_does_nothing() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (_, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     assert!(matches!(server.writer().flush(), Ok(())));
 }
 
 #[test]
 fn client_flush_does_nothing() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, _) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     assert!(matches!(client.writer().flush(), Ok(())));
 }
 
 #[test]
 fn server_close_notify() {
     let provider = provider::DEFAULT_PROVIDER;
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let server_config = Arc::new(make_server_config_with_mandatory_client_auth(kt, &provider));
 
     for version_provider in ALL_VERSIONS {
@@ -2246,7 +2246,7 @@ fn server_close_notify() {
 #[test]
 fn client_close_notify() {
     let provider = provider::DEFAULT_PROVIDER;
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let server_config = Arc::new(make_server_config_with_mandatory_client_auth(kt, &provider));
 
     for version_provider in ALL_VERSIONS {
@@ -2297,7 +2297,7 @@ fn client_close_notify() {
 #[test]
 fn server_closes_uncleanly() {
     let provider = provider::DEFAULT_PROVIDER;
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let server_config = Arc::new(make_server_config(kt, &provider));
 
     for version_provider in ALL_VERSIONS {
@@ -2354,7 +2354,7 @@ fn server_closes_uncleanly() {
 #[test]
 fn client_closes_uncleanly() {
     let provider = provider::DEFAULT_PROVIDER;
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let server_config = Arc::new(make_server_config(kt, &provider));
 
     for version_provider in ALL_VERSIONS {
@@ -2443,7 +2443,7 @@ fn test_complete_io_errors_if_close_notify_received_too_early() {
 
 #[test]
 fn test_complete_io_with_no_io_needed() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(
@@ -2488,7 +2488,7 @@ fn test_complete_io_with_no_io_needed() {
 
 #[test]
 fn test_junk_after_close_notify_received() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(
@@ -2540,7 +2540,7 @@ fn test_junk_after_close_notify_received() {
 
 #[test]
 fn test_data_after_close_notify_is_ignored() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(
@@ -2582,7 +2582,7 @@ fn test_data_after_close_notify_is_ignored() {
 #[test]
 fn test_close_notify_sent_prior_to_handshake_complete() {
     let mut server = ServerConnection::new(Arc::new(make_server_config(
-        KeyType::EcdsaP256,
+        KeyType::default(),
         &provider::DEFAULT_PROVIDER,
     )))
     .unwrap();
@@ -2612,7 +2612,7 @@ fn test_close_notify_sent_prior_to_handshake_complete() {
 
 #[test]
 fn test_subsequent_close_notify_ignored() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, _) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut server_input = VecInput::default();
     client.send_close_notify();
     assert!(transfer(&mut client, &mut server_input) > 0);
@@ -2624,7 +2624,7 @@ fn test_subsequent_close_notify_ignored() {
 
 #[test]
 fn test_second_close_notify_after_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(
@@ -2646,7 +2646,7 @@ fn test_second_close_notify_after_handshake() {
 
 #[test]
 fn test_read_tls_artificial_eof_after_close_notify() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(

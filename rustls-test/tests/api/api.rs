@@ -52,13 +52,13 @@ fn alpn_test_error(
     agreed: Option<ApplicationProtocol<'static>>,
     expected_error: Option<ErrorFromPeer>,
 ) {
-    let mut server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let mut server_config = make_server_config(KeyType::default(), &provider::DEFAULT_PROVIDER);
     server_config.alpn_protocols = server_protos;
 
     let server_config = Arc::new(server_config);
 
     for version_provider in ALL_VERSIONS {
-        let mut client_config = make_client_config(KeyType::Rsa2048, &version_provider);
+        let mut client_config = make_client_config(KeyType::default(), &version_provider);
         client_config
             .alpn_protocols
             .clone_from(&client_protos);
@@ -128,12 +128,12 @@ fn alpn() {
 #[test]
 fn connection_level_alpn_protocols() {
     let provider = provider::DEFAULT_PROVIDER;
-    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let mut server_config = make_server_config(KeyType::default(), &provider);
     server_config.alpn_protocols = vec![b"h2".into(), b"http/1.1".into()];
     let server_config = Arc::new(server_config);
 
     // Config specifies `h2`
-    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config(KeyType::default(), &provider);
     client_config.alpn_protocols = vec![b"h2".into()];
     let client_config = Arc::new(client_config);
 
@@ -192,7 +192,7 @@ fn server_selects_unoffered_alpn_unchecked() {
 }
 
 fn unoffered_alpn_test(check_selected_alpn: bool) -> Result<rustls::IoState, Error> {
-    let mut config = make_client_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let mut config = make_client_config(KeyType::default(), &provider::DEFAULT_PROVIDER);
     config.check_selected_alpn = check_selected_alpn;
     let mut client = Arc::new(config)
         .connect(server_name("localhost"))
@@ -233,8 +233,8 @@ fn version_test(
     let client_provider = apply_versions(provider.clone(), client_versions);
     let server_provider = apply_versions(provider, server_versions);
 
-    let client_config = make_client_config(KeyType::Rsa2048, &client_provider);
-    let server_config = make_server_config(KeyType::Rsa2048, &server_provider);
+    let client_config = make_client_config(KeyType::default(), &client_provider);
+    let server_config = make_server_config(KeyType::default(), &server_provider);
 
     println!("version {client_versions:?} {server_versions:?} -> {result:?}");
 
@@ -339,7 +339,7 @@ fn config_builder_for_client_rejects_empty_kx_groups() {
             }
             .into()
         )
-        .with_root_certificates(KeyType::EcdsaP256.client_root_store())
+        .with_root_certificates(KeyType::default().client_root_store())
         .with_no_client_auth()
         .err(),
         Some(ApiMisuse::NoKeyExchangeGroupsConfigured.into())
@@ -357,7 +357,7 @@ fn config_builder_for_client_rejects_empty_cipher_suites() {
             }
             .into()
         )
-        .with_root_certificates(KeyType::EcdsaP256.client_root_store())
+        .with_root_certificates(KeyType::default().client_root_store())
         .with_no_client_auth()
         .err(),
         Some(ApiMisuse::NoCipherSuitesConfigured.into())
@@ -375,7 +375,7 @@ fn config_builder_for_server_rejects_empty_kx_groups() {
             .into()
         )
         .with_no_client_auth()
-        .with_single_cert(KeyType::EcdsaP256.identity(), KeyType::EcdsaP256.key())
+        .with_single_cert(KeyType::default().identity(), KeyType::default().key())
         .err(),
         Some(ApiMisuse::NoKeyExchangeGroupsConfigured.into())
     );
@@ -393,7 +393,7 @@ fn config_builder_for_server_rejects_empty_cipher_suites() {
             .into()
         )
         .with_no_client_auth()
-        .with_single_cert(KeyType::EcdsaP256.identity(), KeyType::EcdsaP256.key())
+        .with_single_cert(KeyType::default().identity(), KeyType::default().key())
         .err(),
         Some(ApiMisuse::NoCipherSuitesConfigured.into())
     );
@@ -575,7 +575,7 @@ fn test_config_builders_debug() {
 
 #[test]
 fn test_tls13_valid_early_plaintext_alert() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut server_input = VecInput::default();
 
     // Perform the start of a TLS 1.3 handshake, sending a client hello to the server.
@@ -601,7 +601,7 @@ fn test_tls13_valid_early_plaintext_alert() {
 
 #[test]
 fn test_tls13_too_short_early_plaintext_alert() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut server_input = VecInput::default();
 
     // Perform the start of a TLS 1.3 handshake, sending a client hello to the server.
@@ -624,7 +624,7 @@ fn test_tls13_too_short_early_plaintext_alert() {
 
 #[test]
 fn test_tls13_late_plaintext_alert() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -650,9 +650,9 @@ fn test_tls13_late_plaintext_alert() {
 #[test]
 fn server_rejects_empty_post_handshake_alert_fragment() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
-    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config(KeyType::default(), &provider);
     client_config.enable_secret_extraction = true;
-    let server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let server_config = make_server_config(KeyType::default(), &provider);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
@@ -688,7 +688,7 @@ fn server_rejects_empty_post_handshake_alert_fragment() {
 
 #[test]
 fn client_error_is_sticky() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, _) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     client_input
         .read(&mut b"\x16\x03\x03\x00\x08\x0f\x00\x00\x04junk".as_ref())
@@ -703,7 +703,7 @@ fn client_error_is_sticky() {
 
 #[test]
 fn server_error_is_sticky() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (_, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut server_input = VecInput::default();
     server_input
         .read(&mut b"\x16\x03\x03\x00\x08\x0f\x00\x00\x04junk".as_ref())
@@ -719,7 +719,7 @@ fn server_error_is_sticky() {
 #[allow(clippy::unnecessary_operation)]
 #[test]
 fn server_is_send_and_sync() {
-    let (_, server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (_, server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     &server as &dyn Send;
     &server as &dyn Sync;
 }
@@ -727,36 +727,36 @@ fn server_is_send_and_sync() {
 #[allow(clippy::unnecessary_operation)]
 #[test]
 fn client_is_send_and_sync() {
-    let (client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (client, _) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     &client as &dyn Send;
     &client as &dyn Sync;
 }
 
 #[test]
 fn server_config_is_clone() {
-    let _ = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let _ = make_server_config(KeyType::default(), &provider::DEFAULT_PROVIDER);
 }
 
 #[test]
 fn client_config_is_clone() {
-    let _ = make_client_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let _ = make_client_config(KeyType::default(), &provider::DEFAULT_PROVIDER);
 }
 
 #[test]
 fn client_connection_is_debug() {
-    let (client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (client, _) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     println!("{client:?}");
 }
 
 #[test]
 fn server_connection_is_debug() {
-    let (_, server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (_, server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     println!("{server:?}");
 }
 
 #[test]
 fn server_exposes_offered_sni() {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_PROVIDER;
     for version_provider in ALL_VERSIONS {
         let client_config = Arc::new(make_client_config(kt, &version_provider));
@@ -787,7 +787,7 @@ fn server_exposes_offered_sni() {
 #[test]
 fn server_exposes_offered_sni_smashed_to_lowercase() {
     // webpki actually does this for us in its DnsName type
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_PROVIDER;
     for version_provider in ALL_VERSIONS {
         let client_config = Arc::new(make_client_config(kt, &version_provider));
@@ -975,8 +975,8 @@ fn test_extended_master_secret_reporting() {
     // rustls<->rustls 1.2 handshake negotiates it and reports `Some(true)` on
     // both ends.
     let provider = provider::DEFAULT_TLS12_PROVIDER;
-    let client_config = make_client_config(KeyType::Rsa2048, &provider);
-    let server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let client_config = make_client_config(KeyType::default(), &provider);
+    let server_config = make_server_config(KeyType::default(), &provider);
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     assert_eq!(client.extended_master_secret(), None);
     assert_eq!(server.extended_master_secret(), None);
@@ -994,8 +994,8 @@ fn test_extended_master_secret_reporting() {
     // TLS 1.3 has no Extended Master Secret extension (the property is intrinsic
     // to its key schedule), so it is reported as `None`.
     let provider = provider::DEFAULT_TLS13_PROVIDER;
-    let client_config = make_client_config(KeyType::Rsa2048, &provider);
-    let server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let client_config = make_client_config(KeyType::default(), &provider);
+    let server_config = make_server_config(KeyType::default(), &provider);
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
@@ -1011,8 +1011,8 @@ fn test_extended_master_secret_reporting() {
 #[test]
 fn test_tls13_exporter_maximum_output_length() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
-    let client_config = make_client_config(KeyType::EcdsaP256, &provider);
-    let server_config = make_server_config(KeyType::EcdsaP256, &provider);
+    let client_config = make_client_config(KeyType::default(), &provider);
+    let server_config = make_server_config(KeyType::default(), &provider);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
@@ -1274,7 +1274,7 @@ fn test_client_rejects_illegal_tls13_ccs() {
         Altered::InPlace
     }
 
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     transfer(&mut client, &mut server_input);
@@ -1338,10 +1338,10 @@ fn test_no_warning_logging_during_successful_sessions() {
 #[test]
 fn test_explicit_provider_selection() {
     let client_config =
-        ClientConfig::builder(rustls_ring::DEFAULT_PROVIDER.into()).finish(KeyType::Rsa2048);
+        ClientConfig::builder(rustls_ring::DEFAULT_PROVIDER.into()).finish(KeyType::default());
 
     let server_config =
-        ServerConfig::builder(rustls_aws_lc_rs::DEFAULT_PROVIDER.into()).finish(KeyType::Rsa2048);
+        ServerConfig::builder(rustls_aws_lc_rs::DEFAULT_PROVIDER.into()).finish(KeyType::default());
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
@@ -1394,7 +1394,7 @@ fn test_client_construction_fails_if_random_source_fails_in_first_request() {
         }
         .into(),
     )
-    .finish(KeyType::Rsa2048);
+    .finish(KeyType::default());
 
     assert_eq!(
         Arc::new(client_config)
@@ -1418,7 +1418,7 @@ fn test_client_construction_fails_if_random_source_fails_in_second_request() {
         }
         .into(),
     )
-    .finish(KeyType::Rsa2048);
+    .finish(KeyType::default());
 
     assert_eq!(
         Arc::new(client_config)
@@ -1445,7 +1445,7 @@ fn test_client_construction_requires_66_bytes_of_random_material() {
         }
         .into(),
     )
-    .finish(KeyType::Rsa2048);
+    .finish(KeyType::default());
 
     Arc::new(client_config)
         .connect(server_name("localhost"))
@@ -1480,11 +1480,11 @@ fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message
     }
 
     let provider = provider::DEFAULT_TLS12_PROVIDER;
-    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config(KeyType::default(), &provider);
     let storage = Arc::new(ClientStorage::new());
     client_config.resumption = Resumption::store(storage.clone());
     let client_config = Arc::new(client_config);
-    let server_config = Arc::new(make_server_config(KeyType::Rsa2048, &provider));
+    let server_config = Arc::new(make_server_config(KeyType::default(), &provider));
 
     // successful handshake to allow resumption
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
@@ -1531,7 +1531,7 @@ fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message
 
 #[test]
 fn test_client_fips_service_indicator() {
-    match make_client_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER).fips() {
+    match make_client_config(KeyType::default(), &provider::DEFAULT_PROVIDER).fips() {
         FipsStatus::Pending | FipsStatus::Certified { .. } if provider_is_fips() => {}
         FipsStatus::Unvalidated if !provider_is_fips() => {}
         other => panic!(
@@ -1543,7 +1543,7 @@ fn test_client_fips_service_indicator() {
 
 #[test]
 fn test_server_fips_service_indicator() {
-    match make_server_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER).fips() {
+    match make_server_config(KeyType::default(), &provider::DEFAULT_PROVIDER).fips() {
         FipsStatus::Pending | FipsStatus::Certified { .. } if provider_is_fips() => {}
         FipsStatus::Unvalidated if !provider_is_fips() => {}
         other => panic!(
@@ -1556,8 +1556,8 @@ fn test_server_fips_service_indicator() {
 #[test]
 fn test_connection_fips_service_indicator() {
     let provider = provider::DEFAULT_PROVIDER;
-    let client_config = Arc::new(make_client_config(KeyType::Rsa2048, &provider));
-    let server_config = Arc::new(make_server_config(KeyType::Rsa2048, &provider));
+    let client_config = Arc::new(make_client_config(KeyType::default(), &provider));
+    let server_config = Arc::new(make_server_config(KeyType::default(), &provider));
     let conn_pair = make_pair_for_arc_configs(&client_config, &server_config);
     // Each connection's FIPS status should reflect the FIPS status of the config it was created
     // from.
@@ -1571,7 +1571,7 @@ fn test_client_fips_service_indicator_includes_require_ems() {
         return;
     }
 
-    let mut client_config = make_client_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let mut client_config = make_client_config(KeyType::default(), &provider::DEFAULT_PROVIDER);
     assert!(matches!(
         client_config.fips(),
         FipsStatus::Pending | FipsStatus::Certified { .. }
@@ -1586,7 +1586,7 @@ fn test_server_fips_service_indicator_includes_require_ems() {
         return;
     }
 
-    let mut server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let mut server_config = make_server_config(KeyType::default(), &provider::DEFAULT_PROVIDER);
     assert!(matches!(
         server_config.fips(),
         FipsStatus::Pending | FipsStatus::Certified { .. }
@@ -1619,14 +1619,14 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
         // ECH HPKE suite is itself FIPS approved.
         let config = ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
             .with_ech(EchMode::Enable(ech_config));
-        let config = config.finish(KeyType::Rsa2048);
+        let config = config.finish(KeyType::default());
         assert_eq!(config.fips(), suite.fips());
 
         // The same applies if an ECH GREASE client configuration is used.
         let (public_key, _) = suite.generate_key_pair().unwrap();
         let config = ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
             .with_ech(EchMode::Grease(EchGreaseConfig::new(*suite, public_key)));
-        let config = Arc::new(config.finish(KeyType::Rsa2048));
+        let config = Arc::new(config.finish(KeyType::default()));
         assert_eq!(config.fips(), suite.fips());
 
         // And a connection made from a client config should retain the fips status of the
@@ -1642,8 +1642,8 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
 #[test]
 fn test_illegal_server_renegotiation_attempt_after_tls13_handshake() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
-    let client_config = make_client_config(KeyType::Rsa2048, &provider);
-    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let client_config = make_client_config(KeyType::default(), &provider);
+    let mut server_config = make_server_config(KeyType::default(), &provider);
     server_config.enable_secret_extraction = true;
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
@@ -1682,8 +1682,8 @@ fn test_illegal_server_renegotiation_attempt_after_tls13_handshake() {
 #[test]
 fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
     let provider = provider::DEFAULT_TLS12_PROVIDER;
-    let client_config = make_client_config(KeyType::Rsa2048, &provider);
-    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let client_config = make_client_config(KeyType::default(), &provider);
+    let mut server_config = make_server_config(KeyType::default(), &provider);
     server_config.enable_secret_extraction = true;
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
@@ -1731,9 +1731,9 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
 #[test]
 fn test_illegal_client_renegotiation_attempt_after_tls13_handshake() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
-    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config(KeyType::default(), &provider);
     client_config.enable_secret_extraction = true;
-    let server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let server_config = make_server_config(KeyType::default(), &provider);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
@@ -1765,8 +1765,8 @@ fn test_illegal_client_renegotiation_attempt_after_tls13_handshake() {
 #[test]
 fn test_illegal_client_renegotiation_attempt_during_tls12_handshake() {
     let provider = provider::DEFAULT_TLS12_PROVIDER;
-    let server_config = make_server_config(KeyType::Rsa2048, &provider);
-    let client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let server_config = make_server_config(KeyType::default(), &provider);
+    let client_config = make_client_config(KeyType::default(), &provider);
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     let mut client_hello = vec![];
@@ -1832,7 +1832,7 @@ fn tls13_packed_handshake() {
 
 #[test]
 fn large_client_hello() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (_, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut server_input = VecInput::default();
     let hello = include_bytes!("../data/bug2227-clienthello.bin");
     let mut cursor = io::Cursor::new(hello);
@@ -1871,7 +1871,7 @@ fn large_client_hello_acceptor() {
 
 #[test]
 fn acceptor_with_illegal_max_fragment_size() {
-    let mut server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let mut server_config = make_server_config(KeyType::default(), &provider::DEFAULT_PROVIDER);
     server_config.max_fragment_size = Some(31);
 
     let receive = ServerHandshake::start();
@@ -1980,8 +1980,8 @@ fn server_invalid_sni_policy() {
 
     for (policy, sni, expected_result) in test_cases {
         let provider = provider::DEFAULT_PROVIDER;
-        let client_config = make_client_config(KeyType::EcdsaP256, &provider);
-        let mut server_config = make_server_config(KeyType::EcdsaP256, &provider);
+        let client_config = make_client_config(KeyType::default(), &provider);
+        let mut server_config = make_server_config(KeyType::default(), &provider);
 
         server_config.cert_resolver = Arc::new(ServerCheckSni {
             expect_sni: matches!(expected_result, Accept),
