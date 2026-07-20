@@ -31,6 +31,7 @@ use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::tracing::{debug, trace};
+use crate::verify::{ClientIdentity, VerifiedIdentity};
 
 pub(crate) enum ServerState {
     /// Reading an entire ClientHello
@@ -44,6 +45,10 @@ pub(crate) enum ServerState {
 
     /// Processing the received ClientHello.
     ClientHello(Box<ExpectClientHello>),
+
+    /// Verifying the client's present certificate chain.
+    VerifyClientIdentity(VerifyClientIdentity),
+
     Tls12(tls12::Tls12State),
     Tls13(tls13::Tls13State),
 }
@@ -63,8 +68,8 @@ impl crate::conn::StateMachine for ServerState {
     fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output<'m>) -> Result<Self, Error> {
         match self {
             Self::ReadClientHello(r) => r.handle(input, output),
-            Self::ChooseConfig(_) => {
-                Err(Error::Unreachable("ChooseConfig cannot process a message"))
+            Self::ChooseConfig(_) | Self::VerifyClientIdentity(_) => {
+                Err(Error::Unreachable("state cannot process a message"))
             }
             Self::ClientHello(e) => e.handle(input, output),
             Self::Tls12(sm) => sm.handle(input, output),
@@ -73,7 +78,14 @@ impl crate::conn::StateMachine for ServerState {
     }
 
     fn wants_input(&self) -> bool {
-        !matches!(self, Self::ChooseConfig(_))
+        !matches!(self, Self::ChooseConfig(_) | Self::VerifyClientIdentity(_))
+    }
+
+    fn handle_without_input(self) -> Result<Self, Error> {
+        match self {
+            Self::VerifyClientIdentity(vci) => vci.use_verifier_trait(),
+            _ => Ok(self),
+        }
     }
 
     fn is_traffic(&self) -> bool {
@@ -773,6 +785,46 @@ impl From<Box<ExpectClientHello>> for ServerState {
     fn from(value: Box<ExpectClientHello>) -> Self {
         Self::ClientHello(value)
     }
+}
+
+pub(crate) struct VerifyClientIdentity {
+    inner: Box<dyn VerifyClientIdentityInternal>,
+}
+
+impl VerifyClientIdentity {
+    /// Obtain the peer's asserted identity for external verification.
+    pub(crate) fn asserted_identity(&self) -> Result<ClientIdentity<'static, '_>, Error> {
+        self.inner.asserted_identity()
+    }
+
+    /// Progress the handshake by calling the verifier trait synchronously.
+    pub(crate) fn use_verifier_trait(self) -> Result<ServerState, Error> {
+        self.inner.with_config()
+    }
+
+    /// Progress the handshake by incorporating an external verification.
+    pub(crate) fn into_continue(
+        self,
+        verified: VerifiedIdentity<'static>,
+    ) -> Result<ServerState, Error> {
+        self.inner.into_continue(verified)
+    }
+}
+
+impl From<Box<dyn VerifyClientIdentityInternal>> for VerifyClientIdentity {
+    fn from(inner: Box<dyn VerifyClientIdentityInternal>) -> Self {
+        Self { inner }
+    }
+}
+
+/// Trait to maintain static unreachablity of per-protocol-version code.
+pub(crate) trait VerifyClientIdentityInternal: Send + Sync {
+    fn asserted_identity(&self) -> Result<ClientIdentity<'static, '_>, Error>;
+    fn with_config(self: Box<Self>) -> Result<ServerState, Error>;
+    fn into_continue(
+        self: Box<Self>,
+        verified: VerifiedIdentity<'static>,
+    ) -> Result<ServerState, Error>;
 }
 
 pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {

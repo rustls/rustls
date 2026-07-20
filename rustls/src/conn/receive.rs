@@ -28,6 +28,7 @@ pub(crate) struct MessageIter<'a, 'm, Side: SideData, Send: SendOutput + 'a> {
     pub(super) recv: &'a mut ReceivePath,
     pub(super) state: &'a mut Result<Side::State, Error>,
     pub(super) output: JoinOutput<'a, Send>,
+    pub(super) advance: bool,
 }
 
 impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
@@ -36,6 +37,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
         tls: &'a mut Vec<u8>,
         quic: Option<&'a mut dyn QuicOutput>,
         conn: &'a mut ConnectionCommon<Side>,
+        advance: bool,
     ) -> Self {
         Self {
             input,
@@ -48,6 +50,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
                 send: &mut conn.common.send,
                 side: &mut conn.side,
             },
+            advance,
         }
     }
 }
@@ -59,6 +62,7 @@ impl<'a, 'm, 's, Side: SideData> MessageIter<'a, 'm, Side, SendAdapter<'s>> {
         state: &'a mut Result<Side::State, Error>,
         recv: &'a mut ReceivePath,
         output: JoinOutput<'a, SendAdapter<'s>>,
+        advance: bool,
     ) -> Self {
         Self {
             input,
@@ -66,6 +70,7 @@ impl<'a, 'm, 's, Side: SideData> MessageIter<'a, 'm, Side, SendAdapter<'s>> {
             recv,
             state,
             output,
+            advance,
         }
     }
 }
@@ -154,6 +159,17 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
                     *self.state = Err(e.clone());
                     return Some(Err(e));
                 }
+            }
+
+            if self.advance && !st.wants_input() {
+                st = match st.handle_without_input() {
+                    Ok(st) => st,
+                    Err(err) => {
+                        maybe_send_fatal_alert(self.output.send, &err, self.tls);
+                        *self.state = Err(err.clone());
+                        return Some(Err(err));
+                    }
+                };
             }
 
             if self.recv.has_received_close_notify {
