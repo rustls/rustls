@@ -124,21 +124,22 @@ pub struct Tls13Session {
 impl Tls13Session {
     /// Decode a ticket from the given bytes.
     pub fn from_slice(bytes: &[u8], provider: &CryptoProvider) -> Result<Self, Error> {
-        let mut reader = Reader::new(bytes);
-        let suite = CipherSuite::read(&mut reader)?;
-        let suite = provider
-            .tls13_cipher_suites
-            .iter()
-            .find(|s| s.common.suite == suite)
-            .ok_or(ApiMisuse::ResumingFromUnknownCipherSuite(suite))?;
+        Reader::new(bytes).all("Tls13Session", |reader| {
+            let suite = CipherSuite::read(reader)?;
+            let suite = provider
+                .tls13_cipher_suites
+                .iter()
+                .find(|s| s.common.suite == suite)
+                .ok_or(ApiMisuse::ResumingFromUnknownCipherSuite(suite))?;
 
-        Ok(Self {
-            suite: *suite,
-            secret: Zeroizing::new(SizedPayload::<u8>::read(&mut reader)?.into_owned()),
-            age_add: u32::read(&mut reader)?,
-            max_early_data_size: u32::read(&mut reader)?,
-            common: ClientSessionCommon::read(&mut reader)?,
-            quic_params: SizedPayload::<u16, MaybeEmpty>::read(&mut reader)?.into_owned(),
+            Ok(Self {
+                suite: *suite,
+                secret: Zeroizing::new(SizedPayload::<u8>::read(reader)?.into_owned()),
+                age_add: u32::read(reader)?,
+                max_early_data_size: u32::read(reader)?,
+                common: ClientSessionCommon::read(reader)?,
+                quic_params: SizedPayload::<u16, MaybeEmpty>::read(reader)?.into_owned(),
+            })
         })
     }
 
