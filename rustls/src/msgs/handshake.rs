@@ -220,15 +220,11 @@ impl Codec<'_> for SingleProtocolName {
 
     fn read(reader: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let len = Self::SIZE_LEN.read(reader)?;
-        let mut sub = reader.sub(len)?;
-
-        let item = ApplicationProtocol::read(&mut sub)?;
-
-        if sub.any_left() {
-            Err(InvalidMessage::TrailingData("SingleProtocolName"))
-        } else {
-            Ok(Self(item.to_owned()))
-        }
+        reader
+            .sub(len)?
+            .all("SingleProtocolName", |sub| {
+                Ok(Self(ApplicationProtocol::read(sub)?.to_owned()))
+            })
     }
 }
 
