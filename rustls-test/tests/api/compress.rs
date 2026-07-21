@@ -260,6 +260,65 @@ fn test_cert_decompression_by_server_produces_invalid_cert_payload() {
 }
 
 #[test]
+fn test_cert_decompression_by_client_rejects_trailing_data() {
+    let provider = provider::DEFAULT_PROVIDER;
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    server_config.cert_compressors = vec![&IdentityCompressor];
+    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    client_config.cert_decompressors = vec![&TrailingDataDecompressor];
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    assert_eq!(
+        do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server
+        ),
+        Err(ErrorFromPeer::Client(Error::InvalidMessage(
+            InvalidMessage::TrailingData("read_bytes")
+        )))
+    );
+    transfer(&mut client, &mut server_input);
+    assert_eq!(
+        server.process_new_packets(&mut server_input),
+        Err(Error::AlertReceived(AlertDescription::DecodeError))
+    );
+}
+
+#[test]
+fn test_cert_decompression_by_server_rejects_trailing_data() {
+    let provider = provider::DEFAULT_PROVIDER;
+    let mut server_config =
+        make_server_config_with_mandatory_client_auth(KeyType::Rsa2048, &provider);
+    server_config.cert_decompressors = vec![&TrailingDataDecompressor];
+    let mut client_config = make_client_config_with_auth(KeyType::Rsa2048, &provider);
+    client_config.cert_compressors = vec![&IdentityCompressor];
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    assert_eq!(
+        do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server
+        ),
+        Err(ErrorFromPeer::Server(Error::InvalidMessage(
+            InvalidMessage::TrailingData("read_bytes")
+        )))
+    );
+    transfer(&mut server, &mut client_input);
+    assert_eq!(
+        client.process_new_packets(&mut client_input),
+        Err(Error::AlertReceived(AlertDescription::DecodeError))
+    );
+}
+
+#[test]
 fn test_cert_decompression_by_server_fails() {
     let provider = provider::DEFAULT_PROVIDER;
     let mut server_config =
@@ -340,6 +399,27 @@ impl rustls::compress::CertDecompressor for GarbageDecompressor {
         output: &mut [u8],
     ) -> Result<(), rustls::compress::DecompressionFailed> {
         output.fill(0xff);
+        Ok(())
+    }
+
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::Zlib
+    }
+}
+
+#[derive(Debug)]
+struct TrailingDataDecompressor;
+
+impl rustls::compress::CertDecompressor for TrailingDataDecompressor {
+    fn decompress(
+        &self,
+        _input: &[u8],
+        output: &mut [u8],
+    ) -> Result<(), rustls::compress::DecompressionFailed> {
+        // A zeroed buffer decodes as a valid but empty `CertificatePayloadTls13`
+        // (empty context, empty entry list) in its first four bytes; the rest is
+        // trailing data that a strict decoder must reject.
+        output.fill(0);
         Ok(())
     }
 
