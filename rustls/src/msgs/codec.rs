@@ -512,13 +512,6 @@ impl<'a> Reader<'a> {
         mem::take(&mut self.buffer)
     }
 
-    pub(crate) fn expect_empty(&self, name: &'static str) -> Result<(), InvalidMessage> {
-        match self.any_left() {
-            true => Err(InvalidMessage::TrailingData(name)),
-            false => Ok(()),
-        }
-    }
-
     /// Whether the reader has any content left.
     pub(crate) fn any_left(&self) -> bool {
         !self.buffer.is_empty()
