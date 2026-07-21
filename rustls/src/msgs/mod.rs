@@ -673,13 +673,13 @@ impl Codec<'_> for ChangeCipherSpecPayload {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let typ = u8::read(r)?;
-        if typ != 1 {
-            return Err(InvalidMessage::InvalidCcs);
-        }
-
-        r.expect_empty("ChangeCipherSpecPayload")
-            .map(|_| Self {})
+        r.all("ChangeCipherSpecPayload", |r| {
+            let typ = u8::read(r)?;
+            if typ != 1 {
+                return Err(InvalidMessage::InvalidCcs);
+            }
+            Ok(Self)
+        })
     }
 }
 
