@@ -235,23 +235,6 @@ impl SendPath {
             .set_max_fragment_size(new)
     }
 
-    pub(crate) fn ensure_key_update_queued(&mut self) {
-        if self.queued_key_update_message.is_some() {
-            return;
-        }
-
-        let message = EncodedMessage::<Payload<'static>>::from(Message::build_key_update_notify());
-        self.queued_key_update_message = Some(
-            self.encrypt_state
-                .encrypt_outgoing(message.borrow_outbound(), Vec::new()),
-        );
-
-        if let Some(mut ks) = self.tls13_key_schedule.take() {
-            ks.update_encrypter_for_key_update(self);
-            self.tls13_key_schedule = Some(ks);
-        }
-    }
-
     /// Trigger a `refresh_traffic_keys` if required.
     pub(crate) fn maybe_refresh_traffic_keys(&mut self) {
         if self.refresh_traffic_keys_pending {
@@ -279,7 +262,20 @@ impl SendOutput for SendPath {
     }
 
     fn ensure_key_update_queued(&mut self) {
-        self.ensure_key_update_queued();
+        if self.queued_key_update_message.is_some() {
+            return;
+        }
+
+        let message = EncodedMessage::<Payload<'static>>::from(Message::build_key_update_notify());
+        self.queued_key_update_message = Some(
+            self.encrypt_state
+                .encrypt_outgoing(message.borrow_outbound(), Vec::new()),
+        );
+
+        if let Some(mut ks) = self.tls13_key_schedule.take() {
+            ks.update_encrypter_for_key_update(self);
+            self.tls13_key_schedule = Some(ks);
+        }
     }
 
     fn set_encrypter(&mut self, encrypter: Box<dyn MessageEncrypter>, max_messages: u64) {
