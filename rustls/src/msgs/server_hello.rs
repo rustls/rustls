@@ -37,34 +37,33 @@ impl Codec<'_> for ServerHelloPayload {
 
     // minus version and random, which have already been read.
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let session_id = SessionId::read(r)?;
-        let suite = CipherSuite::read(r)?;
-        let compression = Compression::read(r)?;
+        r.all("ServerHelloPayload", |r| {
+            let session_id = SessionId::read(r)?;
+            let suite = CipherSuite::read(r)?;
+            let compression = Compression::read(r)?;
 
-        // RFC5246:
-        // "The presence of extensions can be detected by determining whether
-        //  there are bytes following the compression_method field at the end of
-        //  the ServerHello."
-        let extensions = Box::new(
-            if r.any_left() {
-                ServerExtensions::read(r)?
-            } else {
-                ServerExtensions::default()
-            }
-            .into_owned(),
-        );
+            // RFC5246:
+            // "The presence of extensions can be detected by determining whether
+            //  there are bytes following the compression_method field at the end of
+            //  the ServerHello."
+            let extensions = Box::new(
+                if r.any_left() {
+                    ServerExtensions::read(r)?
+                } else {
+                    ServerExtensions::default()
+                }
+                .into_owned(),
+            );
 
-        let ret = Self {
-            legacy_version: ProtocolVersion(0),
-            random: ZERO_RANDOM,
-            session_id,
-            cipher_suite: suite,
-            compression_method: compression,
-            extensions,
-        };
-
-        r.expect_empty("ServerHelloPayload")
-            .map(|_| ret)
+            Ok(Self {
+                legacy_version: ProtocolVersion(0),
+                random: ZERO_RANDOM,
+                session_id,
+                cipher_suite: suite,
+                compression_method: compression,
+                extensions,
+            })
+        })
     }
 }
 
