@@ -406,7 +406,7 @@ impl Codec<'_> for () {
     fn encode(&self, _: &mut Vec<u8>) {}
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        r.expect_empty("Empty")
+        r.all("Empty", |_| Ok(()))
     }
 }
 
