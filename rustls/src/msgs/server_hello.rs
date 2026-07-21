@@ -413,15 +413,13 @@ impl Codec<'_> for EchConfigExtension {
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let typ = ExtensionType::read(r)?;
         let len = u16::read(r)? as usize;
-        let mut sub = r.sub(len)?;
-
-        #[expect(clippy::match_single_binding)] // Future-proofing.
-        let ext = match typ {
-            _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
-        };
-
-        sub.expect_empty("EchConfigExtension")
-            .map(|_| ext)
+        r.sub(len)?
+            .all("EchConfigExtension", |sub| {
+                #[expect(clippy::match_single_binding)] // Future-proofing.
+                match typ {
+                    _ => Ok(Self::Unknown(UnknownExtension::read(typ, sub))),
+                }
+            })
     }
 }
 
