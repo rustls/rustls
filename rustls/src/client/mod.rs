@@ -226,24 +226,25 @@ pub struct Tls12Session {
 impl Tls12Session {
     /// Decode a ticket from the given bytes.
     pub fn from_slice(bytes: &[u8], provider: &CryptoProvider) -> Result<Self, Error> {
-        let mut reader = Reader::new(bytes);
-        let suite = CipherSuite::read(&mut reader)?;
-        let suite = provider
-            .tls12_cipher_suites
-            .iter()
-            .find(|s| s.common.suite == suite)
-            .ok_or(ApiMisuse::ResumingFromUnknownCipherSuite(suite))?;
+        Reader::new(bytes).all("Tls12Session", |reader| {
+            let suite = CipherSuite::read(reader)?;
+            let suite = provider
+                .tls12_cipher_suites
+                .iter()
+                .find(|s| s.common.suite == suite)
+                .ok_or(ApiMisuse::ResumingFromUnknownCipherSuite(suite))?;
 
-        Ok(Self {
-            suite: *suite,
-            session_id: SessionId::read(&mut reader)?,
-            master_secret: Zeroizing::new(
-                reader
-                    .take_array("MasterSecret")
-                    .copied()?,
-            ),
-            extended_ms: matches!(u8::read(&mut reader)?, 1),
-            common: ClientSessionCommon::read(&mut reader)?,
+            Ok(Self {
+                suite: *suite,
+                session_id: SessionId::read(reader)?,
+                master_secret: Zeroizing::new(
+                    reader
+                        .take_array("MasterSecret")
+                        .copied()?,
+                ),
+                extended_ms: matches!(u8::read(reader)?, 1),
+                common: ClientSessionCommon::read(reader)?,
+            })
         })
     }
 
