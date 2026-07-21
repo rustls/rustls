@@ -43,7 +43,13 @@ fn main() -> Result<(), Box<dyn StdError>> {
     let (mut tcp_stream, _) = listener.accept()?;
     let mut conn = ServerConnection::new(Arc::new(config))?;
     let mut input = VecInput::default();
-    let mut tls_stream = Stream::new(&mut input, &mut conn, &mut tcp_stream);
+    let mut received_plaintext = Vec::new();
+    let mut tls_stream = Stream::new(
+        &mut input,
+        &mut received_plaintext,
+        &mut conn,
+        &mut tcp_stream,
+    );
 
     tls_stream.write_all(b"Hello from the server")?;
     tls_stream.flush()?;

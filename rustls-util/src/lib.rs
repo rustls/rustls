@@ -1,8 +1,9 @@
 use std::io;
 
+use rustls::{Connection, SideData, VecInput};
+
 mod key_log_file;
 pub use key_log_file::KeyLogFile;
-use rustls::{Connection, VecInput};
 
 mod stream;
 pub use crate::stream::{Stream, StreamOwned};
@@ -37,7 +38,8 @@ pub use crate::stream::{Stream, StreamOwned};
 pub fn complete_io(
     io: &mut (impl io::Read + io::Write),
     input: &mut VecInput,
-    conn: &mut dyn Connection,
+    received_plaintext: &mut Vec<u8>,
+    conn: &mut dyn Connection<impl SideData>,
 ) -> Result<(usize, usize), io::Error> {
     let mut eof = false;
     let mut wrlen = 0;
@@ -104,7 +106,12 @@ pub fn complete_io(
             }
         }
 
-        if let Err(e) = conn.process_new_packets(input) {
+        let error = conn
+            .process_new_packets(input)
+            .handle_all(received_plaintext)
+            .err();
+
+        if let Some(e) = error {
             // In case we have an alert to send describing this error, try a last-gasp
             // write -- but don't predate the primary error.
             let _ignored = conn.write_tls(io);

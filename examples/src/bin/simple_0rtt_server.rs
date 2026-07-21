@@ -78,7 +78,10 @@ fn main() -> Result<(), Box<dyn StdError>> {
                 };
             }
 
-            if let Err(e) = conn.process_new_packets(&mut input) {
+            if let Err(e) = conn
+                .process_new_packets(&mut input)
+                .handle_all(&mut Vec::new())
+            {
                 let _ignored = conn.write_tls(&mut stream);
                 stream.flush()?;
 
@@ -110,6 +113,6 @@ fn main() -> Result<(), Box<dyn StdError>> {
         conn.writer()
             .write_all(b"Hello from the server")?;
         conn.send_close_notify();
-        complete_io(&mut stream, &mut input, &mut conn)?;
+        complete_io(&mut stream, &mut input, &mut buf, &mut conn)?;
     }
 }

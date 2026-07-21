@@ -136,7 +136,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .ok_or("cannot resolve hostname")?;
         let mut sock = TcpStream::connect(sock_addr)?;
         let mut input = VecInput::default();
-        let mut tls = Stream::new(&mut input, &mut conn, &mut sock);
+        let mut received_plaintext = Vec::new();
+        let mut tls = Stream::new(&mut input, &mut received_plaintext, &mut conn, &mut sock);
 
         // Trim a leading '/' from the user-supplied path so we never emit a request line
         // like `GET //foo HTTP/1.1`.

@@ -1,7 +1,8 @@
 #![allow(clippy::std_instead_of_core)] // awaits core::io::IoSlice in stable (1.98)
-use std::io::{BufRead, IoSlice, Read, Result, Write};
+use std::io::{self, BufRead, IoSlice, Read, Result, Write};
+use std::marker::PhantomData;
 
-use rustls::{Connection, VecInput};
+use rustls::{Connection, SideData, TlsInputBuffer, VecInput};
 
 use crate::complete_io;
 
@@ -15,7 +16,7 @@ use crate::complete_io;
 /// [`complete_io()`]: crate::complete_io()
 #[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
-pub struct Stream<'a, C: 'a + ?Sized, T: 'a + Read + Write + ?Sized> {
+pub struct Stream<'a, C: 'a + ?Sized, S, T: 'a + Read + Write + ?Sized> {
     /// Our TLS connection
     pub conn: &'a mut C,
 
@@ -24,28 +25,46 @@ pub struct Stream<'a, C: 'a + ?Sized, T: 'a + Read + Write + ?Sized> {
 
     /// The input buffer
     pub input: &'a mut VecInput,
+
+    /// The buffer to store received plaintext
+    pub received_plaintext: &'a mut Vec<u8>,
+
+    /// Marker for the side of the connection (client or server)
+    pub side: PhantomData<S>,
 }
 
-impl<'a, C, T> Stream<'a, C, T>
+impl<'a, C, S, T> Stream<'a, C, S, T>
 where
-    C: 'a + Connection,
+    C: 'a + Connection<S>,
+    S: SideData,
     T: 'a + Read + Write,
 {
     /// Make a new Stream using the Connection `conn` and socket-like object
     /// `sock`.  This does not fail and does no IO.
-    pub fn new(input: &'a mut VecInput, conn: &'a mut C, sock: &'a mut T) -> Self {
-        Self { conn, sock, input }
+    pub fn new(
+        input: &'a mut VecInput,
+        received_plaintext: &'a mut Vec<u8>,
+        conn: &'a mut C,
+        sock: &'a mut T,
+    ) -> Self {
+        Self {
+            conn,
+            sock,
+            input,
+            received_plaintext,
+            side: PhantomData,
+        }
     }
 
     /// If we're handshaking, complete all the IO for that.
     /// If we have data to write, write it all.
     fn complete_prior_io(&mut self) -> Result<()> {
         if self.conn.is_handshaking() {
-            complete_io(self.sock, self.input, self.conn)?;
+            complete_io(self.sock, self.input, self.received_plaintext, self.conn)?;
         }
 
         if self.conn.wants_write() {
-            complete_io(self.sock, self.input, self.conn)?;
+            complete_io(self.sock, self.input, self.received_plaintext, self.conn)?;
         }
 
         Ok(())
@@ -57,57 +76,74 @@ where
         // We call complete_io() in a loop since a single call may read only
         // a partial packet from the underlying transport. A full packet is
         // needed to get more plaintext, which we must do if EOF has not been
-        // hit.
-        while self.conn.wants_read() {
-            if complete_io(self.sock, self.input, self.conn)?.0 == 0 {
+        // hit. We stop as soon as we have some plaintext to return, since
+        // `wants_read()` stays true even when plaintext is available.
+        while self.received_plaintext.is_empty() && self.conn.wants_read() {
+            if complete_io(self.sock, self.input, self.received_plaintext, self.conn)?.0 == 0 {
                 break;
             }
         }
 
-        Ok(())
-    }
+        // If we have no plaintext to return and the peer closed the connection without
+        // sending a `close_notify`, surface that as an unexpected EOF.  A clean closure
+        // (via `close_notify`) is instead reported as `Ok(0)`/an empty buffer.
+        if self.received_plaintext.is_empty() && self.input.has_seen_eof() {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "peer closed connection without sending TLS close_notify",
+            ));
+        }
 
-    // Implements `BufRead::fill_buf` but with more flexible lifetimes, so StreamOwned can reuse it
-    fn fill_buf(mut self) -> Result<&'a [u8]> {
-        self.prepare_read()?;
-        self.conn.reader().into_first_chunk()
+        Ok(())
     }
 }
 
-impl<'a, C, T> Read for Stream<'a, C, T>
+impl<'a, C, S, T> Read for Stream<'a, C, S, T>
 where
-    C: 'a + Connection,
+    C: 'a + Connection<S>,
+    S: SideData,
     T: 'a + Read + Write,
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         self.prepare_read()?;
-        self.conn.reader().read(buf)
+        let len = Ord::min(buf.len(), self.received_plaintext.len());
+        let Some((src, _)) = self
+            .received_plaintext
+            .split_at_checked(len)
+        else {
+            return Ok(0);
+        };
+
+        let Some((dst, _)) = buf.split_at_mut_checked(len) else {
+            return Ok(0);
+        };
+
+        dst.copy_from_slice(src);
+        self.received_plaintext.drain(..len);
+        Ok(len)
     }
 }
 
-impl<'a, C, T> BufRead for Stream<'a, C, T>
+impl<'a, C, S, T> BufRead for Stream<'a, C, S, T>
 where
-    C: 'a + Connection,
+    C: 'a + Connection<S>,
     T: 'a + Read + Write,
+    S: SideData,
 {
     fn fill_buf(&mut self) -> Result<&[u8]> {
-        // reborrow to get an owned `Stream`
-        Stream {
-            conn: self.conn,
-            sock: self.sock,
-            input: self.input,
-        }
-        .fill_buf()
+        self.prepare_read()?;
+        Ok(self.received_plaintext)
     }
 
     fn consume(&mut self, amt: usize) {
-        self.conn.reader().consume(amt)
+        self.received_plaintext.drain(..amt);
     }
 }
 
-impl<'a, C, T> Write for Stream<'a, C, T>
+impl<'a, C, S, T> Write for Stream<'a, C, S, T>
 where
-    C: 'a + Connection,
+    C: 'a + Connection<S>,
+    S: SideData,
     T: 'a + Read + Write,
 {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
@@ -118,7 +154,7 @@ where
         // Try to write the underlying transport here, but don't let
         // any errors mask the fact we've consumed `len` bytes.
         // Callers will learn of permanent errors on the next call.
-        let _ = complete_io(self.sock, self.input, self.conn);
+        let _ = complete_io(self.sock, self.input, self.received_plaintext, self.conn);
 
         Ok(len)
     }
@@ -134,7 +170,7 @@ where
         // Try to write the underlying transport here, but don't let
         // any errors mask the fact we've consumed `len` bytes.
         // Callers will learn of permanent errors on the next call.
-        let _ = complete_io(self.sock, self.input, self.conn);
+        let _ = complete_io(self.sock, self.input, self.received_plaintext, self.conn);
 
         Ok(len)
     }
@@ -144,8 +180,9 @@ where
 
         self.conn.writer().flush()?;
         if self.conn.wants_write() {
-            complete_io(self.sock, self.input, self.conn)?;
+            complete_io(self.sock, self.input, self.received_plaintext, self.conn)?;
         }
+
         Ok(())
     }
 }
@@ -160,7 +197,7 @@ where
 /// [`complete_io()`]: crate::complete_io()
 #[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
-pub struct StreamOwned<C: Sized, T: Read + Write + Sized> {
+pub struct StreamOwned<C: Sized, S, T: Read + Write + Sized> {
     /// Our connection
     pub conn: C,
 
@@ -169,11 +206,18 @@ pub struct StreamOwned<C: Sized, T: Read + Write + Sized> {
 
     /// The input buffer
     pub input: VecInput,
+
+    /// The buffer to store received plaintext
+    pub received_plaintext: Vec<u8>,
+
+    /// Marker for the side of the connection (client or server)
+    pub side: PhantomData<S>,
 }
 
-impl<C, T> StreamOwned<C, T>
+impl<C, S, T> StreamOwned<C, S, T>
 where
-    C: Connection,
+    C: Connection<S>,
+    S: SideData,
     T: Read + Write,
 {
     /// Make a new StreamOwned taking the Connection `conn` and socket-like
@@ -186,6 +230,8 @@ where
             conn,
             sock,
             input: VecInput::default(),
+            received_plaintext: Vec::new(),
+            side: PhantomData,
         }
     }
 
@@ -205,23 +251,27 @@ where
     }
 }
 
-impl<'a, C, T> StreamOwned<C, T>
+impl<'a, C, S, T> StreamOwned<C, S, T>
 where
-    C: Connection,
+    C: Connection<S>,
+    S: SideData,
     T: Read + Write,
 {
-    fn as_stream(&'a mut self) -> Stream<'a, C, T> {
+    fn as_stream(&'a mut self) -> Stream<'a, C, S, T> {
         Stream {
             conn: &mut self.conn,
             sock: &mut self.sock,
             input: &mut self.input,
+            received_plaintext: &mut self.received_plaintext,
+            side: PhantomData,
         }
     }
 }
 
-impl<C, T> Read for StreamOwned<C, T>
+impl<C, S, T> Read for StreamOwned<C, S, T>
 where
-    C: Connection,
+    C: Connection<S>,
+    S: SideData,
     T: Read + Write,
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
@@ -229,13 +279,15 @@ where
     }
 }
 
-impl<C, T> BufRead for StreamOwned<C, T>
+impl<C, S, T> BufRead for StreamOwned<C, S, T>
 where
-    C: Connection,
+    C: Connection<S>,
+    S: SideData,
     T: Read + Write,
 {
     fn fill_buf(&mut self) -> Result<&[u8]> {
-        self.as_stream().fill_buf()
+        self.as_stream().prepare_read()?;
+        Ok(&self.received_plaintext)
     }
 
     fn consume(&mut self, amt: usize) {
@@ -243,9 +295,10 @@ where
     }
 }
 
-impl<C, T> Write for StreamOwned<C, T>
+impl<C, S, T> Write for StreamOwned<C, S, T>
 where
-    C: Connection,
+    C: Connection<S>,
+    S: SideData,
     T: Read + Write,
 {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
@@ -261,22 +314,24 @@ where
 mod tests {
     use std::net::TcpStream;
 
+    use rustls::client::ClientSide;
+    use rustls::server::ServerSide;
     use rustls::{ClientConnection, ServerConnection};
 
     use super::{Stream, StreamOwned};
 
     #[test]
     fn stream_can_be_created_for_connection_and_tcpstream() {
-        type _Test<'a> = Stream<'a, ClientConnection, TcpStream>;
+        type _Test<'a> = Stream<'a, ClientConnection, ClientSide, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_client_and_tcpstream() {
-        type _Test = StreamOwned<ClientConnection, TcpStream>;
+        type _Test = StreamOwned<ClientConnection, ServerSide, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_server_and_tcpstream() {
-        type _Test = StreamOwned<ServerConnection, TcpStream>;
+        type _Test = StreamOwned<ServerConnection, ClientSide, TcpStream>;
     }
 }

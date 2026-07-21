@@ -1611,9 +1611,6 @@ pub enum ApiMisuse {
     /// ECH attempted with a configuration that also supports TLS1.2.
     EchForbidsTls12Support,
 
-    /// The received plaintext buffer is full; read out some plaintext before receiving more.
-    ReceivedPlaintextBufferFull,
-
     /// Secret extraction operation attempted without opting-in to secret extraction.
     ///
     /// This is possible from [`Connection::dangerous_extract_secrets()`][crate::Connection::dangerous_extract_secrets].

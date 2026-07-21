@@ -1,4 +1,5 @@
 use core::hash::Hasher;
+use core::marker::PhantomData;
 use core::{fmt, mem};
 use std::borrow::Cow;
 use std::io;
@@ -8,7 +9,8 @@ use rustls::client::danger::{
     HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
 };
 use rustls::client::{
-    ClientSessionKey, ServerVerifierBuilder, Tls13Session, WantsClientCert, WebPkiServerVerifier,
+    ClientSessionKey, ClientSide, ServerVerifierBuilder, Tls13Session, WantsClientCert,
+    WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{
     EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, Payload,
@@ -28,12 +30,12 @@ use rustls::pki_types::{
 };
 use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
 use rustls::server::{
-    ClientHello, ClientVerifierBuilder, ServerCredentialResolver, WebPkiClientVerifier,
+    ClientHello, ClientVerifierBuilder, ServerCredentialResolver, ServerSide, WebPkiClientVerifier,
 };
 use rustls::{
     ClientConfig, ClientConnection, ConfigBuilder, Connection, ConnectionTrafficSecrets,
-    DistinguishedName, RootCertStore, ServerConfig, ServerConnection, SupportedCipherSuite,
-    VecInput, WantsVerifier,
+    DistinguishedName, MessageHandler, RootCertStore, ServerConfig, ServerConnection, SideData,
+    SupportedCipherSuite, VecInput, WantsVerifier,
 };
 
 macro_rules! embed_files {
@@ -200,7 +202,7 @@ embed_files! {
     (RSA_4096_INTER_KEY, "rsa-4096", "inter.key");
 }
 
-pub fn transfer(left: &mut impl Connection, right_input: &mut VecInput) -> usize {
+pub fn transfer<S: SideData>(left: &mut impl Connection<S>, right_input: &mut VecInput) -> usize {
     let mut buf = [0u8; 262144];
     let mut total = 0;
 
@@ -241,8 +243,8 @@ pub enum Altered {
     Raw(Vec<u8>),
 }
 
-pub fn transfer_altered<F>(
-    left: &mut impl Connection,
+pub fn transfer_altered<F, S: SideData>(
+    left: &mut impl Connection<S>,
     filter: F,
     right_input: &mut VecInput,
 ) -> usize
@@ -755,19 +757,40 @@ pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, S
 
 pub fn do_handshake(
     client_input: &mut VecInput,
-    client: &mut impl Connection,
+    client: &mut impl Connection<ClientSide>,
     server_input: &mut VecInput,
-    server: &mut impl Connection,
+    server: &mut impl Connection<ServerSide>,
+) -> (usize, usize) {
+    do_handshake_collecting(
+        client_input,
+        client,
+        &mut Vec::new(),
+        server_input,
+        server,
+        &mut Vec::new(),
+    )
+}
+
+pub fn do_handshake_collecting(
+    client_input: &mut VecInput,
+    client: &mut impl Connection<ClientSide>,
+    client_received: &mut Vec<u8>,
+    server_input: &mut VecInput,
+    server: &mut impl Connection<ServerSide>,
+    server_received: &mut Vec<u8>,
 ) -> (usize, usize) {
     let (mut to_client, mut to_server) = (0, 0);
     while server.is_handshaking() || client.is_handshaking() {
         to_server += transfer(client, server_input);
         server
             .process_new_packets(server_input)
+            .handle_all(server_received)
             .unwrap();
+
         to_client += transfer(server, client_input);
         client
             .process_new_packets(client_input)
+            .handle_all(client_received)
             .unwrap();
     }
     (to_server, to_client)
@@ -789,10 +812,13 @@ pub fn do_handshake_until_error(
         transfer(client, server_input);
         server
             .process_new_packets(server_input)
+            .handle_all(&mut Vec::new())
             .map_err(ErrorFromPeer::Server)?;
+
         transfer(server, client_input);
         client
             .process_new_packets(client_input)
+            .handle_all(&mut Vec::new())
             .map_err(ErrorFromPeer::Client)?;
     }
 
@@ -812,12 +838,14 @@ pub fn do_handshake_altered(
 
         server
             .process_new_packets(&mut server_input)
+            .handle_all(&mut Vec::new())
             .map_err(ErrorFromPeer::Server)?;
 
         transfer_altered(&mut server, &alter_server_message, &mut client_input);
 
         client
             .process_new_packets(&mut client_input)
+            .handle_all(&mut Vec::new())
             .map_err(ErrorFromPeer::Client)?;
     }
 
@@ -836,6 +864,7 @@ pub fn do_handshake_until_both_error(
             transfer(server, client_input);
             let client_err = client
                 .process_new_packets(client_input)
+                .handle_all(&mut Vec::new())
                 .map_err(ErrorFromPeer::Client)
                 .expect_err("client didn't produce error after server error");
             errors.push(client_err);
@@ -847,6 +876,7 @@ pub fn do_handshake_until_both_error(
             transfer(client, server_input);
             let server_err = server
                 .process_new_packets(server_input)
+                .handle_all(&mut Vec::new())
                 .map_err(ErrorFromPeer::Server)
                 .expect_err("server didn't produce error after client error");
             errors.push(server_err);
@@ -958,6 +988,7 @@ pub fn do_suite_and_kx_test(
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
 
     assert!(client.is_handshaking());
@@ -990,6 +1021,7 @@ pub fn do_suite_and_kx_test(
     transfer(&mut server, &mut client_input);
     client
         .process_new_packets(&mut client_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
 
     assert_eq!(Some(expect_suite), client.negotiated_cipher_suite());
@@ -1020,10 +1052,12 @@ pub fn do_suite_and_kx_test(
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
     transfer(&mut server, &mut client_input);
     client
         .process_new_packets(&mut client_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
 
     assert!(!client.is_handshaking());
@@ -1383,9 +1417,9 @@ impl RawTls {
             .unwrap();
     }
 
-    pub fn receive_and_decrypt(
+    pub fn receive_and_decrypt<S: SideData>(
         &mut self,
-        peer: &mut impl Connection,
+        peer: &mut impl Connection<S>,
         f: impl Fn(EncodedMessage<&[u8]>),
     ) {
         let mut data = vec![];
@@ -1583,7 +1617,7 @@ impl ServerCredentialResolver for ServerCheckCertResolve {
     }
 }
 
-pub struct OtherSession<'a, C: Connection> {
+pub struct OtherSession<'a, S: SideData, C: Connection<S>> {
     sess: &'a mut C,
     input: &'a mut VecInput,
     pub reads: usize,
@@ -1594,9 +1628,11 @@ pub struct OtherSession<'a, C: Connection> {
     pub last_error: Option<Error>,
     pub buffered: bool,
     buffer: Vec<Vec<u8>>,
+    pub received: Vec<u8>,
+    side: PhantomData<S>,
 }
 
-impl<'a, C: Connection> OtherSession<'a, C> {
+impl<'a, S: SideData, C: Connection<S>> OtherSession<'a, S, C> {
     pub fn new(input: &'a mut VecInput, sess: &'a mut C) -> Self {
         OtherSession {
             sess,
@@ -1608,6 +1644,8 @@ impl<'a, C: Connection> OtherSession<'a, C> {
             last_error: None,
             buffered: false,
             buffer: vec![],
+            received: vec![],
+            side: PhantomData,
         }
     }
 
@@ -1647,13 +1685,14 @@ impl<'a, C: Connection> OtherSession<'a, C> {
             }
         }
 
-        let rc = self
+        let iter = self
             .sess
             .process_new_packets(self.input);
-        if !self.fail_ok {
-            rc.unwrap();
-        } else if rc.is_err() {
-            self.last_error = rc.err();
+        match (iter.handle_all(&mut self.received), self.fail_ok) {
+            (Ok(_), false) => (),
+            (Err(error), true) => self.last_error = Some(error),
+            (Ok(_), true) => panic!("read_all() succeeded unexpectedly"),
+            (Err(error), false) => panic!("read_all() failed unexpectedly: {error}"),
         }
 
         self.writevs.push(chunks);
@@ -1699,14 +1738,14 @@ impl<'a, C: Connection> OtherSession<'a, C> {
     }
 }
 
-impl<C: Connection> io::Read for OtherSession<'_, C> {
+impl<S: SideData, C: Connection<S>> io::Read for OtherSession<'_, S, C> {
     fn read(&mut self, mut b: &mut [u8]) -> io::Result<usize> {
         self.reads += 1;
         self.sess.write_tls(&mut b)
     }
 }
 
-impl<C: Connection> io::Write for OtherSession<'_, C> {
+impl<S: SideData, C: Connection<S>> io::Write for OtherSession<'_, S, C> {
     fn write(&mut self, _: &[u8]) -> io::Result<usize> {
         unreachable!()
     }
@@ -1735,17 +1774,18 @@ impl<C: Connection> io::Write for OtherSession<'_, C> {
 
 /// Check `reader` has available exactly `bytes`
 #[track_caller]
+pub fn check_iter(iter: MessageHandler<'_, '_, impl SideData>, expected: &[u8]) {
+    let mut read = Vec::with_capacity(expected.len());
+    iter.handle_all(&mut read).unwrap();
+    assert_eq!(expected, &read);
+}
+
+/// Check `reader` has available exactly `bytes`
+#[track_caller]
 pub fn check_read(reader: &mut dyn io::Read, bytes: &[u8]) {
     let mut buf = vec![0u8; bytes.len() + 1];
     assert_eq!(bytes.len(), reader.read(&mut buf).unwrap());
     assert_eq!(bytes, &buf[..bytes.len()]);
-}
-
-/// Check `reader has available exactly `bytes`, followed by EOF
-#[track_caller]
-pub fn check_read_and_close(reader: &mut dyn io::Read, expect: &[u8]) {
-    check_read(reader, expect);
-    assert!(matches!(reader.read(&mut [0u8; 5]), Ok(0)));
 }
 
 /// Check `reader` yields only an error of kind `err_kind`

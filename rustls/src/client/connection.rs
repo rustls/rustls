@@ -13,7 +13,7 @@ use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event,
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Connection, ConnectionCommon, ConnectionCore, IoState, KeyingMaterialExporter, Reader,
+    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, MessageHandler,
     SideCommonOutput, SideData, Writer,
 };
 #[cfg(doc)]
@@ -52,7 +52,6 @@ impl ClientConnection {
     /// This fails if:
     ///
     /// - the handshake is not complete. Check with [`Connection::is_handshaking()`].
-    /// - there is any buffered application data.  Check with [`Connection::reader()`].
     /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write_tls()`].
     pub fn split(self) -> Result<SplitConnection<ClientSide>, Error> {
         self.inner.split()
@@ -127,7 +126,7 @@ impl ClientConnection {
     }
 }
 
-impl Connection for ClientConnection {
+impl Connection<ClientSide> for ClientConnection {
     fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
         self.inner.write_tls(wr)
     }
@@ -140,15 +139,14 @@ impl Connection for ClientConnection {
         self.inner.wants_write()
     }
 
-    fn reader(&mut self) -> Reader<'_> {
-        self.inner.reader()
-    }
-
     fn writer(&mut self) -> Writer<'_> {
         self.inner.writer()
     }
 
-    fn process_new_packets(&mut self, input: &mut dyn TlsInputBuffer) -> Result<IoState, Error> {
+    fn process_new_packets<'a, 'm>(
+        &'a mut self,
+        input: &'m mut dyn TlsInputBuffer,
+    ) -> MessageHandler<'a, 'm, ClientSide> {
         self.inner.process_new_packets(input)
     }
 
@@ -162,11 +160,6 @@ impl Connection for ClientConnection {
 
     fn set_buffer_limit(&mut self, limit: Option<usize>) {
         self.inner.set_buffer_limit(limit)
-    }
-
-    fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
-        self.inner
-            .set_plaintext_buffer_limit(limit)
     }
 
     fn refresh_traffic_keys(&mut self) -> Result<(), Error> {

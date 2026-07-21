@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug};
 use core::ops::{Deref, DerefMut};
-use std::io::{self, BufRead, Read};
+use std::io;
 
 use kernel::KernelConnection;
 use pki_types::FipsStatus;
@@ -24,6 +24,7 @@ use crate::vecbuf::ChunkVecBuffer;
 pub mod kernel;
 
 mod receive;
+use receive::JoinOutput;
 pub(crate) use receive::{Input, MessageIter, ReceivePath, TrafficTemperCounters};
 pub use receive::{SliceInput, TlsInputBuffer, VecInput};
 
@@ -34,10 +35,10 @@ pub(crate) use send::{SendOutput, SendPath};
 pub(crate) mod split;
 use split::SplitConnection;
 
-use crate::crypto::cipher::OutboundPlain;
+use crate::crypto::cipher::{OutboundPlain, Payload};
 
 /// A trait generalizing over buffered client or server connections.
-pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
+pub trait Connection<Side: SideData>: Debug + Deref<Target = ConnectionOutputs> {
     /// Writes TLS messages to `wr`.
     ///
     /// On success, this function returns `Ok(n)` where `n` is a number of bytes written to `wr`
@@ -49,17 +50,10 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error>;
 
     /// Returns true if the caller should call [`Self::process_new_packets()`] as soon as possible.
-    ///
-    /// If there is pending plaintext data to read with [`Self::reader()`],
-    /// this returns false.  If your application respects this mechanism,
-    /// only one full TLS message will be buffered by rustls.
     fn wants_read(&self) -> bool;
 
     /// Returns true if the caller should call [`Self::write_tls()`] as soon as possible.
     fn wants_write(&self) -> bool;
-
-    /// Returns an object that allows reading plaintext.
-    fn reader(&mut self) -> Reader<'_>;
 
     /// Returns an object that allows writing plaintext.
     fn writer(&mut self) -> Writer<'_>;
@@ -77,7 +71,10 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     ///
     /// Success from this function comes with some sundry state data
     /// about the connection.
-    fn process_new_packets(&mut self, input: &mut dyn TlsInputBuffer) -> Result<IoState, Error>;
+    fn process_new_packets<'a, 'm>(
+        &'a mut self,
+        input: &'m mut dyn TlsInputBuffer,
+    ) -> MessageHandler<'a, 'm, Side>;
 
     /// Returns an object that can derive key material from the agreed connection secrets.
     ///
@@ -139,11 +136,6 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     ///
     /// This buffer is emptied by [`Self::write_tls()`].
     fn set_buffer_limit(&mut self, limit: Option<usize>);
-
-    /// Sets a limit on the internal buffers used to buffer decoded plaintext.
-    ///
-    /// See [`Self::set_buffer_limit()`] for more information on how limits are applied.
-    fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>);
 
     /// Sends a TLS1.3 `key_update` message to refresh a connection's keys.
     ///
@@ -220,55 +212,11 @@ impl<Side: SideData> ConnectionCommon<Side> {
         }
     }
 
-    #[inline]
-    pub(crate) fn process_new_packets(
-        &mut self,
-        input: &mut dyn TlsInputBuffer,
-    ) -> Result<IoState, Error> {
-        if input.has_seen_eof() {
-            self.buffers.has_seen_eof = true;
-        } else if self
-            .buffers
-            .received_plaintext
-            .is_full()
-        {
-            return Err(ApiMisuse::ReceivedPlaintextBufferFull.into());
-        }
-
-        let mut iter = MessageIter::new(input, None, &mut self.core);
-        while let Some(result) = iter.next() {
-            let payload = result?.reborrow(&Delocator::new(iter.input().slice_mut()));
-            self.buffers
-                .received_plaintext
-                .append(payload.into_vec());
-        }
-
-        input.discard(
-            self.core
-                .common
-                .recv
-                .deframer
-                .take_discard(),
-        );
-
-        // Release unsent buffered plaintext.
-        if self.send.may_send_application_data
-            && !self
-                .buffers
-                .sendable_plaintext
-                .is_empty()
-        {
-            self.core
-                .common
-                .send
-                .send_buffered_plaintext(&mut self.buffers.sendable_plaintext);
-        }
-
-        Ok(IoState::new(
-            &self.core.common.send,
-            &self.core.common.recv,
-            &self.buffers,
-        ))
+    pub(crate) fn process_new_packets<'a, 'm>(
+        &'a mut self,
+        input: &'m mut dyn TlsInputBuffer,
+    ) -> MessageHandler<'a, 'm, Side> {
+        MessageHandler::new(input, &mut self.buffers, &mut self.core)
     }
 
     pub(crate) fn wants_read(&self) -> bool {
@@ -278,10 +226,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         //
         // In the handshake case we don't have readable plaintext before the handshake has
         // completed, but also don't want to read if we still have sendable tls.
-        self.buffers
-            .received_plaintext
-            .is_empty()
-            && !self.recv.has_received_close_notify
+        !self.recv.has_received_close_notify
             && (self.send.may_send_application_data || self.send.sendable_tls.is_empty())
     }
 
@@ -300,12 +245,6 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .sendable_plaintext
             .set_limit(limit);
         self.send.sendable_tls.set_limit(limit);
-    }
-
-    pub(crate) fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
-        self.buffers
-            .received_plaintext
-            .set_limit(limit);
     }
 
     pub(crate) fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
@@ -331,19 +270,6 @@ impl<Side: SideData> ConnectionCommon<Side> {
 }
 
 impl<Side: SideData> ConnectionCommon<Side> {
-    /// Returns an object that allows reading plaintext.
-    pub(crate) fn reader(&mut self) -> Reader<'_> {
-        let common = &mut self.core.common;
-        let has_received_close_notify = common.recv.has_received_close_notify;
-        Reader {
-            received_plaintext: &mut self.buffers.received_plaintext,
-            // Are we done? i.e., have we processed all received messages, and received a
-            // close_notify to indicate that no new messages will arrive?
-            has_received_close_notify,
-            has_seen_eof: self.buffers.has_seen_eof,
-        }
-    }
-
     /// Returns an object that allows writing plaintext.
     pub(crate) fn writer(&mut self) -> Writer<'_> {
         Writer::new(self)
@@ -468,9 +394,115 @@ impl ConnectionCore<ServerSide> {
     }
 }
 
+/// Driver for handling messages from the `TlsInputBuffer`.
+///
+/// Must be driven to completion to make progress, by calling either [`Self::handle_all()`] or
+/// repeatedly calling [`Self::next_payload()`] until it returns `None`.
+#[must_use]
+pub struct MessageHandler<'a, 'm, Side: SideData> {
+    iter: MessageIter<'a, 'm, Side, SendPath>,
+    buffers: &'a mut Buffers,
+    done: bool,
+}
+
+impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
+    pub(crate) fn new(
+        input: &'m mut dyn TlsInputBuffer,
+        buffers: &'a mut Buffers,
+        core: &'a mut ConnectionCore<Side>,
+    ) -> Self {
+        if input.has_seen_eof() {
+            buffers.has_seen_eof = true;
+        }
+
+        Self {
+            iter: MessageIter::new(input, None, core),
+            buffers,
+            done: false,
+        }
+    }
+}
+
+impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
+    /// Handles all complete messages from the input buffer.
+    ///
+    /// Writes any plaintext application data from the input into `buf`, and returns the I/O
+    /// state of the connection after processing the last message. If an error is returned,
+    /// the connection is in a fatal error state and no further progress can be made.
+    pub fn handle_all(mut self, buf: &mut Vec<u8>) -> Result<IoState, Error> {
+        while let Some(result) = self.next_payload() {
+            buf.extend_from_slice(result?.bytes());
+        }
+
+        Ok(self.state())
+    }
+
+    /// Yields the first payload of plaintext application data from the input buffer.
+    ///
+    /// Should be called repeatedly until it returns `None`, at which point the input buffer no
+    /// longer contains any complete messages and should be refilled by the application.
+    pub fn next_payload(&mut self) -> Option<Result<Payload<'_>, Error>> {
+        if self.done {
+            return None;
+        }
+
+        let Some(result) = self.iter.next() else {
+            self.done = true;
+            return None;
+        };
+
+        let payload = match result {
+            Ok(payload) => payload,
+            Err(err) => {
+                self.done = true;
+                return Some(Err(err));
+            }
+        };
+
+        Some(Ok(
+            payload.reborrow(&Delocator::new(self.iter.input.slice_mut()))
+        ))
+    }
+
+    /// The I/O state of the connection after processing the last message.
+    pub fn state(self) -> IoState {
+        IoState::new(self.iter.output.send, self.iter.recv)
+    }
+}
+
+impl<'a, 'm, Side: SideData + private::Side> Drop for MessageHandler<'a, 'm, Side> {
+    fn drop(&mut self) {
+        let MessageIter {
+            input,
+            recv,
+            output: JoinOutput { send, .. },
+            ..
+        } = &mut self.iter;
+
+        input.discard(recv.deframer.take_discard());
+
+        // Release unsent buffered plaintext.
+        if send.may_send_application_data
+            && !self
+                .buffers
+                .sendable_plaintext
+                .is_empty()
+        {
+            send.send_buffered_plaintext(&mut self.buffers.sendable_plaintext);
+        }
+    }
+}
+
+impl<S: SideData> Debug for MessageHandler<'_, '_, S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PlaintextIter")
+            .field("done", &self.done)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Common items for buffered, std::io-using connections.
 pub(crate) struct Buffers {
-    pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_plaintext: ChunkVecBuffer,
     pub(crate) has_seen_eof: bool,
 }
@@ -478,114 +510,15 @@ pub(crate) struct Buffers {
 impl Buffers {
     fn new() -> Self {
         Self {
-            received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             has_seen_eof: false,
         }
     }
 
     fn is_empty(&self) -> bool {
-        self.received_plaintext.is_empty() && self.sendable_plaintext.is_empty()
+        self.sendable_plaintext.is_empty()
     }
 }
-
-/// A structure that implements [`std::io::Read`] for reading plaintext.
-pub struct Reader<'a> {
-    pub(super) received_plaintext: &'a mut ChunkVecBuffer,
-    pub(super) has_received_close_notify: bool,
-    pub(super) has_seen_eof: bool,
-}
-
-impl<'a> Reader<'a> {
-    /// Check the connection's state if no bytes are available for reading.
-    fn check_no_bytes_state(&self) -> io::Result<()> {
-        match (self.has_received_close_notify, self.has_seen_eof) {
-            // cleanly closed; don't care about TCP EOF: express this as Ok(0)
-            (true, _) => Ok(()),
-            // unclean closure
-            (false, true) => Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                UNEXPECTED_EOF_MESSAGE,
-            )),
-            // connection still going, but needs more data: signal `WouldBlock` so that
-            // the caller knows this
-            (false, false) => Err(io::ErrorKind::WouldBlock.into()),
-        }
-    }
-
-    /// Obtain a chunk of plaintext data received from the peer over this TLS connection.
-    ///
-    /// This method consumes `self` so that it can return a slice whose lifetime is bounded by
-    /// the [`Connection`] that created this [`Reader`].
-    pub fn into_first_chunk(self) -> io::Result<&'a [u8]> {
-        match self.received_plaintext.chunk() {
-            Some(chunk) => Ok(chunk),
-            None => {
-                self.check_no_bytes_state()?;
-                Ok(&[])
-            }
-        }
-    }
-}
-
-impl Read for Reader<'_> {
-    /// Obtain plaintext data received from the peer over this TLS connection.
-    ///
-    /// If the peer closes the TLS session cleanly, this returns `Ok(0)`  once all
-    /// the pending data has been read. No further data can be received on that
-    /// connection, so the underlying TCP connection should be half-closed too.
-    ///
-    /// If the peer closes the TLS session uncleanly (a TCP EOF without sending a
-    /// `close_notify` alert) this function returns a `std::io::Error` of type
-    /// `ErrorKind::UnexpectedEof` once any pending data has been read.
-    ///
-    /// Note that support for `close_notify` varies in peer TLS libraries: many do not
-    /// support it and uncleanly close the TCP connection (this might be
-    /// vulnerable to truncation attacks depending on the application protocol).
-    /// This means applications using rustls must both handle EOF
-    /// from this function, *and* unexpected EOF of the underlying TCP connection.
-    ///
-    /// If there are no bytes to read, this returns `Err(ErrorKind::WouldBlock.into())`.
-    ///
-    /// You may learn the number of bytes available at any time by inspecting
-    /// the return of [`Connection::process_new_packets()`].
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let len = self.received_plaintext.read(buf)?;
-        if len > 0 || buf.is_empty() {
-            return Ok(len);
-        }
-
-        self.check_no_bytes_state()
-            .map(|()| len)
-    }
-}
-
-impl BufRead for Reader<'_> {
-    /// Obtain a chunk of plaintext data received from the peer over this TLS connection.
-    /// This reads the same data as [`Reader::read()`], but returns a reference instead of
-    /// copying the data.
-    ///
-    /// The caller should call [`Reader::consume()`] afterward to advance the buffer.
-    ///
-    /// See [`Reader::into_first_chunk()`] for a version of this function that returns a
-    /// buffer with a longer lifetime.
-    fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        Reader {
-            // reborrow
-            received_plaintext: self.received_plaintext,
-            ..*self
-        }
-        .into_first_chunk()
-    }
-
-    fn consume(&mut self, amt: usize) {
-        self.received_plaintext
-            .consume_first_chunk(amt)
-    }
-}
-
-const UNEXPECTED_EOF_MESSAGE: &str = "peer closed connection without sending TLS close_notify: \
-https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof";
 
 /// A structure that implements [`std::io::Write`] for writing plaintext.
 pub struct Writer<'a> {
@@ -758,15 +691,13 @@ impl ConnectionRandoms {
 #[derive(Debug, Eq, PartialEq)]
 pub struct IoState {
     tls_bytes_to_write: usize,
-    plaintext_bytes_to_read: usize,
     peer_has_closed: bool,
 }
 
 impl IoState {
-    pub(crate) fn new(send: &SendPath, recv: &ReceivePath, buffers: &Buffers) -> Self {
+    pub(crate) fn new(send: &SendPath, recv: &ReceivePath) -> Self {
         Self {
             tls_bytes_to_write: send.sendable_tls.len(),
-            plaintext_bytes_to_read: buffers.received_plaintext.len(),
             peer_has_closed: recv.has_received_close_notify,
         }
     }
@@ -776,11 +707,6 @@ impl IoState {
     /// A non-zero value implies [`CommonState::wants_write()`].
     pub fn tls_bytes_to_write(&self) -> usize {
         self.tls_bytes_to_write
-    }
-
-    /// How many plaintext bytes could be obtained via [`std::io::Read`] without further I/O.
-    pub fn plaintext_bytes_to_read(&self) -> usize {
-        self.plaintext_bytes_to_read
     }
 
     /// True if the peer has sent us a close_notify alert.
@@ -880,5 +806,3 @@ pub(crate) trait StateMachine: Sized {
         send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error>;
 }
-
-const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;

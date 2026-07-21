@@ -29,6 +29,7 @@ fuzz_target!(|data: &[u8]| {
         let rd = input.read(&mut stream);
         if client
             .process_new_packets(&mut input)
+            .handle_all(&mut Vec::new())
             .is_err()
         {
             break;

@@ -114,6 +114,7 @@ fn test_version(provider: CryptoProvider) -> Transcript {
             .extend_from_slice(&buffer);
         server
             .process_new_packets(&mut SliceInput::new(&mut buffer))
+            .handle_all(&mut Vec::new())
             .unwrap();
 
         let mut buffer = vec![];
@@ -125,6 +126,7 @@ fn test_version(provider: CryptoProvider) -> Transcript {
             .extend_from_slice(&buffer);
         client
             .process_new_packets(&mut SliceInput::new(&mut buffer))
+            .handle_all(&mut Vec::new())
             .unwrap();
     }
 

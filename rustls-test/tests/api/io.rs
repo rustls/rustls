@@ -4,12 +4,10 @@
 #![allow(clippy::std_instead_of_core)] // awaits core::io::IoSlice in stable (1.98)
 
 use core::fmt::Debug;
-use std::borrow::Cow;
 use std::io::{self, BufRead, IoSlice, Read, Write};
 use std::sync::Arc;
 
 use pki_types::DnsName;
-use rustls::crypto::CryptoProvider;
 use rustls::crypto::kx::NamedGroup;
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
@@ -19,11 +17,12 @@ use rustls::{
 };
 use rustls_test::{
     ClientConfigExt, KeyType, OtherSession, ServerConfigExt, TestNonBlockIo, check_fill_buf,
-    check_fill_buf_err, check_read, check_read_and_close, check_read_err, do_handshake, encoding,
-    make_client_config, make_client_config_with_auth, make_client_config_with_kx_groups,
-    make_disjoint_suite_configs, make_pair, make_pair_for_arc_configs, make_pair_for_configs,
-    make_server_config, make_server_config_with_kx_groups,
-    make_server_config_with_mandatory_client_auth, server_name, transfer, transfer_eof,
+    check_fill_buf_err, check_iter, check_read, check_read_err, do_handshake,
+    do_handshake_collecting, encoding, make_client_config, make_client_config_with_auth,
+    make_client_config_with_kx_groups, make_disjoint_suite_configs, make_pair,
+    make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
+    make_server_config_with_kx_groups, make_server_config_with_mandatory_client_auth, server_name,
+    transfer, transfer_eof,
 };
 use rustls_util::{Stream, StreamOwned, complete_io};
 
@@ -46,18 +45,25 @@ fn buffered_client_data_sent() {
         assert_eq!(0, server.writer().write(b"").unwrap());
         assert_eq!(5, client.writer().write(b"hello").unwrap());
 
-        do_handshake(
+        // The client's buffered plaintext may be delivered as part of the final handshake
+        // flight, so collect it during the handshake as well as afterwards.
+        let mut server_received = Vec::new();
+        do_handshake_collecting(
             &mut client_input,
             &mut client,
+            &mut Vec::new(),
             &mut server_input,
             &mut server,
+            &mut server_received,
         );
+
         transfer(&mut client, &mut server_input);
         server
             .process_new_packets(&mut server_input)
+            .handle_all(&mut server_received)
             .unwrap();
 
-        check_read(&mut server.reader(), b"hello");
+        assert_eq!(&server_received, b"hello");
     }
 }
 
@@ -78,18 +84,24 @@ fn buffered_server_data_sent() {
         assert_eq!(0, server.writer().write(b"").unwrap());
         assert_eq!(5, server.writer().write(b"hello").unwrap());
 
-        do_handshake(
+        // The server's buffered plaintext may be delivered as part of the final handshake
+        // flight, so collect it during the handshake as well as afterwards.
+        let mut client_received = Vec::new();
+        do_handshake_collecting(
             &mut client_input,
             &mut client,
+            &mut client_received,
             &mut server_input,
             &mut server,
+            &mut Vec::new(),
         );
         transfer(&mut server, &mut client_input);
         client
             .process_new_packets(&mut client_input)
+            .handle_all(&mut client_received)
             .unwrap();
 
-        check_read(&mut client.reader(), b"hello");
+        assert_eq!(&client_received, b"hello");
     }
 }
 
@@ -122,24 +134,33 @@ fn buffered_both_data_sent() {
                 .unwrap()
         );
 
-        do_handshake(
+        // Buffered plaintext on both sides may be delivered as part of the final handshake
+        // flight, so collect it during the handshake as well as afterwards.
+        let mut client_received = Vec::new();
+        let mut server_received = Vec::new();
+        do_handshake_collecting(
             &mut client_input,
             &mut client,
+            &mut client_received,
             &mut server_input,
             &mut server,
+            &mut server_received,
         );
 
         transfer(&mut server, &mut client_input);
         client
             .process_new_packets(&mut client_input)
+            .handle_all(&mut client_received)
             .unwrap();
+
         transfer(&mut client, &mut server_input);
         server
             .process_new_packets(&mut server_input)
+            .handle_all(&mut server_received)
             .unwrap();
 
-        check_read(&mut client.reader(), b"from-server!");
-        check_read(&mut server.reader(), b"from-client!");
+        assert_eq!(&client_received, b"from-server!");
+        assert_eq!(&server_received, b"from-client!");
     }
 }
 
@@ -166,18 +187,22 @@ fn server_respects_buffer_limit_pre_handshake() {
         12
     );
 
-    do_handshake(
+    let mut client_received = Vec::new();
+    do_handshake_collecting(
         &mut client_input,
         &mut client,
+        &mut client_received,
         &mut server_input,
         &mut server,
+        &mut Vec::new(),
     );
+
     transfer(&mut server, &mut client_input);
     client
         .process_new_packets(&mut client_input)
+        .handle_all(&mut client_received)
         .unwrap();
-
-    check_read(&mut client.reader(), b"01234567890123456789012345678901");
+    assert_eq!(&client_received, b"01234567890123456789012345678901");
 }
 
 #[test]
@@ -199,18 +224,22 @@ fn server_respects_buffer_limit_pre_handshake_with_vectored_write() {
         32
     );
 
-    do_handshake(
+    let mut client_received = Vec::new();
+    do_handshake_collecting(
         &mut client_input,
         &mut client,
+        &mut client_received,
         &mut server_input,
         &mut server,
+        &mut Vec::new(),
     );
+
     transfer(&mut server, &mut client_input);
     client
         .process_new_packets(&mut client_input)
+        .handle_all(&mut client_received)
         .unwrap();
-
-    check_read(&mut client.reader(), b"01234567890123456789012345678901");
+    assert_eq!(&client_received, b"01234567890123456789012345678901");
 }
 
 #[test]
@@ -244,11 +273,8 @@ fn server_respects_buffer_limit_post_handshake() {
     );
 
     transfer(&mut server, &mut client_input);
-    client
-        .process_new_packets(&mut client_input)
-        .unwrap();
-
-    check_read(&mut client.reader(), b"01234567890123456789012345");
+    let iter = client.process_new_packets(&mut client_input);
+    check_iter(iter, b"01234567890123456789012345");
 }
 
 #[test]
@@ -274,18 +300,22 @@ fn client_respects_buffer_limit_pre_handshake() {
         12
     );
 
-    do_handshake(
+    let mut server_received = Vec::new();
+    do_handshake_collecting(
         &mut client_input,
         &mut client,
+        &mut Vec::new(),
         &mut server_input,
         &mut server,
+        &mut server_received,
     );
+
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut server_received)
         .unwrap();
-
-    check_read(&mut server.reader(), b"01234567890123456789012345678901");
+    assert_eq!(&server_received, b"01234567890123456789012345678901");
 }
 
 #[test]
@@ -307,18 +337,22 @@ fn client_respects_buffer_limit_pre_handshake_with_vectored_write() {
         32
     );
 
-    do_handshake(
+    let mut server_received = Vec::new();
+    do_handshake_collecting(
         &mut client_input,
         &mut client,
+        &mut Vec::new(),
         &mut server_input,
         &mut server,
+        &mut server_received,
     );
+
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut server_received)
         .unwrap();
-
-    check_read(&mut server.reader(), b"01234567890123456789012345678901");
+    assert_eq!(&server_received, b"01234567890123456789012345678901");
 }
 
 #[test]
@@ -351,11 +385,8 @@ fn client_respects_buffer_limit_post_handshake() {
     );
 
     transfer(&mut client, &mut server_input);
-    server
-        .process_new_packets(&mut server_input)
-        .unwrap();
-
-    check_read(&mut server.reader(), b"01234567890123456789012345");
+    let iter = server.process_new_packets(&mut server_input);
+    check_iter(iter, b"01234567890123456789012345");
 }
 
 #[test]
@@ -407,54 +438,19 @@ fn buf_read() {
     assert_eq!(client.writer().write(b"world").unwrap(), 5);
     assert_eq!(client.writer().write(b"").unwrap(), 0);
     transfer(&mut client, &mut server_input);
-    server
-        .process_new_packets(&mut server_input)
-        .unwrap();
+    let mut iter = server.process_new_packets(&mut server_input);
 
-    let mut reader = server.reader();
-    // fill_buf() returns each record separately (this is an implementation detail)
-    assert_eq!(reader.fill_buf().unwrap(), b"hello");
-    // partially consuming the buffer is OK
-    reader.consume(1);
-    assert_eq!(reader.fill_buf().unwrap(), b"ello");
-    // Read::read is compatible with BufRead
-    let mut b = [0u8; 2];
-    reader.read_exact(&mut b).unwrap();
-    assert_eq!(b, *b"el");
-    assert_eq!(reader.fill_buf().unwrap(), b"lo");
-    reader.consume(2);
-    // once the first packet is consumed, the next one is available
-    assert_eq!(reader.fill_buf().unwrap(), b"world");
-    reader.consume(5);
-    check_fill_buf_err(&mut reader, io::ErrorKind::WouldBlock);
-}
+    let mut i = 0;
+    while let Some(result) = iter.next_payload() {
+        let payload = result.unwrap();
+        match i {
+            0 => assert_eq!(payload.bytes(), b"hello"),
+            1 => assert_eq!(payload.bytes(), b"world"),
+            _ => panic!("unexpected chunk"),
+        }
 
-#[test]
-fn server_read_returns_wouldblock_when_no_data() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
-    assert!(matches!(server.reader().read(&mut [0u8; 1]),
-                     Err(err) if err.kind() == io::ErrorKind::WouldBlock));
-}
-
-#[test]
-fn client_read_returns_wouldblock_when_no_data() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
-    assert!(matches!(client.reader().read(&mut [0u8; 1]),
-                     Err(err) if err.kind() == io::ErrorKind::WouldBlock));
-}
-
-#[test]
-fn server_fill_buf_returns_wouldblock_when_no_data() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
-    assert!(matches!(server.reader().fill_buf(),
-                     Err(err) if err.kind() == io::ErrorKind::WouldBlock));
-}
-
-#[test]
-fn client_fill_buf_returns_wouldblock_when_no_data() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
-    assert!(matches!(client.reader().fill_buf(),
-                     Err(err) if err.kind() == io::ErrorKind::WouldBlock));
+        i += 1;
+    }
 }
 
 #[test]
@@ -463,9 +459,9 @@ fn new_server_returns_initial_io_state() {
     let mut server_input = VecInput::default();
     let io_state = server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
     println!("IoState is Debug {io_state:?}");
-    assert_eq!(io_state.plaintext_bytes_to_read(), 0);
     assert!(!io_state.peer_has_closed());
     assert_eq!(io_state.tls_bytes_to_write(), 0);
 }
@@ -476,9 +472,9 @@ fn new_client_returns_initial_io_state() {
     let mut client_input = VecInput::default();
     let io_state = client
         .process_new_packets(&mut client_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
     println!("IoState is Debug {io_state:?}");
-    assert_eq!(io_state.plaintext_bytes_to_read(), 0);
     assert!(!io_state.peer_has_closed());
     assert!(io_state.tls_bytes_to_write() > 200);
 }
@@ -488,11 +484,13 @@ fn client_complete_io_for_handshake() {
     let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
+    let mut received_plaintext = Vec::new();
 
     assert!(client.is_handshaking());
     let (rdlen, wrlen) = complete_io(
         &mut OtherSession::new(&mut server_input, &mut server),
         &mut client_input,
+        &mut received_plaintext,
         &mut client,
     )
     .unwrap();
@@ -506,11 +504,13 @@ fn buffered_client_complete_io_for_handshake() {
     let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
+    let mut received_plaintext = Vec::new();
 
     assert!(client.is_handshaking());
     let (rdlen, wrlen) = complete_io(
         &mut OtherSession::new_buffered(&mut server_input, &mut server),
         &mut client_input,
+        &mut received_plaintext,
         &mut client,
     )
     .unwrap();
@@ -524,9 +524,16 @@ fn client_complete_io_for_handshake_eof() {
     let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut input = io::Cursor::new(Vec::new());
+    let mut received_plaintext = Vec::new();
 
     assert!(client.is_handshaking());
-    let err = complete_io(&mut input, &mut client_input, &mut client).unwrap_err();
+    let err = complete_io(
+        &mut input,
+        &mut client_input,
+        &mut received_plaintext,
+        &mut client,
+    )
+    .unwrap_err();
     assert_eq!(io::ErrorKind::UnexpectedEof, err.kind());
 }
 
@@ -537,6 +544,7 @@ fn client_complete_io_for_write() {
         let (mut client, mut server) = make_pair(*kt, &provider);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
+        let mut received_plaintext = Vec::new();
 
         do_handshake(
             &mut client_input,
@@ -555,15 +563,19 @@ fn client_complete_io_for_write() {
             .unwrap();
         {
             let mut pipe = OtherSession::new(&mut server_input, &mut server);
-            let (rdlen, wrlen) = complete_io(&mut pipe, &mut client_input, &mut client).unwrap();
+            let (rdlen, wrlen) = complete_io(
+                &mut pipe,
+                &mut client_input,
+                &mut received_plaintext,
+                &mut client,
+            )
+            .unwrap();
+
             assert!(rdlen == 0 && wrlen > 0);
             println!("{:?}", pipe.writev_lengths());
             assert_eq!(pipe.writev_lengths(), vec![vec![42, 42]]);
+            assert_eq!(&pipe.received, b"0123456789012345678901234567890123456789",);
         }
-        check_read(
-            &mut server.reader(),
-            b"0123456789012345678901234567890123456789",
-        );
     }
 }
 
@@ -571,12 +583,14 @@ fn client_complete_io_for_write() {
 fn client_complete_io_with_nonblocking_io() {
     let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
+    let mut received_plaintext = Vec::new();
 
     // absolutely no progress writing ClientHello
     assert_eq!(
         complete_io(
             &mut TestNonBlockIo::default(),
             &mut client_input,
+            &mut received_plaintext,
             &mut client
         )
         .unwrap_err()
@@ -594,6 +608,7 @@ fn client_complete_io_with_nonblocking_io() {
                 reads: vec![],
             },
             &mut client_input,
+            &mut received_plaintext,
             &mut client
         )
         .unwrap(),
@@ -610,6 +625,7 @@ fn client_complete_io_with_nonblocking_io() {
                 reads: vec![],
             },
             &mut client_input,
+            &mut received_plaintext,
             &mut client
         )
         .unwrap_err()
@@ -626,6 +642,7 @@ fn client_complete_io_with_nonblocking_io() {
             reads: vec![vec![ContentType::Handshake.into()]],
         },
         &mut client_input,
+        &mut received_plaintext,
         &mut client
     ))
     .unwrap();
@@ -651,6 +668,7 @@ fn client_complete_io_with_nonblocking_io() {
                 writes: vec![],
             },
             &mut client_input,
+            &mut received_plaintext,
             &mut client
         )
         .unwrap(),
@@ -671,6 +689,7 @@ fn client_complete_io_with_nonblocking_io() {
                 writes: vec![],
             },
             &mut client_input,
+            &mut received_plaintext,
             &mut client
         )
         .unwrap_err()
@@ -686,6 +705,7 @@ fn client_complete_io_with_nonblocking_io() {
                 writes: vec![1],
             },
             &mut client_input,
+            &mut received_plaintext,
             &mut client
         )
         .unwrap(),
@@ -700,6 +720,7 @@ fn buffered_client_complete_io_for_write() {
         let (mut client, mut server) = make_pair(*kt, &provider);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
+        let mut received_plaintext = Vec::new();
 
         do_handshake(
             &mut client_input,
@@ -718,15 +739,19 @@ fn buffered_client_complete_io_for_write() {
             .unwrap();
         {
             let mut pipe = OtherSession::new_buffered(&mut server_input, &mut server);
-            let (rdlen, wrlen) = complete_io(&mut pipe, &mut client_input, &mut client).unwrap();
+            let (rdlen, wrlen) = complete_io(
+                &mut pipe,
+                &mut client_input,
+                &mut received_plaintext,
+                &mut client,
+            )
+            .unwrap();
+
             assert!(rdlen == 0 && wrlen > 0);
             println!("{:?}", pipe.writev_lengths());
             assert_eq!(pipe.writev_lengths(), vec![vec![42, 42]]);
+            assert_eq!(&pipe.received, b"0123456789012345678901234567890123456789",);
         }
-        check_read(
-            &mut server.reader(),
-            b"0123456789012345678901234567890123456789",
-        );
     }
 }
 
@@ -737,6 +762,7 @@ fn client_complete_io_for_read() {
         let (mut client, mut server) = make_pair(*kt, &provider);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
+        let mut received_plaintext = Vec::new();
 
         do_handshake(
             &mut client_input,
@@ -751,11 +777,17 @@ fn client_complete_io_for_read() {
             .unwrap();
         {
             let mut pipe = OtherSession::new(&mut server_input, &mut server);
-            let (rdlen, wrlen) = complete_io(&mut pipe, &mut client_input, &mut client).unwrap();
+            let (rdlen, wrlen) = complete_io(
+                &mut pipe,
+                &mut client_input,
+                &mut received_plaintext,
+                &mut client,
+            )
+            .unwrap();
             assert!(rdlen > 0 && wrlen == 0);
             assert_eq!(pipe.reads, 1);
         }
-        check_read(&mut client.reader(), b"01234567890123456789");
+        assert_eq!(&received_plaintext, b"01234567890123456789");
     }
 }
 
@@ -766,11 +798,13 @@ fn server_complete_io_for_handshake() {
         let (mut client, mut server) = make_pair(*kt, &provider);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
+        let mut received_plaintext = Vec::new();
 
         assert!(server.is_handshaking());
         let (rdlen, wrlen) = complete_io(
             &mut OtherSession::new(&mut client_input, &mut client),
             &mut server_input,
+            &mut received_plaintext,
             &mut server,
         )
         .unwrap();
@@ -785,9 +819,16 @@ fn server_complete_io_for_handshake_eof() {
     let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let mut server_input = VecInput::default();
     let mut input = io::Cursor::new(Vec::new());
+    let mut received_plaintext = Vec::new();
 
     assert!(server.is_handshaking());
-    let err = complete_io(&mut input, &mut server_input, &mut server).unwrap_err();
+    let err = complete_io(
+        &mut input,
+        &mut server_input,
+        &mut received_plaintext,
+        &mut server,
+    )
+    .unwrap_err();
     assert_eq!(io::ErrorKind::UnexpectedEof, err.kind());
 }
 
@@ -798,6 +839,7 @@ fn server_complete_io_for_write() {
         let (mut client, mut server) = make_pair(*kt, &provider);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
+        let mut received_plaintext = Vec::new();
 
         do_handshake(
             &mut client_input,
@@ -816,14 +858,17 @@ fn server_complete_io_for_write() {
             .unwrap();
         {
             let mut pipe = OtherSession::new(&mut client_input, &mut client);
-            let (rdlen, wrlen) = complete_io(&mut pipe, &mut server_input, &mut server).unwrap();
+            let (rdlen, wrlen) = complete_io(
+                &mut pipe,
+                &mut server_input,
+                &mut received_plaintext,
+                &mut server,
+            )
+            .unwrap();
             assert!(rdlen == 0 && wrlen > 0);
             assert_eq!(pipe.writev_lengths(), vec![vec![42, 42]]);
+            assert_eq!(&pipe.received, b"0123456789012345678901234567890123456789",);
         }
-        check_read(
-            &mut client.reader(),
-            b"0123456789012345678901234567890123456789",
-        );
     }
 }
 
@@ -834,6 +879,7 @@ fn server_complete_io_for_write_eof() {
         let (mut client, mut server) = make_pair(*kt, &provider);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
+        let mut received_plaintext = Vec::new();
 
         do_handshake(
             &mut client_input,
@@ -852,14 +898,24 @@ fn server_complete_io_for_write_eof() {
             let mut eof_writer = EofWriter::<BYTES_BEFORE_EOF>::default();
 
             // Only BYTES_BEFORE_EOF should be written.
-            let (rdlen, wrlen) =
-                complete_io(&mut eof_writer, &mut server_input, &mut server).unwrap();
+            let (rdlen, wrlen) = complete_io(
+                &mut eof_writer,
+                &mut server_input,
+                &mut received_plaintext,
+                &mut server,
+            )
+            .unwrap();
             assert_eq!(rdlen, 0);
             assert_eq!(wrlen, BYTES_BEFORE_EOF);
 
             // Now nothing should be written.
-            let (rdlen, wrlen) =
-                complete_io(&mut eof_writer, &mut server_input, &mut server).unwrap();
+            let (rdlen, wrlen) = complete_io(
+                &mut eof_writer,
+                &mut server_input,
+                &mut received_plaintext,
+                &mut server,
+            )
+            .unwrap();
             assert_eq!(rdlen, 0);
             assert_eq!(wrlen, 0);
         }
@@ -896,6 +952,7 @@ fn server_complete_io_for_read() {
         let (mut client, mut server) = make_pair(*kt, &provider);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
+        let mut received_plaintext = Vec::new();
 
         do_handshake(
             &mut client_input,
@@ -910,11 +967,17 @@ fn server_complete_io_for_read() {
             .unwrap();
         {
             let mut pipe = OtherSession::new(&mut client_input, &mut client);
-            let (rdlen, wrlen) = complete_io(&mut pipe, &mut server_input, &mut server).unwrap();
+            let (rdlen, wrlen) = complete_io(
+                &mut pipe,
+                &mut server_input,
+                &mut received_plaintext,
+                &mut server,
+            )
+            .unwrap();
             assert!(rdlen > 0 && wrlen == 0);
             assert_eq!(pipe.reads, 1);
         }
-        check_read(&mut server.reader(), b"01234567890123456789");
+        assert_eq!(&received_plaintext, b"01234567890123456789");
     }
 }
 
@@ -924,11 +987,17 @@ fn server_complete_io_for_handshake_ending_with_alert() {
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
+    let mut received_plaintext = Vec::new();
 
     assert!(server.is_handshaking());
 
     let mut pipe = OtherSession::new_fails(&mut client_input, &mut client);
-    let rc = complete_io(&mut pipe, &mut server_input, &mut server);
+    let rc = complete_io(
+        &mut pipe,
+        &mut server_input,
+        &mut received_plaintext,
+        &mut server,
+    );
     assert!(rc.is_err(), "server io failed due to handshake failure");
     assert!(!server.wants_write(), "but server did send its alert");
     assert_eq!(
@@ -962,16 +1031,28 @@ fn test_client_stream_write(stream_kind: StreamKind) {
         let (mut client, mut server) = make_pair(*kt, &provider);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
+        let mut received_plaintext = Vec::new();
         let data = b"hello";
-        {
-            let mut pipe = OtherSession::new(&mut server_input, &mut server);
-            let mut stream: Box<dyn Write> = match stream_kind {
-                StreamKind::Ref => Box::new(Stream::new(&mut client_input, &mut client, &mut pipe)),
-                StreamKind::Owned => Box::new(StreamOwned::new(client, pipe)),
-            };
-            assert_eq!(stream.write(data).unwrap(), 5);
+
+        let mut pipe = OtherSession::new(&mut server_input, &mut server);
+        match stream_kind {
+            StreamKind::Ref => {
+                let mut stream = Stream::new(
+                    &mut client_input,
+                    &mut received_plaintext,
+                    &mut client,
+                    &mut pipe,
+                );
+                assert_eq!(stream.write(data).unwrap(), 5);
+                assert_eq!(&pipe.received, data);
+            }
+            StreamKind::Owned => {
+                let mut stream = StreamOwned::new(client, pipe);
+                assert_eq!(stream.write(data).unwrap(), 5);
+                let (_, pipe) = stream.into_parts();
+                assert_eq!(&pipe.received, data);
+            }
         }
-        check_read(&mut server.reader(), data);
     }
 }
 
@@ -981,16 +1062,28 @@ fn test_server_stream_write(stream_kind: StreamKind) {
         let (mut client, mut server) = make_pair(*kt, &provider);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
+        let mut received_plaintext = Vec::new();
         let data = b"hello";
-        {
-            let mut pipe = OtherSession::new(&mut client_input, &mut client);
-            let mut stream: Box<dyn Write> = match stream_kind {
-                StreamKind::Ref => Box::new(Stream::new(&mut server_input, &mut server, &mut pipe)),
-                StreamKind::Owned => Box::new(StreamOwned::new(server, pipe)),
-            };
-            assert_eq!(stream.write(data).unwrap(), 5);
+
+        let mut pipe = OtherSession::new(&mut client_input, &mut client);
+        match stream_kind {
+            StreamKind::Ref => {
+                let mut stream = Stream::new(
+                    &mut server_input,
+                    &mut received_plaintext,
+                    &mut server,
+                    &mut pipe,
+                );
+                assert_eq!(stream.write(data).unwrap(), 5);
+                assert_eq!(&pipe.received, data);
+            }
+            StreamKind::Owned => {
+                let mut stream = StreamOwned::new(server, pipe);
+                assert_eq!(stream.write(data).unwrap(), 5);
+                let (_, pipe) = stream.into_parts();
+                assert_eq!(&pipe.received, data);
+            }
         }
-        check_read(&mut client.reader(), data);
     }
 }
 
@@ -1035,6 +1128,8 @@ fn test_client_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
         let (mut client, mut server) = make_pair(*kt, &provider);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
+        let mut received_plaintext = Vec::new();
+
         let data = b"world";
         server.writer().write_all(data).unwrap();
 
@@ -1043,7 +1138,12 @@ fn test_client_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
             transfer_eof(&mut client_input);
 
             let stream: Box<dyn BufRead> = match stream_kind {
-                StreamKind::Ref => Box::new(Stream::new(&mut client_input, &mut client, &mut pipe)),
+                StreamKind::Ref => Box::new(Stream::new(
+                    &mut client_input,
+                    &mut received_plaintext,
+                    &mut client,
+                    &mut pipe,
+                )),
                 StreamKind::Owned => Box::new(StreamOwned::new(client, pipe)),
             };
 
@@ -1058,15 +1158,21 @@ fn test_server_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
         let (mut client, mut server) = make_pair(*kt, &provider);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
+        let mut received_plaintext = Vec::new();
+
         let data = b"world";
         client.writer().write_all(data).unwrap();
-
         {
             let mut pipe = OtherSession::new(&mut client_input, &mut client);
             transfer_eof(&mut server_input);
 
             let stream: Box<dyn BufRead> = match stream_kind {
-                StreamKind::Ref => Box::new(Stream::new(&mut server_input, &mut server, &mut pipe)),
+                StreamKind::Ref => Box::new(Stream::new(
+                    &mut server_input,
+                    &mut received_plaintext,
+                    &mut server,
+                    &mut pipe,
+                )),
                 StreamKind::Owned => Box::new(StreamOwned::new(server, pipe)),
             };
 
@@ -1144,18 +1250,25 @@ fn test_write_vectored_degenerate_cases() {
     );
     assert!(transfer(&mut client, &mut server_input) > 0);
     assert!(transfer(&mut server, &mut client_input) > 0);
-    server
-        .process_new_packets(&mut server_input)
-        .unwrap();
-    client
-        .process_new_packets(&mut client_input)
-        .unwrap();
+    let mut server_iter = server.process_new_packets(&mut server_input);
+    assert_eq!(
+        server_iter
+            .next_payload()
+            .unwrap()
+            .unwrap()
+            .bytes(),
+        b"client"
+    );
 
-    let mut buf = [0; 6];
-    assert_eq!(client.reader().read(&mut buf).unwrap(), 6);
-    assert_eq!(&buf, b"server");
-    assert_eq!(server.reader().read(&mut buf).unwrap(), 6);
-    assert_eq!(&buf, b"client");
+    let mut client_iter = client.process_new_packets(&mut client_input);
+    assert_eq!(
+        client_iter
+            .next_payload()
+            .unwrap()
+            .unwrap()
+            .bytes(),
+        b"server"
+    );
 }
 
 struct FailsWrites {
@@ -1189,6 +1302,8 @@ fn stream_write_reports_underlying_io_error_before_plaintext_processed() {
     let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
+    let mut received_plaintext = Vec::new();
+
     do_handshake(
         &mut client_input,
         &mut client,
@@ -1204,7 +1319,13 @@ fn stream_write_reports_underlying_io_error_before_plaintext_processed() {
         .writer()
         .write_all(b"hello")
         .unwrap();
-    let mut client_stream = Stream::new(&mut client_input, &mut client, &mut pipe);
+
+    let mut client_stream = Stream::new(
+        &mut client_input,
+        &mut received_plaintext,
+        &mut client,
+        &mut pipe,
+    );
     let rc = client_stream.write(b"world");
     assert!(rc.is_err());
     let err = rc.err().unwrap();
@@ -1216,6 +1337,8 @@ fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
     let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
+    let mut received_plaintext = Vec::new();
+
     do_handshake(
         &mut client_input,
         &mut client,
@@ -1231,7 +1354,14 @@ fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
         .writer()
         .write_all(b"hello")
         .unwrap();
-    let mut client_stream = Stream::new(&mut client_input, &mut client, &mut pipe);
+
+    let mut client_stream = Stream::new(
+        &mut client_input,
+        &mut received_plaintext,
+        &mut client,
+        &mut pipe,
+    );
+
     let rc = client_stream.write(b"world");
     assert_eq!(format!("{rc:?}"), "Ok(5)");
 }
@@ -1242,16 +1372,24 @@ fn client_stream_handshake_error() {
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
+    let mut received_plaintext = Vec::new();
 
     {
         let mut pipe = OtherSession::new_fails(&mut server_input, &mut server);
-        let mut client_stream = Stream::new(&mut client_input, &mut client, &mut pipe);
+        let mut client_stream = Stream::new(
+            &mut client_input,
+            &mut received_plaintext,
+            &mut client,
+            &mut pipe,
+        );
+
         let rc = client_stream.write(b"hello");
         assert!(rc.is_err());
         assert_eq!(
             format!("{rc:?}"),
             "Err(Custom { kind: InvalidData, error: AlertReceived(HandshakeFailure) })"
         );
+
         let rc = client_stream.write(b"hello");
         assert!(rc.is_err());
         assert_eq!(
@@ -1291,6 +1429,7 @@ fn server_stream_handshake_error() {
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
+    let mut received_plaintext = Vec::new();
 
     client
         .writer()
@@ -1299,7 +1438,13 @@ fn server_stream_handshake_error() {
 
     {
         let mut pipe = OtherSession::new_fails(&mut client_input, &mut client);
-        let mut server_stream = Stream::new(&mut server_input, &mut server, &mut pipe);
+        let mut server_stream = Stream::new(
+            &mut server_input,
+            &mut received_plaintext,
+            &mut server,
+            &mut pipe,
+        );
+
         let mut bytes = [0u8; 5];
         let rc = server_stream.read(&mut bytes);
         assert!(rc.is_err());
@@ -1357,11 +1502,8 @@ fn vectored_write_for_server_appdata() {
         let wrlen = server.write_tls(&mut pipe).unwrap();
         assert_eq!(84, wrlen);
         assert_eq!(pipe.writev_lengths(), vec![vec![42, 42]]);
+        assert_eq!(&pipe.received, b"0123456789012345678901234567890123456789",);
     }
-    check_read(
-        &mut client.reader(),
-        b"0123456789012345678901234567890123456789",
-    );
 }
 
 #[test]
@@ -1369,6 +1511,7 @@ fn vectored_write_for_client_appdata() {
     let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
+
     do_handshake(
         &mut client_input,
         &mut client,
@@ -1389,11 +1532,8 @@ fn vectored_write_for_client_appdata() {
         let wrlen = client.write_tls(&mut pipe).unwrap();
         assert_eq!(84, wrlen);
         assert_eq!(pipe.writev_lengths(), vec![vec![42, 42]]);
+        assert_eq!(&pipe.received, b"0123456789012345678901234567890123456789");
     }
-    check_read(
-        &mut server.reader(),
-        b"0123456789012345678901234567890123456789",
-    );
 }
 
 #[test]
@@ -1420,6 +1560,7 @@ fn vectored_write_for_server_handshake_with_half_rtt_data() {
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
     {
         let mut pipe = OtherSession::new(&mut client_input, &mut client);
@@ -1428,14 +1569,18 @@ fn vectored_write_for_server_handshake_with_half_rtt_data() {
         assert!(wrlen > 2400); // its pretty big (contains cert chain)
         assert_eq!(pipe.writev_lengths().len(), 1); // only one writev
         assert_eq!(pipe.writev_lengths()[0].len(), 5); // at least a server hello/ccs/cert/serverkx/0.5rtt data
+        // The client decrypts the 0.5-RTT application data as part of this flight.
+        assert_eq!(&pipe.received, b"012345678901234567890123456789");
     }
 
     client
         .process_new_packets(&mut client_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
     {
         let mut pipe = OtherSession::new(&mut client_input, &mut client);
@@ -1447,7 +1592,6 @@ fn vectored_write_for_server_handshake_with_half_rtt_data() {
 
     assert!(!server.is_handshaking());
     assert!(!client.is_handshaking());
-    check_read(&mut client.reader(), b"012345678901234567890123456789");
 }
 
 fn check_half_rtt_does_not_work(server_config: ServerConfig) {
@@ -1470,6 +1614,7 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
     {
         let mut pipe = OtherSession::new(&mut client_input, &mut client);
@@ -1483,6 +1628,7 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
     // client second flight
     client
         .process_new_packets(&mut client_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
     transfer(&mut client, &mut server_input);
 
@@ -1491,17 +1637,18 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
     // flight (42 and 32 are lengths of appdata sent above).
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
     {
         let mut pipe = OtherSession::new(&mut client_input, &mut client);
         let wrlen = server.write_tls(&mut pipe).unwrap();
         assert_eq!(wrlen, 258);
         assert_eq!(pipe.writev_lengths(), vec![vec![184, 42, 32]]);
+        assert_eq!(&pipe.received, b"012345678901234567890123456789");
     }
 
     assert!(!server.is_handshaking());
     assert!(!client.is_handshaking());
-    check_read(&mut client.reader(), b"012345678901234567890123456789");
 }
 
 #[test]
@@ -1547,6 +1694,7 @@ fn vectored_write_for_client_handshake() {
     transfer(&mut server, &mut client_input);
     client
         .process_new_packets(&mut client_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
 
     {
@@ -1555,11 +1703,11 @@ fn vectored_write_for_client_handshake() {
         assert_eq!(wrlen, 138);
         // CCS, finished, then two application data records
         assert_eq!(pipe.writev_lengths(), vec![vec![6, 58, 42, 32]]);
+        assert_eq!(&pipe.received, b"012345678901234567890123456789");
     }
 
     assert!(!server.is_handshaking());
     assert!(!client.is_handshaking());
-    check_read(&mut server.reader(), b"012345678901234567890123456789");
 }
 
 #[test]
@@ -1595,8 +1743,8 @@ fn vectored_write_with_slow_client() {
             pipe.writev_lengths(),
             vec![vec![21], vec![10], vec![5], vec![3], vec![3]]
         );
+        assert_eq!(&pipe.received, b"01234567890123456789");
     }
-    check_read(&mut client.reader(), b"01234567890123456789");
 }
 
 #[test]
@@ -1648,7 +1796,11 @@ fn test_server_mtu_reduction() {
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
+    // The 0.5-RTT application data is delivered across the handshake flights (fragmented by
+    // the reduced MTU), so accumulate everything the client decrypts.
+    let mut received = Vec::new();
     {
         let mut pipe = OtherSession::new(&mut client_input, &mut client);
         server.write_tls(&mut pipe).unwrap();
@@ -1658,14 +1810,17 @@ fn test_server_mtu_reduction() {
                 .iter()
                 .all(|x| *x <= 64 + encryption_overhead)
         );
+        received.extend_from_slice(&pipe.received);
     }
 
     client
         .process_new_packets(&mut client_input)
+        .handle_all(&mut received)
         .unwrap();
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
     {
         let mut pipe = OtherSession::new(&mut client_input, &mut client);
@@ -1676,12 +1831,10 @@ fn test_server_mtu_reduction() {
                 .iter()
                 .all(|x| *x <= 64 + encryption_overhead)
         );
+        received.extend_from_slice(&pipe.received);
     }
 
-    client
-        .process_new_packets(&mut client_input)
-        .unwrap();
-    check_read(&mut client.reader(), &big_data);
+    assert_eq!(received, big_data);
 }
 
 fn check_client_max_fragment_size(size: usize) -> Option<Error> {
@@ -1743,18 +1896,14 @@ fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
                 let pattern = (0x00..=0xffu8).collect::<Vec<u8>>();
                 assert_eq!(pattern.len(), server.writer().write(&pattern).unwrap());
                 transfer(&mut server, &mut client_input);
-                client
-                    .process_new_packets(&mut client_input)
-                    .unwrap();
-                check_read(&mut client.reader(), &pattern);
+                let iter = client.process_new_packets(&mut client_input);
+                check_iter(iter, &pattern);
 
                 // and client -> server
                 assert_eq!(pattern.len(), client.writer().write(&pattern).unwrap());
                 transfer(&mut client, &mut server_input);
-                server
-                    .process_new_packets(&mut server_input)
-                    .unwrap();
-                check_read(&mut server.reader(), &pattern);
+                let iter = server.process_new_packets(&mut server_input);
+                check_iter(iter, &pattern);
             }
         }
     }
@@ -1798,6 +1947,7 @@ fn test_full_server_handshake() {
     let mut server_output = server_output.concat();
     client
         .process_new_packets(&mut SliceInput::new(&mut server_output))
+        .handle_all(&mut Vec::new())
         .unwrap();
     let mut client_output = vec![];
     client
@@ -1816,6 +1966,7 @@ fn test_full_server_handshake() {
     let mut server_output = server_output.concat();
     client
         .process_new_packets(&mut SliceInput::new(&mut server_output))
+        .handle_all(&mut Vec::new())
         .unwrap();
 
     assert!(matches!(server, ServerHandshake::Complete(_)));
@@ -2068,119 +2219,6 @@ fn test_acceptor_rejected_handshake() {
 }
 
 #[test]
-fn test_received_plaintext_backpressure() {
-    test_plaintext_buffer_limit(None, 16_384);
-    test_plaintext_buffer_limit(Some(18_000), 18_000);
-}
-
-fn test_plaintext_buffer_limit(limit: Option<usize>, plaintext_limit: usize) {
-    dbg!(plaintext_limit);
-    let kt = KeyType::Rsa2048;
-    let provider = provider::DEFAULT_PROVIDER;
-
-    let server_config = Arc::new(
-        ServerConfig::builder(
-            CryptoProvider {
-                tls13_cipher_suites: Cow::Owned(vec![
-                    provider::cipher_suite::TLS13_AES_128_GCM_SHA256,
-                ]),
-                ..provider.clone()
-            }
-            .into(),
-        )
-        .with_no_client_auth()
-        .with_single_cert(kt.identity(), kt.key())
-        .unwrap(),
-    );
-
-    let client_config = Arc::new(make_client_config(kt, &provider));
-    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    let mut client_tls_input = VecInput::default();
-    let mut server_tls_input = VecInput::default();
-
-    if let Some(limit) = limit {
-        server.set_plaintext_buffer_limit(Some(limit));
-        client.set_plaintext_buffer_limit(Some(limit));
-    }
-
-    do_handshake(
-        &mut client_tls_input,
-        &mut client,
-        &mut server_tls_input,
-        &mut server,
-    );
-
-    for direction in [false, true] {
-        let (left, right_input, right): (&mut dyn Connection, _, &mut dyn Connection) =
-            match direction {
-                false => (&mut client, &mut server_tls_input, &mut server),
-                true => (&mut server, &mut client_tls_input, &mut client),
-            };
-
-        // Fill the server's received plaintext buffer with 16k bytes
-        let write_buf = vec![0; plaintext_limit];
-        assert_eq!(left.writer().write(&write_buf).unwrap(), plaintext_limit);
-        let mut network_buf = Vec::with_capacity(plaintext_limit * 2);
-        let sent = dbg!(
-            left.write_tls(&mut network_buf)
-                .unwrap()
-        );
-        let mut read = 0;
-        while read < sent {
-            let new = dbg!(
-                right_input
-                    .read(&mut &network_buf[read..sent])
-                    .unwrap()
-            );
-            if new == 4096 {
-                read += new;
-            } else {
-                break;
-            }
-        }
-        right
-            .process_new_packets(right_input)
-            .unwrap();
-
-        // Send one more byte from client to server
-        assert_eq!(left.writer().write(&[1]).unwrap(), 1);
-        let sent = dbg!(
-            left.write_tls(&mut network_buf)
-                .unwrap()
-        );
-
-        right_input
-            .read(&mut &network_buf[..sent])
-            .unwrap();
-
-        // Get an error because the received plaintext buffer is full
-        assert_eq!(
-            format!(
-                "{:?}",
-                right
-                    .process_new_packets(right_input)
-                    .unwrap_err()
-            ),
-            "ApiMisuse(ReceivedPlaintextBufferFull)"
-        );
-
-        // Read out some of the plaintext
-        right
-            .reader()
-            .read_exact(&mut [0; 1])
-            .unwrap();
-
-        // Now there's room again in the plaintext buffer
-        assert_eq!(
-            right_input
-                .read(&mut &network_buf[..sent])
-                .unwrap(),
-            sent
-        );
-    }
-}
-
-#[test]
 fn server_flush_does_nothing() {
     let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     assert!(matches!(server.writer().flush(), Ok(())));
@@ -2229,17 +2267,15 @@ fn server_close_notify() {
         server.send_close_notify();
 
         transfer(&mut server, &mut client_input);
-        let io_state = client
-            .process_new_packets(&mut client_input)
-            .unwrap();
-        assert!(io_state.peer_has_closed());
-        check_read_and_close(&mut client.reader(), b"from-server!");
+        let iter = client.process_new_packets(&mut client_input);
+        let mut received = Vec::with_capacity(16);
+        let state = iter.handle_all(&mut received).unwrap();
+        assert_eq!(received, b"from-server!");
+        assert!(state.peer_has_closed());
 
         transfer(&mut client, &mut server_input);
-        server
-            .process_new_packets(&mut server_input)
-            .unwrap();
-        check_read(&mut server.reader(), b"from-client!");
+        let iter = server.process_new_packets(&mut server_input);
+        check_iter(iter, b"from-client!");
     }
 }
 
@@ -2280,17 +2316,14 @@ fn client_close_notify() {
         client.send_close_notify();
 
         transfer(&mut client, &mut server_input);
-        let io_state = server
-            .process_new_packets(&mut server_input)
-            .unwrap();
-        assert!(io_state.peer_has_closed());
-        check_read_and_close(&mut server.reader(), b"from-client!");
+        let iter = server.process_new_packets(&mut server_input);
+        let mut received = Vec::with_capacity(16);
+        let state = iter.handle_all(&mut received).unwrap();
+        assert!(state.peer_has_closed());
 
         transfer(&mut server, &mut client_input);
-        client
-            .process_new_packets(&mut client_input)
-            .unwrap();
-        check_read(&mut client.reader(), b"from-server!");
+        let iter = client.process_new_packets(&mut client_input);
+        check_iter(iter, b"from-server!");
     }
 }
 
@@ -2331,23 +2364,15 @@ fn server_closes_uncleanly() {
 
         transfer(&mut server, &mut client_input);
         transfer_eof(&mut client_input);
-        let io_state = client
-            .process_new_packets(&mut client_input)
-            .unwrap();
-        assert!(!io_state.peer_has_closed());
-        check_read(&mut client.reader(), b"from-server!");
-
-        check_read_err(
-            &mut client.reader() as &mut dyn Read,
-            io::ErrorKind::UnexpectedEof,
-        );
+        let iter = client.process_new_packets(&mut client_input);
+        let mut received = Vec::with_capacity(16);
+        let state = iter.handle_all(&mut received).unwrap();
+        assert!(!state.peer_has_closed());
 
         // may still transmit pending frames
         transfer(&mut client, &mut server_input);
-        server
-            .process_new_packets(&mut server_input)
-            .unwrap();
-        check_read(&mut server.reader(), b"from-client!");
+        let iter = server.process_new_packets(&mut server_input);
+        check_iter(iter, b"from-client!");
     }
 }
 
@@ -2388,23 +2413,16 @@ fn client_closes_uncleanly() {
 
         transfer(&mut client, &mut server_input);
         transfer_eof(&mut server_input);
-        let io_state = server
-            .process_new_packets(&mut server_input)
-            .unwrap();
-        assert!(!io_state.peer_has_closed());
-        check_read(&mut server.reader(), b"from-client!");
-
-        check_read_err(
-            &mut server.reader() as &mut dyn Read,
-            io::ErrorKind::UnexpectedEof,
-        );
+        let iter = server.process_new_packets(&mut server_input);
+        let mut received = Vec::with_capacity(16);
+        let state = iter.handle_all(&mut received).unwrap();
+        assert_eq!(&received, b"from-client!");
+        assert!(!state.peer_has_closed());
 
         // may still transmit pending frames
         transfer(&mut server, &mut client_input);
-        client
-            .process_new_packets(&mut client_input)
-            .unwrap();
-        check_read(&mut client.reader(), b"from-server!");
+        let iter = client.process_new_packets(&mut client_input);
+        check_iter(iter, b"from-server!");
     }
 }
 
@@ -2432,11 +2450,17 @@ fn test_complete_io_errors_if_close_notify_received_too_early() {
         \x15\x03\x03\x00\x02\x01\x00";
 
     let mut server_input = VecInput::default();
+    let mut received_plaintext = Vec::new();
     let mut stream = FakeStream(client_hello_followed_by_close_notify_alert);
     assert_eq!(
-        complete_io(&mut stream, &mut server_input, &mut server)
-            .unwrap_err()
-            .kind(),
+        complete_io(
+            &mut stream,
+            &mut server_input,
+            &mut received_plaintext,
+            &mut server
+        )
+        .unwrap_err()
+        .kind(),
         io::ErrorKind::UnexpectedEof
     );
 }
@@ -2446,12 +2470,15 @@ fn test_complete_io_with_no_io_needed() {
     let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
+    let mut received_plaintext = Vec::new();
+
     do_handshake(
         &mut client_input,
         &mut client,
         &mut server_input,
         &mut server,
     );
+
     client
         .writer()
         .write_all(b"hello")
@@ -2460,6 +2487,7 @@ fn test_complete_io_with_no_io_needed() {
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
     server
         .writer()
@@ -2469,6 +2497,7 @@ fn test_complete_io_with_no_io_needed() {
     transfer(&mut server, &mut client_input);
     client
         .process_new_packets(&mut client_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
 
     // neither want any IO: both directions are closed.
@@ -2476,12 +2505,26 @@ fn test_complete_io_with_no_io_needed() {
     assert!(!client.wants_read());
     assert!(!server.wants_write());
     assert!(!server.wants_read());
+
     assert_eq!(
-        complete_io(&mut FakeStream(&[]), &mut client_input, &mut client).unwrap(),
+        complete_io(
+            &mut FakeStream(&[]),
+            &mut client_input,
+            &mut received_plaintext,
+            &mut client
+        )
+        .unwrap(),
         (0, 0)
     );
+
     assert_eq!(
-        complete_io(&mut FakeStream(&[]), &mut server_input, &mut server).unwrap(),
+        complete_io(
+            &mut FakeStream(&[]),
+            &mut server_input,
+            &mut received_plaintext,
+            &mut server
+        )
+        .unwrap(),
         (0, 0)
     );
 }
@@ -2513,29 +2556,17 @@ fn test_junk_after_close_notify_received() {
     client_buffer.extend_from_slice(&[0x17, 0x03, 0x03, 0x01]);
 
     let mut final_input = SliceInput::new(&mut client_buffer);
-    server
-        .process_new_packets(&mut final_input)
-        .unwrap();
-    server
-        .process_new_packets(&mut final_input)
-        .unwrap(); // check for desync
+    let mut received_data = Vec::new();
+    for _ in 0..2 {
+        // check for desync
+        server
+            .process_new_packets(&mut final_input)
+            .handle_all(&mut received_data)
+            .unwrap();
+    }
 
     // can read data received prior to close_notify
-    let mut received_data = [0u8; 128];
-    let len = server
-        .reader()
-        .read(&mut received_data)
-        .unwrap();
-    assert_eq!(&received_data[..len], b"hello");
-
-    // but subsequent reads just report clean EOF
-    assert_eq!(
-        server
-            .reader()
-            .read(&mut received_data)
-            .unwrap(),
-        0
-    );
+    assert_eq!(&received_data, b"hello");
 }
 
 #[test]
@@ -2560,23 +2591,13 @@ fn test_data_after_close_notify_is_ignored() {
         .write_all(b"after")
         .unwrap();
     transfer(&mut client, &mut server_input);
+
+    let mut received_data = Vec::with_capacity(128);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut received_data)
         .unwrap();
-
-    let mut received_data = [0u8; 128];
-    let count = server
-        .reader()
-        .read(&mut received_data)
-        .unwrap();
-    assert_eq!(&received_data[..count], b"before");
-    assert_eq!(
-        server
-            .reader()
-            .read(&mut received_data)
-            .unwrap(),
-        0
-    );
+    assert_eq!(&received_data, b"before");
 }
 
 #[test]
@@ -2605,6 +2626,7 @@ fn test_close_notify_sent_prior_to_handshake_complete() {
     assert_eq!(
         server
             .process_new_packets(&mut server_input)
+            .handle_all(&mut Vec::new())
             .err(),
         Some(PeerMisbehaved::IllegalWarningAlert(AlertDescription::CloseNotify).into())
     );
@@ -2637,6 +2659,7 @@ fn test_second_close_notify_after_handshake() {
     assert!(transfer(&mut client, &mut server_input) > 0);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
 
     // does nothing
@@ -2659,6 +2682,7 @@ fn test_read_tls_artificial_eof_after_close_notify() {
     assert!(transfer(&mut client, &mut server_input) > 0);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
 
     let buf = [1, 2, 3, 4];

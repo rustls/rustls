@@ -239,10 +239,11 @@
 //! loop {
 //!   if client.wants_read() && socket.ready_for_read() {
 //!     input.read(&mut socket).unwrap();
-//!     client.process_new_packets(&mut input).unwrap();
-//!
 //!     let mut plaintext = Vec::new();
-//!     client.reader().read_to_end(&mut plaintext).unwrap();
+//!     client
+//!       .process_new_packets(&mut input)
+//!       .handle_all(&mut plaintext)
+//!       .unwrap();
 //!     io::stdout().write(&plaintext).unwrap();
 //!   }
 //!
@@ -383,8 +384,8 @@ pub mod internal {
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
 pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind};
 pub use crate::conn::{
-    Connection, IoState, KeyingMaterialExporter, Reader, SideData, SliceInput, TlsInputBuffer,
-    VecInput, Writer, kernel,
+    Connection, IoState, KeyingMaterialExporter, MessageHandler, SideData, SliceInput,
+    TlsInputBuffer, VecInput, Writer, kernel,
 };
 /// Types related to "split" mode.
 ///
