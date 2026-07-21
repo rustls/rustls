@@ -655,10 +655,12 @@ impl Codec<'_> for AlertMessagePayload {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let level = AlertLevel::read(r)?;
-        let description = AlertDescription::read(r)?;
-        r.expect_empty("AlertMessagePayload")
-            .map(|_| Self { level, description })
+        r.all("AlertMessagePayload", |r| {
+            Ok(Self {
+                level: AlertLevel::read(r)?,
+                description: AlertDescription::read(r)?,
+            })
+        })
     }
 }
 
