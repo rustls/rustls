@@ -461,6 +461,19 @@ impl<'a> Reader<'a> {
         Self { buffer }
     }
 
+    /// Reads all of `buffer` into a type of `T`, checking for trailing data.
+    pub(crate) fn all<T, E: From<InvalidMessage>, F: FnOnce(&mut Self) -> Result<T, E>>(
+        &mut self,
+        type_name: &'static str,
+        f: F,
+    ) -> Result<T, E> {
+        let value = f(self)?;
+        match self.any_left() {
+            true => Err(InvalidMessage::TrailingData(type_name).into()),
+            false => Ok(value),
+        }
+    }
+
     /// Attempts to create a new Reader on a sub section of this
     /// readers bytes by taking a slice of the provided `length`
     /// will return `Err(InvalidMessage::MessageTooShort)` if there is not enough bytes
