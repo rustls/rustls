@@ -24,7 +24,7 @@ use crate::msgs::{
     ClientExtensions, ClientHelloPayload, Codec, EchConfigContents, EchConfigPayload, Encoding,
     EncryptedClientHello, EncryptedClientHelloOuter, ExtensionType, HandshakeAlignedProof,
     HandshakeMessagePayload, HandshakePayload, HelloRetryRequest, HpkeKeyConfig, Message,
-    MessagePayload, PresharedKeyBinder, PresharedKeyOffer, Random, Reader, ServerHelloPayload,
+    MessagePayload, PresharedKeyBinder, PresharedKeyOffer, Random, ServerHelloPayload,
     ServerNamePayload, SizedPayload,
 };
 use crate::tls13::Tls13CipherSuite;
@@ -101,10 +101,9 @@ impl EchConfig {
         ech_config_list: EchConfigListBytes<'_>,
         hpke_suites: &[&'static dyn Hpke],
     ) -> Result<Self, Error> {
-        let ech_configs = Vec::<EchConfigPayload>::read(&mut Reader::new(&ech_config_list))
-            .map_err(|_| {
-                Error::InvalidEncryptedClientHello(EncryptedClientHelloError::InvalidConfigList)
-            })?;
+        let ech_configs = Vec::<EchConfigPayload>::read_bytes(&ech_config_list).map_err(|_| {
+            Error::InvalidEncryptedClientHello(EncryptedClientHelloError::InvalidConfigList)
+        })?;
 
         Self::new_for_configs(ech_configs, hpke_suites)
     }
