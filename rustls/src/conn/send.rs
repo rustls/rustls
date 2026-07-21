@@ -193,13 +193,13 @@ impl SendPath {
         &mut self,
         iter: impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>>,
     ) {
+        self.perhaps_write_key_update();
         for m in iter {
             // Alerts are always sendable -- never quashed by a PreEncryptAction.
             if MUST_ENCRYPT && m.typ != ContentType::Alert && self.preflight_encrypt(0).is_err() {
                 return;
             }
 
-            self.perhaps_write_key_update();
             let record = match MUST_ENCRYPT {
                 true => self
                     .encrypt_state
