@@ -433,14 +433,10 @@ pub(crate) trait Codec<'a>: Debug + Sized {
     /// Function for wrapping a call to the read function in
     /// a Reader for the slice of bytes provided
     ///
-    /// Returns `Err(InvalidMessage::ExcessData(_))` if
+    /// Returns `Err(InvalidMessage::TrailingData(_))` if
     /// `Self::read` does not read the entirety of `bytes`.
     fn read_bytes(bytes: &'a [u8]) -> Result<Self, InvalidMessage> {
-        let mut reader = Reader::new(bytes);
-        Self::read(&mut reader).and_then(|r| {
-            reader.expect_empty("read_bytes")?;
-            Ok(r)
-        })
+        Reader::new(bytes).all("read_bytes", Self::read)
     }
 }
 
