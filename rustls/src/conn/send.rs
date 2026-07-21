@@ -53,18 +53,6 @@ impl SendPath {
         self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
     }
 
-    pub(crate) fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
-        match level {
-            AlertLevel::Fatal if self.has_sent_fatal_alert => return,
-            AlertLevel::Fatal => self.has_sent_fatal_alert = true,
-            _ => {}
-        };
-        self.send_msg(
-            Message::build_alert(level, desc),
-            self.encrypt_state.is_encrypting(),
-        );
-    }
-
     /// Like send_msg_encrypt, but operate on an appdata directly.
     pub(crate) fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
         let len = payload.len();
@@ -288,7 +276,16 @@ impl SendOutput for SendPath {
     }
 
     fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
-        self.send_alert(level, desc);
+        match level {
+            AlertLevel::Fatal if self.has_sent_fatal_alert => return,
+            AlertLevel::Fatal => self.has_sent_fatal_alert = true,
+            _ => {}
+        };
+
+        self.send_msg(
+            Message::build_alert(level, desc),
+            self.encrypt_state.is_encrypting(),
+        );
     }
 
     fn start_traffic(&mut self) {
