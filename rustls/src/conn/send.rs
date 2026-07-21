@@ -177,7 +177,7 @@ impl SendPath {
     /// Like send_msg_encrypt, but operate on an appdata directly.
     pub(crate) fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
         let len = payload.len();
-        self.send_messages(
+        self.send_messages::<true>(
             self.message_fragmenter
                 .fragment_payload(
                     ContentType::ApplicationData,
@@ -189,20 +189,23 @@ impl SendPath {
     }
 
     /// Encrypt and queue each fragment in `iter`.
-    fn send_messages<'a>(
+    fn send_messages<'a, const MUST_ENCRYPT: bool>(
         &mut self,
         iter: impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>>,
     ) {
         for m in iter {
             // Alerts are always sendable -- never quashed by a PreEncryptAction.
-            if m.typ != ContentType::Alert && self.preflight_encrypt(0).is_err() {
+            if MUST_ENCRYPT && m.typ != ContentType::Alert && self.preflight_encrypt(0).is_err() {
                 return;
             }
 
             self.perhaps_write_key_update();
-            let record = self
-                .encrypt_state
-                .encrypt_outgoing(m, self.sendable_tls.take_spare());
+            let record = match MUST_ENCRYPT {
+                true => self
+                    .encrypt_state
+                    .encrypt_outgoing(m, self.sendable_tls.take_spare()),
+                false => m.to_unencrypted_bytes(),
+            };
             self.sendable_tls.append(record);
         }
     }
@@ -299,16 +302,9 @@ impl SendOutput for SendPath {
         let fragments = self
             .message_fragmenter
             .fragment_message(&encoded);
-
-        if must_encrypt {
-            self.send_messages(fragments);
-            return;
-        }
-
-        self.perhaps_write_key_update();
-        for m in fragments {
-            self.sendable_tls
-                .append(m.to_unencrypted_bytes());
+        match must_encrypt {
+            true => self.send_messages::<true>(fragments),
+            false => self.send_messages::<false>(fragments),
         }
     }
 }
