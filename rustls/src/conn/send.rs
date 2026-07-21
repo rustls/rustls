@@ -53,20 +53,6 @@ impl SendPath {
         self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
     }
 
-    /// Like send_msg_encrypt, but operate on an appdata directly.
-    pub(crate) fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
-        let len = payload.len();
-        self.send_messages(
-            self.message_fragmenter
-                .fragment_payload(
-                    ContentType::ApplicationData,
-                    ProtocolVersion::TLSv1_2,
-                    payload,
-                ),
-        );
-        len
-    }
-
     /// Encrypt and queue each fragment in `iter`.
     fn send_messages<'a>(
         &mut self,
@@ -205,6 +191,20 @@ impl SendPath {
         while let Some(buf) = plaintext.pop() {
             self.send_appdata_encrypt(buf.as_slice().into());
         }
+    }
+
+    /// Like send_msg_encrypt, but operate on an appdata directly.
+    pub(crate) fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
+        let len = payload.len();
+        self.send_messages(
+            self.message_fragmenter
+                .fragment_payload(
+                    ContentType::ApplicationData,
+                    ProtocolVersion::TLSv1_2,
+                    payload,
+                ),
+        );
+        len
     }
 
     pub(crate) fn start_outgoing_traffic(&mut self) {
