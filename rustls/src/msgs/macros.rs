@@ -164,13 +164,13 @@ macro_rules! extension_struct {
             ) -> Result<ExtensionType, InvalidMessage> {
                 let typ = ExtensionType::read(r)?;
                 let len = usize::from(u16::read(r)?);
-                let mut ext_body = r.sub(len)?;
-                match self.read_extension_body(typ, &mut ext_body)? {
-                    true => ext_body.expect_empty(stringify!($struct_name))?,
-                    false => unknown(typ)?,
-
-                };
-                Ok(typ)
+                r.sub(len)?
+                    .all(stringify!($struct_name), |body| {
+                        if !self.read_extension_body(typ, body)? {
+                            unknown(typ)?;
+                        }
+                        Ok(typ)
+                    })
             }
 
             /// Reads one extension body for an extension named by `typ`.
