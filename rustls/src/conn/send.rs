@@ -53,25 +53,6 @@ impl SendPath {
         self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
     }
 
-    /// Encrypt and queue each fragment in `iter`.
-    fn send_messages<'a>(
-        &mut self,
-        iter: impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>>,
-    ) {
-        for m in iter {
-            // Alerts are always sendable -- never quashed by a PreEncryptAction.
-            if m.typ != ContentType::Alert && self.preflight_encrypt(0).is_err() {
-                return;
-            }
-
-            self.perhaps_write_key_update();
-            let record = self
-                .encrypt_state
-                .encrypt_outgoing(m, self.sendable_tls.take_spare());
-            self.sendable_tls.append(record);
-        }
-    }
-
     fn preflight_encrypt(&mut self, n: usize) -> Result<(), Error> {
         match self
             .encrypt_state
@@ -205,6 +186,25 @@ impl SendPath {
                 ),
         );
         len
+    }
+
+    /// Encrypt and queue each fragment in `iter`.
+    fn send_messages<'a>(
+        &mut self,
+        iter: impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>>,
+    ) {
+        for m in iter {
+            // Alerts are always sendable -- never quashed by a PreEncryptAction.
+            if m.typ != ContentType::Alert && self.preflight_encrypt(0).is_err() {
+                return;
+            }
+
+            self.perhaps_write_key_update();
+            let record = self
+                .encrypt_state
+                .encrypt_outgoing(m, self.sendable_tls.take_spare());
+            self.sendable_tls.append(record);
+        }
     }
 
     pub(crate) fn start_outgoing_traffic(&mut self) {
