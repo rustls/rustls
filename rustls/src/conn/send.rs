@@ -296,19 +296,17 @@ impl SendOutput for SendPath {
     /// Send a raw TLS message, fragmenting it if needed.
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         let encoded = EncodedMessage::from(m);
+        let fragments = self
+            .message_fragmenter
+            .fragment_message(&encoded);
+
         if must_encrypt {
-            self.send_messages(
-                self.message_fragmenter
-                    .fragment_message(&encoded),
-            );
+            self.send_messages(fragments);
             return;
         }
 
-        let iter = self
-            .message_fragmenter
-            .fragment_message(&encoded);
         self.perhaps_write_key_update();
-        for m in iter {
+        for m in fragments {
             self.sendable_tls
                 .append(m.to_unencrypted_bytes());
         }
