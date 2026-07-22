@@ -10,6 +10,7 @@ use zeroize::Zeroize;
 use super::config::ServerConfig;
 use super::hs::ServerState;
 use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
+use crate::ConnectionTrafficSecrets;
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
@@ -32,8 +33,9 @@ use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
-use crate::verify::{ClientIdentity, PeerVerified, SignatureVerificationInput};
-use crate::{ConnectionTrafficSecrets, verify};
+use crate::verify::{
+    ClientIdentity, FinishedMessageVerified, PeerVerified, SignatureVerificationInput,
+};
 
 #[expect(private_interfaces)]
 pub(crate) enum Tls12State {
@@ -962,7 +964,7 @@ impl ExpectFinished {
 
         let fin_verified =
             match ConstantTimeEq::ct_eq(&expect_verify_data[..], finished.bytes()).into() {
-                true => verify::FinishedMessageVerified::assertion(),
+                true => FinishedMessageVerified::assertion(),
                 false => {
                     return Err(PeerMisbehaved::IncorrectFinished.into());
                 }
@@ -1074,7 +1076,7 @@ struct HandshakeState {
 pub(super) struct ExpectTraffic {
     // only `Some` if `config.enable_secret_extraction` is true
     extracted_secrets: Option<Result<PartiallyExtractedSecrets, Error>>,
-    _fin_verified: verify::FinishedMessageVerified,
+    _fin_verified: FinishedMessageVerified,
 }
 
 impl ExpectTraffic {}

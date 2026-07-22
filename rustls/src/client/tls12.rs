@@ -32,7 +32,10 @@ use crate::suites::{PartiallyExtractedSecrets, Suite};
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
-use crate::verify::{self, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput};
+use crate::verify::{
+    DigitallySignedStruct, FinishedMessageVerified, HandshakeSignatureValid, PeerVerified,
+    ServerIdentity, SignatureVerificationInput,
+};
 
 #[expect(private_interfaces)]
 pub(crate) enum Tls12State {
@@ -74,6 +77,7 @@ mod server_hello {
     };
     use crate::msgs::ServerHelloPayload;
     use crate::sealed::Sealed;
+    use crate::verify::{HandshakeSignatureValid, PeerVerified};
 
     pub(crate) static TLS12_HANDLER: &dyn ClientHandler<Tls12CipherSuite> = &Handler;
 
@@ -192,8 +196,8 @@ mod server_hello {
 
                     let (dec, enc) = secrets.make_cipher_pair(Side::Client);
                     output.output(OutputEvent::HandshakeKind(HandshakeKind::Resumed));
-                    let cert_verified = verify::PeerVerified::assertion();
-                    let sig_verified = verify::HandshakeSignatureValid::assertion();
+                    let cert_verified = PeerVerified::assertion();
+                    let sig_verified = HandshakeSignatureValid::assertion();
 
                     let hs = HandshakeState {
                         config,
@@ -926,8 +930,8 @@ struct ExpectNewTicket {
     peer_identity: Identity<'static>,
     resuming: Option<(Tls12Session, Box<dyn MessageEncrypter>)>,
     pending_decrypter: Box<dyn MessageDecrypter>,
-    cert_verified: verify::PeerVerified,
-    sig_verified: verify::HandshakeSignatureValid,
+    cert_verified: PeerVerified,
+    sig_verified: HandshakeSignatureValid,
 }
 
 impl ExpectNewTicket {
@@ -972,8 +976,8 @@ struct ExpectCcs {
     resuming: Option<(Tls12Session, Box<dyn MessageEncrypter>)>,
     pending_decrypter: Box<dyn MessageDecrypter>,
     ticket: Option<NewSessionTicketPayload>,
-    cert_verified: verify::PeerVerified,
-    sig_verified: verify::HandshakeSignatureValid,
+    cert_verified: PeerVerified,
+    sig_verified: HandshakeSignatureValid,
 }
 
 impl ExpectCcs {
@@ -1026,8 +1030,8 @@ pub(super) struct ExpectFinished {
     resuming: Option<(Tls12Session, Box<dyn MessageEncrypter>)>,
     ticket: Option<NewSessionTicketPayload>,
     secrets: ConnectionSecrets,
-    cert_verified: verify::PeerVerified,
-    sig_verified: verify::HandshakeSignatureValid,
+    cert_verified: PeerVerified,
+    sig_verified: HandshakeSignatureValid,
 }
 
 impl ExpectFinished {
@@ -1103,7 +1107,7 @@ impl ExpectFinished {
         // get one chance.  But it can't hurt.
         let fin_verified =
             match ConstantTimeEq::ct_eq(&expect_verify_data[..], finished.bytes()).into() {
-                true => verify::FinishedMessageVerified::assertion(),
+                true => FinishedMessageVerified::assertion(),
                 false => {
                     return Err(PeerMisbehaved::IncorrectFinished.into());
                 }
@@ -1180,9 +1184,9 @@ struct HandshakeState {
 pub(super) struct ExpectTraffic {
     // only `Some` if `config.enable_secret_extraction` is true
     extracted_secrets: Option<Result<PartiallyExtractedSecrets, Error>>,
-    _cert_verified: verify::PeerVerified,
-    _sig_verified: verify::HandshakeSignatureValid,
-    _fin_verified: verify::FinishedMessageVerified,
+    _cert_verified: PeerVerified,
+    _sig_verified: HandshakeSignatureValid,
+    _fin_verified: FinishedMessageVerified,
 }
 
 impl ExpectTraffic {

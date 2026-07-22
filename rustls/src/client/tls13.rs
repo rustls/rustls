@@ -47,7 +47,10 @@ use crate::tls13::key_schedule::{
 use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
-use crate::verify::{self, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput};
+use crate::verify::{
+    DigitallySignedStruct, FinishedMessageVerified, HandshakeSignatureValid, PeerVerified,
+    ServerIdentity, SignatureVerificationInput,
+};
 use crate::{ConnectionTrafficSecrets, KeyLog, compress, crypto};
 
 #[expect(private_interfaces)]
@@ -613,8 +616,8 @@ impl ExpectEncryptedExtensions {
 
                 // We *don't* reverify the certificate chain here: resumption is a
                 // continuation of the previous session in terms of security policy.
-                let cert_verified = verify::PeerVerified::assertion();
-                let sig_verified = verify::HandshakeSignatureValid::assertion();
+                let cert_verified = PeerVerified::assertion();
+                let sig_verified = HandshakeSignatureValid::assertion();
                 Ok(Box::new(ExpectFinished {
                     hs: self.hs,
                     session_input: Tls13ClientSessionInput {
@@ -1274,8 +1277,8 @@ struct ExpectFinished {
     hs: HandshakeState,
     session_input: Tls13ClientSessionInput,
     client_auth: Option<ClientAuthDetails>,
-    cert_verified: verify::PeerVerified,
-    sig_verified: verify::HandshakeSignatureValid,
+    cert_verified: PeerVerified,
+    sig_verified: HandshakeSignatureValid,
     ech: Ech,
     in_early_traffic: bool,
 }
@@ -1302,7 +1305,7 @@ impl ExpectFinished {
 
         let fin = match ConstantTimeEq::ct_eq(expect_verify_data.as_ref(), finished.bytes()).into()
         {
-            true => verify::FinishedMessageVerified::assertion(),
+            true => FinishedMessageVerified::assertion(),
             false => {
                 return Err(PeerMisbehaved::IncorrectFinished.into());
             }
@@ -1457,9 +1460,9 @@ pub(super) struct ExpectTraffic {
     key_schedule_recv: KeyScheduleTrafficReceive,
     resumption: KeyScheduleResumption,
     counters: TrafficTemperCounters,
-    _cert_verified: verify::PeerVerified,
-    _sig_verified: verify::HandshakeSignatureValid,
-    _fin_verified: verify::FinishedMessageVerified,
+    _cert_verified: PeerVerified,
+    _sig_verified: HandshakeSignatureValid,
+    _fin_verified: FinishedMessageVerified,
 }
 
 impl ExpectTraffic {

@@ -39,8 +39,10 @@ use crate::tls13::key_schedule::{
 use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
-use crate::verify::{ClientIdentity, PeerVerified};
-use crate::{ConnectionTrafficSecrets, compress, verify};
+use crate::verify::{
+    ClientIdentity, FinishedMessageVerified, PeerVerified, SignatureVerificationInput,
+};
+use crate::{ConnectionTrafficSecrets, compress};
 
 #[expect(private_interfaces)]
 pub(crate) enum Tls13State {
@@ -1125,7 +1127,7 @@ impl ExpectCertificateVerify {
         self.hs
             .config
             .verifier
-            .verify_tls13_signature(&verify::SignatureVerificationInput {
+            .verify_tls13_signature(&SignatureVerificationInput {
                 message: construct_client_verify_message(&handshake_hash).as_ref(),
                 signer: &self.peer_identity.as_signer(),
                 signature,
@@ -1431,7 +1433,7 @@ impl ExpectFinished {
 
         let fin = match ConstantTimeEq::ct_eq(expect_verify_data.as_ref(), finished.bytes()).into()
         {
-            true => verify::FinishedMessageVerified::assertion(),
+            true => FinishedMessageVerified::assertion(),
             false => return Err(PeerMisbehaved::IncorrectFinished.into()),
         };
 
@@ -1505,7 +1507,7 @@ pub(super) struct ExpectTraffic {
     config: Arc<ServerConfig>,
     key_schedule_recv: KeyScheduleTrafficReceive,
     counters: TrafficTemperCounters,
-    _fin_verified: verify::FinishedMessageVerified,
+    _fin_verified: FinishedMessageVerified,
 }
 
 impl ExpectTraffic {
@@ -1614,7 +1616,7 @@ impl From<Box<ExpectTraffic>> for ServerState {
 }
 
 struct ExpectQuicTraffic {
-    _fin_verified: verify::FinishedMessageVerified,
+    _fin_verified: FinishedMessageVerified,
 }
 
 impl ExpectQuicTraffic {
