@@ -10,7 +10,7 @@ use super::client_hello::{
     EncryptedClientHello, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer,
     PskKeyExchangeModes, ServerNamePayload,
 };
-use super::codec::{Codec, Reader, SizedPayload, put_u16};
+use super::codec::{Codec, LengthPrefixedBuffer, ListLength, Reader, SizedPayload, put_u16};
 use super::enums::{
     ClientCertificateType, Compression, ECCurveType, EchVersion, ExtensionType, KeyUpdateRequest,
 };
@@ -200,6 +200,35 @@ fn refuses_new_session_ticket_ext_with_duplicate_extension() {
         NewSessionTicketExtensions::read_bytes(&bytes).unwrap_err(),
         InvalidMessage::DuplicateExtension(0x0099)
     );
+}
+
+#[test]
+fn refuses_new_session_ticket_ext_with_misplaced_extension() {
+    for misplaced in [ExtensionType::RenegotiationInfo, ExtensionType::KeyShare] {
+        assert_eq!(
+            NewSessionTicketExtensions::read_bytes(&empty_extension_list(misplaced)).unwrap_err(),
+            InvalidMessage::MisplacedExtension(u16::from(misplaced))
+        );
+    }
+}
+
+#[test]
+fn accepts_new_session_ticket_ext_with_unrecognized_extension() {
+    assert!(
+        NewSessionTicketExtensions::read_bytes(&empty_extension_list(ExtensionType::from(0x0420)))
+            .is_ok()
+    );
+}
+
+/// Encodes an extension list containing one `typ` extension with an empty body.
+fn empty_extension_list(typ: ExtensionType) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    {
+        let list = LengthPrefixedBuffer::new(ListLength::U16, &mut bytes);
+        typ.encode(list.buf);
+        0u16.encode(list.buf);
+    }
+    bytes
 }
 
 #[test]
