@@ -19,15 +19,16 @@ use crate::crypto::{
     CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme, SingleCredential,
     TEST_PROVIDER, tls12_only, tls13_only, tls13_suite,
 };
-use crate::enums::{CertificateType, ProtocolVersion};
+use crate::enums::{CertificateType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::{
     CertificateChain, ClientHelloPayload, Codec, Compression, ECCurveType, EcParameters,
-    EncryptedExtensions, HEADER_SIZE, HandshakeMessagePayload, HandshakePayload, HelloRetryRequest,
-    HelloRetryRequestExtensions, KeyShareEntry, MaybeEmpty, Message, MessagePayload,
-    NewSessionTicketExtensions, NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams,
-    ServerExtensions, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams,
-    ServerKeyExchangePayload, SessionId, SizedPayload,
+    EncryptedExtensions, ExtensionType, HEADER_SIZE, HandshakeMessagePayload, HandshakePayload,
+    HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, LengthPrefixedBuffer,
+    ListLength, MaybeEmpty, Message, MessagePayload, NewSessionTicketExtensions,
+    NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams, ServerExtensions,
+    ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
+    SessionId, SizedPayload,
 };
 use crate::pki_types::PrivateKeyDer;
 use crate::pki_types::pem::PemObject;
@@ -572,6 +573,82 @@ fn client_requiring_rpk_receives_server_ee(
             .map(|_| ()),
         expected
     );
+}
+
+#[test]
+fn test_client_rejects_recognized_misplaced_extension_in_tls13_server_hello() {
+    // `supported_groups` and `signature_algorithms` are offered by the
+    // client, but not specified for the ServerHello.
+    for misplaced in [
+        ExtensionType::EllipticCurves,
+        ExtensionType::SignatureAlgorithms,
+    ] {
+        assert_eq!(
+            client_receives_tls13_server_hello_with_raw_extension(misplaced),
+            Err(PeerMisbehaved::UnexpectedCleartextExtension.into())
+        );
+    }
+
+    // Unrecognized extensions are rejected as unsolicited.
+    assert_eq!(
+        client_receives_tls13_server_hello_with_raw_extension(ExtensionType::from(0x04d2)),
+        Err(PeerMisbehaved::UnsolicitedServerHelloExtension.into())
+    );
+}
+
+fn client_receives_tls13_server_hello_with_raw_extension(
+    extension_type: ExtensionType,
+) -> Result<(), Error> {
+    let config = ClientConfig::builder(Arc::new(TEST_PROVIDER))
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(ServerVerifierRequiringRpk))
+        .with_no_client_auth()
+        .unwrap();
+
+    let mut conn = Arc::new(config)
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build()
+        .unwrap();
+    let mut sent = Vec::new();
+    conn.write_tls(&mut sent).unwrap();
+
+    // `ServerExtensions` cannot encode an extension type it does not model,
+    // so assemble the ServerHello body by hand and have
+    // `HandshakePayload::Unknown` carry it: the handshake and record headers
+    // are then computed by the usual encoding path.
+    let mut body = Vec::new();
+    ProtocolVersion::TLSv1_3.encode(&mut body);
+    Random([0; 32]).encode(&mut body);
+    SessionId::empty().encode(&mut body);
+    TEST_PROVIDER.tls13_cipher_suites[0]
+        .common
+        .suite
+        .encode(&mut body);
+    Compression::Null.encode(&mut body);
+
+    let extensions = LengthPrefixedBuffer::new(ListLength::U16, &mut body);
+    ExtensionType::KeyShare.encode(extensions.buf);
+    let key_share = LengthPrefixedBuffer::new(ListLength::U16, extensions.buf);
+    KeyShareEntry::new(TEST_PROVIDER.kx_groups[0].name(), vec![0xaa; 32]).encode(key_share.buf);
+    drop(key_share);
+    extension_type.encode(extensions.buf);
+    0u16.encode(extensions.buf);
+    drop(extensions);
+
+    let sh = Message {
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Unknown((
+            HandshakeType::ServerHello,
+            Payload::new(body),
+        )))),
+    };
+
+    let mut input = VecInput::default();
+    input
+        .read(&mut sh.into_wire_bytes().as_slice())
+        .unwrap();
+    conn.process_new_packets(&mut input)
+        .map(|_| ())
 }
 
 fn client_credentials(provider: &CryptoProvider) -> Credentials {

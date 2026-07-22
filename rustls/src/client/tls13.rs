@@ -109,7 +109,13 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
 
         let mut randoms = ConnectionRandoms::new(st.input.random, server_hello.random);
 
-        if !server_hello.only_contains(ALLOWED_PLAINTEXT_EXTS) {
+        // RFC 9846 section 4.3: reject recognized extensions not specified
+        // for the TLS 1.3 ServerHello.  Unrecognized extensions were already
+        // rejected by the unsolicited extension check.
+        if server_hello
+            .received_types()
+            .any(|ext| ext.is_recognized() && !ALLOWED_PLAINTEXT_EXTS.contains(&ext))
+        {
             return Err(PeerMisbehaved::UnexpectedCleartextExtension.into());
         }
 

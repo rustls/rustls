@@ -50,11 +50,11 @@ pub(crate) use client_hello::{
 };
 
 mod codec;
+use codec::U24;
 pub(crate) use codec::{
-    CERTIFICATE_MAX_SIZE_LIMIT, Codec, ListLength, MaybeEmpty, NonEmpty, Reader, SizedPayload,
-    TlsListElement, hex, put_u16, put_u64,
+    CERTIFICATE_MAX_SIZE_LIMIT, Codec, LengthPrefixedBuffer, ListLength, MaybeEmpty, NonEmpty,
+    Reader, SizedPayload, TlsListElement, hex, put_u16, put_u64,
 };
-use codec::{LengthPrefixedBuffer, U24};
 
 mod deframer;
 pub(crate) use deframer::{Deframed, Deframer, Delocator, HandshakeAlignedProof, Locator};
