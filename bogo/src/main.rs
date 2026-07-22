@@ -1365,7 +1365,7 @@ impl DummyServerAuth {
 }
 
 impl ServerVerifier for DummyServerAuth {
-    fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
+    fn verify_identity(&self, _identity: &ServerIdentity<'_, '_>) -> Result<PeerVerified, Error> {
         if let OcspValidation::Reject = self.ocsp {
             return Err(CertificateError::InvalidOcspResponse.into());
         }

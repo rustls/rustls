@@ -428,7 +428,10 @@ mod danger {
     }
 
     impl ServerVerifier for NoCertificateVerification {
-        fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
+        fn verify_identity(
+            &self,
+            _identity: &ServerIdentity<'_, '_>,
+        ) -> Result<PeerVerified, Error> {
             Ok(PeerVerified::assertion())
         }
 

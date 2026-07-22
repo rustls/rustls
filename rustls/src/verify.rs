@@ -33,7 +33,7 @@ pub trait ServerVerifier: Debug + Send + Sync {
     ///
     /// [Certificate]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.4.2
     /// [`CertificateError::BadEncoding`]: crate::error::CertificateError::BadEncoding
-    fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error>;
+    fn verify_identity(&self, identity: &ServerIdentity<'_, '_>) -> Result<PeerVerified, Error>;
 
     /// Verify a signature allegedly by the given server certificate.
     ///
@@ -105,11 +105,11 @@ pub trait ServerVerifier: Debug + Send + Sync {
 /// Data required to verify a server's identity.
 #[non_exhaustive]
 #[derive(Debug)]
-pub struct ServerIdentity<'a> {
+pub struct ServerIdentity<'a, 'b> {
     /// Identity information presented by the server.
-    pub identity: &'a Identity<'a>,
+    pub identity: &'b Identity<'a>,
     /// The server name the client specified when connecting to the server.
-    pub server_name: &'a ServerName<'a>,
+    pub server_name: &'b ServerName<'a>,
     /// OCSP response stapled to the server's `Certificate` message, if any.
     ///
     /// Empty if no OCSP response was received, and that also
@@ -119,9 +119,9 @@ pub struct ServerIdentity<'a> {
     pub now: UnixTime,
 }
 
-impl<'a> ServerIdentity<'a> {
+impl<'a, 'b> ServerIdentity<'a, 'b> {
     /// Create a new `ServerIdentity` instance with empty OCSP response.
-    pub fn new(identity: &'a Identity<'a>, server_name: &'a ServerName<'a>, now: UnixTime) -> Self {
+    pub fn new(identity: &'b Identity<'a>, server_name: &'b ServerName<'a>, now: UnixTime) -> Self {
         Self {
             identity,
             server_name,

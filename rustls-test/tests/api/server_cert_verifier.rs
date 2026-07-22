@@ -805,7 +805,7 @@ struct ServerVerifierWithCasExt {
 }
 
 impl ServerVerifier for ServerVerifierWithCasExt {
-    fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
+    fn verify_identity(&self, identity: &ServerIdentity<'_, '_>) -> Result<PeerVerified, Error> {
         self.verifier.verify_identity(identity)
     }
 
