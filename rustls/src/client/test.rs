@@ -390,7 +390,7 @@ struct ExpectSha1EcdsaVerifier {
 }
 
 impl ServerVerifier for ExpectSha1EcdsaVerifier {
-    fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
+    fn verify_identity(&self, _identity: &ServerIdentity<'_, '_>) -> Result<PeerVerified, Error> {
         Ok(PeerVerified::assertion())
     }
 
@@ -671,7 +671,7 @@ impl ServerVerifier for ServerVerifierWithAuthorityNames {
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
-    fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
+    fn verify_identity(&self, _identity: &ServerIdentity<'_, '_>) -> Result<PeerVerified, Error> {
         unreachable!()
     }
 
@@ -707,7 +707,7 @@ struct ServerVerifierRequiringRpk;
 
 impl ServerVerifier for ServerVerifierRequiringRpk {
     #[cfg_attr(coverage_nightly, coverage(off))]
-    fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
+    fn verify_identity(&self, _identity: &ServerIdentity<'_, '_>) -> Result<PeerVerified, Error> {
         todo!()
     }
 
