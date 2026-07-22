@@ -24,8 +24,8 @@ use super::handshake::{
     SessionId, SingleProtocolName, SupportedEcPointFormats, SupportedProtocolVersions,
 };
 use super::server_hello::{
-    EchConfigContents, EchConfigPayload, HpkeKeyConfig, ServerEncryptedClientHello,
-    ServerExtensions, ServerHelloPayload, ServerTicketRequestHint,
+    EchConfigContents, EchConfigPayload, EncryptedExtensions, HpkeKeyConfig,
+    ServerEncryptedClientHello, ServerExtensions, ServerHelloPayload, ServerTicketRequestHint,
 };
 use super::{HandshakeMessagePayload, HandshakePayload};
 use crate::crypto::cipher::Payload;
@@ -1232,8 +1232,20 @@ fn sample_new_session_ticket_payload_tls13() -> NewSessionTicketPayloadTls13 {
     }
 }
 
-fn sample_encrypted_extensions() -> Box<ServerExtensions<'static>> {
-    sample_server_hello_payload().extensions
+fn sample_encrypted_extensions() -> Box<EncryptedExtensions<'static>> {
+    Box::new(EncryptedExtensions {
+        server_name_ack: Some(()),
+        selected_protocol: Some(SingleProtocolName::new(ApplicationProtocol::from(vec![0]))),
+        client_certificate_type: Some(CertificateType::RawPublicKey),
+        server_certificate_type: Some(CertificateType::RawPublicKey),
+        transport_parameters: Some(Payload::new(vec![1, 2, 3])),
+        early_data_ack: Some(()),
+        ticket_request: Some(ServerTicketRequestHint { expected_count: 2 }),
+        encrypted_client_hello_ack: Some(ServerEncryptedClientHello {
+            retry_configs: vec![],
+        }),
+        unknown_extensions: Default::default(),
+    })
 }
 
 fn sample_certificate_status() -> CertificateStatus<'static> {

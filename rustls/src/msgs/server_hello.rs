@@ -242,6 +242,106 @@ impl<'a> Codec<'a> for ServerExtensions<'a> {
     }
 }
 
+extension_struct! {
+    /// The extensions carried in a TLS 1.3 EncryptedExtensions message.
+    pub(crate) struct EncryptedExtensions<'a> {
+        /// Server name indication acknowledgement (RFC6066)
+        ExtensionType::ServerName =>
+            pub(crate) server_name_ack: Option<()>,
+
+        /// Selected ALPN protocol (RFC7301)
+        ExtensionType::ALProtocolNegotiation =>
+            pub(crate) selected_protocol: Option<SingleProtocolName>,
+
+        /// Required client certificate type (RFC7250)
+        ExtensionType::ClientCertificateType =>
+            pub(crate) client_certificate_type: Option<CertificateType>,
+
+        /// Selected server certificate type (RFC7250)
+        ExtensionType::ServerCertificateType =>
+            pub(crate) server_certificate_type: Option<CertificateType>,
+
+        /// QUIC transport parameters (RFC9001)
+        ExtensionType::TransportParameters =>
+            pub(crate) transport_parameters: Option<Payload<'a>>,
+
+        /// Early data is accepted (RFC8446)
+        ExtensionType::EarlyData =>
+            pub(crate) early_data_ack: Option<()>,
+
+        /// Ticket request hint (RFC9149)
+        ExtensionType::TicketRequest =>
+            pub(crate) ticket_request: Option<ServerTicketRequestHint>,
+
+        /// Encrypted inner client hello response (RFC 9849)
+        ExtensionType::EncryptedClientHello =>
+            pub(crate) encrypted_client_hello_ack: Option<ServerEncryptedClientHello>,
+    } + {
+        pub(crate) unknown_extensions: BTreeSet<u16>,
+    }
+}
+
+impl EncryptedExtensions<'_> {
+    /// Every extension type present in this message.
+    pub(crate) fn received_types(&self) -> impl Iterator<Item = ExtensionType> + '_ {
+        self.collect_used().into_iter().chain(
+            self.unknown_extensions
+                .iter()
+                .map(|ext| ExtensionType::from(*ext)),
+        )
+    }
+
+    pub(crate) fn into_owned(self) -> EncryptedExtensions<'static> {
+        let Self {
+            server_name_ack,
+            selected_protocol,
+            client_certificate_type,
+            server_certificate_type,
+            transport_parameters,
+            early_data_ack,
+            ticket_request,
+            encrypted_client_hello_ack,
+            unknown_extensions,
+        } = self;
+        EncryptedExtensions {
+            server_name_ack,
+            selected_protocol,
+            client_certificate_type,
+            server_certificate_type,
+            transport_parameters: transport_parameters.map(|x| x.into_owned()),
+            early_data_ack,
+            ticket_request,
+            encrypted_client_hello_ack,
+            unknown_extensions,
+        }
+    }
+}
+
+impl<'a> Codec<'a> for EncryptedExtensions<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let extensions = LengthPrefixedBuffer::new(ListLength::U16, bytes);
+
+        for ext in Self::ALL_EXTENSIONS {
+            self.encode_one(*ext, extensions.buf);
+        }
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let mut out = Self::default();
+        let mut checker = DuplicateExtensionChecker::new();
+
+        let len = usize::from(u16::read(r)?);
+        let mut sub = r.sub(len)?;
+
+        while sub.any_left() {
+            out.read_one(&mut sub, |unknown| checker.check(unknown))?;
+        }
+
+        out.unknown_extensions = checker.0;
+        Ok(out)
+    }
+}
+
 /// Representation of the ECHEncryptedExtensions extension specified in
 /// [RFC 9849 Section 5].
 ///

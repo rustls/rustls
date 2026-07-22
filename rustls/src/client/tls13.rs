@@ -32,10 +32,10 @@ use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, ChangeCipherSpecPayload, ClientExtensions,
-    Codec, EchConfigPayload, ExtensionType, HandshakeMessagePayload, HandshakePayload,
-    KeyShareEntry, KeyUpdateRequest, MaybeEmpty, Message, MessagePayload,
+    Codec, EchConfigPayload, EncryptedExtensions, ExtensionType, HandshakeMessagePayload,
+    HandshakePayload, KeyShareEntry, KeyUpdateRequest, MaybeEmpty, Message, MessagePayload,
     NewSessionTicketPayloadTls13, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer,
-    ServerExtensions, ServerHelloPayload, SizedPayload,
+    ServerHelloPayload, SizedPayload,
 };
 use crate::sealed::Sealed;
 use crate::suites::PartiallyExtractedSecrets;
@@ -479,14 +479,24 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, output: &mut dyn Out
 
 fn validate_encrypted_extensions(
     hello: &ClientHelloDetails,
-    exts: &ServerExtensions<'_>,
+    exts: &EncryptedExtensions<'_>,
 ) -> Result<(), Error> {
     if hello.server_sent_unsolicited_extensions(exts.received_types(), &[]) {
         return Err(PeerMisbehaved::UnsolicitedEncryptedExtension.into());
     }
 
-    if exts.contains_any(ALLOWED_PLAINTEXT_EXTS) || exts.contains_any(DISALLOWED_TLS13_EXTS) {
-        return Err(PeerMisbehaved::DisallowedEncryptedExtension.into());
+    // These are recognized but not modelled by `EncryptedExtensions`, so
+    // appear in `unknown_extensions`.
+    for ext in ALLOWED_PLAINTEXT_EXTS
+        .iter()
+        .chain(DISALLOWED_TLS13_EXTS)
+    {
+        if exts
+            .unknown_extensions
+            .contains(&u16::from(*ext))
+        {
+            return Err(PeerMisbehaved::DisallowedEncryptedExtension.into());
+        }
     }
 
     Ok(())
