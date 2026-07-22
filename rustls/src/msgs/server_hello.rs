@@ -334,13 +334,27 @@ impl<'a> Codec<'a> for EncryptedExtensions<'a> {
         let mut sub = r.sub(len)?;
 
         while sub.any_left() {
-            out.read_one(&mut sub, |unknown| checker.check(unknown))?;
+            out.read_one(&mut sub, |unknown| {
+                checker.check_unprocessed(unknown, UNPROCESSED_ENCRYPTED_EXTS)
+            })?;
         }
 
         out.unknown_extensions = checker.0;
         Ok(out)
     }
 }
+
+/// Recognized extensions that are specified for EncryptedExtensions, but which
+/// rustls does not process: these are ignored if received.
+///
+/// See RFC 9846 section 4.3 Table 1, plus `max_fragment_length` per its IANA
+/// "TLS 1.3" registry entry (carried over from RFC 8446 section 4.2).
+const UNPROCESSED_ENCRYPTED_EXTS: &[ExtensionType] = &[
+    ExtensionType::MaxFragmentLength,
+    ExtensionType::EllipticCurves,
+    ExtensionType::UseSRTP,
+    ExtensionType::Heartbeat,
+];
 
 /// Representation of the ECHEncryptedExtensions extension specified in
 /// [RFC 9849 Section 5].

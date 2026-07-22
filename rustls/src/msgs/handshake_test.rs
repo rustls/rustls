@@ -143,6 +143,35 @@ fn refuses_server_ext_with_unparsed_bytes() {
 }
 
 #[test]
+fn refuses_encrypted_ext_with_misplaced_extension() {
+    for misplaced in [ExtensionType::KeyShare, ExtensionType::ExtendedMasterSecret] {
+        assert_eq!(
+            EncryptedExtensions::read_bytes(&empty_extension_list(misplaced)).unwrap_err(),
+            InvalidMessage::MisplacedExtension(u16::from(misplaced))
+        );
+    }
+}
+
+#[test]
+fn accepts_encrypted_ext_with_permitted_unprocessed_extension() {
+    // `supported_groups` and `max_fragment_length` are specified for
+    // EncryptedExtensions, but rustls does not process them there.
+    for permitted in [
+        ExtensionType::EllipticCurves,
+        ExtensionType::MaxFragmentLength,
+    ] {
+        assert!(EncryptedExtensions::read_bytes(&empty_extension_list(permitted)).is_ok());
+    }
+}
+
+#[test]
+fn accepts_encrypted_ext_with_unrecognized_extension() {
+    assert!(
+        EncryptedExtensions::read_bytes(&empty_extension_list(ExtensionType::from(0x04d2))).is_ok()
+    );
+}
+
+#[test]
 fn refuses_certificate_ext_with_unparsed_bytes() {
     let bytes = [
         0x00u8, 0x0a, 0x00, 0x05, 0x00, 0x06, 0x01, 0x00, 0x00, 0x01, 0xcc, 0x01,
