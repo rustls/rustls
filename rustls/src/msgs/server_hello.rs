@@ -294,7 +294,9 @@ impl Codec<'_> for EchConfigPayload {
         let mut contents = r.sub(length as usize)?;
 
         Ok(match version {
-            EchVersion::V18 => Self::V18(EchConfigContents::read(&mut contents)?),
+            EchVersion::V18 => {
+                Self::V18(contents.all("EchConfigContents", EchConfigContents::read)?)
+            }
             _ => {
                 // Note: we don't SizedPayload::read() here because we've already read the length prefix.
                 let data = SizedPayload::from(Payload::new(contents.rest()));

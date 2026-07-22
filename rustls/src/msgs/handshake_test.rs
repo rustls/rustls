@@ -861,6 +861,29 @@ fn test_echconfig_serialization() {
     assert_round_trip_eq(ECHCONFIG_LIST_WITH_UNSUPPORTED);
 }
 
+#[test]
+fn rejects_trailing_data_in_v18_echconfig() {
+    // version(2) | length(2) | ECHConfigContents(length)
+    let mut encoded = get_ech_config(ECHCONFIG_LIST_LOCALHOST)
+        .remove(0)
+        .get_encoding();
+    assert!(matches!(
+        EchConfigPayload::read_bytes(&encoded).unwrap(),
+        EchConfigPayload::V18(_)
+    ));
+
+    // Grow the contents length prefix to cover an extra byte after the
+    // extensions vector, which for a recognized version is the final field.
+    encoded.push(0);
+    let len = u16::from_be_bytes([encoded[2], encoded[3]]) + 1;
+    encoded[2..4].copy_from_slice(&len.to_be_bytes());
+
+    assert_eq!(
+        EchConfigPayload::read_bytes(&encoded).unwrap_err(),
+        InvalidMessage::TrailingData("EchConfigContents")
+    );
+}
+
 fn sample_hello_retry_request() -> HelloRetryRequest {
     HelloRetryRequest {
         legacy_version: ProtocolVersion::TLSv1_2,
