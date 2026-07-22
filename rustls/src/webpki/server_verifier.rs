@@ -8,8 +8,8 @@ use crate::crypto::{CryptoProvider, Identity, SignatureScheme, WebPkiSupportedAl
 use crate::error::ApiMisuse;
 use crate::sync::Arc;
 use crate::verify::{
-    HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
-    SignatureVerificationInput,
+    HandshakeSignatureValid, ServerIdentity, ServerVerifier, SignatureVerificationInput,
+    VerifiedIdentity,
 };
 use crate::webpki::verify::{
     ParsedCertificate, verify_identity_signed_by_trust_anchor_impl, verify_tls12_signature,
@@ -210,7 +210,10 @@ impl ServerVerifier for WebPkiServerVerifier {
     /// each certificate in the chain to a root CA (excluding the root itself), or only the
     /// end entity certificate. Similarly, unknown revocation status may be treated as an error
     /// or allowed based on configuration.
-    fn verify_identity(&self, identity: &ServerIdentity<'_, '_>) -> Result<PeerVerified, Error> {
+    fn verify_identity<'a>(
+        &self,
+        identity: &ServerIdentity<'a, '_>,
+    ) -> Result<VerifiedIdentity<'a>, Error> {
         let certificates = match identity.identity {
             Identity::X509(certificates) => certificates,
             Identity::RawPublicKey(_) => {
@@ -249,7 +252,7 @@ impl ServerVerifier for WebPkiServerVerifier {
         )?;
 
         verify_server_name(&cert, identity.server_name)?;
-        Ok(PeerVerified::assertion())
+        Ok(VerifiedIdentity::assertion(identity.identity.clone()))
     }
 
     fn verify_tls12_signature(

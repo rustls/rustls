@@ -34,8 +34,8 @@ use crate::pki_types::pem::PemObject;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::{derive_traffic_iv, derive_traffic_key};
 use crate::verify::{
-    HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
-    SignatureVerificationInput,
+    HandshakeSignatureValid, ServerIdentity, ServerVerifier, SignatureVerificationInput,
+    VerifiedIdentity,
 };
 use crate::{
     Connection, DigitallySignedStruct, DistinguishedName, KeyLog, RootCertStore, VecInput,
@@ -50,10 +50,11 @@ fn tls12_client_session_value_roundtrip() {
     ]))
     .unwrap();
 
-    let peer_identity = Identity::X509(crate::crypto::CertificateIdentity {
-        end_entity: CertificateDer::from(&b"test cert"[..]),
-        intermediates: vec![],
-    });
+    let peer_identity =
+        VerifiedIdentity::assertion(Identity::X509(crate::crypto::CertificateIdentity {
+            end_entity: CertificateDer::from(&b"test cert"[..]),
+            intermediates: vec![],
+        }));
 
     let session = Tls12Session::new(
         TEST_PROVIDER.tls12_cipher_suites[0],
@@ -76,14 +77,14 @@ fn tls12_client_session_value_roundtrip() {
     assert_eq!(decoded.extended_ms, session.extended_ms);
     assert_eq!(decoded.common.ticket(), session.common.ticket());
     assert_eq!(decoded.common.epoch, session.common.epoch);
-    assert_eq!(*decoded.common.peer_identity(), peer_identity);
+    assert_eq!(*decoded.common.peer_identity(), peer_identity.into());
 }
 
 #[test]
 fn tls13_client_session_value_roundtrip() {
     let age_add = 0x12345678_u32;
-    let peer_identity = Identity::RawPublicKey(pki_types::SubjectPublicKeyInfoDer::from(
-        &b"raw public key"[..],
+    let peer_identity = VerifiedIdentity::assertion(Identity::RawPublicKey(
+        pki_types::SubjectPublicKeyInfoDer::from(&b"raw public key"[..]),
     ));
 
     let session = Tls13Session::new(
@@ -118,7 +119,7 @@ fn tls13_client_session_value_roundtrip() {
     assert_eq!(decoded.quic_params.bytes(), session.quic_params.bytes());
     assert_eq!(decoded.common.ticket(), session.common.ticket());
     assert_eq!(decoded.common.epoch, session.common.epoch);
-    assert_eq!(*decoded.common.peer_identity(), peer_identity);
+    assert_eq!(*decoded.common.peer_identity(), peer_identity.into());
 }
 
 /// Tests that session_ticket(35) extension
@@ -391,8 +392,11 @@ struct ExpectSha1EcdsaVerifier {
 }
 
 impl ServerVerifier for ExpectSha1EcdsaVerifier {
-    fn verify_identity(&self, _identity: &ServerIdentity<'_, '_>) -> Result<PeerVerified, Error> {
-        Ok(PeerVerified::assertion())
+    fn verify_identity<'a>(
+        &self,
+        identity: &ServerIdentity<'a, '_>,
+    ) -> Result<VerifiedIdentity<'a>, Error> {
+        Ok(VerifiedIdentity::assertion(identity.identity.clone()))
     }
 
     fn verify_tls12_signature(
@@ -599,7 +603,10 @@ impl ServerVerifier for ServerVerifierWithAuthorityNames {
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
-    fn verify_identity(&self, _identity: &ServerIdentity<'_, '_>) -> Result<PeerVerified, Error> {
+    fn verify_identity<'a>(
+        &self,
+        _identity: &ServerIdentity<'a, '_>,
+    ) -> Result<VerifiedIdentity<'a>, Error> {
         unreachable!()
     }
 
@@ -635,7 +642,10 @@ struct ServerVerifierRequiringRpk;
 
 impl ServerVerifier for ServerVerifierRequiringRpk {
     #[cfg_attr(coverage_nightly, coverage(off))]
-    fn verify_identity(&self, _identity: &ServerIdentity<'_, '_>) -> Result<PeerVerified, Error> {
+    fn verify_identity<'a>(
+        &self,
+        _identity: &ServerIdentity<'a, '_>,
+    ) -> Result<VerifiedIdentity<'a>, Error> {
         todo!()
     }
 

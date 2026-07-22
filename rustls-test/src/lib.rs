@@ -4,9 +4,7 @@ use std::borrow::Cow;
 use std::io;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use rustls::client::danger::{
-    HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
-};
+use rustls::client::danger::{HandshakeSignatureValid, ServerIdentity, ServerVerifier};
 use rustls::client::{
     ClientSessionKey, ServerVerifierBuilder, Tls13Session, WantsClientCert, WebPkiServerVerifier,
 };
@@ -16,7 +14,7 @@ use rustls::crypto::cipher::{
 use rustls::crypto::kx::{NamedGroup, SupportedKxGroup};
 use rustls::crypto::{
     CipherSuite, Credentials, CryptoProvider, Identity, InconsistentKeys, SelectedCredential,
-    SignatureScheme, SigningKey, SingleCredential, WebPkiSupportedAlgorithms,
+    SignatureScheme, SigningKey, SingleCredential, VerifiedIdentity, WebPkiSupportedAlgorithms,
     verify_tls13_signature,
 };
 use rustls::enums::{CertificateType, ContentType, ProtocolVersion};
@@ -590,8 +588,7 @@ pub fn make_server_config_with_raw_key_support(
     kt: KeyType,
     provider: &CryptoProvider,
 ) -> ServerConfig {
-    let mut client_verifier =
-        MockClientVerifier::new(|| Ok(PeerVerified::assertion()), kt, provider);
+    let mut client_verifier = MockClientVerifier::new(|| Ok(()), kt, provider);
     let server_cert_resolver = Arc::new(SingleCredential::from(
         kt.credentials_with_raw_pub_key(provider)
             .unwrap(),
@@ -1060,14 +1057,17 @@ pub struct MockServerVerifier {
 }
 
 impl ServerVerifier for MockServerVerifier {
-    fn verify_identity(&self, identity: &ServerIdentity<'_, '_>) -> Result<PeerVerified, Error> {
+    fn verify_identity<'a>(
+        &self,
+        identity: &ServerIdentity<'a, '_>,
+    ) -> Result<VerifiedIdentity<'a>, Error> {
         println!("verify_identity({identity:?})");
         if let Some(expected_ocsp) = &self.expected_ocsp_response {
             assert_eq!(expected_ocsp, identity.ocsp_response);
         }
         match &self.cert_rejection_error {
             Some(error) => Err(error.clone()),
-            _ => Ok(PeerVerified::assertion()),
+            _ => Ok(VerifiedIdentity::assertion(identity.identity.clone())),
         }
     }
 
@@ -1192,7 +1192,7 @@ impl Default for MockServerVerifier {
 
 #[derive(Debug)]
 pub struct MockClientVerifier {
-    pub verified: fn() -> Result<PeerVerified, Error>,
+    pub verified: fn() -> Result<(), Error>,
     pub subjects: Arc<[DistinguishedName]>,
     pub mandatory: bool,
     pub offered_schemes: Option<Vec<SignatureScheme>>,
@@ -1203,7 +1203,7 @@ pub struct MockClientVerifier {
 
 impl MockClientVerifier {
     pub fn new(
-        verified: fn() -> Result<PeerVerified, Error>,
+        verified: fn() -> Result<(), Error>,
         kt: KeyType,
         provider: &CryptoProvider,
     ) -> Self {
@@ -1224,8 +1224,12 @@ impl MockClientVerifier {
 }
 
 impl ClientVerifier for MockClientVerifier {
-    fn verify_identity(&self, _identity: &ClientIdentity<'_>) -> Result<PeerVerified, Error> {
-        (self.verified)()
+    fn verify_identity<'a>(
+        &self,
+        identity: &ClientIdentity<'a, '_>,
+    ) -> Result<VerifiedIdentity<'a>, Error> {
+        (self.verified)()?;
+        Ok(VerifiedIdentity::assertion(identity.identity.clone()))
     }
 
     fn verify_tls12_signature(

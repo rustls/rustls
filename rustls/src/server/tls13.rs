@@ -40,7 +40,7 @@ use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
 use crate::verify::{
-    ClientIdentity, FinishedMessageVerified, PeerVerified, SignatureVerificationInput,
+    ClientIdentity, FinishedMessageVerified, SignatureVerificationInput, VerifiedIdentity,
 };
 use crate::{ConnectionTrafficSecrets, compress};
 
@@ -1068,7 +1068,7 @@ impl ExpectCertificate {
             return Err(PeerMisbehaved::NoCertificatesPresented.into());
         };
 
-        let peer_verified = self
+        let peer_identity = self
             .hs
             .config
             .verifier
@@ -1081,7 +1081,6 @@ impl ExpectCertificate {
             hs: self.hs,
             key_schedule: self.key_schedule,
             peer_identity: peer_identity.into_owned(),
-            _peer_verified: peer_verified,
         })
         .into())
     }
@@ -1106,8 +1105,7 @@ impl From<Box<ExpectCertificate>> for ServerState {
 struct ExpectCertificateVerify {
     hs: HandshakeState,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    peer_identity: Identity<'static>,
-    _peer_verified: PeerVerified,
+    peer_identity: VerifiedIdentity<'static>,
 }
 
 impl ExpectCertificateVerify {
@@ -1157,7 +1155,7 @@ impl From<Box<ExpectCertificateVerify>> for ServerState {
 struct ExpectEarlyData {
     hs: HandshakeState,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    peer_identity: Option<Identity<'static>>,
+    peer_identity: Option<VerifiedIdentity<'static>>,
     remaining_length: usize,
 }
 
@@ -1337,14 +1335,14 @@ impl<'a> Codec<'a> for ZeroizingCow<'a> {
 struct ExpectFinished {
     hs: HandshakeState,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    peer_identity: Option<Identity<'static>>,
+    peer_identity: Option<VerifiedIdentity<'static>>,
 }
 
 impl ExpectFinished {
     fn emit_ticket(
         flight: &mut HandshakeFlightTls13<'_>,
         suite: &'static Tls13CipherSuite,
-        peer_identity: Option<Identity<'static>>,
+        peer_identity: Option<VerifiedIdentity<'static>>,
         chosen_alpn_protocol: Option<ApplicationProtocol<'static>>,
         sni: Option<DnsName<'static>>,
         resumption_data: &[u8],
@@ -1465,7 +1463,7 @@ impl ExpectFinished {
 
         // Application data may now flow, even if we have client auth enabled.
         if let Some(identity) = self.peer_identity {
-            output.output(OutputEvent::PeerIdentity(identity));
+            output.output(OutputEvent::PeerIdentity(identity.into()));
         }
         output.output(OutputEvent::Exporter(Box::new(exporter)));
         output

@@ -23,7 +23,7 @@ use crate::conn::{ConnectionRandoms, Input, TrafficTemperCounters};
 use crate::crypto::cipher::Payload;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
-use crate::crypto::{Identity, SelectedCredential, SignatureScheme, Signer};
+use crate::crypto::{Identity, SelectedCredential, SignatureScheme, Signer, VerifiedIdentity};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{
     ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved, RejectedEch,
@@ -616,17 +616,17 @@ impl ExpectEncryptedExtensions {
 
                 // We *don't* reverify the certificate chain here: resumption is a
                 // continuation of the previous session in terms of security policy.
-                let cert_verified = PeerVerified::assertion();
+                let peer_identity =
+                    VerifiedIdentity::assertion(resuming_session.peer_identity().clone());
                 let sig_verified = HandshakeSignatureValid::assertion();
                 Ok(Box::new(ExpectFinished {
                     hs: self.hs,
                     session_input: Tls13ClientSessionInput {
                         suite: self.suite,
-                        peer_identity: resuming_session.peer_identity().clone(),
+                        peer_identity,
                         quic_params,
                     },
                     client_auth: None,
-                    cert_verified,
                     sig_verified,
                     ech,
                     in_early_traffic: self.in_early_traffic,
@@ -1142,7 +1142,7 @@ impl ExpectCertificateVerify {
         )?
         .ok_or(PeerMisbehaved::NoCertificatesPresented)?;
 
-        let cert_verified = self
+        let peer_identity = self
             .hs
             .config
             .verifier()
@@ -1171,11 +1171,10 @@ impl ExpectCertificateVerify {
             hs: self.hs,
             session_input: Tls13ClientSessionInput {
                 suite: self.suite,
-                peer_identity: identity,
+                peer_identity: peer_identity.into_owned(),
                 quic_params: self.quic_params,
             },
             client_auth: self.client_auth,
-            cert_verified,
             sig_verified,
             ech: self.ech,
             in_early_traffic: false,
@@ -1277,7 +1276,6 @@ struct ExpectFinished {
     hs: HandshakeState,
     session_input: Tls13ClientSessionInput,
     client_auth: Option<ClientAuthDetails>,
-    cert_verified: PeerVerified,
     sig_verified: HandshakeSignatureValid,
     ech: Ech,
     in_early_traffic: bool,
@@ -1394,8 +1392,15 @@ impl ExpectFinished {
             key_schedule_pre_finished.into_traffic(output, st.hs.transcript.current_hash(), &proof);
         let (key_schedule_send, key_schedule_recv) = key_schedule.split();
 
+        let _cert_verified = st
+            .session_input
+            .peer_identity
+            .as_marker();
         output.output(OutputEvent::PeerIdentity(
-            st.session_input.peer_identity.clone(),
+            st.session_input
+                .peer_identity
+                .clone()
+                .into(),
         ));
         output.output(OutputEvent::Exporter(Box::new(exporter)));
         output
@@ -1423,7 +1428,7 @@ impl ExpectFinished {
             key_schedule_recv,
             resumption,
             counters: TrafficTemperCounters::default(),
-            _cert_verified: st.cert_verified,
+            _cert_verified,
             _sig_verified: st.sig_verified,
             _fin_verified: fin,
         };
