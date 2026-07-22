@@ -293,10 +293,14 @@ impl MessageEncrypter for GcmMessageEncrypter {
         payload.extend_from_slice(&nonce.as_ref()[4..]);
         payload.extend_from_chunks(&msg.payload);
 
-        self.enc_key
-            .seal_in_place_separate_tag(nonce, aad, &mut payload.as_mut()[GCM_EXPLICIT_NONCE_LEN..])
-            .map(|tag| payload.extend_from_slice(tag.as_ref()))
-            .map_err(|_| Error::EncryptError)?;
+        match self.enc_key.seal_in_place_separate_tag(
+            nonce,
+            aad,
+            &mut payload.as_mut()[GCM_EXPLICIT_NONCE_LEN..],
+        ) {
+            Ok(tag) => payload.extend_from_slice(tag.as_ref()),
+            Err(_) => return Err(Error::EncryptError),
+        }
 
         Ok(EncodedMessage {
             typ: msg.typ,
