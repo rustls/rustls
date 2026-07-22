@@ -1090,6 +1090,8 @@ pub enum InvalidMessage {
     MessageTooLarge,
     /// Message is shorter than the expected length
     MessageTooShort,
+    /// A peer sent a recognized extension type in a message where it is not permitted
+    MisplacedExtension(u16),
     /// Missing data for the named handshake payload value
     MissingData(&'static str),
     /// A peer did not advertise its supported key exchange groups.
@@ -1129,6 +1131,7 @@ impl From<InvalidMessage> for AlertDescription {
         match e {
             InvalidMessage::PreSharedKeyIsNotFinalExtension => Self::IllegalParameter,
             InvalidMessage::DuplicateExtension(_) => Self::IllegalParameter,
+            InvalidMessage::MisplacedExtension(_) => Self::IllegalParameter,
             InvalidMessage::UnknownHelloRetryRequestExtension => Self::UnsupportedExtension,
             InvalidMessage::CertificatePayloadTooLarge => Self::BadCertificate,
             _ => Self::DecodeError,

@@ -1227,7 +1227,11 @@ impl Codec<'_> for NewSessionTicketExtensions {
         let mut sub = r.sub(len)?;
 
         while sub.any_left() {
-            out.read_one(&mut sub, |unknown| checker.check(unknown))?;
+            // `read_one` processes `early_data`, the only extension
+            // specified for NewSessionTicket, and calls this closure for
+            // other types. Every specified type is processed, so the
+            // permitted list is empty.
+            out.read_one(&mut sub, |unknown| checker.check_unprocessed(unknown, &[]))?;
         }
 
         Ok(out)
@@ -1404,6 +1408,25 @@ pub(super) struct DuplicateExtensionChecker(pub(super) BTreeSet<u16>);
 impl DuplicateExtensionChecker {
     pub(super) fn new() -> Self {
         Self(BTreeSet::new())
+    }
+
+    /// Check an unmodelled extension of type `typ` is appropriate for the message.
+    ///
+    /// A message must reject recognized extension types not specified for it
+    /// (RFC 9846 section 4.3).
+    ///
+    /// `permitted` lists the types that are specified for the message but
+    /// not processed by rustls. These, and unrecognized types, are ignored
+    /// (subject to the usual duplicate check).
+    pub(super) fn check_unprocessed(
+        &mut self,
+        typ: ExtensionType,
+        permitted: &[ExtensionType],
+    ) -> Result<(), InvalidMessage> {
+        match typ.is_recognized() && !permitted.contains(&typ) {
+            true => Err(InvalidMessage::MisplacedExtension(u16::from(typ))),
+            false => self.check(typ),
+        }
     }
 
     pub(super) fn check(&mut self, typ: ExtensionType) -> Result<(), InvalidMessage> {
