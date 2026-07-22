@@ -387,7 +387,24 @@ impl<'a> Codec<'a> for ClientExtensions<'a> {
         let mut sub = r.sub(len)?;
 
         while sub.any_left() {
-            let typ = out.read_one(&mut sub, |unknown| checker.check(unknown))?;
+            let typ = out.read_one(&mut sub, |unknown| match unknown {
+                // The only recognized extension specified for no form of
+                // ClientHello: it may appear only in CertificateRequest
+                // (RFC 9846 section 4.3).  Other recognized-but-unmodelled
+                // extension types are legal in (at least TLS 1.2)
+                // ClientHellos, and are ignored.
+                ExtensionType::OIDFilters => {
+                    Err(InvalidMessage::MisplacedExtension(u16::from(unknown)))
+                }
+                _ => checker.check(unknown),
+            })?;
+
+            // `ech_outer_extensions` may appear only inside an
+            // EncodedClientHelloInner, never in a ClientHello on the wire
+            // (RFC 9849 section 5.1).
+            if typ == ExtensionType::EncryptedClientHelloOuterExtensions {
+                return Err(InvalidMessage::MisplacedExtension(u16::from(typ)));
+            }
 
             // PreSharedKey offer must come last
             if typ == ExtensionType::PreSharedKey && sub.any_left() {
