@@ -134,6 +134,35 @@ fn refuses_client_exts_with_unparsed_bytes() {
 }
 
 #[test]
+fn refuses_client_ext_with_misplaced_extension() {
+    // `oid_filters`
+    assert_eq!(
+        ClientExtensions::read_bytes(&empty_extension_list(ExtensionType::OIDFilters)).unwrap_err(),
+        InvalidMessage::MisplacedExtension(u16::from(ExtensionType::OIDFilters))
+    );
+
+    // `ech_outer_extensions` may only appear inside an EncodedClientHelloInner
+    let misplaced = ExtensionType::EncryptedClientHelloOuterExtensions;
+    let mut body = Vec::new();
+    vec![ExtensionType::SCT].encode(&mut body);
+    assert_eq!(
+        ClientExtensions::read_bytes(&extension_list(misplaced, &body)).unwrap_err(),
+        InvalidMessage::MisplacedExtension(u16::from(misplaced))
+    );
+}
+
+#[test]
+fn accepts_client_ext_with_legacy_or_unrecognized_extension() {
+    // `heartbeat` is recognized but unmodelled, and legal in a ClientHello
+    assert!(ClientExtensions::read_bytes(&empty_extension_list(ExtensionType::Heartbeat)).is_ok());
+
+    // unrecognized extensions are ignored
+    assert!(
+        ClientExtensions::read_bytes(&empty_extension_list(ExtensionType::from(0x04d2))).is_ok()
+    );
+}
+
+#[test]
 fn refuses_server_ext_with_unparsed_bytes() {
     let bytes = [0x00u8, 0x08, 0x00, 0x0b, 0x00, 0x04, 0x02, 0xf8, 0x01, 0x02];
     assert_eq!(
@@ -280,11 +309,17 @@ fn accepts_new_session_ticket_ext_with_unrecognized_extension() {
 
 /// Encodes an extension list containing one `typ` extension with an empty body.
 fn empty_extension_list(typ: ExtensionType) -> Vec<u8> {
+    extension_list(typ, &[])
+}
+
+/// Encodes an extension list containing one `typ` extension with `body`.
+fn extension_list(typ: ExtensionType, body: &[u8]) -> Vec<u8> {
     let mut bytes = Vec::new();
     {
         let list = LengthPrefixedBuffer::new(ListLength::U16, &mut bytes);
         typ.encode(list.buf);
-        0u16.encode(list.buf);
+        let ext_body = LengthPrefixedBuffer::new(ListLength::U16, list.buf);
+        ext_body.buf.extend_from_slice(body);
     }
     bytes
 }
@@ -1030,7 +1065,6 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
             early_data_request: Some(()),
             certificate_compression_algorithms: Some(vec![CertificateCompressionAlgorithm::Brotli]),
             encrypted_client_hello: Some(EncryptedClientHello::Inner),
-            encrypted_client_hello_outer: Some(vec![ExtensionType::SCT]),
             ..Default::default()
         }),
     }
