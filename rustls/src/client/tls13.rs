@@ -1404,10 +1404,7 @@ impl ExpectFinished {
             .peer_identity
             .as_marker();
         output.output(OutputEvent::PeerIdentity(
-            st.session_input
-                .peer_identity
-                .clone()
-                .into(),
+            st.session_input.peer_identity.clone(),
         ));
         output.output(OutputEvent::Exporter(Box::new(exporter)));
         output

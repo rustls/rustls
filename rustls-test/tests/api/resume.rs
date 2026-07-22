@@ -436,7 +436,7 @@ fn tls13_stateful_resumption() {
     assert_eq!(
         client
             .peer_identity()
-            .map(|identity| match identity {
+            .map(|identity| match identity.identity() {
                 Identity::X509(CertificateIdentity { intermediates, .. }) => intermediates.len(),
                 _ => 0,
             }),
@@ -466,7 +466,7 @@ fn tls13_stateful_resumption() {
     assert_eq!(
         client
             .peer_identity()
-            .map(|identity| match identity {
+            .map(|identity| match identity.identity() {
                 Identity::X509(CertificateIdentity { intermediates, .. }) => intermediates.len(),
                 _ => 0,
             }),
@@ -496,7 +496,7 @@ fn tls13_stateful_resumption() {
     assert_eq!(
         client
             .peer_identity()
-            .map(|identity| match identity {
+            .map(|identity| match identity.identity() {
                 Identity::X509(CertificateIdentity { intermediates, .. }) => intermediates.len(),
                 _ => 0,
             }),
@@ -546,7 +546,7 @@ fn tls13_stateless_resumption() {
     assert_eq!(
         client
             .peer_identity()
-            .map(|identity| match identity {
+            .map(|identity| match identity.identity() {
                 Identity::X509(CertificateIdentity { intermediates, .. }) => intermediates.len(),
                 _ => 0,
             }),
@@ -576,7 +576,7 @@ fn tls13_stateless_resumption() {
     assert_eq!(
         client
             .peer_identity()
-            .map(|identity| match identity {
+            .map(|identity| match identity.identity() {
                 Identity::X509(CertificateIdentity { intermediates, .. }) => intermediates.len(),
                 _ => 0,
             }),
@@ -606,7 +606,7 @@ fn tls13_stateless_resumption() {
     assert_eq!(
         client
             .peer_identity()
-            .map(|identity| match identity {
+            .map(|identity| match identity.identity() {
                 Identity::X509(CertificateIdentity { intermediates, .. }) => intermediates.len(),
                 _ => 0,
             }),
