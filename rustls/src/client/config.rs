@@ -26,9 +26,10 @@ use crate::key_log::NoKeyLog;
 use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
 use crate::time_provider::{DefaultTimeProvider, TimeProvider};
+use crate::verify::ServerVerifier;
 #[cfg(feature = "webpki")]
 use crate::webpki::{self, WebPkiServerVerifier};
-use crate::{DistinguishedName, DynHasher, KeyLog, compress, verify};
+use crate::{DistinguishedName, DynHasher, KeyLog, compress};
 
 /// Common configuration for (typically) all connections made by a program.
 ///
@@ -90,7 +91,7 @@ pub struct ClientConfig {
     /// store, and then resumed by `A`.  This would give a false impression to the user
     /// of `A` that the server certificate is fully validated.
     ///
-    /// [`ServerVerifier::hash_config()`]: verify::ServerVerifier::hash_config()
+    /// [`ServerVerifier::hash_config()`]: crate::verify::ServerVerifier::hash_config()
     pub resumption: Resumption,
 
     /// The maximum size of plaintext input to be emitted in a single TLS record.
@@ -267,7 +268,7 @@ impl ClientConfig {
     /// Return the verifier for this client configuration.
     ///
     /// This is the object that determines how server certificates are verified.
-    pub fn verifier(&self) -> &Arc<dyn verify::ServerVerifier> {
+    pub fn verifier(&self) -> &Arc<dyn ServerVerifier> {
         &self.domain.verifier
     }
 
@@ -466,7 +467,7 @@ pub(super) struct SecurityDomain {
     provider: Arc<CryptoProvider>,
 
     /// How to verify the server certificate chain.
-    verifier: Arc<dyn verify::ServerVerifier>,
+    verifier: Arc<dyn ServerVerifier>,
 
     /// How to decide what client auth certificate/keys to use.
     client_auth_cert_resolver: Arc<dyn ClientCredentialResolver>,
@@ -478,7 +479,7 @@ impl SecurityDomain {
     pub(crate) fn new(
         provider: Arc<CryptoProvider>,
         client_auth_cert_resolver: Arc<dyn ClientCredentialResolver + 'static>,
-        verifier: Arc<dyn verify::ServerVerifier + 'static>,
+        verifier: Arc<dyn ServerVerifier + 'static>,
         time_provider: Arc<dyn TimeProvider + 'static>,
     ) -> Self {
         // Use a hash function that outputs at least 32 bytes.
@@ -520,7 +521,7 @@ impl SecurityDomain {
         }
     }
 
-    fn with_verifier(&self, verifier: Arc<dyn verify::ServerVerifier + 'static>) -> Self {
+    fn with_verifier(&self, verifier: Arc<dyn ServerVerifier + 'static>) -> Self {
         let Self {
             time_provider,
             provider,
@@ -707,7 +708,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone)]
 pub struct WantsClientCert {
-    verifier: Arc<dyn verify::ServerVerifier>,
+    verifier: Arc<dyn ServerVerifier>,
     client_ech_mode: Option<EchMode>,
 }
 
