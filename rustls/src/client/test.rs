@@ -23,7 +23,7 @@ use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::{
     CertificateChain, ClientHelloPayload, Codec, Compression, ECCurveType, EcParameters,
-    HEADER_SIZE, HandshakeMessagePayload, HandshakePayload, HelloRetryRequest,
+    EncryptedExtensions, HEADER_SIZE, HandshakeMessagePayload, HandshakePayload, HelloRetryRequest,
     HelloRetryRequestExtensions, KeyShareEntry, MaybeEmpty, Message, MessagePayload,
     NewSessionTicketExtensions, NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams,
     ServerExtensions, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams,
@@ -428,7 +428,7 @@ impl ServerVerifier for ExpectSha1EcdsaVerifier {
 fn test_client_requiring_rpk_rejects_server_that_only_offers_x509_id_by_omission() {
     client_requiring_rpk_receives_server_ee(
         Err(PeerIncompatible::IncorrectCertificateTypeExtension.into()),
-        ServerExtensions::default(),
+        EncryptedExtensions::default(),
         &TEST_PROVIDER,
     );
 }
@@ -437,9 +437,9 @@ fn test_client_requiring_rpk_rejects_server_that_only_offers_x509_id_by_omission
 fn test_client_requiring_rpk_rejects_server_that_only_offers_x509_id() {
     client_requiring_rpk_receives_server_ee(
         Err(PeerIncompatible::IncorrectCertificateTypeExtension.into()),
-        ServerExtensions {
+        EncryptedExtensions {
             server_certificate_type: Some(CertificateType::X509),
-            ..ServerExtensions::default()
+            ..EncryptedExtensions::default()
         },
         &TEST_PROVIDER,
     );
@@ -449,9 +449,9 @@ fn test_client_requiring_rpk_rejects_server_that_only_offers_x509_id() {
 fn test_client_requiring_rpk_rejects_server_that_only_demands_x509_by_omission() {
     client_requiring_rpk_receives_server_ee(
         Err(PeerIncompatible::IncorrectCertificateTypeExtension.into()),
-        ServerExtensions {
+        EncryptedExtensions {
             server_certificate_type: Some(CertificateType::RawPublicKey),
-            ..ServerExtensions::default()
+            ..EncryptedExtensions::default()
         },
         &TEST_PROVIDER,
     );
@@ -461,10 +461,10 @@ fn test_client_requiring_rpk_rejects_server_that_only_demands_x509_by_omission()
 fn test_client_requiring_rpk_rejects_server_that_only_demands_x509() {
     client_requiring_rpk_receives_server_ee(
         Err(PeerIncompatible::IncorrectCertificateTypeExtension.into()),
-        ServerExtensions {
+        EncryptedExtensions {
             client_certificate_type: Some(CertificateType::X509),
             server_certificate_type: Some(CertificateType::RawPublicKey),
-            ..ServerExtensions::default()
+            ..EncryptedExtensions::default()
         },
         &TEST_PROVIDER,
     );
@@ -474,10 +474,10 @@ fn test_client_requiring_rpk_rejects_server_that_only_demands_x509() {
 fn test_client_requiring_rpk_accepts_rpk_server() {
     client_requiring_rpk_receives_server_ee(
         Ok(()),
-        ServerExtensions {
+        EncryptedExtensions {
             client_certificate_type: Some(CertificateType::RawPublicKey),
             server_certificate_type: Some(CertificateType::RawPublicKey),
-            ..ServerExtensions::default()
+            ..EncryptedExtensions::default()
         },
         &TEST_PROVIDER,
     );
@@ -486,7 +486,7 @@ fn test_client_requiring_rpk_accepts_rpk_server() {
 #[track_caller]
 fn client_requiring_rpk_receives_server_ee(
     expected: Result<(), Error>,
-    encrypted_extensions: ServerExtensions<'_>,
+    encrypted_extensions: EncryptedExtensions<'_>,
     provider: &CryptoProvider,
 ) {
     let Some(provider) = x25519_provider(provider.clone()) else {
