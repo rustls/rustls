@@ -481,22 +481,10 @@ fn validate_encrypted_extensions(
     hello: &ClientHelloDetails,
     exts: &EncryptedExtensions<'_>,
 ) -> Result<(), Error> {
+    // Recognized extensions not specified for EncryptedExtensions were
+    // already rejected during parsing.
     if hello.server_sent_unsolicited_extensions(exts.received_types(), &[]) {
         return Err(PeerMisbehaved::UnsolicitedEncryptedExtension.into());
-    }
-
-    // These are recognized but not modelled by `EncryptedExtensions`, so
-    // appear in `unknown_extensions`.
-    for ext in ALLOWED_PLAINTEXT_EXTS
-        .iter()
-        .chain(DISALLOWED_TLS13_EXTS)
-    {
-        if exts
-            .unknown_extensions
-            .contains(&u16::from(*ext))
-        {
-            return Err(PeerMisbehaved::DisallowedEncryptedExtension.into());
-        }
     }
 
     Ok(())
@@ -1686,13 +1674,4 @@ const ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
     ExtensionType::KeyShare,
     ExtensionType::PreSharedKey,
     ExtensionType::SupportedVersions,
-];
-
-// Only the intersection of things we offer, and those disallowed
-// in TLS1.3
-const DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
-    ExtensionType::ECPointFormats,
-    ExtensionType::SessionTicket,
-    ExtensionType::RenegotiationInfo,
-    ExtensionType::ExtendedMasterSecret,
 ];

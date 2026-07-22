@@ -315,6 +315,21 @@ impl EncryptedExtensions<'_> {
                 .map(|ext| ExtensionType::from(*ext)),
         )
     }
+
+    /// Recognized EncryptedExtensions that we do not process.
+    ///
+    /// These are extensions that are defined for the EncryptedExtensions message type,
+    /// have a recognized extension type constant, that we ignore if received instead
+    /// of processing into struct fields.
+    ///
+    /// See RFC 9846 section 4.3 Table 1, plus `max_fragment_length` per its IANA
+    /// "TLS 1.3" registry entry (carried over from RFC 8446 section 4.2).
+    const UNPROCESSED: &'static [ExtensionType] = &[
+        ExtensionType::MaxFragmentLength,
+        ExtensionType::EllipticCurves,
+        ExtensionType::UseSRTP,
+        ExtensionType::Heartbeat,
+    ];
 }
 
 impl<'a> Codec<'a> for EncryptedExtensions<'a> {
@@ -334,7 +349,9 @@ impl<'a> Codec<'a> for EncryptedExtensions<'a> {
         let mut sub = r.sub(len)?;
 
         while sub.any_left() {
-            out.read_one(&mut sub, |unknown| checker.check(unknown))?;
+            out.read_one(&mut sub, |unknown| {
+                checker.check_unprocessed(unknown, Self::UNPROCESSED)
+            })?;
         }
 
         out.unknown_extensions = checker.0;
