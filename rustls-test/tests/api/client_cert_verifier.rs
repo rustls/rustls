@@ -5,7 +5,6 @@
 use std::sync::Arc;
 
 use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage, PeerMisbehaved};
-use rustls::server::danger::PeerVerified;
 use rustls::{ClientConfig, ServerConnection, VecInput};
 use rustls_test::{
     ErrorFromPeer, MockClientVerifier, MultiTest, do_handshake, do_handshake_until_both_error,
@@ -16,17 +15,17 @@ use rustls_test::{
 use super::provider;
 
 // Client is authorized!
-fn ver_ok() -> Result<PeerVerified, Error> {
-    Ok(PeerVerified::assertion())
+fn ver_ok() -> Result<(), Error> {
+    Ok(())
 }
 
 // Use when we shouldn't even attempt verification
-fn ver_unreachable() -> Result<PeerVerified, Error> {
+fn ver_unreachable() -> Result<(), Error> {
     unreachable!()
 }
 
 // Verifier that returns an error that we can expect
-fn ver_err() -> Result<PeerVerified, Error> {
+fn ver_err() -> Result<(), Error> {
     Err(Error::General("test err".to_string()))
 }
 
