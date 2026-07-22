@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use rustls::VecInput;
-use rustls::crypto::Identity;
+use rustls::crypto::{Identity, VerifiedIdentity};
 use rustls::enums::CertificateType;
 use rustls::error::{Error, PeerIncompatible};
 use rustls_test::{
@@ -37,7 +37,10 @@ fn successful_raw_key_connection_and_correct_peer_certificates() {
         );
 
         // Test that the client peer certificate is the server's public key
-        match client.peer_identity() {
+        match client
+            .peer_identity()
+            .map(VerifiedIdentity::identity)
+        {
             Some(Identity::X509(certificates)) => {
                 assert!(certificates.intermediates.is_empty());
                 assert_eq!(certificates.end_entity.as_ref(), kt.spki().as_ref());
@@ -51,7 +54,10 @@ fn successful_raw_key_connection_and_correct_peer_certificates() {
         }
 
         // Test that the server peer certificate is the client's public key
-        match server.peer_identity() {
+        match server
+            .peer_identity()
+            .map(VerifiedIdentity::identity)
+        {
             Some(Identity::X509(certificates)) => {
                 assert!(certificates.intermediates.is_empty());
                 assert_eq!(certificates.end_entity.as_ref(), kt.client_spki().as_ref());

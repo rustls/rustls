@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 
+use rustls::crypto::VerifiedIdentity;
 use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage, PeerMisbehaved};
 use rustls::{ClientConfig, ServerConnection, VecInput};
 use rustls_test::{
@@ -199,7 +200,9 @@ fn server_allow_any_anonymous_or_authenticated_client() {
             &mut server,
         );
         assert_eq!(
-            server.peer_identity(),
+            server
+                .peer_identity()
+                .map(VerifiedIdentity::identity),
             match expect.client_auth {
                 true => Some(expect.key_type.client_identity()),
                 false => None,
