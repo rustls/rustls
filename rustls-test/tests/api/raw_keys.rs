@@ -6,6 +6,7 @@ use rustls::VecInput;
 use rustls::crypto::Identity;
 use rustls::enums::CertificateType;
 use rustls::error::{Error, PeerIncompatible};
+use rustls::server::danger::VerifiedIdentity;
 use rustls_test::{
     ErrorFromPeer, KeyType, ServerCheckCertResolve, do_handshake, do_handshake_until_error,
     make_client_config, make_client_config_with_raw_key_support, make_pair_for_configs,
@@ -32,7 +33,10 @@ fn successful_raw_key_connection_and_correct_peer_certificates() {
         );
 
         // Test that the client peer certificate is the server's public key
-        match client.peer_identity() {
+        match client
+            .peer_identity()
+            .map(VerifiedIdentity::identity)
+        {
             Some(Identity::X509(certificates)) => {
                 assert!(certificates.intermediates.is_empty());
                 assert_eq!(certificates.end_entity.as_ref(), kt.spki().as_ref());
@@ -46,7 +50,10 @@ fn successful_raw_key_connection_and_correct_peer_certificates() {
         }
 
         // Test that the server peer certificate is the client's public key
-        match server.peer_identity() {
+        match server
+            .peer_identity()
+            .map(VerifiedIdentity::identity)
+        {
             Some(Identity::X509(certificates)) => {
                 assert!(certificates.intermediates.is_empty());
                 assert_eq!(certificates.end_entity.as_ref(), kt.client_spki().as_ref());

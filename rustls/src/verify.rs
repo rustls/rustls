@@ -425,13 +425,18 @@ impl FinishedMessageVerified {
 pub(crate) struct PeerVerified(());
 
 /// A peer's identity, which has been verified.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct VerifiedIdentity<'a>(Identity<'a>);
 
 impl<'a> VerifiedIdentity<'a> {
     /// Make a `VerifiedIdentity`, noting that `identity` has been verified somehow.
     pub fn assertion(identity: Identity<'a>) -> Self {
         VerifiedIdentity(identity)
+    }
+
+    /// Borrow the verified [`Identity`].
+    pub fn identity(&self) -> &Identity<'a> {
+        &self.0
     }
 
     /// Convert the value into an owned one.
@@ -447,6 +452,12 @@ impl<'a> VerifiedIdentity<'a> {
 
     pub(crate) fn into_inner(self) -> Identity<'a> {
         self.0
+    }
+}
+
+impl PartialEq<Identity<'_>> for VerifiedIdentity<'_> {
+    fn eq(&self, other: &Identity<'_>) -> bool {
+        self.0 == *other
     }
 }
 

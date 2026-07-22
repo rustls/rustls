@@ -1131,7 +1131,7 @@ impl ExpectFinished {
             .then(|| st.secrets.extract_secrets(Side::Client));
 
         let _cert_verified = st.peer_identity.as_marker();
-        output.output(OutputEvent::PeerIdentity(st.peer_identity.into()));
+        output.output(OutputEvent::PeerIdentity(st.peer_identity));
         output.output(OutputEvent::ExtendedMasterSecret(st.hs.using_ems));
         output.output(OutputEvent::Exporter(st.secrets.into_exporter()));
         output.start_traffic();

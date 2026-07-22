@@ -1463,7 +1463,7 @@ impl ExpectFinished {
 
         // Application data may now flow, even if we have client auth enabled.
         if let Some(identity) = self.peer_identity {
-            output.output(OutputEvent::PeerIdentity(identity.into()));
+            output.output(OutputEvent::PeerIdentity(identity));
         }
         output.output(OutputEvent::Exporter(Box::new(exporter)));
         output

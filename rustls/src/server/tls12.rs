@@ -1029,7 +1029,7 @@ impl ExpectFinished {
         }
 
         if let Some(identity) = self.peer_identity {
-            output.output(OutputEvent::PeerIdentity(identity.into()));
+            output.output(OutputEvent::PeerIdentity(identity));
         }
 
         let extracted_secrets = self

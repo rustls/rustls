@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 
+use rustls::crypto::VerifiedIdentity;
 use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage, PeerMisbehaved};
 use rustls::{ServerConfig, ServerConnection, VecInput};
 use rustls_test::{
@@ -210,7 +211,12 @@ fn server_allow_any_anonymous_or_authenticated_client() {
                 &mut server_input,
                 &mut server,
             );
-            assert_eq!(server.peer_identity(), client_cert_chain.as_deref());
+            assert_eq!(
+                server
+                    .peer_identity()
+                    .map(VerifiedIdentity::identity),
+                client_cert_chain.as_deref()
+            );
         }
     }
 }
