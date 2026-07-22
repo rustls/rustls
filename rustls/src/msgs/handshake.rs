@@ -1111,6 +1111,23 @@ extension_struct! {
     }
 }
 
+impl CertificateRequestExtensions {
+    /// Recognized but unprocessed extensions specified for CertificateRequest.
+    ///
+    /// rustls does not process these, and they are ignored if received in a
+    /// CertificateRequest message.
+    ///
+    /// See RFC 9846 section 4.3 Table 1, plus `signed_certificate_timestamp` per
+    /// its IANA "TLS 1.3" registry entry (carried over from RFC 8446 section 4.2).
+    const UNPROCESSED: &'static [ExtensionType] = &[
+        ExtensionType::ServerName,
+        ExtensionType::StatusRequest,
+        ExtensionType::SCT,
+        ExtensionType::OIDFilters,
+        ExtensionType::SignatureAlgorithmsCert,
+    ];
+}
+
 impl Codec<'_> for CertificateRequestExtensions {
     fn encode(&self, bytes: &mut Vec<u8>) {
         let extensions = LengthPrefixedBuffer::new(ListLength::U16, bytes);
@@ -1129,7 +1146,9 @@ impl Codec<'_> for CertificateRequestExtensions {
         let mut sub = r.sub(len)?;
 
         while sub.any_left() {
-            out.read_one(&mut sub, |unknown| checker.check(unknown))?;
+            out.read_one(&mut sub, |unknown| {
+                checker.check_unprocessed(unknown, Self::UNPROCESSED)
+            })?;
         }
 
         if out
