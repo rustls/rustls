@@ -183,6 +183,35 @@ fn refuses_certificate_req_ext_with_duplicate() {
 }
 
 #[test]
+fn refuses_certificate_req_ext_with_misplaced_extension() {
+    for misplaced in [ExtensionType::KeyShare, ExtensionType::EarlyData] {
+        assert_eq!(
+            CertificateRequestExtensions::read_bytes(&empty_extension_list(misplaced)).unwrap_err(),
+            InvalidMessage::MisplacedExtension(u16::from(misplaced))
+        );
+    }
+}
+
+#[test]
+fn accepts_certificate_req_ext_with_permitted_unprocessed_extension() {
+    // `status_request` and `signed_certificate_timestamp` are specified for
+    // CertificateRequest, but rustls does not process them there.
+    for permitted in [ExtensionType::StatusRequest, ExtensionType::SCT] {
+        assert!(CertificateRequestExtensions::read_bytes(&empty_extension_list(permitted)).is_ok());
+    }
+}
+
+#[test]
+fn accepts_certificate_req_ext_with_unrecognized_extension() {
+    assert!(
+        CertificateRequestExtensions::read_bytes(&empty_extension_list(ExtensionType::from(
+            0x1212
+        )))
+        .is_ok()
+    );
+}
+
+#[test]
 fn refuses_new_session_ticket_ext_with_unparsed_bytes() {
     let bytes = [
         0x00u8, 0x09, 0x00, 0x2a, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x01,
