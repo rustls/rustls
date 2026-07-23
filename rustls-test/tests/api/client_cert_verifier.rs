@@ -6,16 +6,14 @@ use std::sync::Arc;
 
 use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage, PeerMisbehaved};
 use rustls::server::danger::PeerVerified;
-use rustls::{ServerConfig, ServerConnection, VecInput};
+use rustls::{ClientConfig, ServerConnection, VecInput};
 use rustls_test::{
-    ErrorFromPeer, KeyType, MockClientVerifier, do_handshake, do_handshake_until_both_error,
-    do_handshake_until_error, make_client_config, make_client_config_with_auth,
-    make_pair_for_arc_configs, make_server_config_with_client_verifier,
-    make_server_config_with_mandatory_client_auth, make_server_config_with_optional_client_auth,
-    server_name, webpki_client_verifier_builder,
+    ErrorFromPeer, MockClientVerifier, MultiTest, do_handshake, do_handshake_until_both_error,
+    do_handshake_until_error, make_pair_for_arc_configs, make_server_config_with_client_verifier,
+    make_server_config_with_optional_client_auth, server_name, webpki_client_verifier_builder,
 };
 
-use super::{ALL_VERSIONS, provider};
+use super::provider;
 
 // Client is authorized!
 fn ver_ok() -> Result<PeerVerified, Error> {
@@ -32,144 +30,124 @@ fn ver_err() -> Result<PeerVerified, Error> {
     Err(Error::General("test err".to_string()))
 }
 
-fn server_config_with_verifier(
-    kt: KeyType,
-    client_cert_verifier: MockClientVerifier,
-) -> ServerConfig {
-    ServerConfig::builder(provider::DEFAULT_PROVIDER.into())
-        .with_client_cert_verifier(Arc::new(client_cert_verifier))
-        .with_single_cert(kt.identity(), kt.key())
-        .unwrap()
-}
-
-#[test]
 // Happy path, we resolve to a root, it is verified OK, should be able to connect
+#[test]
 fn client_verifier_works() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider).iter() {
-        let client_verifier = MockClientVerifier::new(ver_ok, *kt, &provider);
-        let server_config = server_config_with_verifier(*kt, client_verifier);
-        let server_config = Arc::new(server_config);
-
-        for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config_with_auth(*kt, &version_provider);
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&Arc::new(client_config.clone()), &server_config);
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let err = do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(err, Ok(()));
-        }
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER)
+        .require_client_auth()
+        .with_client_verifier(Box::new(|kt, provider| {
+            Arc::new(MockClientVerifier::new(ver_ok, kt, &provider))
+        }))
+    {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(err, Ok(()));
     }
 }
 
 // Server offers no verification schemes
 #[test]
 fn client_verifier_no_schemes() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider).iter() {
-        let mut client_verifier = MockClientVerifier::new(ver_ok, *kt, &provider);
-        client_verifier.offered_schemes = Some(vec![]);
-        let server_config = server_config_with_verifier(*kt, client_verifier);
-        let server_config = Arc::new(server_config);
-
-        for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config_with_auth(*kt, &version_provider);
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&Arc::new(client_config.clone()), &server_config);
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let err = do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(
-                err,
-                Err(ErrorFromPeer::Client(Error::InvalidMessage(
-                    InvalidMessage::NoSignatureSchemes,
-                ))),
-            );
-        }
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER)
+        .require_client_auth()
+        .with_client_verifier(Box::new(|kt, provider| {
+            let mut verifier = MockClientVerifier::new(ver_ok, kt, &provider);
+            verifier.offered_schemes = Some(vec![]);
+            Arc::new(verifier)
+        }))
+    {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(
+            err,
+            Err(ErrorFromPeer::Client(Error::InvalidMessage(
+                InvalidMessage::NoSignatureSchemes,
+            ))),
+        );
     }
 }
 
-// If we do have a root, we must do auth
+// server demands client auth, but client config has no credentials.
 #[test]
 fn client_verifier_no_auth_yes_root() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider).iter() {
-        let client_verifier = MockClientVerifier::new(ver_unreachable, *kt, &provider);
+    for (_, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER)
+        .require_client_auth()
+        .with_client_verifier(Box::new(|kt, provider| {
+            Arc::new(MockClientVerifier::new(ver_unreachable, kt, &provider))
+        }))
+    {
+        let mut server = ServerConnection::new(server_config).unwrap();
 
-        let server_config = server_config_with_verifier(*kt, client_verifier);
-        let server_config = Arc::new(server_config);
+        let mut client = Arc::new(
+            ClientConfig::builder(Arc::new(provider::DEFAULT_PROVIDER))
+                .with_root_certificates(expect.key_type.client_root_store())
+                .with_no_client_auth()
+                .unwrap(),
+        )
+        .connect(server_name("localhost"))
+        .build()
+        .unwrap();
 
-        for version_provider in ALL_VERSIONS {
-            let client_config = Arc::new(make_client_config(*kt, &version_provider));
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-            let mut client = client_config
-                .connect(server_name("localhost"))
-                .build()
-                .unwrap();
-
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let errs = do_handshake_until_both_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(
-                errs,
-                Err(vec![
-                    ErrorFromPeer::Server(Error::PeerMisbehaved(
-                        PeerMisbehaved::NoCertificatesPresented
-                    )),
-                    ErrorFromPeer::Client(Error::AlertReceived(
-                        AlertDescription::CertificateRequired
-                    ))
-                ])
-            );
-        }
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let errs = do_handshake_until_both_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(
+            errs,
+            Err(vec![
+                ErrorFromPeer::Server(Error::PeerMisbehaved(
+                    PeerMisbehaved::NoCertificatesPresented
+                )),
+                ErrorFromPeer::Client(Error::AlertReceived(AlertDescription::CertificateRequired))
+            ])
+        );
     }
 }
 
-#[test]
 // Triple checks we propagate the rustls::Error through
+#[test]
 fn client_verifier_fails_properly() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider).iter() {
-        let client_verifier = MockClientVerifier::new(ver_err, *kt, &provider);
-        let server_config = server_config_with_verifier(*kt, client_verifier);
-        let server_config = Arc::new(server_config);
-
-        for version_provider in ALL_VERSIONS {
-            let client_config = Arc::new(make_client_config_with_auth(*kt, &version_provider));
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-            let mut client = client_config
-                .connect(server_name("localhost"))
-                .build()
-                .unwrap();
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let err = do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(
-                err,
-                Err(ErrorFromPeer::Server(Error::General("test err".into())))
-            );
-        }
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER)
+        .require_client_auth()
+        .with_client_verifier(Box::new(|kt, provider| {
+            Arc::new(MockClientVerifier::new(ver_err, kt, &provider))
+        }))
+    {
+        let mut server = ServerConnection::new(server_config).unwrap();
+        let mut client = client_config
+            .connect(server_name("localhost"))
+            .build()
+            .unwrap();
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(
+            err,
+            Err(ErrorFromPeer::Server(Error::General("test err".into())))
+        );
     }
 }
 
@@ -179,176 +157,165 @@ fn client_verifier_fails_properly() {
 /// certificate and not being given one.
 #[test]
 fn server_allow_any_anonymous_or_authenticated_client() {
-    let provider = Arc::new(provider::DEFAULT_PROVIDER);
-    let kt = KeyType::default();
-    for client_cert_chain in [None, Some(kt.client_identity())] {
-        let client_auth = Arc::new(
-            webpki_client_verifier_builder(kt.client_root_store(), &provider)
-                .allow_unauthenticated()
-                .build()
-                .unwrap(),
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER)
+        .with_client_verifier(Box::new(|kt, provider| {
+            Arc::new(
+                webpki_client_verifier_builder(kt.client_root_store(), &provider)
+                    .allow_unauthenticated()
+                    .build()
+                    .unwrap(),
+            )
+        }))
+    {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
         );
-
-        let server_config = ServerConfig::builder(provider.clone())
-            .with_client_cert_verifier(client_auth)
-            .with_single_cert(kt.identity(), kt.key())
-            .unwrap();
-        let server_config = Arc::new(server_config);
-
-        for version_provider in ALL_VERSIONS {
-            let client_config = if client_cert_chain.is_some() {
-                make_client_config_with_auth(kt, &version_provider)
-            } else {
-                make_client_config(kt, &version_provider)
-            };
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            do_handshake(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(server.peer_identity(), client_cert_chain.as_deref());
-        }
+        assert_eq!(
+            server.peer_identity(),
+            match expect.client_auth {
+                true => Some(expect.key_type.client_identity()),
+                false => None,
+            }
+            .as_deref()
+        );
     }
 }
 
 #[test]
 fn client_auth_works() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = Arc::new(make_server_config_with_mandatory_client_auth(
-            *kt, &provider,
-        ));
-
-        for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config_with_auth(*kt, &version_provider);
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            do_handshake(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-        }
+    for (client_config, server_config, _) in
+        MultiTest::new(provider::DEFAULT_PROVIDER).require_client_auth()
+    {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
     }
 }
 
 #[test]
 fn client_mandatory_auth_client_revocation_works() {
     let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
+    for (client_config, _, expect) in MultiTest::new(provider.clone()).require_client_auth() {
         // Create a server configuration that includes a CRL that specifies the client certificate
         // is revoked.
-        let relevant_crls = vec![kt.client_crl()];
+        let relevant_crls = vec![expect.key_type.client_crl()];
         // Only check the EE certificate status. See client_mandatory_auth_intermediate_revocation_works
         // for testing revocation status of the whole chain.
-        let ee_verifier_builder = webpki_client_verifier_builder(kt.client_root_store(), &provider)
-            .with_crls(relevant_crls)
-            .only_check_end_entity_revocation();
+        let ee_verifier_builder =
+            webpki_client_verifier_builder(expect.key_type.client_root_store(), &provider)
+                .with_crls(relevant_crls)
+                .only_check_end_entity_revocation();
         let revoked_server_config = Arc::new(make_server_config_with_client_verifier(
-            *kt,
+            expect.key_type,
             ee_verifier_builder,
             &provider,
         ));
 
         // Create a server configuration that includes a CRL that doesn't cover the client certificate,
         // and uses the default behaviour of treating unknown revocation status as an error.
-        let unrelated_crls = vec![kt.intermediate_crl()];
-        let ee_verifier_builder = webpki_client_verifier_builder(kt.client_root_store(), &provider)
-            .with_crls(unrelated_crls.clone())
-            .only_check_end_entity_revocation();
+        let unrelated_crls = vec![expect.key_type.intermediate_crl()];
+        let ee_verifier_builder =
+            webpki_client_verifier_builder(expect.key_type.client_root_store(), &provider)
+                .with_crls(unrelated_crls.clone())
+                .only_check_end_entity_revocation();
         let missing_client_crl_server_config = Arc::new(make_server_config_with_client_verifier(
-            *kt,
+            expect.key_type,
             ee_verifier_builder,
             &provider,
         ));
 
         // Create a server configuration that includes a CRL that doesn't cover the client certificate,
         // but change the builder to allow unknown revocation status.
-        let ee_verifier_builder = webpki_client_verifier_builder(kt.client_root_store(), &provider)
-            .with_crls(unrelated_crls.clone())
-            .only_check_end_entity_revocation()
-            .allow_unknown_revocation_status();
-        let allow_missing_client_crl_server_config = Arc::new(
-            make_server_config_with_client_verifier(*kt, ee_verifier_builder, &provider),
-        );
+        let ee_verifier_builder =
+            webpki_client_verifier_builder(expect.key_type.client_root_store(), &provider)
+                .with_crls(unrelated_crls.clone())
+                .only_check_end_entity_revocation()
+                .allow_unknown_revocation_status();
+        let allow_missing_client_crl_server_config =
+            Arc::new(make_server_config_with_client_verifier(
+                expect.key_type,
+                ee_verifier_builder,
+                &provider,
+            ));
 
-        for version_provider in ALL_VERSIONS {
-            // Connecting to the server with a CRL that indicates the client certificate is revoked
-            // should fail with the expected error.
-            let client_config = Arc::new(make_client_config_with_auth(*kt, &version_provider));
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&client_config, &revoked_server_config);
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let err = do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(
-                err,
-                Err(ErrorFromPeer::Server(Error::InvalidCertificate(
-                    CertificateError::Revoked
-                )))
-            );
-            // Connecting to the server missing CRL information for the client certificate should
-            // fail with the expected unknown revocation status error.
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&client_config, &missing_client_crl_server_config);
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let res = do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(
-                res,
-                Err(ErrorFromPeer::Server(Error::InvalidCertificate(
-                    CertificateError::UnknownRevocationStatus
-                )))
-            );
-            // Connecting to the server missing CRL information for the client should not error
-            // if the server's verifier allows unknown revocation status.
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&client_config, &allow_missing_client_crl_server_config);
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            )
-            .unwrap();
-        }
+        // Connecting to the server with a CRL that indicates the client certificate is revoked
+        // should fail with the expected error.
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&client_config, &revoked_server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(
+            err,
+            Err(ErrorFromPeer::Server(Error::InvalidCertificate(
+                CertificateError::Revoked
+            )))
+        );
+        // Connecting to the server missing CRL information for the client certificate should
+        // fail with the expected unknown revocation status error.
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&client_config, &missing_client_crl_server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let res = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(
+            res,
+            Err(ErrorFromPeer::Server(Error::InvalidCertificate(
+                CertificateError::UnknownRevocationStatus
+            )))
+        );
+        // Connecting to the server missing CRL information for the client should not error
+        // if the server's verifier allows unknown revocation status.
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&client_config, &allow_missing_client_crl_server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        )
+        .unwrap();
     }
 }
 
 #[test]
 fn client_mandatory_auth_intermediate_revocation_works() {
     let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
+    for (client_config, _, expect) in MultiTest::new(provider.clone()).require_client_auth() {
         // Create a server configuration that includes a CRL that specifies the intermediate certificate
         // is revoked. We check the full chain for revocation status (default), and allow unknown
         // revocation status so the EE's unknown revocation status isn't an error.
-        let crls = vec![kt.intermediate_crl()];
+        let crls = vec![expect.key_type.intermediate_crl()];
         let full_chain_verifier_builder =
-            webpki_client_verifier_builder(kt.client_root_store(), &provider)
+            webpki_client_verifier_builder(expect.key_type.client_root_store(), &provider)
                 .with_crls(crls.clone())
                 .allow_unknown_revocation_status();
         let full_chain_server_config = Arc::new(make_server_config_with_client_verifier(
-            *kt,
+            expect.key_type,
             full_chain_verifier_builder,
             &provider,
         ));
@@ -356,82 +323,76 @@ fn client_mandatory_auth_intermediate_revocation_works() {
         // Also create a server configuration that uses the same CRL, but that only checks the EE
         // cert revocation status.
         let ee_only_verifier_builder =
-            webpki_client_verifier_builder(kt.client_root_store(), &provider)
+            webpki_client_verifier_builder(expect.key_type.client_root_store(), &provider)
                 .with_crls(crls)
                 .only_check_end_entity_revocation()
                 .allow_unknown_revocation_status();
         let ee_server_config = Arc::new(make_server_config_with_client_verifier(
-            *kt,
+            expect.key_type,
             ee_only_verifier_builder,
             &provider,
         ));
 
-        for version_provider in ALL_VERSIONS {
-            // When checking the full chain, we expect an error - the intermediate is revoked.
-            let client_config = Arc::new(make_client_config_with_auth(*kt, &version_provider));
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&client_config, &full_chain_server_config);
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let err = do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(
-                err,
-                Err(ErrorFromPeer::Server(Error::InvalidCertificate(
-                    CertificateError::Revoked
-                )))
-            );
-            // However, when checking just the EE cert we expect no error - the intermediate's
-            // revocation status should not be checked.
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&client_config, &ee_server_config);
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            )
-            .unwrap();
-        }
+        // When checking the full chain, we expect an error - the intermediate is revoked.
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&client_config, &full_chain_server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(
+            err,
+            Err(ErrorFromPeer::Server(Error::InvalidCertificate(
+                CertificateError::Revoked
+            )))
+        );
+        // However, when checking just the EE cert we expect no error - the intermediate's
+        // revocation status should not be checked.
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &ee_server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        )
+        .unwrap();
     }
 }
 
 #[test]
 fn client_optional_auth_client_revocation_works() {
     let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
+    for (client_config, _, expect) in MultiTest::new(provider.clone()).require_client_auth() {
         // Create a server configuration that includes a CRL that specifies the client certificate
         // is revoked.
-        let crls = vec![kt.client_crl()];
+        let crls = vec![expect.key_type.client_crl()];
         let server_config = Arc::new(make_server_config_with_optional_client_auth(
-            *kt, crls, &provider,
+            expect.key_type,
+            crls,
+            &provider,
         ));
 
-        for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config_with_auth(*kt, &version_provider);
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-            // Because the client certificate is revoked, the handshake should fail.
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let err = do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(
-                err,
-                Err(ErrorFromPeer::Server(Error::InvalidCertificate(
-                    CertificateError::Revoked
-                )))
-            );
-        }
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        // Because the client certificate is revoked, the handshake should fail.
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(
+            err,
+            Err(ErrorFromPeer::Server(Error::InvalidCertificate(
+                CertificateError::Revoked
+            )))
+        );
     }
 }
