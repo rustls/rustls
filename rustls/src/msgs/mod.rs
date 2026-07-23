@@ -50,11 +50,11 @@ pub(crate) use client_hello::{
 };
 
 mod codec;
+use codec::U24;
 pub(crate) use codec::{
-    CERTIFICATE_MAX_SIZE_LIMIT, Codec, ListLength, MaybeEmpty, NonEmpty, Reader, SizedPayload,
-    TlsListElement, hex, put_u16, put_u64,
+    CERTIFICATE_MAX_SIZE_LIMIT, Codec, LengthPrefixedBuffer, ListLength, MaybeEmpty, NonEmpty,
+    Reader, SizedPayload, TlsListElement, hex, put_u16, put_u64,
 };
-use codec::{LengthPrefixedBuffer, U24};
 
 mod deframer;
 pub(crate) use deframer::{Deframed, Deframer, Delocator, HandshakeAlignedProof, Locator};
@@ -89,8 +89,8 @@ pub(crate) use handshake::{EcParameters, NewSessionTicketExtensions, ServerEcdhP
 
 mod server_hello;
 pub(crate) use server_hello::{
-    EchConfigContents, EchConfigPayload, HpkeKeyConfig, ServerExtensions, ServerHelloPayload,
-    ServerTicketRequestHint,
+    EchConfigContents, EchConfigPayload, EncryptedExtensions, HpkeKeyConfig, ServerExtensions,
+    ServerHelloPayload, ServerTicketRequestHint,
 };
 
 #[cfg(test)]
@@ -444,7 +444,7 @@ impl<'a> HandshakeMessagePayload<'a> {
                         HandshakePayload::NewSessionTicket(p)
                     }
                     HandshakeType::EncryptedExtensions => HandshakePayload::EncryptedExtensions(
-                        Box::new(ServerExtensions::read(sub)?),
+                        Box::new(EncryptedExtensions::read(sub)?),
                     ),
                     HandshakeType::KeyUpdate => {
                         HandshakePayload::KeyUpdate(KeyUpdateRequest::read(sub)?)
@@ -544,7 +544,7 @@ pub(crate) enum HandshakePayload<'a> {
     ClientKeyExchange(Payload<'a>),
     NewSessionTicket(NewSessionTicketPayload),
     NewSessionTicketTls13(NewSessionTicketPayloadTls13),
-    EncryptedExtensions(Box<ServerExtensions<'a>>),
+    EncryptedExtensions(Box<EncryptedExtensions<'a>>),
     KeyUpdate(KeyUpdateRequest),
     Finished(Payload<'a>),
     CertificateStatus(CertificateStatus<'a>),

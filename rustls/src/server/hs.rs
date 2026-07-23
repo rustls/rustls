@@ -11,6 +11,7 @@ use super::{ClientHello, CommonServerSessionValue, ServerConfig, tls12, tls13};
 use crate::SupportedCipherSuite;
 use crate::common_state::{Event, Output, OutputEvent, Protocol};
 use crate::conn::{ConnectionRandoms, Input};
+use crate::crypto::cipher::Payload;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme};
@@ -20,9 +21,9 @@ use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::kernel::KernelState;
 use crate::log::{debug, trace};
 use crate::msgs::{
-    ClientHelloPayload, Compression, HandshakeAlignedProof, HandshakeMessagePayload,
-    HandshakePayload, Message, MessagePayload, Random, ServerExtensions, ServerExtensionsInput,
-    ServerNamePayload, SessionId, SingleProtocolName, TransportParameters,
+    ClientHelloPayload, Compression, EncryptedExtensions, HandshakeAlignedProof,
+    HandshakeMessagePayload, HandshakePayload, Message, MessagePayload, Random, ServerExtensions,
+    ServerExtensionsInput, ServerNamePayload, SessionId, SingleProtocolName, TransportParameters,
 };
 use crate::sealed::Sealed;
 use crate::suites::{PartiallyExtractedSecrets, Suite};
@@ -113,8 +114,15 @@ impl Tls12Extensions {
         config: &ServerConfig,
     ) -> Result<(Self, Box<ServerExtensions<'static>>), Error> {
         let ep = ExtensionProcessing::new(hello, config);
-        let (alpn_protocol, mut extensions) =
+        let (alpn_protocol, common) =
             ep.process_common(extra_exts, output, ocsp_response, resumedata)?;
+
+        let mut extensions = Box::new(ServerExtensions {
+            server_name_ack: common.server_name_ack,
+            selected_protocol: common.selected_protocol,
+            transport_parameters: common.transport_parameters,
+            ..ServerExtensions::default()
+        });
 
         // Renegotiation.
         // (We don't do reneg at all, but would support the secure version if we did.)
@@ -168,10 +176,17 @@ impl Tls13Extensions {
         hello: &ClientHelloPayload,
         output: &mut dyn Output<'_>,
         config: &ServerConfig,
-    ) -> Result<(Self, Box<ServerExtensions<'static>>), Error> {
+    ) -> Result<(Self, Box<EncryptedExtensions<'static>>), Error> {
         let ep = ExtensionProcessing::new(hello, config);
-        let (alpn_protocol, mut extensions) =
+        let (alpn_protocol, common) =
             ep.process_common(extra_exts, output, ocsp_response, resumedata)?;
+
+        let mut extensions = Box::new(EncryptedExtensions {
+            server_name_ack: common.server_name_ack,
+            selected_protocol: common.selected_protocol,
+            transport_parameters: common.transport_parameters,
+            ..EncryptedExtensions::default()
+        });
 
         let expected_client_type = select_cert_type(
             hello
@@ -228,15 +243,9 @@ impl<'a> ExtensionProcessing<'a> {
         output: &mut dyn Output<'_>,
         ocsp_response: &mut Option<&[u8]>,
         resumedata: Option<&CommonServerSessionValue<'_>>,
-    ) -> Result<
-        (
-            Option<ApplicationProtocol<'static>>,
-            Box<ServerExtensions<'static>>,
-        ),
-        Error,
-    > {
+    ) -> Result<(Option<ApplicationProtocol<'static>>, CommonExtensions), Error> {
         let Self { config, hello } = self;
-        let mut extensions = Box::new(ServerExtensions::default());
+        let mut extensions = CommonExtensions::default();
 
         let ServerExtensionsInput {
             transport_parameters,
@@ -310,6 +319,15 @@ impl<'a> ExtensionProcessing<'a> {
 
         Ok((chosen_protocol.map(|p| p.to_owned()), extensions))
     }
+}
+
+/// Extension values negotiated identically for TLS 1.2 ServerHello and
+/// TLS 1.3 EncryptedExtensions, prior to placement in the right message.
+#[derive(Default)]
+struct CommonExtensions {
+    server_name_ack: Option<()>,
+    selected_protocol: Option<SingleProtocolName>,
+    transport_parameters: Option<Payload<'static>>,
 }
 
 fn select_cert_type(

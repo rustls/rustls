@@ -32,10 +32,10 @@ use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, ChangeCipherSpecPayload, ClientExtensions,
-    Codec, EchConfigPayload, ExtensionType, HandshakeMessagePayload, HandshakePayload,
-    KeyShareEntry, KeyUpdateRequest, MaybeEmpty, Message, MessagePayload,
+    Codec, EchConfigPayload, EncryptedExtensions, ExtensionType, HandshakeMessagePayload,
+    HandshakePayload, KeyShareEntry, KeyUpdateRequest, MaybeEmpty, Message, MessagePayload,
     NewSessionTicketPayloadTls13, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer,
-    ServerExtensions, ServerHelloPayload, SizedPayload,
+    ServerHelloPayload, SizedPayload,
 };
 use crate::sealed::Sealed;
 use crate::suites::PartiallyExtractedSecrets;
@@ -109,7 +109,13 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
 
         let mut randoms = ConnectionRandoms::new(st.input.random, server_hello.random);
 
-        if !server_hello.only_contains(ALLOWED_PLAINTEXT_EXTS) {
+        // RFC 9846 section 4.3: reject recognized extensions not specified
+        // for the TLS 1.3 ServerHello.  Unrecognized extensions were already
+        // rejected by the unsolicited extension check.
+        if server_hello
+            .received_types()
+            .any(|ext| ext.is_recognized() && !ALLOWED_PLAINTEXT_EXTS.contains(&ext))
+        {
             return Err(PeerMisbehaved::UnexpectedCleartextExtension.into());
         }
 
@@ -479,14 +485,12 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, output: &mut dyn Out
 
 fn validate_encrypted_extensions(
     hello: &ClientHelloDetails,
-    exts: &ServerExtensions<'_>,
+    exts: &EncryptedExtensions<'_>,
 ) -> Result<(), Error> {
-    if hello.server_sent_unsolicited_extensions(exts, &[]) {
+    // Recognized extensions not specified for EncryptedExtensions were
+    // already rejected during parsing.
+    if hello.server_sent_unsolicited_extensions(exts.received_types(), &[]) {
         return Err(PeerMisbehaved::UnsolicitedEncryptedExtension.into());
-    }
-
-    if exts.contains_any(ALLOWED_PLAINTEXT_EXTS) || exts.contains_any(DISALLOWED_TLS13_EXTS) {
-        return Err(PeerMisbehaved::DisallowedEncryptedExtension.into());
     }
 
     Ok(())
@@ -1676,13 +1680,4 @@ const ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
     ExtensionType::KeyShare,
     ExtensionType::PreSharedKey,
     ExtensionType::SupportedVersions,
-];
-
-// Only the intersection of things we offer, and those disallowed
-// in TLS1.3
-const DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
-    ExtensionType::ECPointFormats,
-    ExtensionType::SessionTicket,
-    ExtensionType::RenegotiationInfo,
-    ExtensionType::ExtendedMasterSecret,
 ];

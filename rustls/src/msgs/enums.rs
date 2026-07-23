@@ -110,6 +110,15 @@ impl ExtensionType {
                 | Self::PSKKeyExchangeModes
         )
     }
+
+    /// Returns true if this is a recognized extension type.
+    ///
+    /// rustls does not necessarily process every recognized extension
+    /// type, but it can distinguish these from unrecognized values,
+    /// which must be ignored wherever they appear.
+    pub(crate) fn is_recognized(&self) -> bool {
+        ExtensionTypeName::try_from(*self).is_ok()
+    }
 }
 
 enum_builder! {
