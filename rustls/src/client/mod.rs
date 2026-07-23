@@ -12,7 +12,7 @@ use crate::error::{ApiMisuse, Error, InvalidMessage};
 use crate::log::{debug, trace};
 use crate::msgs::{
     CertificateChain, Codec, ExtensionType, MaybeEmpty, NewSessionTicketPayloadTls13, Reader,
-    ServerExtensions, SessionId, SizedPayload,
+    SessionId, SizedPayload,
 };
 use crate::sync::Arc;
 use crate::verify::DistinguishedName;
@@ -376,17 +376,10 @@ impl ClientHelloDetails {
 
     fn server_sent_unsolicited_extensions(
         &self,
-        received_exts: &ServerExtensions<'_>,
+        received_exts: impl Iterator<Item = ExtensionType>,
         allowed_unsolicited: &[ExtensionType],
     ) -> bool {
-        let mut extensions = received_exts.collect_used();
-        extensions.extend(
-            received_exts
-                .unknown_extensions
-                .iter()
-                .map(|ext| ExtensionType::from(*ext)),
-        );
-        for ext_type in extensions {
+        for ext_type in received_exts {
             if !self.sent_extensions.contains(&ext_type) && !allowed_unsolicited.contains(&ext_type)
             {
                 trace!("Unsolicited extension {ext_type:?}");
