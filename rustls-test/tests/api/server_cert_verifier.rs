@@ -21,79 +21,60 @@ use rustls::{
     ClientConfig, DistinguishedName, RootCertStore, ServerConfig, ServerConnection, VecInput,
 };
 use rustls_test::{
-    ErrorFromPeer, KeyType, MockServerVerifier, certificate_error_expecting_name, do_handshake,
-    do_handshake_until_both_error, do_handshake_until_error, make_client_config,
-    make_client_config_with_verifier, make_pair_for_arc_configs, make_pair_for_configs,
-    make_server_config, server_name, webpki_server_verifier_builder,
+    ErrorFromPeer, KeyType, MockServerVerifier, MultiTest, certificate_error_expecting_name,
+    do_handshake, do_handshake_until_both_error, do_handshake_until_error, make_client_config,
+    make_pair_for_arc_configs, make_server_config, server_name, webpki_server_verifier_builder,
 };
 use webpki::anchor_from_trusted_cert;
 use x509_parser::prelude::FromDer;
 use x509_parser::x509::X509Name;
 
-use super::{ALL_VERSIONS, provider};
+use super::provider;
 
 #[test]
 fn client_can_override_certificate_verification() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider).iter() {
-        let verifier = Arc::new(MockServerVerifier::accepts_anything());
-
-        let server_config = Arc::new(make_server_config(*kt, &provider));
-
-        for version_provider in ALL_VERSIONS {
-            let mut client_config = make_client_config(*kt, &version_provider);
-            client_config
-                .dangerous()
-                .set_certificate_verifier(verifier.clone());
-
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            do_handshake(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-        }
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER)
+        .with_server_verifier(Box::new(|_, _| {
+            Arc::new(MockServerVerifier::accepts_anything())
+        }))
+    {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
     }
 }
 
 #[test]
 fn client_can_override_certificate_verification_and_reject_certificate() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider).iter() {
-        let verifier = Arc::new(MockServerVerifier::rejects_certificate(
-            CertificateError::ApplicationVerificationFailure.into(),
-        ));
-
-        let server_config = Arc::new(make_server_config(*kt, &provider));
-
-        for version_provider in ALL_VERSIONS {
-            let mut client_config = make_client_config(*kt, &version_provider);
-            client_config
-                .dangerous()
-                .set_certificate_verifier(verifier.clone());
-
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let errs = do_handshake_until_both_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(
-                errs,
-                Err(vec![
-                    ErrorFromPeer::Client(CertificateError::ApplicationVerificationFailure.into()),
-                    ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::AccessDenied)),
-                ]),
-            );
-        }
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER)
+        .with_server_verifier(Box::new(|_, _| {
+            Arc::new(MockServerVerifier::rejects_certificate(
+                CertificateError::ApplicationVerificationFailure.into(),
+            ))
+        }))
+    {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let errs = do_handshake_until_both_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(
+            errs,
+            Err(vec![
+                ErrorFromPeer::Client(CertificateError::ApplicationVerificationFailure.into()),
+                ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::AccessDenied)),
+            ]),
+        );
     }
 }
 
@@ -169,62 +150,52 @@ fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
 
 #[test]
 fn client_can_override_certificate_verification_and_offer_no_signature_schemes() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider).iter() {
-        let verifier = Arc::new(MockServerVerifier::offers_no_signature_schemes());
-
-        let server_config = Arc::new(make_server_config(*kt, &provider));
-
-        for version_provider in ALL_VERSIONS {
-            let mut client_config = make_client_config(*kt, &version_provider);
-            client_config
-                .dangerous()
-                .set_certificate_verifier(verifier.clone());
-
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let errs = do_handshake_until_both_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(
-                errs,
-                Err(vec![
-                    ErrorFromPeer::Server(Error::InvalidMessage(
-                        InvalidMessage::NoSignatureSchemes
-                    )),
-                    ErrorFromPeer::Client(Error::AlertReceived(AlertDescription::DecodeError)),
-                ])
-            );
-        }
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER)
+        .with_server_verifier(Box::new(|_, _| {
+            Arc::new(MockServerVerifier::offers_no_signature_schemes())
+        }))
+    {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let errs = do_handshake_until_both_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(
+            errs,
+            Err(vec![
+                ErrorFromPeer::Server(Error::InvalidMessage(InvalidMessage::NoSignatureSchemes)),
+                ErrorFromPeer::Client(Error::AlertReceived(AlertDescription::DecodeError)),
+            ])
+        );
     }
 }
 
 #[test]
 fn test_pinned_ocsp_response_given_to_custom_server_cert_verifier() {
     let ocsp_response = b"hello-ocsp-world!";
-    let kt = KeyType::default();
-    let provider = provider::DEFAULT_PROVIDER;
 
-    for version_provider in ALL_VERSIONS {
-        let server_config = ServerConfig::builder(provider.clone().into())
-            .with_no_client_auth()
-            .with_single_cert_with_ocsp(kt.identity(), kt.key(), Arc::from(&ocsp_response[..]))
-            .unwrap();
+    for (client_config, _, expect) in MultiTest::new(provider::DEFAULT_PROVIDER)
+        .with_server_verifier(Box::new(|_, _| {
+            Arc::new(MockServerVerifier::expects_ocsp_response(ocsp_response))
+        }))
+    {
+        let provider = client_config.provider();
+        let server_config = Arc::new(
+            ServerConfig::builder(provider.clone())
+                .with_no_client_auth()
+                .with_single_cert_with_ocsp(
+                    expect.key_type.identity(),
+                    expect.key_type.key(),
+                    Arc::from(&ocsp_response[..]),
+                )
+                .unwrap(),
+        );
 
-        let client_config = ClientConfig::builder(version_provider.into())
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(MockServerVerifier::expects_ocsp_response(
-                ocsp_response,
-            )))
-            .with_no_client_auth()
-            .unwrap();
-
-        let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake(
@@ -352,328 +323,334 @@ fn client_checks_server_certificate_with_given_ip_address() {
         )
     }
 
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = Arc::new(make_server_config(*kt, &provider));
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        // positive ipv4 case
+        assert_eq!(
+            check_server_name(client_config.clone(), server_config.clone(), "198.51.100.1"),
+            Ok(()),
+        );
 
-        for version_provider in ALL_VERSIONS {
-            let client_config = Arc::new(make_client_config(*kt, &version_provider));
+        // negative ipv4 case
+        assert_eq!(
+            check_server_name(client_config.clone(), server_config.clone(), "198.51.100.2"),
+            Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                certificate_error_expecting_name("198.51.100.2")
+            )))
+        );
 
-            // positive ipv4 case
-            assert_eq!(
-                check_server_name(client_config.clone(), server_config.clone(), "198.51.100.1"),
-                Ok(()),
-            );
+        // positive ipv6 case
+        assert_eq!(
+            check_server_name(client_config.clone(), server_config.clone(), "2001:db8::1"),
+            Ok(()),
+        );
 
-            // negative ipv4 case
-            assert_eq!(
-                check_server_name(client_config.clone(), server_config.clone(), "198.51.100.2"),
-                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    certificate_error_expecting_name("198.51.100.2")
-                )))
-            );
-
-            // positive ipv6 case
-            assert_eq!(
-                check_server_name(client_config.clone(), server_config.clone(), "2001:db8::1"),
-                Ok(()),
-            );
-
-            // negative ipv6 case
-            assert_eq!(
-                check_server_name(client_config.clone(), server_config.clone(), "2001:db8::2"),
-                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    certificate_error_expecting_name("2001:db8::2")
-                )))
-            );
-        }
+        // negative ipv6 case
+        assert_eq!(
+            check_server_name(client_config.clone(), server_config.clone(), "2001:db8::2"),
+            Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                certificate_error_expecting_name("2001:db8::2")
+            )))
+        );
     }
 }
 
 #[test]
 fn client_checks_server_certificate_with_given_name() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = Arc::new(make_server_config(*kt, &provider));
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let mut client = client_config
+            .connect(server_name("not-the-right-hostname.com"))
+            .build()
+            .unwrap();
+        let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
-        for version_provider in ALL_VERSIONS {
-            let client_config = Arc::new(make_client_config(*kt, &version_provider));
-            let mut client = client_config
-                .connect(server_name("not-the-right-hostname.com"))
-                .build()
-                .unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let err = do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(
-                err,
-                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    certificate_error_expecting_name("not-the-right-hostname.com")
-                )))
-            );
-        }
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(
+            err,
+            Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                certificate_error_expecting_name("not-the-right-hostname.com")
+            )))
+        );
     }
 }
 
 #[test]
 fn client_check_server_certificate_ee_revoked() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = Arc::new(make_server_config(*kt, &provider));
-
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
         // Setup a server verifier that will check the EE certificate's revocation status.
-        let crls = vec![kt.end_entity_crl()];
-        let builder = webpki_server_verifier_builder(kt.client_root_store(), &provider)
-            .with_crls(crls)
-            .only_check_end_entity_revocation();
+        let crls = vec![expect.key_type.end_entity_crl()];
+        let builder = webpki_server_verifier_builder(
+            expect.key_type.client_root_store(),
+            client_config.provider(),
+        )
+        .with_crls(crls)
+        .only_check_end_entity_revocation();
 
-        for version_provider in ALL_VERSIONS {
-            let client_config =
-                make_client_config_with_verifier(builder.clone(), &version_provider);
-            let mut client = Arc::new(client_config)
-                .connect(server_name("localhost"))
-                .build()
-                .unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
+        let mut client_config = Arc::unwrap_or_clone(client_config);
+        client_config
+            .dangerous()
+            .set_certificate_verifier(Arc::new(builder.build().unwrap()));
 
-            // We expect the handshake to fail since the server's EE certificate is revoked.
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let err = do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(
-                err,
-                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::Revoked
-                )))
-            );
-        }
+        let mut client = Arc::new(client_config)
+            .connect(server_name("localhost"))
+            .build()
+            .unwrap();
+        let mut server = ServerConnection::new(server_config.clone()).unwrap();
+
+        // We expect the handshake to fail since the server's EE certificate is revoked.
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(
+            err,
+            Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                CertificateError::Revoked
+            )))
+        );
     }
 }
 
 #[test]
 fn client_check_server_certificate_ee_unknown_revocation() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = Arc::new(make_server_config(*kt, &provider));
-
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
         // Setup a server verifier builder that will check the EE certificate's revocation status, but not
         // allow unknown revocation status (the default). We'll provide CRLs that are not relevant
         // to the EE cert to ensure its status is unknown.
-        let unrelated_crls = vec![kt.intermediate_crl()];
-        let forbid_unknown_verifier =
-            webpki_server_verifier_builder(kt.client_root_store(), &provider)
-                .with_crls(unrelated_crls.clone())
-                .only_check_end_entity_revocation();
+        let unrelated_crls = vec![expect.key_type.intermediate_crl()];
+        let forbid_unknown_verifier = webpki_server_verifier_builder(
+            expect.key_type.client_root_store(),
+            client_config.provider(),
+        )
+        .with_crls(unrelated_crls.clone())
+        .only_check_end_entity_revocation();
 
         // Also set up a verifier builder that will allow unknown revocation status.
-        let allow_unknown_verifier =
-            webpki_server_verifier_builder(kt.client_root_store(), &provider)
-                .with_crls(unrelated_crls)
-                .only_check_end_entity_revocation()
-                .allow_unknown_revocation_status();
+        let allow_unknown_verifier = webpki_server_verifier_builder(
+            expect.key_type.client_root_store(),
+            client_config.provider(),
+        )
+        .with_crls(unrelated_crls)
+        .only_check_end_entity_revocation()
+        .allow_unknown_revocation_status();
 
-        for version_provider in ALL_VERSIONS {
-            let client_config = Arc::new(make_client_config_with_verifier(
-                forbid_unknown_verifier.clone(),
-                &version_provider,
-            ));
-            let mut client = client_config
-                .connect(server_name("localhost"))
-                .build()
-                .unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
+        let mut client_config = Arc::unwrap_or_clone(client_config);
+        client_config
+            .dangerous()
+            .set_certificate_verifier(Arc::new(forbid_unknown_verifier.build().unwrap()));
 
-            // We expect if we use the forbid_unknown_verifier that the handshake will fail since the
-            // server's EE certificate's revocation status is unknown given the CRLs we've provided.
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let err = do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(
-                err,
-                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::UnknownRevocationStatus
-                )))
-            );
-
-            // We expect if we use the allow_unknown_verifier that the handshake will not fail.
-            let client_config =
-                make_client_config_with_verifier(allow_unknown_verifier.clone(), &version_provider);
-            let mut client = Arc::new(client_config)
-                .connect(server_name("localhost"))
-                .build()
-                .unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            )
+        let mut client = Arc::new(client_config.clone())
+            .connect(server_name("localhost"))
+            .build()
             .unwrap();
-        }
+        let mut server = ServerConnection::new(server_config.clone()).unwrap();
+
+        // We expect if we use the forbid_unknown_verifier that the handshake will fail since the
+        // server's EE certificate's revocation status is unknown given the CRLs we've provided.
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(
+            err,
+            Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                CertificateError::UnknownRevocationStatus
+            )))
+        );
+
+        // We expect if we use the allow_unknown_verifier that the handshake will not fail.
+
+        client_config
+            .dangerous()
+            .set_certificate_verifier(Arc::new(allow_unknown_verifier.build().unwrap()));
+
+        let mut client = Arc::new(client_config)
+            .connect(server_name("localhost"))
+            .build()
+            .unwrap();
+        let mut server = ServerConnection::new(server_config.clone()).unwrap();
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        )
+        .unwrap();
     }
 }
 
 #[test]
 fn client_check_server_certificate_intermediate_revoked() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = Arc::new(make_server_config(*kt, &provider));
-
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
         // Setup a server verifier builder that will check the full chain revocation status against a CRL
         // that marks the intermediate certificate as revoked. We allow unknown revocation status
         // so the EE cert's unknown status doesn't cause an error.
-        let crls = vec![kt.intermediate_crl()];
-        let full_chain_verifier_builder =
-            webpki_server_verifier_builder(kt.client_root_store(), &provider)
-                .with_crls(crls.clone())
-                .allow_unknown_revocation_status();
+        let crls = vec![expect.key_type.intermediate_crl()];
+        let full_chain_verifier_builder = webpki_server_verifier_builder(
+            expect.key_type.client_root_store(),
+            client_config.provider(),
+        )
+        .with_crls(crls.clone())
+        .allow_unknown_revocation_status();
 
         // Also set up a verifier builder that will use the same CRL, but only check the EE certificate
         // revocation status.
-        let ee_verifier_builder = webpki_server_verifier_builder(kt.client_root_store(), &provider)
-            .with_crls(crls.clone())
-            .only_check_end_entity_revocation()
-            .allow_unknown_revocation_status();
+        let ee_verifier_builder = webpki_server_verifier_builder(
+            expect.key_type.client_root_store(),
+            client_config.provider(),
+        )
+        .with_crls(crls.clone())
+        .only_check_end_entity_revocation()
+        .allow_unknown_revocation_status();
 
-        for version_provider in ALL_VERSIONS {
-            let client_config = Arc::new(make_client_config_with_verifier(
-                full_chain_verifier_builder.clone(),
-                &version_provider,
+        let mut client_config = Arc::unwrap_or_clone(client_config);
+        client_config
+            .dangerous()
+            .set_certificate_verifier(Arc::new(
+                full_chain_verifier_builder
+                    .build()
+                    .unwrap(),
             ));
-            let mut client = client_config
-                .connect(server_name("localhost"))
-                .build()
-                .unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
-            // We expect the handshake to fail when using the full chain verifier since the intermediate's
-            // EE certificate is revoked.
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let err = do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(
-                err,
-                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::Revoked
-                )))
-            );
-
-            let client_config =
-                make_client_config_with_verifier(ee_verifier_builder.clone(), &version_provider);
-            let mut client = Arc::new(client_config)
-                .connect(server_name("localhost"))
-                .build()
-                .unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-            // We expect the handshake to succeed when we use the verifier that only checks the EE certificate
-            // revocation status. The revoked intermediate status should not be checked.
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            )
+        let mut client = Arc::new(client_config.clone())
+            .connect(server_name("localhost"))
+            .build()
             .unwrap();
-        }
+        let mut server = ServerConnection::new(server_config.clone()).unwrap();
+
+        // We expect the handshake to fail when using the full chain verifier since the intermediate's
+        // EE certificate is revoked.
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(
+            err,
+            Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                CertificateError::Revoked
+            )))
+        );
+
+        client_config
+            .dangerous()
+            .set_certificate_verifier(Arc::new(ee_verifier_builder.build().unwrap()));
+
+        let mut client = Arc::new(client_config)
+            .connect(server_name("localhost"))
+            .build()
+            .unwrap();
+        let mut server = ServerConnection::new(server_config.clone()).unwrap();
+        // We expect the handshake to succeed when we use the verifier that only checks the EE certificate
+        // revocation status. The revoked intermediate status should not be checked.
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        )
+        .unwrap();
     }
 }
 
 #[test]
 fn client_check_server_certificate_ee_crl_expired() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = Arc::new(make_server_config(*kt, &provider));
-
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
         // Setup a server verifier that will check the EE certificate's revocation status, with CRL expiration enforced.
-        let crls = vec![kt.end_entity_crl_expired()];
-        let enforce_expiration_builder =
-            webpki_server_verifier_builder(kt.client_root_store(), &provider)
-                .with_crls(crls)
-                .only_check_end_entity_revocation()
-                .enforce_revocation_expiration();
+        let crls = vec![expect.key_type.end_entity_crl_expired()];
+        let enforce_expiration_builder = webpki_server_verifier_builder(
+            expect.key_type.client_root_store(),
+            client_config.provider(),
+        )
+        .with_crls(crls)
+        .only_check_end_entity_revocation()
+        .enforce_revocation_expiration();
 
         // Also setup a server verifier without CRL expiration enforced.
-        let crls = vec![kt.end_entity_crl_expired()];
-        let ignore_expiration_builder =
-            webpki_server_verifier_builder(kt.client_root_store(), &provider)
-                .with_crls(crls)
-                .only_check_end_entity_revocation();
+        let crls = vec![expect.key_type.end_entity_crl_expired()];
+        let ignore_expiration_builder = webpki_server_verifier_builder(
+            expect.key_type.client_root_store(),
+            client_config.provider(),
+        )
+        .with_crls(crls)
+        .only_check_end_entity_revocation();
 
-        for version_provider in ALL_VERSIONS {
-            let client_config = Arc::new(make_client_config_with_verifier(
-                enforce_expiration_builder.clone(),
-                &version_provider,
-            ));
-            let mut client = client_config
-                .connect(server_name("localhost"))
-                .build()
-                .unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-
-            // We expect the handshake to fail since the CRL is expired.
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let err = do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert!(matches!(
-                err,
-                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::ExpiredRevocationListContext { .. }
-                )))
+        let mut client_config = Arc::unwrap_or_clone(client_config);
+        client_config
+            .dangerous()
+            .set_certificate_verifier(Arc::new(
+                enforce_expiration_builder
+                    .build()
+                    .unwrap(),
             ));
 
-            let client_config = Arc::new(make_client_config_with_verifier(
-                ignore_expiration_builder.clone(),
-                &version_provider,
-            ));
-            let mut client = client_config
-                .connect(server_name("localhost"))
-                .build()
-                .unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-
-            // We expect the handshake to succeed when CRL expiration is ignored.
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            )
+        let mut client = Arc::new(client_config.clone())
+            .connect(server_name("localhost"))
+            .build()
             .unwrap();
-        }
+        let mut server = ServerConnection::new(server_config.clone()).unwrap();
+
+        // We expect the handshake to fail since the CRL is expired.
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert!(matches!(
+            err,
+            Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                CertificateError::ExpiredRevocationListContext { .. }
+            )))
+        ));
+
+        client_config
+            .dangerous()
+            .set_certificate_verifier(Arc::new(
+                ignore_expiration_builder
+                    .build()
+                    .unwrap(),
+            ));
+
+        let mut client = Arc::new(client_config)
+            .connect(server_name("localhost"))
+            .build()
+            .unwrap();
+        let mut server = ServerConnection::new(server_config.clone()).unwrap();
+
+        // We expect the handshake to succeed when CRL expiration is ignored.
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        )
+        .unwrap();
     }
 }
 
