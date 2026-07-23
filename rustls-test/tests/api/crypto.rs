@@ -26,7 +26,7 @@ fn key_log_for_tls12() {
     let server_key_log = Arc::new(KeyLogToVec::new("server"));
 
     let provider = provider::DEFAULT_TLS12_PROVIDER;
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let mut client_config = make_client_config(kt, &provider);
     client_config.key_log = client_key_log.clone();
     let client_config = Arc::new(client_config);
@@ -76,7 +76,7 @@ fn key_log_for_tls13() {
     let server_key_log = Arc::new(KeyLogToVec::new("server"));
 
     let provider = provider::DEFAULT_TLS13_PROVIDER;
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let mut client_config = make_client_config(kt, &provider);
     client_config.key_log = client_key_log.clone();
     let client_config = Arc::new(client_config);
@@ -355,7 +355,7 @@ fn test_secret_extract_produces_correct_variant() {
 /// the handshake is done.
 #[test]
 fn test_secret_extraction_disabled_or_too_early() {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     let provider = Arc::new(CryptoProvider {
@@ -415,7 +415,7 @@ fn test_secret_extraction_disabled_or_too_early() {
 
 #[test]
 fn test_refresh_traffic_keys_during_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Ed25519, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     assert_eq!(
         client
             .refresh_traffic_keys()
@@ -432,7 +432,7 @@ fn test_refresh_traffic_keys_during_handshake() {
 
 #[test]
 fn test_refresh_traffic_keys() {
-    let (mut client, mut server) = make_pair(KeyType::Ed25519, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::default(), &provider::DEFAULT_PROVIDER);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(
@@ -508,8 +508,8 @@ fn test_automatic_refresh_traffic_keys() {
     const KEY_UPDATE_SIZE: usize = encrypted_size(5);
     let provider = aes_128_gcm_with_1024_confidentiality_limit(provider::DEFAULT_PROVIDER);
 
-    let client_config = ClientConfig::builder(provider.clone()).finish(KeyType::Ed25519);
-    let server_config = ServerConfig::builder(provider).finish(KeyType::Ed25519);
+    let client_config = ClientConfig::builder(provider.clone()).finish(KeyType::default());
+    let server_config = ServerConfig::builder(provider).finish(KeyType::default());
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
@@ -578,8 +578,9 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
         )))
     });
 
-    let client_config = ClientConfig::builder(provider.clone()).finish(KeyType::Ed25519);
-    let server_config = ServerConfig::builder(provider).finish(KeyType::Ed25519);
+    let kt = KeyType::EcdsaP256;
+    let client_config = ClientConfig::builder(provider.clone()).finish(kt);
+    let server_config = ServerConfig::builder(provider).finish(kt);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();

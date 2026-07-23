@@ -306,11 +306,12 @@ where
     total
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum KeyType {
     Rsa2048,
     Rsa3072,
     Rsa4096,
+    #[default]
     EcdsaP256,
     EcdsaP384,
     EcdsaP521,
@@ -345,6 +346,18 @@ impl KeyType {
         {
             true => ALL_KEY_TYPES,
             false => ALL_KEY_TYPES_EXCEPT_P521,
+        }
+    }
+
+    pub fn other(&self) -> Self {
+        match self {
+            Self::Rsa2048 => Self::Rsa3072,
+            Self::Rsa3072 => Self::Rsa2048,
+            Self::Rsa4096 => Self::Rsa2048,
+            Self::EcdsaP256 => Self::EcdsaP384,
+            Self::EcdsaP384 => Self::EcdsaP256,
+            Self::EcdsaP521 => Self::EcdsaP256,
+            Self::Ed25519 => Self::EcdsaP256,
         }
     }
 
@@ -504,6 +517,171 @@ impl KeyType {
             .cloned()
             .expect("cert chain cannot be empty")
     }
+}
+
+/// A iterator for testing several combinations of config
+///
+/// By default the iterator goes over compatible pairs of client/server configs
+/// alongside the expected `KeyType`:
+///
+/// - for the provider as-is
+/// - for the provider reduced to only support TLS1.2 and 1.3 alone
+/// - for each key type supported by the provider
+/// - for server authentication and mutual authentication
+pub struct MultiTest {
+    providers: Vec<(ProtocolVersion, Arc<CryptoProvider>)>,
+    anon_client: bool,
+    client_auth: ClientAuth,
+    #[expect(clippy::type_complexity)]
+    custom_server_verifier:
+        Option<Box<dyn Fn(KeyType, Arc<CryptoProvider>) -> Arc<dyn ServerVerifier>>>,
+    key_types: Vec<KeyType>,
+}
+
+impl MultiTest {
+    pub fn new(provider: CryptoProvider) -> Self {
+        let key_types = KeyType::all_for_provider(&provider).to_vec();
+        let mut providers = vec![(ProtocolVersion::TLSv1_3, Arc::new(provider.clone()))];
+        providers.push((
+            ProtocolVersion::TLSv1_3,
+            Arc::new(CryptoProvider {
+                tls12_cipher_suites: Cow::Borrowed(&[]),
+                ..provider.clone()
+            }),
+        ));
+        providers.push((
+            ProtocolVersion::TLSv1_2,
+            Arc::new(CryptoProvider {
+                tls13_cipher_suites: Cow::Borrowed(&[]),
+                ..provider
+            }),
+        ));
+
+        Self {
+            providers,
+            anon_client: true,
+            client_auth: ClientAuth::Yes,
+            custom_server_verifier: None,
+            key_types,
+        }
+    }
+
+    pub fn require_client_auth(mut self) -> Self {
+        self.anon_client = false;
+        self
+    }
+
+    pub fn with_client_verifier(
+        mut self,
+        builder: Box<dyn Fn(KeyType, Arc<CryptoProvider>) -> Arc<dyn ClientVerifier>>,
+    ) -> Self {
+        self.client_auth = ClientAuth::CustomClientVerifier(builder);
+        self
+    }
+
+    pub fn with_server_verifier(
+        mut self,
+        builder: Box<dyn Fn(KeyType, Arc<CryptoProvider>) -> Arc<dyn ServerVerifier>>,
+    ) -> Self {
+        self.custom_server_verifier = Some(builder);
+        self
+    }
+}
+
+impl IntoIterator for MultiTest {
+    type Item = (Arc<ClientConfig>, Arc<ServerConfig>, Expectation);
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let mut options = vec![];
+
+        for (version, provider) in self.providers {
+            for kt in &self.key_types {
+                let verifier = match &self.custom_server_verifier {
+                    Some(make_verifier) => make_verifier(*kt, provider.clone()),
+                    None => Arc::new(
+                        WebPkiServerVerifier::builder(kt.client_root_store(), &provider)
+                            .build()
+                            .unwrap(),
+                    ),
+                };
+
+                if self.anon_client {
+                    options.push((
+                        Arc::new(
+                            ClientConfig::builder(provider.clone())
+                                .dangerous()
+                                .with_custom_certificate_verifier(verifier.clone())
+                                .with_no_client_auth()
+                                .unwrap(),
+                        ),
+                        Arc::new(make_server_config(*kt, &provider)),
+                        Expectation {
+                            key_type: *kt,
+                            client_auth: false,
+                            version,
+                        },
+                    ));
+                }
+
+                let client_auth_config = Arc::new(
+                    ClientConfig::builder(provider.clone())
+                        .dangerous()
+                        .with_custom_certificate_verifier(verifier)
+                        .with_client_auth_cert(kt.client_identity(), kt.client_key())
+                        .unwrap(),
+                );
+
+                match &self.client_auth {
+                    ClientAuth::No => {}
+                    ClientAuth::Yes => {
+                        options.push((
+                            client_auth_config.clone(),
+                            Arc::new(make_server_config_with_mandatory_client_auth(
+                                *kt, &provider,
+                            )),
+                            Expectation {
+                                key_type: *kt,
+                                client_auth: true,
+                                version,
+                            },
+                        ));
+                    }
+                    ClientAuth::CustomClientVerifier(make_verifier) => {
+                        options.push((
+                            client_auth_config.clone(),
+                            Arc::new(
+                                ServerConfig::builder(provider.clone())
+                                    .with_client_cert_verifier(make_verifier(*kt, provider.clone()))
+                                    .with_single_cert(kt.identity(), kt.key())
+                                    .unwrap(),
+                            ),
+                            Expectation {
+                                key_type: *kt,
+                                client_auth: true,
+                                version,
+                            },
+                        ));
+                    }
+                }
+            }
+        }
+
+        options.into_iter()
+    }
+}
+
+#[derive(Debug)]
+pub struct Expectation {
+    pub key_type: KeyType,
+    pub client_auth: bool,
+    pub version: ProtocolVersion,
+}
+
+pub enum ClientAuth {
+    No,
+    Yes,
+    CustomClientVerifier(Box<dyn Fn(KeyType, Arc<CryptoProvider>) -> Arc<dyn ClientVerifier>>),
 }
 
 pub trait ServerConfigExt {
@@ -2205,7 +2383,8 @@ pub mod encoding {
                 typ: Self::SIGNATURE_ALGORITHMS,
                 body: len_u16(vector_of(
                     [
-                        SignatureScheme::RSA_PKCS1_SHA256,
+                        SignatureScheme::ED25519,
+                        SignatureScheme::RSA_PSS_SHA256,
                         SignatureScheme::ECDSA_NISTP256_SHA256,
                     ]
                     .map(|s| s.to_array()),

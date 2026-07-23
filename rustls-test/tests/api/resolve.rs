@@ -17,14 +17,14 @@ use rustls::{
     SupportedCipherSuite, VecInput,
 };
 use rustls_test::{
-    ClientConfigExt, ErrorFromPeer, KeyType, ServerCheckCertResolve,
+    ClientConfigExt, ErrorFromPeer, KeyType, MultiTest, ServerCheckCertResolve,
     certificate_error_expecting_name, do_handshake_until_error, make_client_config,
     make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
     make_server_config_with_client_verifier, make_server_config_with_mandatory_client_auth,
     provider_with_one_suite, server_name, transfer, webpki_client_verifier_builder,
 };
 
-use super::{ALL_VERSIONS, provider, provider_is_aws_lc_rs};
+use super::{provider, provider_is_aws_lc_rs};
 
 #[test]
 fn server_cert_resolve_with_sni() {
@@ -259,36 +259,33 @@ fn server_cert_resolve_reduces_sigalgs_for_ecdsa_ciphersuite() {
 
 #[test]
 fn client_with_sni_disabled_does_not_send_sni() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        let mut server_config = make_server_config(*kt, &provider);
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let mut server_config = Arc::unwrap_or_clone(server_config);
         server_config.cert_resolver = Arc::new(ServerCheckNoSni {});
         let server_config = Arc::new(server_config);
 
-        for version_provider in ALL_VERSIONS {
-            let mut client_config = make_client_config(*kt, &version_provider);
-            client_config.enable_sni = false;
+        let mut client_config = Arc::unwrap_or_clone(client_config);
+        client_config.enable_sni = false;
 
-            let mut client = Arc::new(client_config)
-                .connect(server_name("value-not-sent"))
-                .build()
-                .unwrap();
+        let mut client = Arc::new(client_config)
+            .connect(server_name("value-not-sent"))
+            .build()
+            .unwrap();
 
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let err = do_handshake_until_error(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            dbg!(&err);
-            assert_eq!(
-                err.err(),
-                Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
-            );
-        }
+        let mut server = ServerConnection::new(server_config.clone()).unwrap();
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        dbg!(&err);
+        assert_eq!(
+            err.err(),
+            Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
+        );
     }
 }
 
@@ -480,16 +477,13 @@ fn client_cert_resolve_server_added_hint() {
 
 #[test]
 fn server_exposes_offered_sni_even_if_resolver_fails() {
-    let kt = KeyType::Rsa2048;
-    let provider = provider::DEFAULT_PROVIDER;
-    let resolver = ServerNameResolver::new();
+    let resolver = Arc::new(ServerNameResolver::new());
 
-    let mut server_config = make_server_config(kt, &provider);
-    server_config.cert_resolver = Arc::new(resolver);
-    let server_config = Arc::new(server_config);
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let mut server_config = Arc::unwrap_or_clone(server_config);
+        server_config.cert_resolver = resolver.clone();
+        let server_config = Arc::new(server_config);
 
-    for version_provider in ALL_VERSIONS {
-        let client_config = Arc::new(make_client_config(kt, &version_provider));
         let mut server = ServerConnection::new(server_config.clone()).unwrap();
         let mut client = client_config
             .connect(server_name("thisdoesNOTexist.com"))
@@ -512,7 +506,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
 
 #[test]
 fn sni_resolver_works() {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_PROVIDER;
     let mut resolver = ServerNameResolver::new();
     let signing_key = kt.load_key(&provider);
@@ -563,7 +557,7 @@ fn sni_resolver_works() {
 
 #[test]
 fn sni_resolver_rejects_wrong_names() {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let mut resolver = ServerNameResolver::new();
 
     assert_eq!(
@@ -588,7 +582,7 @@ fn sni_resolver_rejects_wrong_names() {
 
 #[test]
 fn sni_resolver_lower_cases_configured_names() {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_PROVIDER;
     let mut resolver = ServerNameResolver::new();
     let signing_key = kt.load_key(&provider);
@@ -624,7 +618,7 @@ fn sni_resolver_lower_cases_configured_names() {
 #[test]
 fn sni_resolver_lower_cases_queried_names() {
     // actually, the handshake parser does this, but the effect is the same.
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_PROVIDER;
     let mut resolver = ServerNameResolver::new();
     let signing_key = kt.load_key(&provider);
@@ -659,7 +653,7 @@ fn sni_resolver_lower_cases_queried_names() {
 
 #[test]
 fn sni_resolver_rejects_bad_certs() {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let mut resolver = ServerNameResolver::new();
 
     let bad_chain =
