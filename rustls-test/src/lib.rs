@@ -571,7 +571,7 @@ impl IntoIterator for MultiTest {
     fn into_iter(self) -> Self::IntoIter {
         let mut options = vec![];
 
-        for (_, provider) in self.providers {
+        for (version, provider) in self.providers {
             for kt in &self.key_types {
                 if self.anon_client {
                     options.push((
@@ -580,6 +580,7 @@ impl IntoIterator for MultiTest {
                         Expectation {
                             key_type: *kt,
                             client_auth: false,
+                            version,
                         },
                     ));
                 }
@@ -594,6 +595,7 @@ impl IntoIterator for MultiTest {
                             Expectation {
                                 key_type: *kt,
                                 client_auth: true,
+                                version,
                             },
                         ));
                     }
@@ -609,6 +611,7 @@ impl IntoIterator for MultiTest {
                             Expectation {
                                 key_type: *kt,
                                 client_auth: true,
+                                version,
                             },
                         ));
                     }
@@ -620,9 +623,11 @@ impl IntoIterator for MultiTest {
     }
 }
 
+#[derive(Debug)]
 pub struct Expectation {
     pub key_type: KeyType,
     pub client_auth: bool,
+    pub version: ProtocolVersion,
 }
 
 pub enum ClientAuth {
