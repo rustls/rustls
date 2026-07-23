@@ -1,6 +1,6 @@
 [package]
 name = "rustls-post-quantum"
-version = "0.3.0-alpha.0"
+version = "0.3.0-dev.1"
 edition.workspace = true
 rust-version = "1.85"
 license = "Apache-2.0 OR ISC OR MIT"
@@ -13,7 +13,7 @@ autobenches = false
 
 [dependencies]
 aws-lc-rs = { workspace = true, features = ["unstable"] }
-rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs" }
+rustls-aws-lc-rs = { version = "0.1.0-dev.1", path = "../rustls-aws-lc-rs" }
 rustls = { path = "../rustls", version = "0.24.0-dev.0", default-features = false }
 webpki = { workspace = true }
 

@@ -1,6 +1,6 @@
 [package]
 name = "rustls"
-version = "0.24.0-dev.0"
+version = "0.24.0-dev.1"
 edition.workspace = true
 rust-version = "1.85"
 license = "Apache-2.0 OR ISC OR MIT"
