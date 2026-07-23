@@ -741,7 +741,7 @@ impl Parameters {
             }
             ResumptionParam::Tickets => {
                 cfg.ticketer = Some(
-                    cfg.crypto_provider()
+                    cfg.provider()
                         .ticketer_factory
                         .ticketer()
                         .unwrap(),

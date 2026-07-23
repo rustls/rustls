@@ -282,7 +282,7 @@ impl ServerConfig {
     }
 
     /// Return the crypto provider used to construct this server configuration.
-    pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
+    pub fn provider(&self) -> &Arc<CryptoProvider> {
         &self.provider
     }
 
@@ -671,7 +671,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         identity: Arc<Identity<'static>>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ServerConfig, Error> {
-        let credentials = Credentials::from_der(identity, key_der, self.crypto_provider())?;
+        let credentials = Credentials::from_der(identity, key_der, self.provider())?;
         self.with_server_credential_resolver(Arc::new(SingleCredential::from(credentials)))
     }
 
@@ -695,7 +695,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         key_der: PrivateKeyDer<'static>,
         ocsp: Arc<[u8]>,
     ) -> Result<ServerConfig, Error> {
-        let mut credentials = Credentials::from_der(identity, key_der, self.crypto_provider())?;
+        let mut credentials = Credentials::from_der(identity, key_der, self.provider())?;
         if !ocsp.is_empty() {
             credentials.ocsp = Some(ocsp);
         }
