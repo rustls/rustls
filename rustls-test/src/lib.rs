@@ -349,6 +349,18 @@ impl KeyType {
         }
     }
 
+    pub fn other(&self) -> Self {
+        match self {
+            Self::Rsa2048 => Self::Rsa3072,
+            Self::Rsa3072 => Self::Rsa2048,
+            Self::Rsa4096 => Self::Rsa2048,
+            Self::EcdsaP256 => Self::EcdsaP384,
+            Self::EcdsaP384 => Self::EcdsaP256,
+            Self::EcdsaP521 => Self::EcdsaP256,
+            Self::Ed25519 => Self::EcdsaP256,
+        }
+    }
+
     fn bytes_for(&self, part: &str) -> &'static [u8] {
         match self {
             Self::Rsa2048 => bytes_for("rsa-2048", part),
@@ -571,7 +583,7 @@ impl IntoIterator for MultiTest {
     fn into_iter(self) -> Self::IntoIter {
         let mut options = vec![];
 
-        for (_, provider) in self.providers {
+        for (version, provider) in self.providers {
             for kt in &self.key_types {
                 if self.anon_client {
                     options.push((
@@ -580,6 +592,7 @@ impl IntoIterator for MultiTest {
                         Expectation {
                             key_type: *kt,
                             client_auth: false,
+                            version,
                         },
                     ));
                 }
@@ -595,6 +608,7 @@ impl IntoIterator for MultiTest {
                             Expectation {
                                 key_type: *kt,
                                 client_auth: true,
+                                version,
                             },
                         ));
                     }
@@ -610,6 +624,7 @@ impl IntoIterator for MultiTest {
                             Expectation {
                                 key_type: *kt,
                                 client_auth: true,
+                                version,
                             },
                         ));
                     }
@@ -621,9 +636,11 @@ impl IntoIterator for MultiTest {
     }
 }
 
+#[derive(Debug)]
 pub struct Expectation {
     pub key_type: KeyType,
     pub client_auth: bool,
+    pub version: ProtocolVersion,
 }
 
 pub enum ClientAuth {

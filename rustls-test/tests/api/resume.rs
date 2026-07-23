@@ -15,27 +15,22 @@ use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
 use rustls::server::{ServerSessionKey, Tls13Tickets};
 use rustls::{ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection, VecInput};
 use rustls_test::{
-    ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, ServerConfigExt,
-    do_handshake, do_handshake_until_error, make_client_config, make_client_config_with_auth,
-    make_client_config_with_kx_groups, make_pair, make_pair_for_arc_configs, make_pair_for_configs,
-    make_server_config, make_server_config_with_kx_groups, transfer,
-    webpki_server_verifier_builder,
+    ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, MultiTest,
+    ServerConfigExt, do_handshake, do_handshake_until_error, make_client_config,
+    make_client_config_with_auth, make_client_config_with_kx_groups, make_pair,
+    make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
+    make_server_config_with_kx_groups, transfer, webpki_server_verifier_builder,
 };
 
-use super::{ALL_VERSIONS, provider};
+use super::provider;
 
 #[test]
 fn client_only_attempts_resumption_with_compatible_security() {
-    let provider = provider::DEFAULT_PROVIDER;
-    let kt = KeyType::Rsa2048;
-
-    let server_config = make_server_config(kt, &provider);
-    for version_provider in ALL_VERSIONS {
+    for (base_client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
-        let base_client_config = make_client_config(kt, &version_provider);
         let (mut client, mut server) =
-            make_pair_for_configs(base_client_config.clone(), server_config.clone());
+            make_pair_for_arc_configs(&base_client_config, &server_config);
         do_handshake(
             &mut client_input,
             &mut client,
@@ -46,7 +41,7 @@ fn client_only_attempts_resumption_with_compatible_security() {
 
         // base case
         let (mut client, mut server) =
-            make_pair_for_configs(base_client_config.clone(), server_config.clone());
+            make_pair_for_arc_configs(&base_client_config, &server_config);
         do_handshake(
             &mut client_input,
             &mut client,
@@ -58,7 +53,7 @@ fn client_only_attempts_resumption_with_compatible_security() {
         // allowed case, using `clone`
         let client_config = ClientConfig::clone(&base_client_config);
         let (mut client, mut server) =
-            make_pair_for_configs(client_config.clone(), server_config.clone());
+            make_pair_for_configs(client_config.clone(), ServerConfig::clone(&server_config));
         do_handshake(
             &mut client_input,
             &mut client,
@@ -68,17 +63,17 @@ fn client_only_attempts_resumption_with_compatible_security() {
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
 
         // disallowed case: unmatching `client_auth_cert_resolver`
-        let client_config = ClientConfig::builder(Arc::new(version_provider.clone()))
-            .add_root_certs(kt)
+        let client_config = ClientConfig::builder(base_client_config.provider().clone())
+            .add_root_certs(expect.key_type)
             .with_client_credential_resolver(
-                make_client_config_with_auth(KeyType::EcdsaP256, &version_provider)
+                make_client_config_with_auth(expect.key_type, base_client_config.provider())
                     .resolver()
                     .clone(),
             )
             .unwrap();
 
         let (mut client, mut server) =
-            make_pair_for_configs(client_config.clone(), server_config.clone());
+            make_pair_for_configs(client_config.clone(), ServerConfig::clone(&server_config));
         do_handshake(
             &mut client_input,
             &mut client,
@@ -88,59 +83,97 @@ fn client_only_attempts_resumption_with_compatible_security() {
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
 
         // disallowed case: unmatching `verifier`
-        let mut client_config = ClientConfig::builder(Arc::new(version_provider.clone()))
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(
-                webpki_server_verifier_builder(kt.client_root_store(), &version_provider)
+        if !expect.client_auth {
+            let mut client_config = ClientConfig::builder(base_client_config.provider().clone())
+                .dangerous()
+                .with_custom_certificate_verifier(Arc::new(
+                    webpki_server_verifier_builder(
+                        expect.key_type.client_root_store(),
+                        base_client_config.provider(),
+                    )
                     .allow_unknown_revocation_status()
                     .build()
                     .unwrap(),
-            ))
-            .with_client_credential_resolver(client_config.resolver().clone())
-            .unwrap();
-        client_config.resumption = base_client_config.resumption.clone();
-
-        let (mut client, mut server) =
-            make_pair_for_configs(client_config.clone(), server_config.clone());
-        do_handshake(
-            &mut client_input,
-            &mut client,
-            &mut server_input,
-            &mut server,
-        );
-        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
-    }
-}
-
-#[test]
-fn resumption_combinations() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = make_server_config(*kt, &provider);
-        for (version, version_provider) in [
-            (ProtocolVersion::TLSv1_2, provider::DEFAULT_TLS12_PROVIDER),
-            (ProtocolVersion::TLSv1_3, provider::DEFAULT_TLS13_PROVIDER),
-        ] {
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            let resumption_data = format!("resumption data {kt:?} {version:?}");
-            let client_config = make_client_config(*kt, &version_provider);
-            let (mut client, mut server) =
-                make_pair_for_configs(client_config.clone(), server_config.clone());
-            server
-                .set_resumption_data(resumption_data.as_bytes())
+                ))
+                .with_client_credential_resolver(client_config.resolver().clone())
                 .unwrap();
+            client_config.resumption = base_client_config.resumption.clone();
+
+            let (mut client, mut server) =
+                make_pair_for_configs(client_config, ServerConfig::clone(&server_config));
             do_handshake(
                 &mut client_input,
                 &mut client,
                 &mut server_input,
                 &mut server,
             );
-
-            let expected_kx = expected_kx_for_version(version);
-
             assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
-            assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+        }
+    }
+}
+
+#[test]
+fn resumption_combinations() {
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let resumption_data = format!("resumption data {expect:?}");
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        server
+            .set_resumption_data(resumption_data.as_bytes())
+            .unwrap();
+        do_handshake(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+
+        let expected_kx = expected_kx_for_version(expect.version);
+
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+        assert_eq!(
+            client
+                .negotiated_key_exchange_group()
+                .unwrap()
+                .name(),
+            expected_kx
+        );
+        assert_eq!(
+            server
+                .negotiated_key_exchange_group()
+                .unwrap()
+                .name(),
+            expected_kx
+        );
+
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        do_handshake(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
+        assert_eq!(
+            server.received_resumption_data(),
+            Some(resumption_data.as_bytes())
+        );
+        if expect.version == ProtocolVersion::TLSv1_2 {
+            assert!(
+                client
+                    .negotiated_key_exchange_group()
+                    .is_none()
+            );
+            assert!(
+                server
+                    .negotiated_key_exchange_group()
+                    .is_none()
+            );
+        } else {
             assert_eq!(
                 client
                     .negotiated_key_exchange_group()
@@ -155,49 +188,6 @@ fn resumption_combinations() {
                     .name(),
                 expected_kx
             );
-
-            let (mut client, mut server) =
-                make_pair_for_configs(client_config.clone(), server_config.clone());
-            do_handshake(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-
-            assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
-            assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
-            assert_eq!(
-                server.received_resumption_data(),
-                Some(resumption_data.as_bytes())
-            );
-            if version == ProtocolVersion::TLSv1_2 {
-                assert!(
-                    client
-                        .negotiated_key_exchange_group()
-                        .is_none()
-                );
-                assert!(
-                    server
-                        .negotiated_key_exchange_group()
-                        .is_none()
-                );
-            } else {
-                assert_eq!(
-                    client
-                        .negotiated_key_exchange_group()
-                        .unwrap()
-                        .name(),
-                    expected_kx
-                );
-                assert_eq!(
-                    server
-                        .negotiated_key_exchange_group()
-                        .unwrap()
-                        .name(),
-                    expected_kx
-                );
-            }
         }
     }
 }
