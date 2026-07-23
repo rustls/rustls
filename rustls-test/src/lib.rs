@@ -549,6 +549,11 @@ impl MultiTest {
             key_types,
         }
     }
+
+    pub fn require_client_auth(mut self) -> Self {
+        self.anon_client = false;
+        self
+    }
 }
 
 impl IntoIterator for MultiTest {
