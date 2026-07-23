@@ -27,19 +27,12 @@ use rustls_test::{
 };
 use rustls_util::{Stream, StreamOwned, complete_io};
 
-use super::{ALL_VERSIONS, provider};
+use super::provider;
 
 #[test]
 fn buffered_client_data_sent() {
-    let server_config = Arc::new(make_server_config(
-        KeyType::default(),
-        &provider::DEFAULT_PROVIDER,
-    ));
-
-    for version_provider in ALL_VERSIONS {
-        let client_config = make_client_config(KeyType::default(), &version_provider);
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
 
@@ -63,15 +56,8 @@ fn buffered_client_data_sent() {
 
 #[test]
 fn buffered_server_data_sent() {
-    let server_config = Arc::new(make_server_config(
-        KeyType::default(),
-        &provider::DEFAULT_PROVIDER,
-    ));
-
-    for version_provider in ALL_VERSIONS {
-        let client_config = make_client_config(KeyType::default(), &version_provider);
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
 
@@ -95,15 +81,8 @@ fn buffered_server_data_sent() {
 
 #[test]
 fn buffered_both_data_sent() {
-    let server_config = Arc::new(make_server_config(
-        KeyType::default(),
-        &provider::DEFAULT_PROVIDER,
-    ));
-
-    for version_provider in ALL_VERSIONS {
-        let client_config = make_client_config(KeyType::default(), &version_provider);
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
 
@@ -1718,44 +1697,43 @@ fn bad_client_max_fragment_sizes() {
 #[test]
 fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
     // general exercising of msgs::fragmenter and msgs::deframer
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        for version_provider in ALL_VERSIONS {
-            // no hidden significance to these numbers
-            for frag_size in [37, 61, 101, 257] {
-                println!("test kt={kt:?} version={version_provider:?} frag={frag_size:?}");
-                let mut client_config = make_client_config(*kt, &version_provider);
-                client_config.max_fragment_size = Some(frag_size);
-                let mut server_config = make_server_config(*kt, &provider);
-                server_config.max_fragment_size = Some(frag_size);
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let mut client_config = Arc::unwrap_or_clone(client_config);
+        let mut server_config = Arc::unwrap_or_clone(server_config);
 
-                let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-                let mut client_input = VecInput::default();
-                let mut server_input = VecInput::default();
-                do_handshake(
-                    &mut client_input,
-                    &mut client,
-                    &mut server_input,
-                    &mut server,
-                );
+        // no hidden significance to these numbers
+        for frag_size in [37, 61, 101, 257] {
+            println!("test configs={client_config:?}/{server_config:?} frag={frag_size:?}");
+            client_config.max_fragment_size = Some(frag_size);
+            server_config.max_fragment_size = Some(frag_size);
 
-                // check server -> client data flow
-                let pattern = (0x00..=0xffu8).collect::<Vec<u8>>();
-                assert_eq!(pattern.len(), server.writer().write(&pattern).unwrap());
-                transfer(&mut server, &mut client_input);
-                client
-                    .process_new_packets(&mut client_input)
-                    .unwrap();
-                check_read(&mut client.reader(), &pattern);
+            let (mut client, mut server) =
+                make_pair_for_configs(client_config.clone(), server_config.clone());
+            let mut client_input = VecInput::default();
+            let mut server_input = VecInput::default();
+            do_handshake(
+                &mut client_input,
+                &mut client,
+                &mut server_input,
+                &mut server,
+            );
 
-                // and client -> server
-                assert_eq!(pattern.len(), client.writer().write(&pattern).unwrap());
-                transfer(&mut client, &mut server_input);
-                server
-                    .process_new_packets(&mut server_input)
-                    .unwrap();
-                check_read(&mut server.reader(), &pattern);
-            }
+            // check server -> client data flow
+            let pattern = (0x00..=0xffu8).collect::<Vec<u8>>();
+            assert_eq!(pattern.len(), server.writer().write(&pattern).unwrap());
+            transfer(&mut server, &mut client_input);
+            client
+                .process_new_packets(&mut client_input)
+                .unwrap();
+            check_read(&mut client.reader(), &pattern);
+
+            // and client -> server
+            assert_eq!(pattern.len(), client.writer().write(&pattern).unwrap());
+            transfer(&mut client, &mut server_input);
+            server
+                .process_new_packets(&mut server_input)
+                .unwrap();
+            check_read(&mut server.reader(), &pattern);
         }
     }
 }
@@ -2188,14 +2166,8 @@ fn client_flush_does_nothing() {
 
 #[test]
 fn server_close_notify() {
-    let provider = provider::DEFAULT_PROVIDER;
-    let kt = KeyType::default();
-    let server_config = Arc::new(make_server_config_with_mandatory_client_auth(kt, &provider));
-
-    for version_provider in ALL_VERSIONS {
-        let client_config = make_client_config_with_auth(kt, &version_provider);
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake(
@@ -2239,14 +2211,8 @@ fn server_close_notify() {
 
 #[test]
 fn client_close_notify() {
-    let provider = provider::DEFAULT_PROVIDER;
-    let kt = KeyType::default();
-    let server_config = Arc::new(make_server_config_with_mandatory_client_auth(kt, &provider));
-
-    for version_provider in ALL_VERSIONS {
-        let client_config = make_client_config_with_auth(kt, &version_provider);
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake(
@@ -2290,14 +2256,8 @@ fn client_close_notify() {
 
 #[test]
 fn server_closes_uncleanly() {
-    let provider = provider::DEFAULT_PROVIDER;
-    let kt = KeyType::default();
-    let server_config = Arc::new(make_server_config(kt, &provider));
-
-    for version_provider in ALL_VERSIONS {
-        let client_config = make_client_config(kt, &version_provider);
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake(
@@ -2347,14 +2307,8 @@ fn server_closes_uncleanly() {
 
 #[test]
 fn client_closes_uncleanly() {
-    let provider = provider::DEFAULT_PROVIDER;
-    let kt = KeyType::default();
-    let server_config = Arc::new(make_server_config(kt, &provider));
-
-    for version_provider in ALL_VERSIONS {
-        let client_config = make_client_config(kt, &version_provider);
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake(
