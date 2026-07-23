@@ -126,7 +126,7 @@ impl ExpectServerHello {
         if self
             .input
             .hello
-            .server_sent_unsolicited_extensions(server_hello, &allowed_unsolicited)
+            .server_sent_unsolicited_extensions(server_hello.received_types(), &allowed_unsolicited)
         {
             return Err(PeerMisbehaved::UnsolicitedServerHelloExtension.into());
         }

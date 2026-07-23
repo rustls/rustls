@@ -481,7 +481,7 @@ fn validate_encrypted_extensions(
     hello: &ClientHelloDetails,
     exts: &ServerExtensions<'_>,
 ) -> Result<(), Error> {
-    if hello.server_sent_unsolicited_extensions(exts, &[]) {
+    if hello.server_sent_unsolicited_extensions(exts.received_types(), &[]) {
         return Err(PeerMisbehaved::UnsolicitedEncryptedExtension.into());
     }
 

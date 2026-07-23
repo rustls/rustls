@@ -166,6 +166,15 @@ extension_struct! {
 }
 
 impl ServerExtensions<'_> {
+    /// Every extension type present in this message.
+    pub(crate) fn received_types(&self) -> impl Iterator<Item = ExtensionType> + '_ {
+        self.collect_used().into_iter().chain(
+            self.unknown_extensions
+                .iter()
+                .map(|ext| ExtensionType::from(*ext)),
+        )
+    }
+
     pub(super) fn into_owned(self) -> ServerExtensions<'static> {
         let Self {
             ec_point_formats,
