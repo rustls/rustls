@@ -10,6 +10,7 @@ use zeroize::Zeroize;
 use super::config::ServerConfig;
 use super::hs::ServerState;
 use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
+use crate::ConnectionTrafficSecrets;
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
@@ -32,8 +33,9 @@ use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
-use crate::verify::{ClientIdentity, PeerVerified, SignatureVerificationInput};
-use crate::{ConnectionTrafficSecrets, verify};
+use crate::verify::{
+    ClientIdentity, FinishedMessageVerified, SignatureVerificationInput, VerifiedIdentity,
+};
 
 #[expect(private_interfaces)]
 pub(crate) enum Tls12State {
@@ -559,7 +561,7 @@ impl ExpectCertificate {
                 None
             }
             Some(identity) => {
-                let verified = self
+                let identity = self
                     .hs
                     .config
                     .verifier
@@ -567,7 +569,7 @@ impl ExpectCertificate {
                         identity: &identity,
                         now: self.hs.config.current_time()?,
                     })?;
-                Some((identity.into_owned(), verified))
+                Some(identity.into_owned())
             }
         };
 
@@ -594,7 +596,7 @@ struct ExpectClientKx {
     randoms: ConnectionRandoms,
     suite: &'static Tls12CipherSuite,
     server_kx: GroupAndKeyExchange,
-    peer_identity: Option<(Identity<'static>, PeerVerified)>,
+    peer_identity: Option<VerifiedIdentity<'static>>,
 }
 
 impl ExpectClientKx {
@@ -635,11 +637,10 @@ impl ExpectClientKx {
         );
 
         match self.peer_identity {
-            Some((peer_identity, peer_verified)) => Ok(Box::new(ExpectCertificateVerify {
+            Some(peer_identity) => Ok(Box::new(ExpectCertificateVerify {
                 hs: self.hs,
                 secrets,
                 peer_identity,
-                _peer_verified: peer_verified,
             })
             .into()),
             None => Ok(Box::new(ExpectCcs {
@@ -663,8 +664,7 @@ impl From<Box<ExpectClientKx>> for ServerState {
 struct ExpectCertificateVerify {
     hs: HandshakeState,
     secrets: ConnectionSecrets,
-    peer_identity: Identity<'static>,
-    _peer_verified: PeerVerified,
+    peer_identity: VerifiedIdentity<'static>,
 }
 
 impl ExpectCertificateVerify {
@@ -720,7 +720,7 @@ impl From<Box<ExpectCertificateVerify>> for ServerState {
 struct ExpectCcs {
     hs: HandshakeState,
     secrets: ConnectionSecrets,
-    peer_identity: Option<Identity<'static>>,
+    peer_identity: Option<VerifiedIdentity<'static>>,
     resuming_decrypter: Option<Box<dyn MessageDecrypter>>,
 }
 
@@ -858,7 +858,7 @@ fn emit_ticket(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
     using_ems: bool,
-    peer_identity: Option<&Identity<'static>>,
+    peer_identity: Option<&VerifiedIdentity<'static>>,
     alpn_protocol: Option<&ApplicationProtocol<'_>>,
     sni: Option<&DnsName<'static>>,
     resumption_data: Vec<u8>,
@@ -936,7 +936,7 @@ fn emit_finished(
 pub(super) struct ExpectFinished {
     hs: HandshakeState,
     secrets: ConnectionSecrets,
-    peer_identity: Option<Identity<'static>>,
+    peer_identity: Option<VerifiedIdentity<'static>>,
     resuming: bool,
     pending_encrypter: Option<Box<dyn MessageEncrypter>>,
 }
@@ -962,7 +962,7 @@ impl ExpectFinished {
 
         let fin_verified =
             match ConstantTimeEq::ct_eq(&expect_verify_data[..], finished.bytes()).into() {
-                true => verify::FinishedMessageVerified::assertion(),
+                true => FinishedMessageVerified::assertion(),
                 false => {
                     return Err(PeerMisbehaved::IncorrectFinished.into());
                 }
@@ -1074,7 +1074,7 @@ struct HandshakeState {
 pub(super) struct ExpectTraffic {
     // only `Some` if `config.enable_secret_extraction` is true
     extracted_secrets: Option<Result<PartiallyExtractedSecrets, Error>>,
-    _fin_verified: verify::FinishedMessageVerified,
+    _fin_verified: FinishedMessageVerified,
 }
 
 impl ExpectTraffic {}

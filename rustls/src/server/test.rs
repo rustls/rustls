@@ -34,6 +34,7 @@ use crate::suites::CipherSuiteCommon;
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
+use crate::verify::VerifiedIdentity;
 use crate::version::TLS12_VERSION;
 
 #[test]
@@ -74,10 +75,12 @@ fn serversessionvalue_with_cert() {
             CommonServerSessionValue::new(
                 None,
                 CipherSuite::TLS13_AES_128_GCM_SHA256,
-                Some(Identity::X509(CertificateIdentity {
-                    end_entity: CertificateDer::from(&[10, 11, 12][..]),
-                    intermediates: alloc::vec![],
-                })),
+                Some(VerifiedIdentity::assertion(Identity::X509(
+                    CertificateIdentity {
+                        end_entity: CertificateDer::from(&[10, 11, 12][..]),
+                        intermediates: alloc::vec![],
+                    }
+                ))),
                 None,
                 alloc::vec![4, 5, 6],
                 UnixTime::now(),

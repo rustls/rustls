@@ -39,8 +39,10 @@ use crate::tls13::key_schedule::{
 use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
-use crate::verify::{ClientIdentity, PeerVerified};
-use crate::{ConnectionTrafficSecrets, compress, verify};
+use crate::verify::{
+    ClientIdentity, FinishedMessageVerified, SignatureVerificationInput, VerifiedIdentity,
+};
+use crate::{ConnectionTrafficSecrets, compress};
 
 #[expect(private_interfaces)]
 pub(crate) enum Tls13State {
@@ -1066,7 +1068,7 @@ impl ExpectCertificate {
             return Err(PeerMisbehaved::NoCertificatesPresented.into());
         };
 
-        let peer_verified = self
+        let peer_identity = self
             .hs
             .config
             .verifier
@@ -1079,7 +1081,6 @@ impl ExpectCertificate {
             hs: self.hs,
             key_schedule: self.key_schedule,
             peer_identity: peer_identity.into_owned(),
-            _peer_verified: peer_verified,
         })
         .into())
     }
@@ -1104,8 +1105,7 @@ impl From<Box<ExpectCertificate>> for ServerState {
 struct ExpectCertificateVerify {
     hs: HandshakeState,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    peer_identity: Identity<'static>,
-    _peer_verified: PeerVerified,
+    peer_identity: VerifiedIdentity<'static>,
 }
 
 impl ExpectCertificateVerify {
@@ -1125,7 +1125,7 @@ impl ExpectCertificateVerify {
         self.hs
             .config
             .verifier
-            .verify_tls13_signature(&verify::SignatureVerificationInput {
+            .verify_tls13_signature(&SignatureVerificationInput {
                 message: construct_client_verify_message(&handshake_hash).as_ref(),
                 signer: &self.peer_identity.as_signer(),
                 signature,
@@ -1155,7 +1155,7 @@ impl From<Box<ExpectCertificateVerify>> for ServerState {
 struct ExpectEarlyData {
     hs: HandshakeState,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    peer_identity: Option<Identity<'static>>,
+    peer_identity: Option<VerifiedIdentity<'static>>,
     remaining_length: usize,
 }
 
@@ -1335,14 +1335,14 @@ impl<'a> Codec<'a> for ZeroizingCow<'a> {
 struct ExpectFinished {
     hs: HandshakeState,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    peer_identity: Option<Identity<'static>>,
+    peer_identity: Option<VerifiedIdentity<'static>>,
 }
 
 impl ExpectFinished {
     fn emit_ticket(
         flight: &mut HandshakeFlightTls13<'_>,
         suite: &'static Tls13CipherSuite,
-        peer_identity: Option<Identity<'static>>,
+        peer_identity: Option<VerifiedIdentity<'static>>,
         chosen_alpn_protocol: Option<ApplicationProtocol<'static>>,
         sni: Option<DnsName<'static>>,
         resumption_data: &[u8],
@@ -1431,7 +1431,7 @@ impl ExpectFinished {
 
         let fin = match ConstantTimeEq::ct_eq(expect_verify_data.as_ref(), finished.bytes()).into()
         {
-            true => verify::FinishedMessageVerified::assertion(),
+            true => FinishedMessageVerified::assertion(),
             false => return Err(PeerMisbehaved::IncorrectFinished.into()),
         };
 
@@ -1505,7 +1505,7 @@ pub(super) struct ExpectTraffic {
     config: Arc<ServerConfig>,
     key_schedule_recv: KeyScheduleTrafficReceive,
     counters: TrafficTemperCounters,
-    _fin_verified: verify::FinishedMessageVerified,
+    _fin_verified: FinishedMessageVerified,
 }
 
 impl ExpectTraffic {
@@ -1614,7 +1614,7 @@ impl From<Box<ExpectTraffic>> for ServerState {
 }
 
 struct ExpectQuicTraffic {
-    _fin_verified: verify::FinishedMessageVerified,
+    _fin_verified: FinishedMessageVerified,
 }
 
 impl ExpectQuicTraffic {

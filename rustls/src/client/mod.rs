@@ -15,7 +15,7 @@ use crate::msgs::{
     ServerExtensions, SessionId, SizedPayload,
 };
 use crate::sync::Arc;
-use crate::verify::DistinguishedName;
+use crate::verify::{DistinguishedName, VerifiedIdentity};
 #[cfg(feature = "webpki")]
 pub use crate::webpki::{
     ServerVerifierBuilder, VerifierBuilderError, WebPkiServerVerifier,
@@ -51,8 +51,7 @@ pub(crate) use tls13::TLS13_HANDLER;
 pub mod danger {
     pub use super::config::danger::{DangerousClientConfig, DangerousClientConfigBuilder};
     pub use crate::verify::{
-        HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
-        SignatureVerificationInput,
+        HandshakeSignatureValid, ServerIdentity, ServerVerifier, SignatureVerificationInput,
     };
 }
 
@@ -208,7 +207,7 @@ impl Deref for Tls13Session {
 #[derive(Clone)]
 pub(crate) struct Tls13ClientSessionInput {
     pub(crate) suite: &'static Tls13CipherSuite,
-    pub(crate) peer_identity: Identity<'static>,
+    pub(crate) peer_identity: VerifiedIdentity<'static>,
     pub(crate) quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
 }
 
@@ -253,7 +252,7 @@ impl Tls12Session {
         session_id: SessionId,
         ticket: Arc<SizedPayload<'static, u16, MaybeEmpty>>,
         master_secret: &[u8; 48],
-        peer_identity: Identity<'static>,
+        peer_identity: VerifiedIdentity<'static>,
         time_now: UnixTime,
         lifetime: Duration,
         extended_ms: bool,
@@ -297,7 +296,7 @@ pub struct ClientSessionCommon {
     pub(crate) ticket: Arc<SizedPayload<'static, u16>>,
     pub(crate) epoch: u64,
     lifetime: Duration,
-    peer_identity: Arc<Identity<'static>>,
+    peer_identity: Arc<VerifiedIdentity<'static>>,
 }
 
 impl ClientSessionCommon {
@@ -305,7 +304,7 @@ impl ClientSessionCommon {
         ticket: Arc<SizedPayload<'static, u16>>,
         time_now: UnixTime,
         lifetime: Duration,
-        peer_identity: Identity<'static>,
+        peer_identity: VerifiedIdentity<'static>,
     ) -> Self {
         Self {
             ticket,
@@ -337,7 +336,7 @@ impl<'a> Codec<'a> for ClientSessionCommon {
             ticket: Arc::new(SizedPayload::read(r)?.into_owned()),
             epoch: u64::read(r)?,
             lifetime: Duration::from_secs(u64::read(r)?),
-            peer_identity: Arc::new(Identity::read(r)?.into_owned()),
+            peer_identity: Arc::new(VerifiedIdentity::assertion(Identity::read(r)?.into_owned())),
         })
     }
 }

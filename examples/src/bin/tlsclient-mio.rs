@@ -409,11 +409,11 @@ mod danger {
     use std::sync::Arc;
 
     use rustls::client::danger::{
-        HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
-        SignatureVerificationInput,
+        HandshakeSignatureValid, ServerIdentity, ServerVerifier, SignatureVerificationInput,
     };
     use rustls::crypto::{
-        CryptoProvider, SignatureScheme, verify_tls12_signature, verify_tls13_signature,
+        CryptoProvider, SignatureScheme, VerifiedIdentity, verify_tls12_signature,
+        verify_tls13_signature,
     };
     use rustls::enums::CertificateType;
     use rustls::{DistinguishedName, Error};
@@ -428,8 +428,11 @@ mod danger {
     }
 
     impl ServerVerifier for NoCertificateVerification {
-        fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
-            Ok(PeerVerified::assertion())
+        fn verify_identity<'a>(
+            &self,
+            identity: &ServerIdentity<'a, '_>,
+        ) -> Result<VerifiedIdentity<'a>, Error> {
+            Ok(VerifiedIdentity::assertion(identity.identity.clone()))
         }
 
         fn verify_tls12_signature(

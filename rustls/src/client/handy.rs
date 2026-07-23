@@ -189,6 +189,7 @@ mod tests {
         NewSessionTicketExtensions, NewSessionTicketPayloadTls13, SessionId, SizedPayload,
     };
     use crate::sync::Arc;
+    use crate::verify::VerifiedIdentity;
 
     #[test]
     fn test_noclientsessionstorage_does_nothing() {
@@ -211,10 +212,10 @@ mod tests {
                     SessionId::empty(),
                     Arc::new(SizedPayload::empty()),
                     &[0u8; 48],
-                    Identity::X509(CertificateIdentity {
+                    VerifiedIdentity::assertion(Identity::X509(CertificateIdentity {
                         end_entity: CertificateDer::from(&[][..]),
                         intermediates: Vec::new(),
-                    }),
+                    })),
                     now,
                     Duration::ZERO,
                     true,
@@ -238,10 +239,12 @@ mod tests {
                 },
                 Tls13ClientSessionInput {
                     suite: tls13_suite(CipherSuite(0xff13), &TEST_PROVIDER),
-                    peer_identity: Identity::X509(CertificateIdentity {
-                        end_entity: CertificateDer::from(&[][..]),
-                        intermediates: Vec::new(),
-                    }),
+                    peer_identity: VerifiedIdentity::assertion(Identity::X509(
+                        CertificateIdentity {
+                            end_entity: CertificateDer::from(&[][..]),
+                            intermediates: Vec::new(),
+                        },
+                    )),
                     quic_params: None,
                 },
                 &[],

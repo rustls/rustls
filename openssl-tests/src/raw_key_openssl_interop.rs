@@ -10,12 +10,10 @@ mod client {
     use std::net::TcpStream;
     use std::sync::Arc;
 
-    use rustls::client::danger::{
-        HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
-    };
+    use rustls::client::danger::{HandshakeSignatureValid, ServerIdentity, ServerVerifier};
     use rustls::crypto::{
         Credentials, Identity, InconsistentKeys, SignatureScheme, SingleCredential,
-        WebPkiSupportedAlgorithms, verify_tls13_signature,
+        VerifiedIdentity, WebPkiSupportedAlgorithms, verify_tls13_signature,
     };
     use rustls::enums::CertificateType;
     use rustls::error::{ApiMisuse, CertificateError, PeerIncompatible};
@@ -102,14 +100,17 @@ mod client {
     }
 
     impl ServerVerifier for SimpleRpkServerVerifier {
-        fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
+        fn verify_identity<'a>(
+            &self,
+            identity: &ServerIdentity<'a, '_>,
+        ) -> Result<VerifiedIdentity<'a>, Error> {
             let Identity::RawPublicKey(spki) = identity.identity else {
                 return Err(ApiMisuse::UnverifiableCertificateType.into());
             };
 
             match self.trusted_spki.contains(spki) {
                 false => Err(Error::InvalidCertificate(CertificateError::UnknownIssuer)),
-                true => Ok(PeerVerified::assertion()),
+                true => Ok(VerifiedIdentity::assertion(identity.identity.clone())),
             }
         }
 
@@ -154,15 +155,13 @@ mod server {
     use rustls::client::danger::HandshakeSignatureValid;
     use rustls::crypto::{
         Credentials, Identity, InconsistentKeys, SignatureScheme, SingleCredential,
-        WebPkiSupportedAlgorithms, verify_tls13_signature,
+        VerifiedIdentity, WebPkiSupportedAlgorithms, verify_tls13_signature,
     };
     use rustls::enums::CertificateType;
     use rustls::error::{ApiMisuse, CertificateError, Error, PeerIncompatible};
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
-    use rustls::server::danger::{
-        ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
-    };
+    use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
     use rustls::{Connection, DistinguishedName, ServerConfig, ServerConnection, VecInput};
     use rustls_aws_lc_rs as provider;
     use rustls_util::complete_io;
@@ -258,14 +257,17 @@ mod server {
     }
 
     impl ClientVerifier for SimpleRpkClientVerifier {
-        fn verify_identity(&self, identity: &ClientIdentity<'_>) -> Result<PeerVerified, Error> {
+        fn verify_identity<'a>(
+            &self,
+            identity: &ClientIdentity<'a, '_>,
+        ) -> Result<VerifiedIdentity<'a>, Error> {
             let Identity::RawPublicKey(spki) = identity.identity else {
                 return Err(ApiMisuse::UnverifiableCertificateType.into());
             };
 
             match self.trusted_spki.contains(spki) {
                 false => Err(Error::InvalidCertificate(CertificateError::UnknownIssuer)),
-                true => Ok(PeerVerified::assertion()),
+                true => Ok(VerifiedIdentity::assertion(identity.identity.clone())),
             }
         }
 

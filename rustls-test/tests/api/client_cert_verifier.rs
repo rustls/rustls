@@ -4,8 +4,8 @@
 
 use std::sync::Arc;
 
+use rustls::crypto::VerifiedIdentity;
 use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage, PeerMisbehaved};
-use rustls::server::danger::PeerVerified;
 use rustls::{ServerConfig, ServerConnection, VecInput};
 use rustls_test::{
     ErrorFromPeer, KeyType, MockClientVerifier, do_handshake, do_handshake_until_both_error,
@@ -18,17 +18,17 @@ use rustls_test::{
 use super::{ALL_VERSIONS, provider};
 
 // Client is authorized!
-fn ver_ok() -> Result<PeerVerified, Error> {
-    Ok(PeerVerified::assertion())
+fn ver_ok() -> Result<(), Error> {
+    Ok(())
 }
 
 // Use when we shouldn't even attempt verification
-fn ver_unreachable() -> Result<PeerVerified, Error> {
+fn ver_unreachable() -> Result<(), Error> {
     unreachable!()
 }
 
 // Verifier that returns an error that we can expect
-fn ver_err() -> Result<PeerVerified, Error> {
+fn ver_err() -> Result<(), Error> {
     Err(Error::General("test err".to_string()))
 }
 
@@ -211,7 +211,12 @@ fn server_allow_any_anonymous_or_authenticated_client() {
                 &mut server_input,
                 &mut server,
             );
-            assert_eq!(server.peer_identity(), client_cert_chain.as_deref());
+            assert_eq!(
+                server
+                    .peer_identity()
+                    .map(VerifiedIdentity::identity),
+                client_cert_chain.as_deref()
+            );
         }
     }
 }

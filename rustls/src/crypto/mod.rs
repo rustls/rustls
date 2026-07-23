@@ -60,7 +60,7 @@ pub(crate) use test_provider::TLS13_TEST_SUITE;
 mod signer;
 pub use signer::{
     CertificateIdentity, Credentials, Identity, InconsistentKeys, SelectedCredential, Signer,
-    SigningKey, SingleCredential, public_key_to_spki,
+    SigningKey, SingleCredential, VerifiedIdentity, public_key_to_spki,
 };
 
 pub use crate::suites::CipherSuiteCommon;

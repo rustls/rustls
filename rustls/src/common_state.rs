@@ -7,7 +7,6 @@ use pki_types::{DnsName, FipsStatus};
 
 use crate::client::EchStatus;
 use crate::conn::{Exporter, ReceivePath, SendOutput, SendPath};
-use crate::crypto::Identity;
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ApplicationProtocol, ProtocolVersion};
@@ -18,6 +17,7 @@ use crate::msgs::{
 };
 use crate::quic::{self, QuicOutput};
 use crate::suites::SupportedCipherSuite;
+use crate::verify::VerifiedIdentity;
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
@@ -96,7 +96,7 @@ pub struct ConnectionOutputs {
     suite: Option<SupportedCipherSuite>,
     negotiated_kx_group: Option<&'static dyn SupportedKxGroup>,
     alpn_protocol: Option<ApplicationProtocol<'static>>,
-    peer_identity: Option<Identity<'static>>,
+    peer_identity: Option<VerifiedIdentity<'static>>,
     extended_master_secret: Option<bool>,
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
@@ -111,7 +111,7 @@ impl ConnectionOutputs {
     /// client, if client authentication was completed.
     ///
     /// The return value is None until this value is available.
-    pub fn peer_identity(&self) -> Option<&Identity<'static>> {
+    pub fn peer_identity(&self) -> Option<&VerifiedIdentity<'static>> {
         self.peer_identity.as_ref()
     }
 
@@ -319,7 +319,7 @@ pub(crate) enum OutputEvent<'a> {
     ExtendedMasterSecret(bool),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
-    PeerIdentity(Identity<'static>),
+    PeerIdentity(VerifiedIdentity<'static>),
     ProtocolVersion(ProtocolVersion),
 }
 

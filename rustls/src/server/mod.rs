@@ -8,6 +8,7 @@ use crate::enums::{ApplicationProtocol, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::{Codec, MaybeEmpty, Reader, SessionId, SizedPayload};
 pub use crate::verify::NoClientAuth;
+use crate::verify::VerifiedIdentity;
 #[cfg(feature = "webpki")]
 pub use crate::webpki::{
     ClientVerifierBuilder, ParsedCertificate, VerifierBuilderError, WebPkiClientVerifier,
@@ -43,7 +44,7 @@ use tls13::Tls13ServerSessionValue;
 /// Dangerous configuration that should be audited and used with extreme care.
 pub mod danger {
     pub use crate::verify::{
-        ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
+        ClientIdentity, ClientVerifier, SignatureVerificationInput, VerifiedIdentity,
     };
 }
 
@@ -84,7 +85,7 @@ pub(crate) struct CommonServerSessionValue<'a> {
     pub(crate) creation_time_sec: u64,
     pub(crate) sni: Option<DnsName<'a>>,
     pub(crate) cipher_suite: CipherSuite,
-    pub(crate) peer_identity: Option<Identity<'a>>,
+    pub(crate) peer_identity: Option<VerifiedIdentity<'a>>,
     pub(crate) alpn: Option<ApplicationProtocol<'a>>,
     pub(crate) application_data: SizedPayload<'a, u16, MaybeEmpty>,
 }
@@ -93,7 +94,7 @@ impl<'a> CommonServerSessionValue<'a> {
     pub(crate) fn new(
         sni: Option<&DnsName<'a>>,
         cipher_suite: CipherSuite,
-        peer_identity: Option<Identity<'a>>,
+        peer_identity: Option<VerifiedIdentity<'a>>,
         alpn: Option<ApplicationProtocol<'a>>,
         application_data: Vec<u8>,
         creation_time: UnixTime,
@@ -183,7 +184,7 @@ impl Codec<'_> for CommonServerSessionValue<'_> {
             sni,
             cipher_suite: CipherSuite::read(r)?,
             peer_identity: match u8::read(r)? {
-                1 => Some(Identity::read(r)?.into_owned()),
+                1 => Some(VerifiedIdentity::assertion(Identity::read(r)?.into_owned())),
                 _ => None,
             },
             alpn: match u8::read(r)? {
