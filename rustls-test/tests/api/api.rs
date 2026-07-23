@@ -34,16 +34,14 @@ use rustls::{
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls_test::{
     Altered, ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType,
-    MockServerVerifier, RawTls, ServerConfigExt, do_handshake, do_handshake_until_error,
-    do_suite_and_kx_test, encoding, make_client_config, make_client_config_with_auth, make_pair,
-    make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
-    make_server_config_with_mandatory_client_auth, provider_with_one_suite, provider_with_suites,
+    MockServerVerifier, MultiTest, RawTls, ServerConfigExt, do_handshake, do_handshake_until_error,
+    do_suite_and_kx_test, encoding, make_client_config, make_pair, make_pair_for_arc_configs,
+    make_pair_for_configs, make_server_config, provider_with_one_suite, provider_with_suites,
     server_name, transfer, transfer_altered, unsafe_plaintext_crypto_provider,
 };
 
 use super::{
-    ALL_VERSIONS, COUNTS, CountingLogger, provider, provider_is_aws_lc_rs, provider_is_fips,
-    provider_is_ring,
+    COUNTS, CountingLogger, provider, provider_is_aws_lc_rs, provider_is_fips, provider_is_ring,
 };
 
 fn alpn_test_error(
@@ -52,19 +50,16 @@ fn alpn_test_error(
     agreed: Option<ApplicationProtocol<'static>>,
     expected_error: Option<ErrorFromPeer>,
 ) {
-    let mut server_config = make_server_config(KeyType::default(), &provider::DEFAULT_PROVIDER);
-    server_config.alpn_protocols = server_protos;
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let mut server_config = Arc::unwrap_or_clone(server_config);
+        server_config.alpn_protocols = server_protos.clone();
 
-    let server_config = Arc::new(server_config);
-
-    for version_provider in ALL_VERSIONS {
-        let mut client_config = make_client_config(KeyType::default(), &version_provider);
+        let mut client_config = Arc::unwrap_or_clone(client_config);
         client_config
             .alpn_protocols
             .clone_from(&client_protos);
 
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+        let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
 
@@ -417,126 +412,104 @@ fn config_builder_for_server_with_time() {
 
 #[test]
 fn client_can_get_server_cert() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config(*kt, &version_provider);
-            let (mut client, mut server) =
-                make_pair_for_configs(client_config, make_server_config(*kt, &provider));
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            do_handshake(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(client.peer_identity().unwrap(), &*kt.identity());
-        }
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(
+            client.peer_identity().unwrap(),
+            &*expect.key_type.identity()
+        );
     }
 }
 
 #[test]
 fn client_can_get_server_cert_after_resumption() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = make_server_config(*kt, &provider);
-        for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config(*kt, &version_provider);
-            let (mut client, mut server) =
-                make_pair_for_configs(client_config.clone(), server_config.clone());
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            do_handshake(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
 
-            let original_certs = client.peer_identity();
+        let original_certs = client.peer_identity();
 
-            let (mut client, mut server) =
-                make_pair_for_configs(client_config.clone(), server_config.clone());
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            do_handshake(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
 
-            let resumed_certs = client.peer_identity();
+        let resumed_certs = client.peer_identity();
 
-            assert_eq!(original_certs, resumed_certs);
-        }
+        assert_eq!(original_certs, resumed_certs);
     }
 }
 
 #[test]
 fn server_can_get_client_cert() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = Arc::new(make_server_config_with_mandatory_client_auth(
-            *kt, &provider,
-        ));
-
-        for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config_with_auth(*kt, &version_provider);
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            do_handshake(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            assert_eq!(server.peer_identity().unwrap(), &*kt.client_identity());
-        }
+    for (client_config, server_config, expect) in
+        MultiTest::new(provider::DEFAULT_PROVIDER).require_client_auth()
+    {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        assert_eq!(
+            server.peer_identity().unwrap(),
+            &*expect.key_type.client_identity()
+        );
     }
 }
 
 #[test]
 fn server_can_get_client_cert_after_resumption() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = Arc::new(make_server_config_with_mandatory_client_auth(
-            *kt, &provider,
-        ));
+    for (client_config, server_config, _) in
+        MultiTest::new(provider::DEFAULT_PROVIDER).require_client_auth()
+    {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        let original_certs = server.peer_identity();
 
-        for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config_with_auth(*kt, &version_provider);
-            let client_config = Arc::new(client_config);
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&client_config, &server_config);
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            do_handshake(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            let original_certs = server.peer_identity();
-
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&client_config, &server_config);
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            do_handshake(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-            let resumed_certs = server.peer_identity();
-            assert_eq!(original_certs, resumed_certs);
-        }
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
+        let resumed_certs = server.peer_identity();
+        assert_eq!(original_certs, resumed_certs);
     }
 }
 
@@ -756,19 +729,15 @@ fn server_connection_is_debug() {
 
 #[test]
 fn server_exposes_offered_sni() {
-    let kt = KeyType::default();
-    let provider = provider::DEFAULT_PROVIDER;
-    for version_provider in ALL_VERSIONS {
-        let client_config = Arc::new(make_client_config(kt, &version_provider));
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
         let mut client = client_config
             .connect(server_name("second.testserver.com"))
             .build()
             .unwrap();
 
-        let mut server =
-            ServerConnection::new(Arc::new(make_server_config(kt, &provider))).unwrap();
-
+        let mut server = ServerConnection::new(server_config).unwrap();
         assert_eq!(None, server.server_name());
+
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake(
@@ -787,17 +756,13 @@ fn server_exposes_offered_sni() {
 #[test]
 fn server_exposes_offered_sni_smashed_to_lowercase() {
     // webpki actually does this for us in its DnsName type
-    let kt = KeyType::default();
-    let provider = provider::DEFAULT_PROVIDER;
-    for version_provider in ALL_VERSIONS {
-        let client_config = Arc::new(make_client_config(kt, &version_provider));
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
         let mut client = client_config
             .connect(server_name("SECOND.TESTServer.com"))
             .build()
             .unwrap();
 
-        let mut server =
-            ServerConnection::new(Arc::new(make_server_config(kt, &provider))).unwrap();
+        let mut server = ServerConnection::new(server_config).unwrap();
 
         assert_eq!(None, server.server_name());
         let mut client_input = VecInput::default();
@@ -1295,22 +1260,16 @@ fn test_client_rejects_illegal_tls13_ccs() {
 fn test_no_warning_logging_during_successful_sessions() {
     CountingLogger::install();
     CountingLogger::reset();
-
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config(*kt, &version_provider);
-            let (mut client, mut server) =
-                make_pair_for_configs(client_config, make_server_config(*kt, &provider));
-            let mut client_input = VecInput::default();
-            let mut server_input = VecInput::default();
-            do_handshake(
-                &mut client_input,
-                &mut client,
-                &mut server_input,
-                &mut server,
-            );
-        }
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
     }
 
     if cfg!(feature = "log") {
