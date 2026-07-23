@@ -519,7 +519,7 @@ impl KeyType {
 pub struct MultiTest {
     providers: Vec<(ProtocolVersion, Arc<CryptoProvider>)>,
     anon_client: bool,
-    client_auth: bool,
+    client_auth: ClientAuth,
     key_types: Vec<KeyType>,
 }
 
@@ -545,13 +545,21 @@ impl MultiTest {
         Self {
             providers,
             anon_client: true,
-            client_auth: true,
+            client_auth: ClientAuth::Yes,
             key_types,
         }
     }
 
     pub fn require_client_auth(mut self) -> Self {
         self.anon_client = false;
+        self
+    }
+
+    pub fn with_client_verifier(
+        mut self,
+        builder: Box<dyn Fn(KeyType, Arc<CryptoProvider>) -> Arc<dyn ClientVerifier>>,
+    ) -> Self {
+        self.client_auth = ClientAuth::CustomClientVerifier(builder);
         self
     }
 }
@@ -576,17 +584,35 @@ impl IntoIterator for MultiTest {
                     ));
                 }
 
-                if self.client_auth {
-                    options.push((
-                        Arc::new(make_client_config_with_auth(*kt, &provider)),
-                        Arc::new(make_server_config_with_mandatory_client_auth(
-                            *kt, &provider,
-                        )),
-                        Expectation {
-                            key_type: *kt,
-                            client_auth: true,
-                        },
-                    ));
+                match &self.client_auth {
+                    ClientAuth::No => {}
+                    ClientAuth::Yes => {
+                        options.push((
+                            Arc::new(make_client_config_with_auth(*kt, &provider)),
+                            Arc::new(make_server_config_with_mandatory_client_auth(
+                                *kt, &provider,
+                            )),
+                            Expectation {
+                                key_type: *kt,
+                                client_auth: true,
+                            },
+                        ));
+                    }
+                    ClientAuth::CustomClientVerifier(make_verifier) => {
+                        options.push((
+                            Arc::new(make_client_config_with_auth(*kt, &provider)),
+                            Arc::new(
+                                ServerConfig::builder(provider.clone())
+                                    .with_client_cert_verifier(make_verifier(*kt, provider.clone()))
+                                    .with_single_cert(kt.identity(), kt.key())
+                                    .unwrap(),
+                            ),
+                            Expectation {
+                                key_type: *kt,
+                                client_auth: true,
+                            },
+                        ));
+                    }
                 }
             }
         }
@@ -598,6 +624,12 @@ impl IntoIterator for MultiTest {
 pub struct Expectation {
     pub key_type: KeyType,
     pub client_auth: bool,
+}
+
+pub enum ClientAuth {
+    No,
+    Yes,
+    CustomClientVerifier(Box<dyn Fn(KeyType, Arc<CryptoProvider>) -> Arc<dyn ClientVerifier>>),
 }
 
 pub trait ServerConfigExt {
