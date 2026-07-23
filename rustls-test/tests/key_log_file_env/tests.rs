@@ -28,27 +28,23 @@ use std::io::Write;
 use std::sync::Arc;
 
 use rustls::{Connection, VecInput};
-use rustls_test::{
-    KeyType, do_handshake, make_client_config, make_pair_for_arc_configs, make_server_config,
-    transfer,
-};
+use rustls_test::{MultiTest, do_handshake, make_pair_for_arc_configs, transfer};
 use rustls_util::KeyLogFile;
 
-use super::{ALL_VERSIONS, provider, serialized};
+use super::{provider, serialized};
 
 #[test]
 fn exercise_key_log_file_for_client() {
     serialized(|| {
-        let provider = provider::DEFAULT_PROVIDER;
-        let server_config = Arc::new(make_server_config(KeyType::default(), &provider));
         unsafe { env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt") };
 
-        for version_provider in ALL_VERSIONS {
-            let mut client_config = make_client_config(KeyType::default(), &version_provider);
+        for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+            let mut client_config = Arc::unwrap_or_clone(client_config);
             client_config.key_log = Arc::new(KeyLogFile::new());
+            let client_config = Arc::new(client_config);
 
             let (mut client, mut server) =
-                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+                make_pair_for_arc_configs(&client_config, &server_config);
             let mut client_input = VecInput::default();
             let mut server_input = VecInput::default();
 
@@ -71,17 +67,15 @@ fn exercise_key_log_file_for_client() {
 #[test]
 fn exercise_key_log_file_for_server() {
     serialized(|| {
-        let mut server_config = make_server_config(KeyType::default(), &provider::DEFAULT_PROVIDER);
-
         unsafe { env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt") };
-        server_config.key_log = Arc::new(KeyLogFile::new());
 
-        let server_config = Arc::new(server_config);
+        for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+            let mut server_config = Arc::unwrap_or_clone(server_config);
+            server_config.key_log = Arc::new(KeyLogFile::new());
+            let server_config = Arc::new(server_config);
 
-        for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config(KeyType::default(), &version_provider);
             let (mut client, mut server) =
-                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+                make_pair_for_arc_configs(&client_config, &server_config);
             let mut client_input = VecInput::default();
             let mut server_input = VecInput::default();
 
