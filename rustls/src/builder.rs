@@ -134,7 +134,7 @@ pub struct ConfigBuilder<Side: ConfigSide, State> {
 
 impl<Side: ConfigSide, State> ConfigBuilder<Side, State> {
     /// Return the crypto provider used to construct this builder.
-    pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
+    pub fn provider(&self) -> &Arc<CryptoProvider> {
         &self.provider
     }
 }
