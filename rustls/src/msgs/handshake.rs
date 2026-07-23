@@ -1446,7 +1446,7 @@ impl DuplicateExtensionChecker {
 ///
 /// See RFC 9846 section 4.3 Table 1, plus `signed_certificate_timestamp` per
 /// its IANA "TLS 1.3" registry entry (carried over from RFC 8446 section 4.2).
-const UNPROCESSED_CERTIFICATE_REQUEST_EXTS: &[ExtensionType] = &[
+pub(super) const UNPROCESSED_CERTIFICATE_REQUEST_EXTS: &[ExtensionType] = &[
     ExtensionType::ServerName,
     ExtensionType::StatusRequest,
     ExtensionType::SCT,

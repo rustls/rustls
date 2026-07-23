@@ -349,7 +349,7 @@ impl<'a> Codec<'a> for EncryptedExtensions<'a> {
 ///
 /// See RFC 9846 section 4.3 Table 1, plus `max_fragment_length` per its IANA
 /// "TLS 1.3" registry entry (carried over from RFC 8446 section 4.2).
-const UNPROCESSED_ENCRYPTED_EXTS: &[ExtensionType] = &[
+pub(super) const UNPROCESSED_ENCRYPTED_EXTS: &[ExtensionType] = &[
     ExtensionType::MaxFragmentLength,
     ExtensionType::EllipticCurves,
     ExtensionType::UseSRTP,

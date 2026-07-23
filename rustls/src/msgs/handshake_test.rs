@@ -22,10 +22,12 @@ use super::handshake::{
     NewSessionTicketPayload, NewSessionTicketPayloadTls13, Random, ServerDhParams,
     ServerEcdhParams, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
     SessionId, SingleProtocolName, SupportedEcPointFormats, SupportedProtocolVersions,
+    UNPROCESSED_CERTIFICATE_REQUEST_EXTS,
 };
 use super::server_hello::{
     EchConfigContents, EchConfigPayload, EncryptedExtensions, HpkeKeyConfig,
     ServerEncryptedClientHello, ServerExtensions, ServerHelloPayload, ServerTicketRequestHint,
+    UNPROCESSED_ENCRYPTED_EXTS,
 };
 use super::{HandshakeMessagePayload, HandshakePayload};
 use crate::crypto::cipher::Payload;
@@ -307,6 +309,95 @@ fn accepts_new_session_ticket_ext_with_unrecognized_extension() {
     );
 }
 
+#[test]
+fn refuses_or_permits_every_recognized_extension_type_per_message() {
+    for typ in recognized_extension_types() {
+        let bytes = empty_extension_list(typ);
+        let misplaced = InvalidMessage::MisplacedExtension(u16::from(typ));
+
+        // TLS 1.3 NewSessionTicket: `early_data` is the only specified
+        // extension type.
+        if !NewSessionTicketExtensions::ALL_EXTENSIONS.contains(&typ) {
+            assert_eq!(
+                NewSessionTicketExtensions::read_bytes(&bytes).unwrap_err(),
+                misplaced,
+                "NewSessionTicket: {typ:?}"
+            );
+        }
+
+        // TLS 1.3 CertificateRequest: specified-but-unprocessed extension
+        // types are ignored.
+        if !CertificateRequestExtensions::ALL_EXTENSIONS.contains(&typ) {
+            match UNPROCESSED_CERTIFICATE_REQUEST_EXTS.contains(&typ) {
+                true => assert!(
+                    CertificateRequestExtensions::read_bytes(&bytes).is_ok(),
+                    "CertificateRequest: {typ:?}"
+                ),
+                false => assert_eq!(
+                    CertificateRequestExtensions::read_bytes(&bytes).unwrap_err(),
+                    misplaced,
+                    "CertificateRequest: {typ:?}"
+                ),
+            }
+        }
+
+        // EncryptedExtensions: likewise.
+        if !EncryptedExtensions::ALL_EXTENSIONS.contains(&typ) {
+            match UNPROCESSED_ENCRYPTED_EXTS.contains(&typ) {
+                true => assert!(
+                    EncryptedExtensions::read_bytes(&bytes).is_ok(),
+                    "EncryptedExtensions: {typ:?}"
+                ),
+                false => assert_eq!(
+                    EncryptedExtensions::read_bytes(&bytes).unwrap_err(),
+                    misplaced,
+                    "EncryptedExtensions: {typ:?}"
+                ),
+            }
+        }
+
+        // HelloRetryRequest and Certificate entries reject every extension
+        // type they do not model, recognized or not.
+        if !HelloRetryRequestExtensions::ALL_EXTENSIONS.contains(&typ) {
+            assert_eq!(
+                HelloRetryRequestExtensions::read_bytes(&bytes).unwrap_err(),
+                InvalidMessage::UnknownHelloRetryRequestExtension,
+                "HelloRetryRequest: {typ:?}"
+            );
+        }
+
+        if !CertificateExtensions::ALL_EXTENSIONS.contains(&typ) {
+            assert_eq!(
+                CertificateExtensions::read_bytes(&bytes).unwrap_err(),
+                InvalidMessage::UnknownCertificateExtension,
+                "Certificate: {typ:?}"
+            );
+        }
+
+        // ClientHello: `oid_filters` is the only rejected unmodelled type
+        // (`ech_outer_extensions` is modelled, and rejected after decoding);
+        // everything else is legal in some form of ClientHello.
+        //
+        // The TLS 1.3 ServerHello policy cannot be applied at parse time
+        // (the protocol version is not yet known, and TLS 1.2 requires
+        // leniency); it is enforced in `client::tls13` and covered by
+        // `client::test`.
+        if !ClientExtensions::ALL_EXTENSIONS.contains(&typ) {
+            match typ == ExtensionType::OIDFilters {
+                true => assert_eq!(
+                    ClientExtensions::read_bytes(&bytes).unwrap_err(),
+                    misplaced,
+                    "ClientHello: {typ:?}"
+                ),
+                false => assert!(
+                    ClientExtensions::read_bytes(&bytes).is_ok(),
+                    "ClientHello: {typ:?}"
+                ),
+            }
+        }
+    }
+}
+
 /// Encodes an extension list containing one `typ` extension with an empty body.
 fn empty_extension_list(typ: ExtensionType) -> Vec<u8> {
     extension_list(typ, &[])
@@ -322,6 +413,13 @@ fn extension_list(typ: ExtensionType, body: &[u8]) -> Vec<u8> {
         ext_body.buf.extend_from_slice(body);
     }
     bytes
+}
+
+/// Every `ExtensionType` value recognized by rustls.
+fn recognized_extension_types() -> impl Iterator<Item = ExtensionType> {
+    (0..=u16::MAX)
+        .map(ExtensionType::from)
+        .filter(ExtensionType::is_recognized)
 }
 
 #[test]
