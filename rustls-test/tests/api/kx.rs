@@ -15,13 +15,13 @@ use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use rustls::{ClientConfig, Connection, HandshakeKind, ServerConfig, VecInput};
 use rustls_test::{
-    ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, OtherSession,
-    ServerConfigExt, do_handshake, do_handshake_until_error, encoding,
+    ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, MultiTest,
+    OtherSession, ServerConfigExt, do_handshake, do_handshake_until_error, encoding,
     make_client_config_with_kx_groups, make_pair, make_pair_for_configs, make_server_config,
     make_server_config_with_kx_groups, transfer,
 };
 
-use super::{ALL_VERSIONS, provider};
+use super::provider;
 
 #[test]
 fn test_client_config_keyshare() {
@@ -76,27 +76,25 @@ fn test_client_config_keyshare_mismatch() {
 fn exercise_all_key_exchange_methods() {
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
-    for (version, version_provider) in [
-        (ProtocolVersion::TLSv1_3, provider::DEFAULT_TLS13_PROVIDER),
-        (ProtocolVersion::TLSv1_2, provider::DEFAULT_TLS12_PROVIDER),
-    ] {
+
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
         for kx_group in provider::ALL_KX_GROUPS {
             if !kx_group
                 .name()
-                .usable_for_version(version)
+                .usable_for_version(expect.version)
             {
                 continue;
             }
 
             let client_config = make_client_config_with_kx_groups(
-                KeyType::default(),
+                expect.key_type,
                 vec![*kx_group],
-                &version_provider,
+                client_config.provider(),
             );
             let server_config = make_server_config_with_kx_groups(
-                KeyType::default(),
+                expect.key_type,
                 vec![*kx_group],
-                &version_provider,
+                server_config.provider(),
             );
             let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
             do_handshake_until_error(
@@ -416,17 +414,18 @@ fn test_server_rejects_clients_without_any_kx_groups() {
 
 #[test]
 fn test_server_rejects_clients_without_any_kx_group_overlap() {
-    for version_provider in ALL_VERSIONS {
+    for (client_config, _, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let base_provider = client_config.provider();
         let (mut client, mut server) = make_pair_for_configs(
             make_client_config_with_kx_groups(
-                KeyType::default(),
+                expect.key_type,
                 vec![provider::kx_group::X25519],
-                &version_provider,
+                base_provider,
             ),
             ServerConfig::builder(
                 CryptoProvider {
                     kx_groups: Cow::Owned(vec![provider::kx_group::SECP384R1]),
-                    ..version_provider
+                    ..CryptoProvider::clone(base_provider)
                 }
                 .into(),
             )
