@@ -532,6 +532,9 @@ pub struct MultiTest {
     providers: Vec<(ProtocolVersion, Arc<CryptoProvider>)>,
     anon_client: bool,
     client_auth: ClientAuth,
+    #[expect(clippy::type_complexity)]
+    custom_server_verifier:
+        Option<Box<dyn Fn(KeyType, Arc<CryptoProvider>) -> Arc<dyn ServerVerifier>>>,
     key_types: Vec<KeyType>,
 }
 
@@ -558,6 +561,7 @@ impl MultiTest {
             providers,
             anon_client: true,
             client_auth: ClientAuth::Yes,
+            custom_server_verifier: None,
             key_types,
         }
     }
@@ -574,6 +578,14 @@ impl MultiTest {
         self.client_auth = ClientAuth::CustomClientVerifier(builder);
         self
     }
+
+    pub fn with_server_verifier(
+        mut self,
+        builder: Box<dyn Fn(KeyType, Arc<CryptoProvider>) -> Arc<dyn ServerVerifier>>,
+    ) -> Self {
+        self.custom_server_verifier = Some(builder);
+        self
+    }
 }
 
 impl IntoIterator for MultiTest {
@@ -585,9 +597,24 @@ impl IntoIterator for MultiTest {
 
         for (version, provider) in self.providers {
             for kt in &self.key_types {
+                let verifier = match &self.custom_server_verifier {
+                    Some(make_verifier) => make_verifier(*kt, provider.clone()),
+                    None => Arc::new(
+                        WebPkiServerVerifier::builder(kt.client_root_store(), &provider)
+                            .build()
+                            .unwrap(),
+                    ),
+                };
+
                 if self.anon_client {
                     options.push((
-                        Arc::new(make_client_config(*kt, &provider)),
+                        Arc::new(
+                            ClientConfig::builder(provider.clone())
+                                .dangerous()
+                                .with_custom_certificate_verifier(verifier.clone())
+                                .with_no_client_auth()
+                                .unwrap(),
+                        ),
                         Arc::new(make_server_config(*kt, &provider)),
                         Expectation {
                             key_type: *kt,
@@ -597,11 +624,19 @@ impl IntoIterator for MultiTest {
                     ));
                 }
 
+                let client_auth_config = Arc::new(
+                    ClientConfig::builder(provider.clone())
+                        .dangerous()
+                        .with_custom_certificate_verifier(verifier)
+                        .with_client_auth_cert(kt.client_identity(), kt.client_key())
+                        .unwrap(),
+                );
+
                 match &self.client_auth {
                     ClientAuth::No => {}
                     ClientAuth::Yes => {
                         options.push((
-                            Arc::new(make_client_config_with_auth(*kt, &provider)),
+                            client_auth_config.clone(),
                             Arc::new(make_server_config_with_mandatory_client_auth(
                                 *kt, &provider,
                             )),
@@ -614,7 +649,7 @@ impl IntoIterator for MultiTest {
                     }
                     ClientAuth::CustomClientVerifier(make_verifier) => {
                         options.push((
-                            Arc::new(make_client_config_with_auth(*kt, &provider)),
+                            client_auth_config.clone(),
                             Arc::new(
                                 ServerConfig::builder(provider.clone())
                                     .with_client_cert_verifier(make_verifier(*kt, provider.clone()))
