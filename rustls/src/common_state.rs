@@ -910,6 +910,15 @@ pub(crate) enum Protocol {
     Quic,
 }
 
+impl Protocol {
+    pub(crate) fn supports_version(&self, version: ProtocolVersion) -> bool {
+        match self {
+            Self::Quic => version == ProtocolVersion::TLSv1_3,
+            Self::Tcp => true,
+        }
+    }
+}
+
 enum Limit {
     #[cfg(feature = "std")]
     Yes,
