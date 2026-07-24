@@ -1615,19 +1615,28 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
         )
         .unwrap();
 
+        let config = ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
+            .with_ech_hpke_suites(&[])
+            .finish(KeyType::Rsa2048);
+        let config = Arc::new(config);
+
         // A ECH client configuration should only be considered FIPS approved if the
         // ECH HPKE suite is itself FIPS approved.
-        let config = ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
-            .with_ech(EchMode::Enable(ech_config));
-        let config = config.finish(KeyType::Rsa2048);
-        assert_eq!(config.fips(), suite.fips());
+        let conn = config
+            .connect("example.com".try_into().unwrap())
+            .with_ech_mode(EchMode::Enable(ech_config))
+            .build()
+            .unwrap();
+        assert_eq!(conn.fips(), suite.fips());
 
         // The same applies if an ECH GREASE client configuration is used.
         let (public_key, _) = suite.generate_key_pair().unwrap();
-        let config = ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
-            .with_ech(EchMode::Grease(EchGreaseConfig::new(*suite, public_key)));
-        let config = Arc::new(config.finish(KeyType::Rsa2048));
-        assert_eq!(config.fips(), suite.fips());
+        let conn = config
+            .connect("example.com".try_into().unwrap())
+            .with_ech_mode(EchMode::Grease(EchGreaseConfig::new(*suite, public_key)))
+            .build()
+            .unwrap();
+        assert_eq!(conn.fips(), suite.fips());
 
         // And a connection made from a client config should retain the fips status of the
         // config w.r.t the HPKE suite.

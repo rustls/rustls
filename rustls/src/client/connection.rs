@@ -9,6 +9,7 @@ use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
 use crate::TlsInputBuffer;
 use crate::client::EchStatus;
+use crate::client::ech::{EchMode, EchParams};
 use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
@@ -201,6 +202,7 @@ pub struct ClientConnectionBuilder {
     pub(crate) config: Arc<ClientConfig>,
     pub(crate) name: ServerName<'static>,
     pub(crate) alpn_protocols: Option<Vec<ApplicationProtocol<'static>>>,
+    pub(crate) ech_mode: Option<EchMode>,
 }
 
 impl ClientConnectionBuilder {
@@ -210,12 +212,49 @@ impl ClientConnectionBuilder {
         self
     }
 
+    /// Specify how to connect using ECH
+    ///
+    /// One of the provided ECH configurations must be compatible with the HPKE provider’s supported
+    /// suites or an error will be returned.
+    pub fn with_ech_params(mut self, ech_params: EchParams<'_>) -> Result<Self, Error> {
+        let ech_hpke_suites = self
+            .config
+            .ech_hpke_suites
+            .as_deref()
+            .unwrap_or_default();
+
+        self.ech_mode = Some(EchMode::from_params(
+            ech_params,
+            ech_hpke_suites,
+            self.config.provider().secure_random,
+        )?);
+
+        Ok(self)
+    }
+
+    /// Specify how to connect using ECH. Does nothing if [`with_ech_hpke_suites`] hasn't been invoked
+    ///
+    /// Unlike [`with_ech_params`](Self::with_ech_params), this allows one to also provide their own
+    /// HPKE suite, whether that has already been provided previously
+    /// with [`with_ech_hpke_suites`] or not
+    ///
+    /// [`with_ech_hpke_suites`]: crate::ConfigBuilder::with_ech_hpke_suites
+    pub fn with_ech_mode(mut self, ech_mode: EchMode) -> Self {
+        if self.config.ech_hpke_suites.is_none() {
+            return self;
+        }
+
+        self.ech_mode = Some(ech_mode);
+        self
+    }
+
     /// Finalize the builder and create the `ClientConnection`.
     pub fn build(self) -> Result<ClientConnection, Error> {
         let Self {
             config,
             name,
             alpn_protocols,
+            ech_mode,
         } = self;
 
         let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
@@ -226,6 +265,7 @@ impl ClientConnectionBuilder {
                 ClientExtensionsInput::from_alpn(alpn_protocols),
                 None,
                 Protocol::Tcp,
+                ech_mode,
             )?),
         })
     }
@@ -297,6 +337,7 @@ impl ConnectionCore<ClientSide> {
         extra_exts: ClientExtensionsInput,
         quic: Option<&mut dyn QuicOutput>,
         protocol: Protocol,
+        ech_info: Option<EchMode>,
     ) -> Result<Self, Error> {
         let mut common_state = CommonState::new(Side::Client, config.fips());
         common_state
@@ -310,7 +351,8 @@ impl ConnectionCore<ClientSide> {
             common: &mut common_state,
         };
 
-        let input = ClientHelloInput::new(name, &extra_exts, protocol, &mut output, config)?;
+        let input =
+            ClientHelloInput::new(name, &extra_exts, protocol, &mut output, config, ech_info)?;
         let state = input.start_handshake(extra_exts, &mut output)?;
 
         Ok(Self::new(state, data, common_state))

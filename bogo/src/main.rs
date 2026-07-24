@@ -103,10 +103,27 @@ pub fn main() {
                 let server_name = ServerName::try_from(opts.host_name.as_str())
                     .unwrap()
                     .to_owned();
-                let sess = config
-                    .connect(server_name)
-                    .build()
-                    .unwrap();
+                let conn_cfg = config.connect(server_name);
+
+                let conn_cfg = if let Some(ech_config_list) = &opts.ech_config_list {
+                    let ech_mode: EchMode =
+                        EchConfig::new(ech_config_list.clone(), ALL_HPKE_SUITES)
+                            .unwrap_or_else(|_| quit(":INVALID_ECH_CONFIG_LIST:"))
+                            .into();
+
+                    conn_cfg.with_ech_mode(ech_mode)
+                } else if opts.enable_ech_grease {
+                    let ech_mode = EchMode::Grease(EchGreaseConfig::new(
+                        GREASE_HPKE_SUITE,
+                        HpkePublicKey(GREASE_25519_PUBKEY.to_vec()),
+                    ));
+
+                    conn_cfg.with_ech_mode(ech_mode)
+                } else {
+                    conn_cfg
+                };
+
+                let sess = conn_cfg.build().unwrap();
                 exec(&opts, sess, &key_log, i);
             }
             SideConfig::Server(config) => {
@@ -1814,19 +1831,8 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
             .into(),
         );
 
-        if let Some(ech_config_list) = &opts.ech_config_list {
-            let ech_mode: EchMode = EchConfig::new(ech_config_list.clone(), ALL_HPKE_SUITES)
-                .unwrap_or_else(|_| quit(":INVALID_ECH_CONFIG_LIST:"))
-                .into();
-
-            ech_cfg.with_ech(ech_mode)
-        } else if opts.enable_ech_grease {
-            let ech_mode = EchMode::Grease(EchGreaseConfig::new(
-                GREASE_HPKE_SUITE,
-                HpkePublicKey(GREASE_25519_PUBKEY.to_vec()),
-            ));
-
-            ech_cfg.with_ech(ech_mode)
+        if opts.ech_config_list.is_some() || opts.enable_ech_grease {
+            ech_cfg.with_ech_hpke_suites(&[])
         } else {
             cfg
         }

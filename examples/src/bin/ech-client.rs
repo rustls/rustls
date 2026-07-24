@@ -113,7 +113,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Construct a rustls client config with a TLS1.3-only provider, and ECH enabled.
     let mut config = ClientConfig::builder(rustls_aws_lc_rs::DEFAULT_TLS13_PROVIDER.into())
-        .with_ech(ech_mode)
+        .with_ech_hpke_suites(&[])
         .with_root_certificates(root_store)
         .with_no_client_auth()?;
 
@@ -128,6 +128,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         trace!("\nRequest {} of {}", i + 1, args.num_reqs);
         let mut conn = config
             .connect(server_name.clone())
+            // Here, we have already fetched the ECH config, which is stored in the `ech_mode`.
+            // There may be cases however where that isn't the case and we choose to fetch it
+            // either here or before creating a client connection builder,
+            // e.g., if we use the same ClientConfig for connecting to different hostnames
+            .with_ech_mode(ech_mode.clone())
             .build()?;
         // The "outer" server that we're connecting to.
         let sock_addr = (args.outer_hostname.as_str(), args.port)

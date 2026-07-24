@@ -1,9 +1,10 @@
+use alloc::boxed::Box;
 use alloc::format;
 use core::fmt;
 use core::marker::PhantomData;
 
-use crate::client::EchMode;
 use crate::crypto::CryptoProvider;
+use crate::crypto::hpke::Hpke;
 use crate::sync::Arc;
 use crate::time_provider::TimeProvider;
 #[cfg(doc)]
@@ -158,7 +159,7 @@ impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, Sta
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
 pub struct WantsVerifier {
-    pub(crate) client_ech_mode: Option<EchMode>,
+    pub(crate) client_ech_hpke_suites: Option<Box<[&'static dyn Hpke]>>,
 }
 
 /// Helper trait to abstract [`ConfigBuilder`] over building a [`ClientConfig`] or [`ServerConfig`].

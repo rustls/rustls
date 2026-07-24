@@ -33,7 +33,7 @@ mod connection;
 pub use connection::{ClientConnection, ClientConnectionBuilder, ClientSide, WriteEarlyData};
 
 mod ech;
-pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
+pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchParams, EchStatus};
 
 mod handy;
 pub use handy::ClientSessionMemoryCache;
@@ -362,15 +362,21 @@ struct ClientHelloDetails {
     sent_extensions: Vec<ExtensionType>,
     extension_order_seed: u16,
     offered_cert_compression: bool,
+    ech_info: Option<EchMode>,
 }
 
 impl ClientHelloDetails {
-    fn new(alpn_protocols: Vec<ApplicationProtocol<'static>>, extension_order_seed: u16) -> Self {
+    fn new(
+        alpn_protocols: Vec<ApplicationProtocol<'static>>,
+        extension_order_seed: u16,
+        ech_info: Option<EchMode>,
+    ) -> Self {
         Self {
             alpn_protocols,
             sent_extensions: Vec::new(),
             extension_order_seed,
             offered_cert_compression: false,
+            ech_info,
         }
     }
 

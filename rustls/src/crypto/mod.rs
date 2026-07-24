@@ -517,6 +517,8 @@ impl Hash for WebPkiSupportedAlgorithms {
 }
 
 pub(crate) mod rand {
+    use core::ops::Range;
+
     use super::{GetRandomFailed, SecureRandom};
 
     /// Make an array of size `N` containing random material.
@@ -526,6 +528,22 @@ pub(crate) mod rand {
         let mut v = [0; N];
         secure_random.fill(&mut v)?;
         Ok(v)
+    }
+
+    /// Return a [`usize`] uniformily distributed in a range
+    ///
+    /// To prevent any biases, this algorithm utilizes rejection sampling
+    pub(crate) fn random_usize_range(
+        secure_random: &dyn SecureRandom,
+        range: Range<usize>,
+    ) -> Result<usize, GetRandomFailed> {
+        loop {
+            let n = usize::from_be_bytes(random_array(secure_random)?);
+
+            if range.contains(&n) {
+                return Ok(n);
+            }
+        }
     }
 
     /// Return a uniformly random [`u32`].
