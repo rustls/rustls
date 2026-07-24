@@ -448,7 +448,6 @@ pub mod lock;
 
 mod hash_map {
     pub(crate) use std::collections::HashMap;
-    pub(crate) use std::collections::hash_map::Entry;
 }
 
 mod sealed {
