@@ -397,6 +397,13 @@ impl Protocol {
     pub(crate) fn is_quic(&self) -> bool {
         matches!(self, Self::Quic(_))
     }
+
+    pub(crate) fn supports_version(&self, version: ProtocolVersion) -> bool {
+        match self {
+            Self::Quic(_) => version == ProtocolVersion::TLSv1_3,
+            Self::Tcp => true,
+        }
+    }
 }
 
 pub(crate) struct HandshakeFlight<'a, const TLS13: bool> {

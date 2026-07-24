@@ -647,6 +647,33 @@ fn test_quic_server_rejects_tls12_hello() {
     );
 }
 
+#[test]
+fn test_quic_client_rejects_tls12_server() {
+    let mut client = quic::ClientConnection::new(
+        Arc::new(make_client_config(
+            KeyType::EcdsaP256,
+            &provider::DEFAULT_PROVIDER,
+        )),
+        quic::Version::V2,
+        "hello.com".try_into().unwrap(),
+        vec![],
+    )
+    .unwrap();
+    let _ = client.events();
+    assert_eq!(
+        client
+            .read_hs(&mut SliceInput::new(&mut encoding::server_hello(
+                ProtocolVersion::TLSv1_2,
+                &[0x12; 32],
+                &[0],
+                CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                vec![]
+            )))
+            .err(),
+        Some(PeerIncompatible::ServerTlsVersionIsDisabledByOurConfig.into()),
+    );
+}
+
 fn do_quic_handshake(client: &mut impl Connection, server: &mut impl Connection) {
     while client.is_handshaking() || server.is_handshaking() {
         quic_transfer(client, server).unwrap();

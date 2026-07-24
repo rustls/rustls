@@ -13,6 +13,7 @@ use super::handy::{ClientSessionMemoryCache, FailResolveClientCert, NoClientSess
 use super::{Tls12Session, Tls13Session};
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::connection::ClientConnectionBuilder;
+use crate::common_state::Protocol;
 #[cfg(doc)]
 use crate::crypto;
 use crate::crypto::kx::NamedGroup;
@@ -270,8 +271,8 @@ impl ClientConfig {
         &self.domain.verifier
     }
 
-    pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
-        self.domain.provider.supports_version(v)
+    pub(crate) fn supports_version(&self, v: ProtocolVersion, protocol: Protocol) -> bool {
+        self.domain.provider.supports_version(v) && protocol.supports_version(v)
     }
 
     pub(super) fn find_cipher_suite(&self, suite: CipherSuite) -> Option<SupportedCipherSuite> {

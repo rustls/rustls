@@ -192,7 +192,6 @@ impl ExpectServerHello {
         trace!("We got ServerHello {server_hello:#?}");
 
         let config = &self.input.config;
-        let tls13_supported = config.supports_version(ProtocolVersion::TLSv1_3);
 
         let server_version = if server_hello.legacy_version == ProtocolVersion::TLSv1_2 {
             server_hello
@@ -203,10 +202,14 @@ impl ExpectServerHello {
         };
 
         match server_version {
-            ProtocolVersion::TLSv1_3 if tls13_supported => {
+            ProtocolVersion::TLSv1_3
+                if config.supports_version(ProtocolVersion::TLSv1_3, self.input.protocol) =>
+            {
                 self.with_version::<Tls13CipherSuite>(server_hello, &input, output)
             }
-            ProtocolVersion::TLSv1_2 if config.supports_version(ProtocolVersion::TLSv1_2) => {
+            ProtocolVersion::TLSv1_2
+                if config.supports_version(ProtocolVersion::TLSv1_2, self.input.protocol) =>
+            {
                 if let Some((_, true)) = &self.early_data_key_schedule {
                     // The client must fail with a dedicated error code if the server
                     // responds with TLS 1.2 when offering 0-RTT.
@@ -461,7 +464,9 @@ impl ClientHelloInput {
         let session_id = match session_id {
             Some(session_id) => session_id,
             None if output.quic().is_some() => SessionId::empty(),
-            None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
+            None if !config.supports_version(ProtocolVersion::TLSv1_3, protocol) => {
+                SessionId::empty()
+            }
             None => SessionId::random(config.provider().secure_random)?,
         };
 
@@ -504,7 +509,7 @@ impl ClientHelloInput {
 
         let key_share = if self
             .config
-            .supports_version(ProtocolVersion::TLSv1_3)
+            .supports_version(ProtocolVersion::TLSv1_3, self.protocol)
         {
             Some(tls13::initial_key_share(&self.config, &self.session_key)?)
         } else {
@@ -556,8 +561,8 @@ fn emit_client_hello_for_retry(
     let forbids_tls12 = input.protocol.is_quic() || ech_state.is_some();
 
     let supported_versions = SupportedProtocolVersions {
-        tls13: config.supports_version(ProtocolVersion::TLSv1_3),
-        tls12: config.supports_version(ProtocolVersion::TLSv1_2) && !forbids_tls12,
+        tls13: config.supports_version(ProtocolVersion::TLSv1_3, input.protocol),
+        tls12: config.supports_version(ProtocolVersion::TLSv1_2, input.protocol) && !forbids_tls12,
     };
 
     // should be unreachable thanks to config builder
@@ -722,7 +727,14 @@ fn emit_client_hello_for_retry(
     }
 
     // Do we have a SessionID or ticket cached for this host?
-    let tls13_session = prepare_resumption(&input.resuming, &mut exts, suite, output, config);
+    let tls13_session = prepare_resumption(
+        &input.resuming,
+        &mut exts,
+        suite,
+        input.protocol,
+        output,
+        config,
+    );
     let (tls13_session, early_data_enabled) = match tls13_session {
         Some((tls13_session, early_data_enabled)) => (Some(tls13_session), early_data_enabled),
         _ => (None, false),
@@ -940,6 +952,7 @@ fn prepare_resumption<'a>(
     resuming: &'a Option<Retrieved<ClientSessionValue>>,
     exts: &mut ClientExtensions<'_>,
     suite: Option<SupportedCipherSuite>,
+    protocol: Protocol,
     output: &mut dyn Output<'_>,
     config: &ClientConfig,
 ) -> Option<(Retrieved<&'a Tls13Session>, bool)> {
@@ -947,7 +960,7 @@ fn prepare_resumption<'a>(
     let resuming = match resuming {
         Some(resuming) if !resuming.ticket().is_empty() => resuming,
         _ => {
-            if config.supports_version(ProtocolVersion::TLSv1_2)
+            if config.supports_version(ProtocolVersion::TLSv1_2, protocol)
                 && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
             {
                 // If we don't have a ticket, request one.
@@ -959,7 +972,7 @@ fn prepare_resumption<'a>(
 
     let Some(tls13) = resuming.map(|csv| csv.tls13()) else {
         // TLS 1.2; send the ticket if we have support this protocol version
-        if config.supports_version(ProtocolVersion::TLSv1_2)
+        if config.supports_version(ProtocolVersion::TLSv1_2, protocol)
             && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
         {
             exts.session_ticket = Some(ClientSessionTicket::Offer(Payload::new(resuming.ticket())));
@@ -967,7 +980,7 @@ fn prepare_resumption<'a>(
         return None; // TLS 1.2, so nothing to return here
     };
 
-    if !config.supports_version(ProtocolVersion::TLSv1_3) {
+    if !config.supports_version(ProtocolVersion::TLSv1_3, protocol) {
         return None;
     }
 
