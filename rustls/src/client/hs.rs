@@ -156,7 +156,10 @@ impl ExpectServerHello {
 
         let suite = <CryptoProvider as Borrow<[&'static T]>>::borrow(self.input.config.provider())
             .iter()
-            .find(|cs| cs.common().suite == server_hello.cipher_suite)
+            .find(|cs| {
+                cs.common().suite == server_hello.cipher_suite
+                    && cs.usable_for_protocol(self.input.protocol)
+            })
             .ok_or(PeerMisbehaved::SelectedUnofferedCipherSuite)?;
 
         match self.suite {
