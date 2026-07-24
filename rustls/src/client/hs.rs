@@ -154,13 +154,19 @@ impl ExpectServerHello {
             }
         }
 
-        let suite = <CryptoProvider as Borrow<[&'static T]>>::borrow(self.input.config.provider())
-            .iter()
-            .find(|cs| {
-                cs.common().suite == server_hello.cipher_suite
-                    && cs.usable_for_protocol(self.input.protocol)
+        let Some(Some(suite)) = self
+            .input
+            .hello
+            .offered_cipher_suites
+            .contains(&server_hello.cipher_suite)
+            .then(|| {
+                <CryptoProvider as Borrow<[&'static T]>>::borrow(self.input.config.provider())
+                    .iter()
+                    .find(|cs| cs.common().suite == server_hello.cipher_suite)
             })
-            .ok_or(PeerMisbehaved::SelectedUnofferedCipherSuite)?;
+        else {
+            return Err(PeerMisbehaved::SelectedUnofferedCipherSuite.into());
+        };
 
         match self.suite {
             Some(prev_suite) if prev_suite.suite() != suite.common().suite => {
@@ -812,6 +818,7 @@ fn emit_client_hello_for_retry(
 
     // Note what extensions we sent.
     input.hello.sent_extensions = chp_payload.collect_used();
+    input.hello.offered_cipher_suites = chp_payload.cipher_suites.clone();
 
     let mut chp = HandshakeMessagePayload(HandshakePayload::ClientHello(chp_payload));
 
