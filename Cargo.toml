@@ -54,7 +54,7 @@ anyhow = "1.0.73"
 asn1 = "0.24"
 async-trait = "0.1.74"
 aws-lc-rs = { version = "1.14", default-features = false }
-base64 = "0.22"
+base64 = "0.23"
 bencher = "0.1.5"
 brotli = { version = "8", default-features = false, features = ["std"] }
 brotli-decompressor = "5.0.0"
