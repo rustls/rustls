@@ -2229,20 +2229,32 @@ pub mod encoding {
             }
         }
 
-        pub fn new_dummy_key_share() -> Self {
-            const SOME_POINT_ON_P256: &[u8] = &[
-                4, 41, 39, 177, 5, 18, 186, 227, 237, 220, 254, 70, 120, 40, 18, 139, 173, 41, 3,
-                38, 153, 25, 247, 8, 96, 105, 200, 196, 223, 108, 115, 40, 56, 199, 120, 121, 100,
-                234, 172, 0, 229, 146, 31, 177, 73, 138, 96, 244, 96, 103, 102, 179, 217, 104, 80,
-                1, 85, 141, 26, 151, 78, 115, 65, 81, 62,
-            ];
+        pub fn new_versions_server_tls13() -> Self {
+            Self {
+                typ: Self::SUPPORTED_VERSIONS,
+                body: ProtocolVersion::TLSv1_3
+                    .to_array()
+                    .to_vec(),
+            }
+        }
 
-            let mut share = len_u16(SOME_POINT_ON_P256.to_vec());
+        pub fn new_dummy_key_share() -> Self {
+            let mut share = len_u16(Self::SOME_POINT_ON_P256.to_vec());
             share.splice(0..0, NamedGroup::secp256r1.to_array());
 
             Self {
                 typ: Self::KEY_SHARE,
                 body: len_u16(share),
+            }
+        }
+
+        pub fn new_dummy_key_share_server() -> Self {
+            let mut share = len_u16(Self::SOME_POINT_ON_P256.to_vec());
+            share.splice(0..0, NamedGroup::secp256r1.to_array());
+
+            Self {
+                typ: Self::KEY_SHARE,
+                body: share,
             }
         }
 
@@ -2266,6 +2278,13 @@ pub mod encoding {
         pub const KEY_SHARE: u16 = 0x0033;
         pub const TRANSPORT_PARAMETERS: u16 = 0x0039;
         pub const ALPN: u16 = 0x0010;
+
+        const SOME_POINT_ON_P256: &[u8] = &[
+            4, 41, 39, 177, 5, 18, 186, 227, 237, 220, 254, 70, 120, 40, 18, 139, 173, 41, 3, 38,
+            153, 25, 247, 8, 96, 105, 200, 196, 223, 108, 115, 40, 56, 199, 120, 121, 100, 234,
+            172, 0, 229, 146, 31, 177, 73, 138, 96, 244, 96, 103, 102, 179, 217, 104, 80, 1, 85,
+            141, 26, 151, 78, 115, 65, 81, 62,
+        ];
     }
 
     /// Return a full TLS message containing a fatal alert.

@@ -2,15 +2,18 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use rustls::client::Resumption;
+use rustls::crypto::{CipherSuite, CryptoProvider};
+use rustls::enums::ProtocolVersion;
 use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
 use rustls::quic::{self, Connection, QuicEvent, ServerHandshake, Side};
 use rustls::server::Tls13Tickets;
-use rustls::{HandshakeKind, SliceInput};
+use rustls::{CipherSuiteCommon, HandshakeKind, SliceInput, Tls13CipherSuite};
 use rustls_test::{
     ClientStorage, KeyType, encoding, make_client_config, make_server_config, server_name,
 };
@@ -620,6 +623,58 @@ fn test_quic_server_no_tls12() {
     );
 }
 
+#[test]
+fn test_quic_server_rejects_tls12_hello() {
+    let mut server = quic::ServerConnection::new(
+        Arc::new(make_server_config(
+            KeyType::EcdsaP256,
+            &provider::DEFAULT_PROVIDER,
+        )),
+        quic::Version::V2,
+        vec![],
+    )
+    .unwrap();
+    assert_eq!(
+        server
+            .read_hs(&mut SliceInput::new(&mut encoding::client_hello(
+                ProtocolVersion::TLSv1_2,
+                &[0x12; 32],
+                &[0x00],
+                vec![CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256],
+                vec![encoding::Extension::new_sig_algs()],
+            )))
+            .err(),
+        Some(PeerIncompatible::Tls13RequiredForQuic.into())
+    );
+}
+
+#[test]
+fn test_quic_client_rejects_tls12_server() {
+    let mut client = quic::ClientConnection::new(
+        Arc::new(make_client_config(
+            KeyType::EcdsaP256,
+            &provider::DEFAULT_PROVIDER,
+        )),
+        quic::Version::V2,
+        "hello.com".try_into().unwrap(),
+        vec![],
+    )
+    .unwrap();
+    let _ = client.events();
+    assert_eq!(
+        client
+            .read_hs(&mut SliceInput::new(&mut encoding::server_hello(
+                ProtocolVersion::TLSv1_2,
+                &[0x12; 32],
+                &[0],
+                CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                vec![]
+            )))
+            .err(),
+        Some(PeerIncompatible::ServerTlsVersionIsDisabledByOurConfig.into()),
+    );
+}
+
 fn do_quic_handshake(client: &mut impl Connection, server: &mut impl Connection) {
     while client.is_handshaking() || server.is_handshaking() {
         quic_transfer(client, server).unwrap();
@@ -1120,3 +1175,98 @@ fn server_rejects_client_hello_with_trailing_fragment() {
         PeerMisbehaved::KeyEpochWithPendingFragment.into()
     );
 }
+
+#[test]
+fn client_rejects_server_choosing_non_quic_suite() {
+    // we support [TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC, TLS13_AES_256_GCM_SHA384].  our
+    // offer is [TLS13_AES_256_GCM_SHA384].  The server chooses TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC
+    // which we should reject.
+    let provider = CryptoProvider {
+        tls13_cipher_suites: Cow::Owned(vec![
+            TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC,
+            provider::cipher_suite::TLS13_AES_256_GCM_SHA384,
+        ]),
+        kx_groups: Cow::Owned(vec![provider::kx_group::SECP256R1]),
+        ..provider::DEFAULT_PROVIDER
+    };
+    let mut client = quic::ClientConnection::new(
+        Arc::new(make_client_config(KeyType::EcdsaP256, &provider)),
+        quic::Version::V2,
+        "hello.com".try_into().unwrap(),
+        vec![],
+    )
+    .unwrap();
+    let _ = client.events();
+    assert_eq!(
+        client
+            .read_hs(&mut SliceInput::new(&mut encoding::server_hello(
+                ProtocolVersion::TLSv1_2,
+                &[0x12; 32],
+                &[0],
+                CipherSuite::TLS13_AES_128_GCM_SHA256,
+                vec![
+                    encoding::Extension::new_versions_server_tls13(),
+                    encoding::Extension::new_dummy_key_share_server()
+                ]
+            )))
+            .err(),
+        Some(PeerMisbehaved::SelectedUnofferedCipherSuite.into()),
+    );
+}
+
+#[test]
+fn server_rejects_client_choosing_non_quic_suite() {
+    let provider = CryptoProvider {
+        tls13_cipher_suites: Cow::Owned(vec![
+            TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC,
+            provider::cipher_suite::TLS13_AES_256_GCM_SHA384,
+        ]),
+        kx_groups: Cow::Owned(vec![provider::kx_group::SECP256R1]),
+        ..provider::DEFAULT_PROVIDER
+    };
+    let mut server = quic::ServerConnection::new(
+        Arc::new(make_server_config(KeyType::EcdsaP256, &provider)),
+        quic::Version::V2,
+        vec![],
+    )
+    .unwrap();
+    assert_eq!(
+        server
+            .read_hs(&mut SliceInput::new(&mut encoding::client_hello(
+                ProtocolVersion::TLSv1_2,
+                &[0x12; 32],
+                &[0x00],
+                vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
+                vec![
+                    encoding::Extension::new_sig_algs(),
+                    encoding::Extension::new_versions(),
+                    encoding::Extension::new_dummy_key_share(),
+                    encoding::Extension::new_kx_groups(),
+                    encoding::Extension::new_quic_transport_params(b"blurgh")
+                ],
+            )))
+            .err(),
+        Some(PeerIncompatible::NoCipherSuitesInCommon.into())
+    );
+}
+
+/// TLS13_AES_128_GCM_SHA256 which doesn't support QUIC.
+///
+/// Once `clone` is const this can be more directly written.
+const TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC: &Tls13CipherSuite = &Tls13CipherSuite {
+    common: CipherSuiteCommon {
+        suite: provider::cipher_suite::TLS13_AES_128_GCM_SHA256
+            .common
+            .suite,
+        hash_provider: provider::cipher_suite::TLS13_AES_128_GCM_SHA256
+            .common
+            .hash_provider,
+        confidentiality_limit: provider::cipher_suite::TLS13_AES_128_GCM_SHA256
+            .common
+            .confidentiality_limit,
+    },
+    protocol_version: provider::cipher_suite::TLS13_AES_128_GCM_SHA256.protocol_version,
+    hkdf_provider: provider::cipher_suite::TLS13_AES_128_GCM_SHA256.hkdf_provider,
+    aead_alg: provider::cipher_suite::TLS13_AES_128_GCM_SHA256.aead_alg,
+    quic: None,
+};

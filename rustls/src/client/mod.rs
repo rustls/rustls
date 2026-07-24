@@ -362,6 +362,7 @@ struct ClientHelloDetails {
     sent_extensions: Vec<ExtensionType>,
     extension_order_seed: u16,
     offered_cert_compression: bool,
+    offered_cipher_suites: Vec<CipherSuite>,
 }
 
 impl ClientHelloDetails {
@@ -371,6 +372,7 @@ impl ClientHelloDetails {
             sent_extensions: Vec::new(),
             extension_order_seed,
             offered_cert_compression: false,
+            offered_cipher_suites: Vec::new(),
         }
     }
 

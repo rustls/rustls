@@ -665,9 +665,11 @@ impl QuicOutput for Quic {
         client_secret: OkmBlock,
         server_secret: OkmBlock,
         suite: &'static Tls13CipherSuite,
-        quic: &'static dyn Algorithm,
         side: Side,
     ) {
+        let Some(quic) = suite.quic else {
+            return;
+        };
         self.events
             .push(QuicEvent::KeyChange(KeyChange::Handshake {
                 keys: Keys::new(&Secrets::new(
@@ -686,9 +688,11 @@ impl QuicOutput for Quic {
         client_secret: OkmBlock,
         server_secret: OkmBlock,
         suite: &'static Tls13CipherSuite,
-        quic: &'static dyn Algorithm,
         side: Side,
     ) {
+        let Some(quic) = suite.quic else {
+            return;
+        };
         let mut secrets = Secrets::new(
             client_secret,
             server_secret,
@@ -721,7 +725,6 @@ pub(crate) trait QuicOutput {
         client_secret: OkmBlock,
         server_secret: OkmBlock,
         suite: &'static Tls13CipherSuite,
-        quic: &'static dyn Algorithm,
         side: Side,
     );
 
@@ -730,7 +733,6 @@ pub(crate) trait QuicOutput {
         client_secret: OkmBlock,
         server_secret: OkmBlock,
         suite: &'static Tls13CipherSuite,
-        quic: &'static dyn Algorithm,
         side: Side,
     );
 
