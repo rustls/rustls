@@ -192,7 +192,16 @@ impl ExpectServerHello {
         trace!("We got ServerHello {server_hello:#?}");
 
         let config = &self.input.config;
-        let tls13_supported = config.supports_version(ProtocolVersion::TLSv1_3);
+        let tls13_supported = self
+            .input
+            .protocol
+            .supports_version(ProtocolVersion::TLSv1_3)
+            && config.supports_version(ProtocolVersion::TLSv1_3);
+        let tls12_supported = self
+            .input
+            .protocol
+            .supports_version(ProtocolVersion::TLSv1_2)
+            && config.supports_version(ProtocolVersion::TLSv1_2);
 
         let server_version = if server_hello.legacy_version == ProtocolVersion::TLSv1_2 {
             server_hello
@@ -206,7 +215,7 @@ impl ExpectServerHello {
             ProtocolVersion::TLSv1_3 if tls13_supported => {
                 self.with_version::<Tls13CipherSuite>(server_hello, &input, output)
             }
-            ProtocolVersion::TLSv1_2 if config.supports_version(ProtocolVersion::TLSv1_2) => {
+            ProtocolVersion::TLSv1_2 if tls12_supported => {
                 if let Some((_, true)) = &self.early_data_key_schedule {
                     // The client must fail with a dedicated error code if the server
                     // responds with TLS 1.2 when offering 0-RTT.
