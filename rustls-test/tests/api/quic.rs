@@ -1214,6 +1214,42 @@ fn client_rejects_server_choosing_non_quic_suite() {
     );
 }
 
+#[test]
+fn server_rejects_client_choosing_non_quic_suite() {
+    let provider = CryptoProvider {
+        tls13_cipher_suites: Cow::Owned(vec![
+            TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC,
+            provider::cipher_suite::TLS13_AES_256_GCM_SHA384,
+        ]),
+        kx_groups: Cow::Owned(vec![provider::kx_group::SECP256R1]),
+        ..provider::DEFAULT_PROVIDER
+    };
+    let mut server = quic::ServerConnection::new(
+        Arc::new(make_server_config(KeyType::EcdsaP256, &provider)),
+        quic::Version::V2,
+        vec![],
+    )
+    .unwrap();
+    assert_eq!(
+        server
+            .read_hs(&mut SliceInput::new(&mut encoding::client_hello(
+                ProtocolVersion::TLSv1_2,
+                &[0x12; 32],
+                &[0x00],
+                vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
+                vec![
+                    encoding::Extension::new_sig_algs(),
+                    encoding::Extension::new_versions(),
+                    encoding::Extension::new_dummy_key_share(),
+                    encoding::Extension::new_kx_groups(),
+                    encoding::Extension::new_quic_transport_params(b"blurgh")
+                ],
+            )))
+            .err(),
+        Some(PeerIncompatible::NoCipherSuitesInCommon.into())
+    );
+}
+
 /// TLS13_AES_128_GCM_SHA256 which doesn't support QUIC.
 ///
 /// Once `clone` is const this can be more directly written.

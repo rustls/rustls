@@ -681,6 +681,8 @@ impl ExpectClientHello {
 
                 // Reduce our supported ciphersuites by the certified key's algorithm.
                 (suite.usable_for_signature_scheme(sig_scheme)
+                // And usable by the current protocol
+                && suite.usable_for_protocol(self.protocol)
                 // And support for one of the key exchange groups
                 && (ecdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::ECDHE)
                 || ffdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE)))
