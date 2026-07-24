@@ -5385,6 +5385,31 @@ mod test_quic {
     }
 
     #[test]
+    fn test_quic_server_rejects_tls12_hello() {
+        let mut server = quic::ServerConnection::new(
+            Arc::new(make_server_config(
+                KeyType::EcdsaP256,
+                &provider::default_provider(),
+            )),
+            quic::Version::V2,
+            vec![],
+        )
+        .unwrap();
+        assert_eq!(
+            server
+                .read_hs(&encoding::client_hello(
+                    ProtocolVersion::TLSv1_2,
+                    &[0x12; 32],
+                    &[0x00],
+                    vec![CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256],
+                    vec![encoding::Extension::new_sig_algs()],
+                ))
+                .err(),
+            Some(PeerIncompatible::Tls13RequiredForQuic.into())
+        );
+    }
+
+    #[test]
     fn test_quic_server_no_params_received() {
         let provider = provider::default_provider();
         let server_config = make_server_config_with_versions(
