@@ -5,6 +5,8 @@
 use std::sync::Arc;
 
 use rustls::client::Resumption;
+use rustls::crypto::CipherSuite;
+use rustls::enums::ProtocolVersion;
 use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
@@ -617,6 +619,31 @@ fn test_quic_server_no_tls12() {
     assert_eq!(
         AlertDescription::try_from(&err).ok(),
         Some(AlertDescription::ProtocolVersion)
+    );
+}
+
+#[test]
+fn test_quic_server_rejects_tls12_hello() {
+    let mut server = quic::ServerConnection::new(
+        Arc::new(make_server_config(
+            KeyType::EcdsaP256,
+            &provider::DEFAULT_PROVIDER,
+        )),
+        quic::Version::V2,
+        vec![],
+    )
+    .unwrap();
+    assert_eq!(
+        server
+            .read_hs(&mut SliceInput::new(&mut encoding::client_hello(
+                ProtocolVersion::TLSv1_2,
+                &[0x12; 32],
+                &[0x00],
+                vec![CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256],
+                vec![encoding::Extension::new_sig_algs()],
+            )))
+            .err(),
+        Some(PeerIncompatible::Tls13RequiredForQuic.into())
     );
 }
 
