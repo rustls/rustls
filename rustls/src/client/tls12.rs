@@ -72,6 +72,7 @@ mod server_hello {
     use crate::client::hs::{
         ClientHandler, ClientHelloInput, ClientSessionValue, ClientState, ExpectServerHello,
     };
+    use crate::common_state::Protocol;
     use crate::msgs::ServerHelloPayload;
     use crate::sealed::Sealed;
 
@@ -107,7 +108,7 @@ mod server_hello {
             if st
                 .input
                 .config
-                .supports_version(ProtocolVersion::TLSv1_3)
+                .supports_version(ProtocolVersion::TLSv1_3, Protocol::Tcp)
                 && has_downgrade_marker
             {
                 return Err(PeerMisbehaved::AttemptedDowngradeToTls12WhenTls13IsSupported.into());
