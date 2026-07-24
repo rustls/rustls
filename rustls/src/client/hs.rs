@@ -433,6 +433,7 @@ fn emit_client_hello_for_retry(
 
     // Note what extensions we sent.
     input.hello.sent_extensions = chp_payload.collect_used();
+    input.hello.offered_cipher_suites = chp_payload.cipher_suites.clone();
 
     let mut chp = HandshakeMessagePayload(HandshakePayload::ClientHello(chp_payload));
 
@@ -770,14 +771,18 @@ impl State<ClientConnectionData> for ExpectServerHello {
             }
         }
 
-        let suite = config
-            .find_cipher_suite(server_hello.cipher_suite, cx.common.protocol)
-            .ok_or_else(|| {
-                cx.common.send_fatal_alert(
-                    AlertDescription::HandshakeFailure,
-                    PeerMisbehaved::SelectedUnofferedCipherSuite,
-                )
-            })?;
+        let Some(Some(suite)) = self
+            .input
+            .hello
+            .offered_cipher_suites
+            .contains(&server_hello.cipher_suite)
+            .then(|| config.find_cipher_suite(server_hello.cipher_suite, cx.common.protocol))
+        else {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::HandshakeFailure,
+                PeerMisbehaved::SelectedUnofferedCipherSuite,
+            ));
+        };
 
         if version != suite.version().version {
             return Err({
