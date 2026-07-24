@@ -771,7 +771,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
         }
 
         let suite = config
-            .find_cipher_suite(server_hello.cipher_suite)
+            .find_cipher_suite(server_hello.cipher_suite, cx.common.protocol)
             .ok_or_else(|| {
                 cx.common.send_fatal_alert(
                     AlertDescription::HandshakeFailure,
@@ -948,7 +948,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or asks us to use a ciphersuite we didn't offer.
-        let Some(cs) = config.find_cipher_suite(hrr.cipher_suite) else {
+        let Some(cs) = config.find_cipher_suite(hrr.cipher_suite, cx.common.protocol) else {
             return Err({
                 cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,

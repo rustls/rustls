@@ -5009,7 +5009,10 @@ fn server_detects_excess_streamed_early_data() {
 }
 
 mod test_quic {
-    use rustls::quic::{self, ConnectionCommon};
+    use rustls::{
+        CipherSuiteCommon, Tls13CipherSuite,
+        quic::{self, ConnectionCommon},
+    };
 
     use super::*;
 
@@ -5491,6 +5494,71 @@ mod test_quic {
             )),
         );
     }
+
+    #[test]
+    fn client_rejects_server_choosing_non_quic_suite() {
+        // we support [TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC, TLS13_AES_256_GCM_SHA384].  our
+        // offer is [TLS13_AES_256_GCM_SHA384].  The server chooses TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC
+        // which we should reject.
+        let provider = CryptoProvider {
+            cipher_suites: vec![
+                TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC,
+                provider::cipher_suite::TLS13_AES_256_GCM_SHA384,
+            ],
+            kx_groups: vec![provider::kx_group::SECP256R1],
+            ..provider::default_provider()
+        };
+        let mut client = quic::ClientConnection::new(
+            Arc::new(make_client_config(KeyType::EcdsaP256, &provider)),
+            quic::Version::V2,
+            "hello.com".try_into().unwrap(),
+            vec![],
+        )
+        .unwrap();
+        assert_eq!(
+            client
+                .read_hs(&encoding::server_hello(
+                    ProtocolVersion::TLSv1_2,
+                    &[0x12; 32],
+                    &[0],
+                    CipherSuite::TLS13_AES_128_GCM_SHA256,
+                    vec![
+                        encoding::Extension::new_versions_server_tls13(),
+                        encoding::Extension::new_dummy_key_share_server()
+                    ]
+                ))
+                .err(),
+            Some(PeerMisbehaved::SelectedUnofferedCipherSuite.into()),
+        );
+    }
+
+    /// TLS13_AES_128_GCM_SHA256 which doesn't support QUIC.
+    ///
+    /// Once `clone` is const this can be more directly written.
+    const TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC: SupportedCipherSuite =
+        SupportedCipherSuite::Tls13(&Tls13CipherSuite {
+            common: CipherSuiteCommon {
+                suite: TLS13_AES_128_GCM_SHA256_INNER
+                    .common
+                    .suite,
+                hash_provider: TLS13_AES_128_GCM_SHA256_INNER
+                    .common
+                    .hash_provider,
+                confidentiality_limit: TLS13_AES_128_GCM_SHA256_INNER
+                    .common
+                    .confidentiality_limit,
+            },
+            hkdf_provider: TLS13_AES_128_GCM_SHA256_INNER.hkdf_provider,
+            aead_alg: TLS13_AES_128_GCM_SHA256_INNER.aead_alg,
+            quic: None,
+        });
+
+    /// nb. `Option::unwrap` is not const until rust 1.83.
+    const TLS13_AES_128_GCM_SHA256_INNER: &Tls13CipherSuite =
+        match provider::cipher_suite::TLS13_AES_128_GCM_SHA256.tls13() {
+            Some(inner) => inner,
+            None => unreachable!(),
+        };
 
     #[test]
     fn packet_key_api() {
