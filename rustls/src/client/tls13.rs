@@ -183,7 +183,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                     output.emit(Event::EarlyData(EarlyDataEvent::Rejected));
                     resuming_session.take();
                     (
-                        KeySchedulePreHandshake::new(Side::Client, protocol, suite),
+                        KeySchedulePreHandshake::new(Side::Client, protocol, suite)?,
                         false,
                     )
                 }

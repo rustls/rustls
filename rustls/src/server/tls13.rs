@@ -488,7 +488,7 @@ mod client_hello {
 
             if !check_binder(
                 transcript,
-                &KeyScheduleEarlyServer::new(protocol, suite, session.secret.bytes()),
+                &KeyScheduleEarlyServer::new(protocol, suite, session.secret.bytes())?,
                 input.message,
                 psk_offer.binders[i].as_ref(),
             ) {
@@ -570,7 +570,7 @@ mod client_hello {
         // Start key schedule
         let key_schedule_pre_handshake = if let Some((_, psk)) = resuming {
             let early_key_schedule =
-                KeyScheduleEarlyServer::new(protocol, suite, psk.secret.bytes());
+                KeyScheduleEarlyServer::new(protocol, suite, psk.secret.bytes())?;
             early_key_schedule.client_early_traffic_secret(
                 &client_hello_hash,
                 &*config.key_log,
@@ -591,7 +591,7 @@ mod client_hello {
 
             KeySchedulePreHandshake::from(early_key_schedule)
         } else {
-            KeySchedulePreHandshake::new(Side::Server, protocol, suite)
+            KeySchedulePreHandshake::new(Side::Server, protocol, suite)?
         };
 
         // Do key exchange

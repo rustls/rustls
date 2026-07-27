@@ -840,7 +840,7 @@ fn emit_client_hello_for_retry(
                 input.protocol,
                 tls13_session.suite,
                 tls13_session.secret.bytes(),
-            );
+            )?;
             tls13::fill_in_psk_binder(&key_schedule, &transcript_buffer, &mut chp);
             Some((tls13_session.suite, key_schedule))
         }
