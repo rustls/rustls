@@ -492,10 +492,10 @@ impl ExpectClientHello {
     ) -> Result<ServerState, Error> {
         let tls13_enabled = self
             .config
-            .supports_version(ProtocolVersion::TLSv1_3);
+            .supports_version(ProtocolVersion::TLSv1_3, self.protocol);
         let tls12_enabled = self
             .config
-            .supports_version(ProtocolVersion::TLSv1_2);
+            .supports_version(ProtocolVersion::TLSv1_2, self.protocol);
 
         // Are we doing TLS1.3?
         if let Some(versions) = &input.client_hello.supported_versions {
@@ -511,10 +511,10 @@ impl ExpectClientHello {
         } else if u16::from(input.client_hello.client_version) < u16::from(ProtocolVersion::TLSv1_2)
         {
             Err(PeerIncompatible::Tls12NotOffered.into())
-        } else if !tls12_enabled && tls13_enabled {
-            Err(PeerIncompatible::SupportedVersionsExtensionRequired.into())
         } else if self.protocol.is_quic() {
             Err(PeerIncompatible::Tls13RequiredForQuic.into())
+        } else if !tls12_enabled && tls13_enabled {
+            Err(PeerIncompatible::SupportedVersionsExtensionRequired.into())
         } else {
             self.with_version::<Tls12CipherSuite>(input, output)
         }

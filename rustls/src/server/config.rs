@@ -9,6 +9,7 @@ use pki_types::{DnsName, FipsStatus, UnixTime};
 
 use super::{ServerSessionKey, handy};
 use crate::builder::{ConfigBuilder, WantsVerifier};
+use crate::common_state::Protocol;
 #[cfg(doc)]
 use crate::crypto;
 use crate::crypto::kx::NamedGroup;
@@ -286,8 +287,8 @@ impl ServerConfig {
         &self.provider
     }
 
-    pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
-        self.provider.supports_version(v)
+    pub(crate) fn supports_version(&self, v: ProtocolVersion, protocol: Protocol) -> bool {
+        self.provider.supports_version(v) && protocol.supports_version(v)
     }
 
     pub(super) fn current_time(&self) -> Result<UnixTime, Error> {
