@@ -13,9 +13,10 @@ use rustls::error::{
 };
 use rustls::quic::{self, Connection, QuicEvent, ServerHandshake, Side};
 use rustls::server::Tls13Tickets;
-use rustls::{CipherSuiteCommon, HandshakeKind, SliceInput, Tls13CipherSuite};
+use rustls::{CipherSuiteCommon, HandshakeKind, SliceInput, Tls13CipherSuite, VecInput};
 use rustls_test::{
-    ClientStorage, KeyType, encoding, make_client_config, make_server_config, server_name,
+    ClientStorage, KeyType, do_handshake, encoding, make_client_config, make_pair_for_arc_configs,
+    make_server_config, server_name,
 };
 
 use super::provider;
@@ -1248,6 +1249,71 @@ fn server_rejects_client_choosing_non_quic_suite() {
             .err(),
         Some(PeerIncompatible::NoCipherSuitesInCommon.into())
     );
+}
+
+// A session stored from a TCP connection may name a cipher suite that cannot be
+// used for QUIC.  Such a session is simply not resumable on a QUIC connection:
+// it must not prevent the connection being made at all.
+#[test]
+fn quic_client_ignores_stored_session_with_non_quic_suite() {
+    let tcp_provider = CryptoProvider {
+        tls13_cipher_suites: Cow::Owned(vec![TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC]),
+        ..provider::DEFAULT_TLS13_PROVIDER
+    };
+
+    // Fill the session store over TCP, using the suite which does not support QUIC.
+    let storage = Arc::new(ClientStorage::new());
+    let mut client_config = make_client_config(KeyType::default(), &tcp_provider);
+    client_config.resumption = Resumption::store(storage.clone());
+    let (mut client, mut server) = make_pair_for_arc_configs(
+        &Arc::new(client_config),
+        &Arc::new(make_server_config(KeyType::default(), &tcp_provider)),
+    );
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    do_handshake(
+        &mut client_input,
+        &mut client,
+        &mut server_input,
+        &mut server,
+    );
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+    assert!(
+        storage
+            .ops()
+            .iter()
+            .any(|op| matches!(op, rustls_test::ClientStorageOp::InsertTls13Ticket(_)))
+    );
+
+    // Now connect over QUIC, sharing the session store.  This provider _does_ offer a
+    // QUIC-capable suite, so the connection is perfectly viable -- the stored session
+    // just cannot be used for it.
+    let quic_provider = CryptoProvider {
+        tls13_cipher_suites: Cow::Owned(vec![
+            TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC,
+            provider::cipher_suite::TLS13_AES_256_GCM_SHA384,
+        ]),
+        ..provider::DEFAULT_TLS13_PROVIDER
+    };
+    let mut client_config = make_client_config(KeyType::default(), &quic_provider);
+    client_config.resumption = Resumption::store(storage);
+    let mut client = quic::ClientConnection::new(
+        Arc::new(client_config),
+        quic::Version::V2,
+        "localhost".try_into().unwrap(),
+        vec![],
+    )
+    .unwrap();
+    let mut server = quic::ServerConnection::new(
+        Arc::new(make_server_config(KeyType::EcdsaP256, &quic_provider)),
+        quic::Version::V2,
+        vec![],
+    )
+    .unwrap();
+
+    do_quic_handshake(&mut client, &mut server);
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
 }
 
 /// TLS13_AES_128_GCM_SHA256 which doesn't support QUIC.
