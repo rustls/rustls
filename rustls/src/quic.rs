@@ -268,7 +268,7 @@ mod connection {
             quic_version: Version,
             params: Vec<u8>,
         ) -> Result<Self, Error> {
-            if !config.supports_version(ProtocolVersion::TLSv1_3) {
+            if !config.supports_version(ProtocolVersion::TLSv1_3, Protocol::Quic) {
                 return Err(Error::General(
                     "TLS 1.3 support is required for QUIC".into(),
                 ));

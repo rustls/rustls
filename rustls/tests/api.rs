@@ -5487,7 +5487,7 @@ mod test_quic {
         assert_eq!(
             server.read_hs(buf.as_slice()).err(),
             Some(Error::PeerIncompatible(
-                PeerIncompatible::SupportedVersionsExtensionRequired
+                PeerIncompatible::Tls13RequiredForQuic
             )),
         );
     }
