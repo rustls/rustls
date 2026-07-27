@@ -1006,6 +1006,14 @@ fn prepare_resumption<'a>(
         suite.can_resume_from(tls13.suite)?;
     }
 
+    // Similarly, if the suite is not usable for the protocol.
+    if !tls13
+        .suite
+        .usable_for_protocol(protocol)
+    {
+        return None;
+    }
+
     let early_data_enabled =
         tls13::prepare_resumption(config, output, &tls13, exts, suite.is_some());
     Some((tls13, early_data_enabled))
