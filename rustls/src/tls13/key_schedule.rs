@@ -11,7 +11,7 @@ use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expa
 use crate::crypto::{hash, hmac};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{HandshakeAlignedProof, Message};
-use crate::{ConnectionTrafficSecrets, KeyLog, Tls13CipherSuite};
+use crate::{ConnectionTrafficSecrets, KeyLog, Tls13CipherSuite, quic};
 
 // We express the state of a contained KeySchedule using these
 // typestates.  This means we can write code that cannot accidentally
@@ -22,8 +22,17 @@ use crate::{ConnectionTrafficSecrets, KeyLog, Tls13CipherSuite};
 pub(crate) struct KeyScheduleEarlyClient(KeyScheduleEarly);
 
 impl KeyScheduleEarlyClient {
-    pub(crate) fn new(protocol: Protocol, suite: &'static Tls13CipherSuite, secret: &[u8]) -> Self {
-        Self(KeyScheduleEarly::new(Side::Client, protocol, suite, secret))
+    pub(crate) fn new(
+        protocol: Protocol,
+        suite: &'static Tls13CipherSuite,
+        secret: &[u8],
+    ) -> Result<Self, Error> {
+        Ok(Self(KeyScheduleEarly::new(
+            Side::Client,
+            protocol,
+            suite,
+            secret,
+        )?))
     }
 
     /// Computes the `client_early_traffic_secret` and installs it as encrypter.
@@ -58,8 +67,17 @@ impl Deref for KeyScheduleEarlyClient {
 pub(crate) struct KeyScheduleEarlyServer(KeyScheduleEarly);
 
 impl KeyScheduleEarlyServer {
-    pub(crate) fn new(protocol: Protocol, suite: &'static Tls13CipherSuite, secret: &[u8]) -> Self {
-        Self(KeyScheduleEarly::new(Side::Server, protocol, suite, secret))
+    pub(crate) fn new(
+        protocol: Protocol,
+        suite: &'static Tls13CipherSuite,
+        secret: &[u8],
+    ) -> Result<Self, Error> {
+        Ok(Self(KeyScheduleEarly::new(
+            Side::Server,
+            protocol,
+            suite,
+            secret,
+        )?))
     }
 
     /// Computes the `client_early_traffic_secret` and installs it as decrypter.
@@ -106,10 +124,10 @@ impl KeyScheduleEarly {
         protocol: Protocol,
         suite: &'static Tls13CipherSuite,
         secret: &[u8],
-    ) -> Self {
-        Self {
-            ks: KeySchedule::new(local, protocol, suite, secret),
-        }
+    ) -> Result<Self, Error> {
+        Ok(Self {
+            ks: KeySchedule::new(local, protocol, suite, secret)?,
+        })
     }
 
     /// Computes the `client_early_traffic_secret` and returns it.
@@ -206,10 +224,14 @@ pub(crate) struct KeySchedulePreHandshake {
 
 impl KeySchedulePreHandshake {
     /// Creates a key schedule without a PSK.
-    pub(crate) fn new(local: Side, protocol: Protocol, suite: &'static Tls13CipherSuite) -> Self {
-        Self {
-            ks: KeySchedule::new_with_empty_secret(local, protocol, suite),
-        }
+    pub(crate) fn new(
+        local: Side,
+        protocol: Protocol,
+        suite: &'static Tls13CipherSuite,
+    ) -> Result<Self, Error> {
+        Ok(Self {
+            ks: KeySchedule::new_with_empty_secret(local, protocol, suite)?,
+        })
     }
 
     /// `shared_secret` is the "(EC)DHE" secret input to
@@ -351,7 +373,7 @@ impl KeyScheduleHandshakeStart {
                 client_secret.clone(),
                 server_secret.clone(),
                 self.ks.suite,
-                self.ks.suite.quic.unwrap(),
+                self.ks.quic.unwrap(),
                 self.ks.side,
             );
         }
@@ -434,7 +456,7 @@ impl KeyScheduleHandshake {
                 client_secret.clone(),
                 server_secret.clone(),
                 before_finished.ks.suite,
-                before_finished.ks.suite.quic.unwrap(),
+                before_finished.ks.quic.unwrap(),
                 before_finished.ks.side,
             );
         }
@@ -583,7 +605,7 @@ impl KeyScheduleClientBeforeFinished {
                 client_secret.clone(),
                 server_secret.clone(),
                 next.ks.suite,
-                next.ks.suite.quic.unwrap(),
+                next.ks.quic.unwrap(),
                 next.ks.side,
             );
         }
@@ -807,8 +829,14 @@ impl KeySchedule {
         protocol: Protocol,
         suite: &'static Tls13CipherSuite,
         secret: &[u8],
-    ) -> Self {
-        Self {
+    ) -> Result<Self, Error> {
+        let quic = match protocol {
+            Protocol::Quic(_) => Some(suite.quic.ok_or(Error::Unreachable(
+                "QUIC connection negotiated a cipher suite without QUIC support",
+            ))?),
+            Protocol::Tcp => None,
+        };
+        Ok(Self {
             current: suite
                 .hkdf_provider
                 .extract_from_secret(None, secret),
@@ -816,8 +844,9 @@ impl KeySchedule {
                 side,
                 protocol,
                 suite,
+                quic,
             },
-        }
+        })
     }
 
     /// Creates a key schedule without a PSK.
@@ -825,8 +854,14 @@ impl KeySchedule {
         side: Side,
         protocol: Protocol,
         suite: &'static Tls13CipherSuite,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, Error> {
+        let quic = match protocol {
+            Protocol::Quic(_) => Some(suite.quic.ok_or(Error::Unreachable(
+                "QUIC connection negotiated a cipher suite without QUIC support",
+            ))?),
+            Protocol::Tcp => None,
+        };
+        Ok(Self {
             current: suite
                 .hkdf_provider
                 .extract_from_zero_ikm(None),
@@ -834,8 +869,9 @@ impl KeySchedule {
                 side,
                 protocol,
                 suite,
+                quic,
             },
-        }
+        })
     }
 
     /// Input the empty secret.
@@ -927,6 +963,8 @@ struct KeyScheduleSuite {
     side: Side,
     protocol: Protocol,
     suite: &'static Tls13CipherSuite,
+    // invariant: Some(suite.quic) if protocol is QUIC
+    quic: Option<&'static dyn quic::Algorithm>,
 }
 
 impl KeyScheduleSuite {
@@ -1323,7 +1361,8 @@ mod tests {
         ];
 
         let suite = TLS13_TEST_SUITE;
-        let mut ks = KeySchedule::new_with_empty_secret(Side::Server, Protocol::Tcp, suite);
+        let mut ks =
+            KeySchedule::new_with_empty_secret(Side::Server, Protocol::Tcp, suite).unwrap();
         ks.input_secret(&ecdhe_secret);
 
         assert_traffic_secret(
@@ -1440,7 +1479,8 @@ mod benchmarks {
 
         b.iter(|| {
             let mut ks =
-                KeySchedule::new_with_empty_secret(Side::Client, Protocol::Tcp, TLS13_TEST_SUITE);
+                KeySchedule::new_with_empty_secret(Side::Client, Protocol::Tcp, TLS13_TEST_SUITE)
+                    .unwrap();
             ks.input_secret(&[0u8; 32]);
 
             extract_traffic_secret(&ks, SecretKind::ClientHandshakeTrafficSecret);

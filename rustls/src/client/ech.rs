@@ -270,7 +270,7 @@ impl EchGreaseConfig {
 
         // Construct an inner hello using the outer hello - this allows us to know the size of
         // dummy payload we should use for the GREASE extension.
-        let encoded_inner_hello = grease_state.encode_inner_hello(outer_hello, None, None);
+        let encoded_inner_hello = grease_state.encode_inner_hello(outer_hello, None, None)?;
 
         // Generate a payload of random data equivalent in length to a real inner hello.
         let payload_len = encoded_inner_hello.len()
@@ -416,7 +416,7 @@ impl EchState {
         );
 
         // Construct the encoded inner hello and update the transcript.
-        let encoded_inner_hello = self.encode_inner_hello(&outer_hello, retry_req, resuming);
+        let encoded_inner_hello = self.encode_inner_hello(&outer_hello, retry_req, resuming)?;
 
         // Complete the ClientHelloOuterAAD with an ech extension, the payload should be a placeholder
         // of size L, all zeroes. L == length of encrypting encoded client hello inner w/ the selected
@@ -587,7 +587,7 @@ impl EchState {
         outer_hello: &ClientHelloPayload,
         retryreq: Option<&HelloRetryRequest>,
         resuming: Option<&Retrieved<&Tls13Session>>,
-    ) -> Vec<u8> {
+    ) -> Result<Vec<u8>, Error> {
         // Start building an inner hello using the outer_hello as a template.
         let mut inner_hello = ClientHelloPayload {
             // Some information is copied over as-is.
@@ -678,8 +678,11 @@ impl EchState {
         if let Some(resuming) = resuming.as_ref() {
             let mut chp = HandshakeMessagePayload(HandshakePayload::ClientHello(inner_hello));
 
-            let key_schedule =
-                KeyScheduleEarlyClient::new(self.protocol, resuming.suite, resuming.secret.bytes());
+            let key_schedule = KeyScheduleEarlyClient::new(
+                self.protocol,
+                resuming.suite,
+                resuming.secret.bytes(),
+            )?;
             tls13::fill_in_psk_binder(&key_schedule, &self.inner_hello_transcript, &mut chp);
             self.early_data_key_schedule = Some(key_schedule);
 
@@ -744,7 +747,7 @@ impl EchState {
         self.inner_hello_transcript
             .add_message(&inner_hello_msg);
 
-        encoded_hello
+        Ok(encoded_hello)
     }
 
     // See https://datatracker.ietf.org/doc/html/rfc9849#name-grease-psk
@@ -910,7 +913,9 @@ mod tests {
 
     #[test]
     fn inner_client_hello_length_conceals_inner_name_length() {
-        let base_inner_len = inner_hello_encoding_for_name(dns_name_of_len(1), true).len();
+        let base_inner_len = inner_hello_encoding_for_name(dns_name_of_len(1), true)
+            .unwrap()
+            .len();
         assert!(
             base_inner_len % 32 == 0,
             "inner hello length must be 32-byte padded"
@@ -922,7 +927,9 @@ mod tests {
 
         for inner_name_len in 1..251 {
             assert_eq!(
-                inner_hello_encoding_for_name(dns_name_of_len(inner_name_len), true).len(),
+                inner_hello_encoding_for_name(dns_name_of_len(inner_name_len), true)
+                    .unwrap()
+                    .len(),
                 base_inner_len,
                 "all inner hello lengths must be invariant wrt inner name length"
             );
@@ -931,7 +938,9 @@ mod tests {
 
     #[test]
     fn inner_client_hello_length_does_not_leak_length_of_omitted_inner_name() {
-        let base_inner_len = inner_hello_encoding_for_name(dns_name_of_len(1), false).len();
+        let base_inner_len = inner_hello_encoding_for_name(dns_name_of_len(1), false)
+            .unwrap()
+            .len();
         assert!(
             base_inner_len % 32 == 0,
             "inner hello length must be 32-byte padded"
@@ -943,14 +952,19 @@ mod tests {
 
         for inner_name_len in 1..251 {
             assert_eq!(
-                inner_hello_encoding_for_name(dns_name_of_len(inner_name_len), false).len(),
+                inner_hello_encoding_for_name(dns_name_of_len(inner_name_len), false)
+                    .unwrap()
+                    .len(),
                 base_inner_len,
                 "all inner hello lengths must be invariant wrt inner name length"
             );
         }
     }
 
-    fn inner_hello_encoding_for_name(name: DnsName<'static>, enable_sni: bool) -> Vec<u8> {
+    fn inner_hello_encoding_for_name(
+        name: DnsName<'static>,
+        enable_sni: bool,
+    ) -> Result<Vec<u8>, Error> {
         let config = EchConfig {
             config: EchConfigPayload::V18(EchConfigContents {
                 key_config: HpkeKeyConfig {
