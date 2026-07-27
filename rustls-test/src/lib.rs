@@ -537,18 +537,6 @@ pub fn make_server_config_with_kx_groups(
     .finish(kt)
 }
 
-pub fn make_server_config_with_mandatory_client_auth_crls(
-    kt: KeyType,
-    crls: Vec<CertificateRevocationListDer<'static>>,
-    provider: &CryptoProvider,
-) -> ServerConfig {
-    make_server_config_with_client_verifier(
-        kt,
-        webpki_client_verifier_builder(kt.client_root_store(), provider).with_crls(crls),
-        provider,
-    )
-}
-
 pub fn make_server_config_with_mandatory_client_auth(
     kt: KeyType,
     provider: &CryptoProvider,
@@ -793,31 +781,6 @@ pub fn do_handshake_until_error(
         transfer(server, client_input);
         client
             .process_new_packets(client_input)
-            .map_err(ErrorFromPeer::Client)?;
-    }
-
-    Ok(())
-}
-
-pub fn do_handshake_altered(
-    mut client: ClientConnection,
-    alter_server_message: impl Fn(&mut EncodedMessage<Vec<u8>>) -> Altered,
-    alter_client_message: impl Fn(&mut EncodedMessage<Vec<u8>>) -> Altered,
-    mut server: ServerConnection,
-) -> Result<(), ErrorFromPeer> {
-    let mut client_input = VecInput::default();
-    let mut server_input = VecInput::default();
-    while server.is_handshaking() || client.is_handshaking() {
-        transfer_altered(&mut client, &alter_client_message, &mut server_input);
-
-        server
-            .process_new_packets(&mut server_input)
-            .map_err(ErrorFromPeer::Server)?;
-
-        transfer_altered(&mut server, &alter_server_message, &mut client_input);
-
-        client
-            .process_new_packets(&mut client_input)
             .map_err(ErrorFromPeer::Client)?;
     }
 
