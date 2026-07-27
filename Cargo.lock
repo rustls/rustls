@@ -1984,7 +1984,7 @@ dependencies = [
 
 [[package]]
 name = "rustls-post-quantum"
-version = "0.3.0-dev.1"
+version = "0.3.0-dev.2"
 dependencies = [
  "aws-lc-rs",
  "criterion",
