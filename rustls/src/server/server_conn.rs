@@ -13,9 +13,9 @@ use super::hs;
 #[cfg(feature = "std")]
 use crate::WantsVerifier;
 use crate::builder::ConfigBuilder;
-use crate::common_state::{CommonState, Side};
 #[cfg(feature = "std")]
-use crate::common_state::{Protocol, State};
+use crate::common_state::State;
+use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
@@ -570,13 +570,14 @@ impl ServerConfig {
     /// We support a given TLS version if it's quoted in the configured
     /// versions *and* at least one ciphersuite for this version is
     /// also configured.
-    pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
+    pub(crate) fn supports_version(&self, v: ProtocolVersion, protocol: Protocol) -> bool {
         self.versions.contains(v)
             && self
                 .provider
                 .cipher_suites
                 .iter()
                 .any(|cs| cs.version().version == v)
+            && protocol.supports_version(v)
     }
 
     #[cfg(feature = "std")]
