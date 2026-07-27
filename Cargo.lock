@@ -1994,7 +1994,6 @@ dependencies = [
  "rustls-aws-lc-rs",
  "rustls-test",
  "rustls-util",
- "rustls-webpki 0.104.0-alpha.7",
  "webpki-roots",
 ]
 
