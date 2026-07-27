@@ -614,7 +614,7 @@ fn test_quic_server_no_tls12() {
         .unwrap();
     assert_eq!(
         err,
-        Error::PeerIncompatible(PeerIncompatible::SupportedVersionsExtensionRequired),
+        Error::PeerIncompatible(PeerIncompatible::Tls13RequiredForQuic),
     );
     assert_eq!(
         AlertDescription::try_from(&err).ok(),
