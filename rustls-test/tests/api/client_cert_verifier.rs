@@ -4,13 +4,17 @@
 
 use std::sync::Arc;
 
+use rustls::client::ClientConnection;
 use rustls::crypto::VerifiedIdentity;
+use rustls::enums::ProtocolVersion;
 use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage, PeerMisbehaved};
-use rustls::{ClientConfig, ServerConnection, VecInput};
+use rustls::server::{ServerHandshake, VerifyClientIdentity};
+use rustls::{ClientConfig, Connection, ServerConfig, ServerConnection, SliceInput, VecInput};
 use rustls_test::{
     ErrorFromPeer, MockClientVerifier, MultiTest, do_handshake, do_handshake_until_both_error,
-    do_handshake_until_error, make_pair_for_arc_configs, make_server_config_with_client_verifier,
-    make_server_config_with_optional_client_auth, server_name, webpki_client_verifier_builder,
+    do_handshake_until_error, encoding, make_pair_for_arc_configs,
+    make_server_config_with_client_verifier, make_server_config_with_optional_client_auth,
+    server_name, webpki_client_verifier_builder,
 };
 
 use super::provider;
@@ -167,6 +171,134 @@ fn client_verifier_fails_properly() {
             Err(ErrorFromPeer::Server(Error::General("test err".into())))
         );
     }
+}
+
+#[test]
+fn server_external_verifier_does_not_call_trait() {
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER)
+        .require_client_auth()
+        .with_client_verifier(Box::new(|kt, provider| {
+            Arc::new(MockClientVerifier::new(ver_unreachable, kt, &provider))
+        }))
+    {
+        let (verify, mut server_output, mut client, mut client_output) =
+            server_external_verifier_test_setup(client_config, server_config);
+
+        let identity = verify.presented_identity().unwrap();
+        assert_eq!(
+            identity.identity,
+            expect
+                .key_type
+                .client_identity()
+                .as_ref()
+        );
+        let verified = VerifiedIdentity::assertion(identity.identity.to_owned());
+        let ServerHandshake::NeedsInput(server) = verify
+            .continue_with(Ok(verified), &mut server_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+
+        let mut server_input = SliceInput::new(&mut client_output);
+        let ServerHandshake::Complete(server) = server
+            .process(&mut server_input, &mut server_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+
+        client
+            .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
+            .handle_all(&mut Vec::new())
+            .unwrap();
+        server_output.clear();
+
+        assert!(!client.is_handshaking());
+        assert!(server.outputs.peer_identity().is_some());
+    }
+}
+
+#[test]
+fn server_external_verifier_error_sends_alert() {
+    for (client_config, server_config, expect) in
+        MultiTest::new(provider::DEFAULT_PROVIDER).require_client_auth()
+    {
+        let (verify, mut server_output, mut client, mut client_output) =
+            server_external_verifier_test_setup(client_config, server_config);
+
+        let mut alert_output = Vec::new();
+        let err = verify
+            .continue_with(Err(CertificateError::Expired.into()), &mut alert_output)
+            .unwrap_err();
+
+        assert_eq!(err, CertificateError::Expired.into());
+        if expect.version == ProtocolVersion::TLSv1_2 {
+            assert_eq!(
+                alert_output,
+                encoding::alert(AlertDescription::CertificateExpired, &[])
+            );
+        }
+
+        server_output.extend(alert_output);
+
+        let client_err = client
+            .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
+            .handle_all(&mut Vec::new())
+            .unwrap_err();
+        assert_eq!(
+            client_err,
+            Error::AlertReceived(AlertDescription::CertificateExpired)
+        );
+    }
+}
+
+fn server_external_verifier_test_setup(
+    client_config: Arc<ClientConfig>,
+    server_config: Arc<ServerConfig>,
+) -> (VerifyClientIdentity, Vec<u8>, ClientConnection, Vec<u8>) {
+    let mut client_output = Vec::new();
+    let mut client = client_config
+        .connect(server_name("localhost"))
+        .build(&mut client_output)
+        .unwrap();
+
+    let mut server_input = SliceInput::new(&mut client_output);
+    let mut server_output = Vec::new();
+    let ServerHandshake::Accepted(accepted) = ServerHandshake::start()
+        .process(&mut server_input, &mut server_output)
+        .unwrap()
+    else {
+        panic!("unexpected state");
+    };
+    client_output.clear();
+
+    let ServerHandshake::NeedsInput(server) = accepted
+        .choose_config(server_config, &mut server_output)
+        .unwrap()
+    else {
+        panic!("unexpected state");
+    };
+
+    client
+        .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    server_output.clear();
+
+    let mut server_input = SliceInput::new(&mut client_output);
+    let ServerHandshake::VerifyClientIdentity(verify) = server
+        .process(&mut server_input, &mut server_output)
+        .unwrap()
+    else {
+        panic!("unexpected state");
+    };
+    let used = server_input.into_used();
+    client_output.drain(..used);
+
+    println!("{verify:?}");
+
+    (verify, server_output, client, client_output)
 }
 
 /// Test that the server handles combination of `offer_client_auth()` returning true
