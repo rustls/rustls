@@ -117,6 +117,10 @@ impl Deframer {
         bounds: Range<usize>,
         buf: &[u8],
     ) {
+        let Some(payload) = buf.get(bounds.start..bounds.end) else {
+            return;
+        };
+
         // if our last span is incomplete, we can blindly add this as a new span --
         // no need to attempt parsing it with `DissectHandshakeIter`.
         //
@@ -142,7 +146,7 @@ impl Deframer {
         // a new message (and perhaps several of them.)
         let iter = DissectHandshakeIter {
             version,
-            payload: &buf[bounds.start..bounds.end],
+            payload,
             bounds,
         };
 
