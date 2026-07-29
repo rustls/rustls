@@ -256,7 +256,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             &proof,
         );
 
-        if !key_schedule.protocol().is_quic() {
+        if !key_schedule.is_quic() {
             emit_fake_ccs(&mut sent_tls13_fake_ccs, output);
         }
 
@@ -447,7 +447,7 @@ pub(super) fn derive_early_traffic_secret(
     transcript_buffer: &HandshakeHashBuffer,
     client_random: &[u8; 32],
 ) {
-    if !early_key_schedule.protocol().is_quic() {
+    if !early_key_schedule.is_quic() {
         // For middlebox compatibility
         emit_fake_ccs(sent_tls13_fake_ccs, output);
     }
@@ -538,11 +538,7 @@ impl ExpectEncryptedExtensions {
         // mechanism) if and only if any ALPN protocols were configured. This defends against badly-behaved
         // servers which accept a connection that requires an application-layer protocol they do not
         // understand.
-        if self
-            .hs
-            .key_schedule
-            .protocol()
-            .is_quic()
+        if self.hs.key_schedule.is_quic()
             && selected_alpn.is_none()
             && !self.hello.alpn_protocols.is_empty()
         {
@@ -1320,7 +1316,7 @@ impl ExpectFinished {
         /* The EndOfEarlyData message to server is still encrypted with early data keys,
          * but appears in the transcript after the server Finished. */
         if st.in_early_traffic {
-            if !st.hs.key_schedule.protocol().is_quic() {
+            if !st.hs.key_schedule.is_quic() {
                 emit_end_of_early_data_tls13(&mut st.hs.transcript, output);
             }
             output.emit(Event::EarlyData(EarlyDataEvent::Finished));
@@ -1414,7 +1410,7 @@ impl ExpectFinished {
             .into());
         }
 
-        let protocol = key_schedule_recv.protocol();
+        let is_quic = key_schedule_recv.is_quic();
 
         let st = ExpectTraffic {
             config: st.hs.config.clone(),
@@ -1429,7 +1425,7 @@ impl ExpectFinished {
             _fin_verified: fin,
         };
 
-        Ok(match protocol.is_quic() {
+        Ok(match is_quic {
             true => Box::new(ExpectQuicTraffic(st)).into(),
             false => Box::new(st).into(),
         })
@@ -1474,11 +1470,7 @@ impl ExpectTraffic {
 
         let now = self.config.current_time()?;
         let value = Tls13Session::new(nst, self.session_input.clone(), secret.as_ref(), now);
-        if self
-            .key_schedule_recv
-            .protocol()
-            .is_quic()
-        {
+        if self.key_schedule_recv.is_quic() {
             if let Some(sz) = nst.extensions.max_early_data_size {
                 if sz != 0 && sz != 0xffff_ffff {
                     return Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into());
@@ -1507,11 +1499,7 @@ impl ExpectTraffic {
         output: &mut dyn Output<'_>,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
-        if self
-            .key_schedule_recv
-            .protocol()
-            .is_quic()
-        {
+        if self.key_schedule_recv.is_quic() {
             return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
         }
 

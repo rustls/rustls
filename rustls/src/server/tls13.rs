@@ -1472,7 +1472,7 @@ impl ExpectFinished {
             .update_key_schedule(Box::new(key_schedule_send));
         output.start_traffic();
 
-        Ok(match key_schedule_recv.protocol().is_quic() {
+        Ok(match key_schedule_recv.is_quic() {
             true => Box::new(ExpectQuicTraffic { _fin_verified: fin }).into(),
             false => Box::new(ExpectTraffic {
                 config: self.hs.config,
@@ -1516,11 +1516,7 @@ impl ExpectTraffic {
         output: &mut dyn Output<'_>,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
-        if self
-            .key_schedule_recv
-            .protocol()
-            .is_quic()
-        {
+        if self.key_schedule_recv.is_quic() {
             return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
         }
 
