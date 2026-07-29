@@ -51,8 +51,8 @@ impl KeyScheduleEarlyClient {
         );
     }
 
-    pub(crate) fn protocol(&self) -> Protocol {
-        self.0.ks.protocol
+    pub(crate) fn is_quic(&self) -> bool {
+        self.0.ks.protocol.is_quic()
     }
 }
 
@@ -482,8 +482,8 @@ impl KeyScheduleHandshake {
         (KeyScheduleClientBeforeFinished(before_finished), tag)
     }
 
-    pub(crate) fn protocol(&self) -> Protocol {
-        self.ks.protocol
+    pub(crate) fn is_quic(&self) -> bool {
+        self.ks.protocol.is_quic()
     }
 }
 
@@ -772,8 +772,8 @@ impl KeyScheduleTrafficReceive {
             .extract_keys(key, iv)?)
     }
 
-    pub(crate) fn protocol(&self) -> Protocol {
-        self.ks.protocol
+    pub(crate) fn is_quic(&self) -> bool {
+        self.ks.protocol.is_quic()
     }
 }
 
