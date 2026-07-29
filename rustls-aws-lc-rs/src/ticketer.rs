@@ -139,7 +139,8 @@ impl TicketProducer for Rfc5077Ticketer {
             .algorithm()
             .digest_algorithm()
             .output_len();
-        let (enc_state, mac) = ciphertext.split_at_checked(ciphertext.len() - tag_len)?;
+        let (enc_state, mac) =
+            ciphertext.split_at_checked(ciphertext.len().checked_sub(tag_len)?)?;
 
         // Reconstitute the HMAC data to verify the tag.
         let mut hmac_data =
@@ -214,6 +215,20 @@ mod tests {
         // first branch in `decrypt()`
         cipher.push(0);
         assert_eq!(t.decrypt(&cipher), None);
+    }
+
+    #[test]
+    fn refuses_decrypt_truncated_ciphertext() {
+        let t = AwsLcRs.ticketer().unwrap();
+        let cipher = t.encrypt(b"hello world").unwrap();
+        assert_eq!(t.decrypt(&cipher), Some(b"hello world".to_vec()));
+
+        // a truncation is rejected at any length; lengths that leave fewer
+        // bytes than the trailing tag after the key_name and iv prefix
+        // exercise the final split.
+        for len in 0..cipher.len() {
+            assert_eq!(t.decrypt(&cipher[..len]), None);
+        }
     }
 
     #[test]
