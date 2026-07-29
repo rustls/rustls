@@ -508,9 +508,10 @@ mod client_hello {
         binder: &[u8],
     ) -> bool {
         let binder_plaintext = match &client_hello.payload {
-            MessagePayload::Handshake { parsed, encoded } => {
-                &encoded.bytes()[..encoded.bytes().len() - parsed.total_binder_length()]
-            }
+            MessagePayload::Handshake { parsed, encoded } => &encoded.bytes()[..encoded
+                .bytes()
+                .len()
+                .saturating_sub(parsed.total_binder_length())],
             _ => unreachable!(),
         };
 
