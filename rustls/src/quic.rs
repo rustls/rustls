@@ -1073,7 +1073,7 @@ impl<'a> KeyBuilder<'a> {
 #[derive(Clone, Copy)]
 pub struct Suite {
     /// The TLS 1.3 ciphersuite used to derive keys.
-    pub suite: &'static Tls13CipherSuite,
+    pub inner: &'static Tls13CipherSuite,
     /// The QUIC key generation algorithm used to derive keys.
     pub quic: &'static dyn Algorithm,
 }
@@ -1083,7 +1083,7 @@ impl Suite {
     pub fn keys(&self, client_dst_connection_id: &[u8], side: Side, version: Version) -> Keys {
         Keys::initial(
             version,
-            self.suite,
+            self.inner,
             self.quic,
             client_dst_connection_id,
             side,
