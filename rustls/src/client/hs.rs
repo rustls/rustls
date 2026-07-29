@@ -816,6 +816,15 @@ fn emit_client_hello_for_retry(
                 input.prev_ech_ext = Some(grease_ext);
             }
         }
+        // If a hello retry request rejected our ECH offer, we carry on with the outer hello.
+        // There is no inner hello to encrypt, but the outer one still must not offer the
+        // inner name's ticket: it re-offers the first hello's GREASE PSK in its place,
+        // with fresh binders.
+        (EchStatus::Rejected, Some(ech_state)) => {
+            if let Some(psk_offer) = chp_payload.preshared_key_offer.as_mut() {
+                ech_state.grease_psk(psk_offer)?;
+            }
+        }
         _ => {}
     }
 
