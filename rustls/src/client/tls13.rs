@@ -16,7 +16,7 @@ use super::{
 };
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{
-    EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Output, OutputEvent, Side,
+    EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Output, OutputEvent, Protocol, Side,
 };
 use crate::conn::kernel::KernelState;
 use crate::conn::{ConnectionRandoms, Input, TrafficTemperCounters};
@@ -45,10 +45,11 @@ use crate::tls13::key_schedule::{
     KeyScheduleTrafficReceive, KeyScheduleTrafficSend,
 };
 use crate::tls13::{
-    Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
+    Tls13CipherSuite, Tls13ProtocolSuite, construct_client_verify_message,
+    construct_server_verify_message,
 };
 use crate::verify::{self, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput};
-use crate::{ConnectionTrafficSecrets, KeyLog, compress, crypto};
+use crate::{ConnectionTrafficSecrets, KeyLog, compress, crypto, quic};
 
 #[expect(private_interfaces)]
 pub(crate) enum Tls13State {
@@ -147,12 +148,20 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         let our_key_share = KeyExchangeChoice::new(&config, output, our_key_share, their_key_share)
             .map_err(|_| PeerMisbehaved::WrongGroupForKeyShare)?;
 
+        let suite = match protocol {
+            Protocol::Tcp => Tls13ProtocolSuite::Tcp(suite),
+            Protocol::Quic(_) => Tls13ProtocolSuite::Quic(quic::Suite::try_from(suite)?),
+        };
+
         let (key_schedule_pre_handshake, in_early_traffic) =
             match (server_hello.preshared_key, st.early_data_key_schedule) {
                 (Some(selected_psk), Some((early_key_schedule, in_early_traffic))) => {
                     match &resuming_session {
                         Some(resuming) => {
-                            let Some(resuming_suite) = suite.can_resume_from(resuming.suite) else {
+                            let Some(resuming_suite) = suite
+                                .suite()
+                                .can_resume_from(resuming.suite.suite())
+                            else {
                                 return Err(
                                     PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite
                                         .into(),
@@ -161,7 +170,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
 
                             // If the server varies the suite here, we will have encrypted early data with
                             // the wrong suite.
-                            if in_early_traffic && resuming_suite != suite {
+                            if in_early_traffic && resuming_suite != suite.suite() {
                                 return Err(
                                     PeerMisbehaved::EarlyDataOfferedWithVariedCipherSuite.into()
                                 );
@@ -188,10 +197,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                     // Discard the early data key schedule.
                     output.emit(Event::EarlyData(EarlyDataEvent::Rejected));
                     resuming_session.take();
-                    (
-                        KeySchedulePreHandshake::new(Side::Client, protocol, suite)?,
-                        false,
-                    )
+                    (KeySchedulePreHandshake::new(Side::Client, suite)?, false)
                 }
             };
 
@@ -215,7 +221,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 &key_schedule,
                 server_hello,
                 server_hello_encoded,
-                suite.common.hash_provider,
+                suite.suite().common.hash_provider,
             )? {
                 // The server accepted our ECH offer, so complete the inner transcript with the
                 // server hello message, and switch the relevant state to the copies for the
@@ -403,7 +409,7 @@ pub(super) fn prepare_resumption(
     doing_retry: bool,
 ) -> bool {
     let resuming_suite = resuming_session.suite;
-    output.output(OutputEvent::CipherSuite(resuming_suite.into()));
+    output.output(OutputEvent::CipherSuite(resuming_suite.suite().into()));
     // The EarlyData extension MUST be supplied together with the
     // PreSharedKey extension.
     let max_early_data_size = resuming_session.max_early_data_size;
@@ -426,6 +432,7 @@ pub(super) fn prepare_resumption(
     let obfuscated_ticket_age = resuming_session.obfuscated_ticket_age();
 
     let binder_len = resuming_suite
+        .suite()
         .common
         .hash_provider
         .output_len();
@@ -499,7 +506,7 @@ fn validate_encrypted_extensions(
 struct ExpectEncryptedExtensions {
     hs: HandshakeState,
     resuming_session: Option<Tls13Session>,
-    suite: &'static Tls13CipherSuite,
+    suite: Tls13ProtocolSuite,
     hello: ClientHelloDetails,
     ech_status: EchStatus,
     in_early_traffic: bool,
@@ -689,7 +696,7 @@ fn check_cert_type(
 
 struct ExpectCertificateOrCompressedCertificateOrCertReq {
     hs: HandshakeState,
-    suite: &'static Tls13CipherSuite,
+    suite: Tls13ProtocolSuite,
     quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     ech: Ech,
     expected_certificate_type: CertificateType,
@@ -766,7 +773,7 @@ impl From<Box<ExpectCertificateOrCompressedCertificateOrCertReq>> for ClientStat
 
 struct ExpectCertificateOrCompressedCertificate {
     hs: HandshakeState,
-    suite: &'static Tls13CipherSuite,
+    suite: Tls13ProtocolSuite,
     quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     client_auth: Option<ClientAuthDetails>,
     ech: Ech,
@@ -826,7 +833,7 @@ impl From<Box<ExpectCertificateOrCompressedCertificate>> for ClientState {
 
 struct ExpectCertificateOrCertReq {
     hs: HandshakeState,
-    suite: &'static Tls13CipherSuite,
+    suite: Tls13ProtocolSuite,
     quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     ech: Ech,
     expected_certificate_type: CertificateType,
@@ -890,7 +897,7 @@ impl From<Box<ExpectCertificateOrCertReq>> for ClientState {
 // in TLS1.3.
 struct ExpectCertificateRequest {
     hs: HandshakeState,
-    suite: &'static Tls13CipherSuite,
+    suite: Tls13ProtocolSuite,
     quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     offered_cert_compression: bool,
     ech: Ech,
@@ -983,7 +990,7 @@ impl ExpectCertificateRequest {
 
 struct ExpectCompressedCertificate {
     hs: HandshakeState,
-    suite: &'static Tls13CipherSuite,
+    suite: Tls13ProtocolSuite,
     quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     client_auth: Option<ClientAuthDetails>,
     ech: Ech,
@@ -1043,7 +1050,7 @@ impl ExpectCompressedCertificate {
 
 struct ExpectCertificate {
     hs: HandshakeState,
-    suite: &'static Tls13CipherSuite,
+    suite: Tls13ProtocolSuite,
     quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     client_auth: Option<ClientAuthDetails>,
     ech: Ech,
@@ -1110,7 +1117,7 @@ impl From<Box<ExpectCertificate>> for ClientState {
 // --- TLS1.3 CertificateVerify ---
 struct ExpectCertificateVerify {
     hs: HandshakeState,
-    suite: &'static Tls13CipherSuite,
+    suite: Tls13ProtocolSuite,
     quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     server_cert: ServerCertDetails,
     client_auth: Option<ClientAuthDetails>,

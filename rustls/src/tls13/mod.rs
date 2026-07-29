@@ -5,10 +5,30 @@ use pki_types::FipsStatus;
 use crate::common_state::Protocol;
 use crate::crypto::{self, SignatureScheme, hash};
 use crate::enums::ProtocolVersion;
+use crate::quic;
 use crate::suites::{CipherSuiteCommon, Suite, SupportedCipherSuite};
 use crate::version::Tls13Version;
 
 pub(crate) mod key_schedule;
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Tls13ProtocolSuite {
+    Tcp(&'static Tls13CipherSuite),
+    Quic(quic::Suite),
+}
+
+impl Tls13ProtocolSuite {
+    pub(crate) fn suite(&self) -> &'static Tls13CipherSuite {
+        match self {
+            Self::Tcp(suite) => suite,
+            Self::Quic(quic) => quic.inner,
+        }
+    }
+
+    pub(crate) fn is_quic(&self) -> bool {
+        matches!(self, Self::Quic(_))
+    }
+}
 
 /// A TLS 1.3 cipher suite supported by rustls.
 #[expect(clippy::exhaustive_structs)]
@@ -49,7 +69,7 @@ pub struct Tls13CipherSuite {
     ///
     /// Provide `None` to opt out of QUIC support for this suite.  It will
     /// not be offered in QUIC handshakes.
-    pub quic: Option<&'static dyn crate::quic::Algorithm>,
+    pub quic: Option<&'static dyn quic::Algorithm>,
 }
 
 impl Tls13CipherSuite {
@@ -77,12 +97,6 @@ impl Tls13CipherSuite {
             Some(quic) => Ord::min(status, quic.fips()),
             None => status,
         }
-    }
-
-    /// Returns a `quic::Suite` for the ciphersuite, if supported.
-    pub fn quic_suite(&'static self) -> Option<crate::quic::Suite> {
-        self.quic
-            .map(|quic| crate::quic::Suite { inner: self, quic })
     }
 }
 

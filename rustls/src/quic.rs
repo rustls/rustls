@@ -1089,6 +1089,14 @@ impl TryFrom<&'static Tls13CipherSuite> for Suite {
     }
 }
 
+impl fmt::Debug for Suite {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Suite")
+            .field("inner", &self.inner)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Complete set of keys used to communicate with the peer
 #[expect(clippy::exhaustive_structs)]
 pub struct Keys {

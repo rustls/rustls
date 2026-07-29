@@ -15,13 +15,14 @@ use crate::msgs::{
     SessionId, SizedPayload,
 };
 use crate::sync::Arc;
+use crate::tls13::Tls13ProtocolSuite;
 use crate::verify::DistinguishedName;
 #[cfg(feature = "webpki")]
 pub use crate::webpki::{
     ServerVerifierBuilder, VerifierBuilderError, WebPkiServerVerifier,
     verify_identity_signed_by_trust_anchor, verify_server_name,
 };
-use crate::{Tls12CipherSuite, Tls13CipherSuite, compress};
+use crate::{Tls12CipherSuite, compress};
 
 mod config;
 pub use config::{
@@ -116,7 +117,7 @@ impl<T> Deref for Retrieved<T> {
 /// A stored TLS 1.3 client session value.
 #[derive(Debug)]
 pub struct Tls13Session {
-    suite: &'static Tls13CipherSuite,
+    suite: Tls13ProtocolSuite,
     secret: Zeroizing<SizedPayload<'static, u8>>,
     pub(crate) age_add: u32,
     max_early_data_size: u32,
@@ -126,6 +127,7 @@ pub struct Tls13Session {
 
 impl Tls13Session {
     /// Decode a ticket from the given bytes.
+    #[cfg(test)]
     pub fn from_slice(bytes: &[u8], provider: &CryptoProvider) -> Result<Self, Error> {
         Reader::new(bytes).all("Tls13Session", |reader| {
             let suite = CipherSuite::read(reader)?;
@@ -136,7 +138,7 @@ impl Tls13Session {
                 .ok_or(ApiMisuse::ResumingFromUnknownCipherSuite(suite))?;
 
             Ok(Self {
-                suite: *suite,
+                suite: Tls13ProtocolSuite::Tcp(suite),
                 secret: Zeroizing::new(SizedPayload::<u8>::read(reader)?.into_owned()),
                 age_add: u32::read(reader)?,
                 max_early_data_size: u32::read(reader)?,
@@ -174,7 +176,11 @@ impl Tls13Session {
 
     /// Encode this ticket into `buf` for persistence.
     pub fn encode(&self, buf: &mut Vec<u8>) {
-        self.suite.common.suite.encode(buf);
+        self.suite
+            .suite()
+            .common
+            .suite
+            .encode(buf);
         self.secret.encode(buf);
         buf.extend_from_slice(&self.age_add.to_be_bytes());
         buf.extend_from_slice(&self.max_early_data_size.to_be_bytes());
@@ -210,7 +216,7 @@ impl Deref for Tls13Session {
 /// A "template" for future TLS1.3 client session values.
 #[derive(Clone)]
 pub(crate) struct Tls13ClientSessionInput {
-    pub(crate) suite: &'static Tls13CipherSuite,
+    pub(crate) suite: Tls13ProtocolSuite,
     pub(crate) peer_identity: Identity<'static>,
     pub(crate) quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
 }
