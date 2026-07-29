@@ -372,8 +372,10 @@ impl KeyScheduleHandshakeStart {
             quic.handshake_secrets(
                 client_secret.clone(),
                 server_secret.clone(),
-                self.ks.suite,
-                self.ks.quic.unwrap(),
+                quic::Suite {
+                    inner: self.ks.suite,
+                    quic: self.ks.quic.unwrap(),
+                },
                 self.ks.side,
             );
         }
@@ -455,8 +457,10 @@ impl KeyScheduleHandshake {
             quic.traffic_secrets(
                 client_secret.clone(),
                 server_secret.clone(),
-                before_finished.ks.suite,
-                before_finished.ks.quic.unwrap(),
+                quic::Suite {
+                    inner: before_finished.ks.suite,
+                    quic: before_finished.ks.quic.unwrap(),
+                },
                 before_finished.ks.side,
             );
         }
@@ -604,8 +608,10 @@ impl KeyScheduleClientBeforeFinished {
             quic.traffic_secrets(
                 client_secret.clone(),
                 server_secret.clone(),
-                next.ks.suite,
-                next.ks.quic.unwrap(),
+                quic::Suite {
+                    inner: next.ks.suite,
+                    quic: next.ks.quic.unwrap(),
+                },
                 next.ks.side,
             );
         }

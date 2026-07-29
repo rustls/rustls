@@ -925,8 +925,7 @@ fn packet_key_api() {
 
     let client_keys = Keys::initial(
         Version::V1,
-        TLS13_AES_128_GCM_SHA256,
-        TLS13_AES_128_GCM_SHA256.quic.unwrap(),
+        quic::Suite::try_from(TLS13_AES_128_GCM_SHA256).unwrap(),
         CONNECTION_ID,
         Side::Client,
     );
@@ -1047,8 +1046,7 @@ fn packet_key_api() {
 
     let server_keys = Keys::initial(
         Version::V1,
-        TLS13_AES_128_GCM_SHA256,
-        TLS13_AES_128_GCM_SHA256.quic.unwrap(),
+        quic::Suite::try_from(TLS13_AES_128_GCM_SHA256).unwrap(),
         CONNECTION_ID,
         Side::Server,
     );
