@@ -417,19 +417,12 @@ pub(crate) const DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto::TEST_PROVIDER;
-    use crate::crypto::kx::NamedGroup;
+    use crate::crypto::test_provider::KEY_EXCHANGE_GROUP;
     use crate::msgs::{ServerEcdhParams, ServerKeyExchangeParams};
 
     #[test]
     fn server_ecdhe_remaining_bytes() {
-        let Some(kx_group) =
-            TEST_PROVIDER.find_kx_group(NamedGroup::X25519, ProtocolVersion::TLSv1_3)
-        else {
-            return;
-        };
-
-        let key = kx_group.start().unwrap();
+        let key = KEY_EXCHANGE_GROUP.start().unwrap();
         let server_params = ServerEcdhParams::new(&*key);
         let mut server_buf = Vec::new();
         server_params.encode(&mut server_buf);

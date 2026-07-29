@@ -177,30 +177,55 @@ const MAX_VERIFY_MSG: usize = 64 + CLIENT_CONSTANT.len() + hash::Output::MAX_LEN
 
 #[cfg(test)]
 mod tests {
-    use crate::crypto::{CipherSuite, TEST_PROVIDER, tls13_suite};
+    use std::boxed::Box;
+
+    use crate::crypto::test_provider::FAKE_HASH;
+    use crate::crypto::{HashAlgorithm, TLS13_TEST_SUITE, hash};
+    use crate::{CipherSuiteCommon, Tls13CipherSuite};
 
     #[test]
     fn test_can_resume_to() {
-        let Some(cha_poly) = TEST_PROVIDER
-            .tls13_cipher_suites
-            .iter()
-            .find(|cs| cs.common.suite == CipherSuite::TLS13_CHACHA20_POLY1305_SHA256)
-        else {
-            return;
+        let other_tls13_suite = Tls13CipherSuite {
+            common: CipherSuiteCommon {
+                hash_provider: &OtherHash,
+                ..TLS13_TEST_SUITE.common
+            },
+            ..*TLS13_TEST_SUITE
         };
 
-        let aes_128_gcm = tls13_suite(CipherSuite::TLS13_AES_128_GCM_SHA256, &TEST_PROVIDER);
         assert!(
-            aes_128_gcm
-                .can_resume_from(cha_poly)
+            TLS13_TEST_SUITE
+                .can_resume_from(TLS13_TEST_SUITE)
                 .is_some()
         );
 
-        let aes_256_gcm = tls13_suite(CipherSuite::TLS13_AES_256_GCM_SHA384, &TEST_PROVIDER);
         assert!(
-            aes_256_gcm
-                .can_resume_from(cha_poly)
+            other_tls13_suite
+                .can_resume_from(TLS13_TEST_SUITE)
                 .is_none()
         );
+    }
+
+    struct OtherHash;
+
+    impl hash::Hash for OtherHash {
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn start(&self) -> Box<dyn hash::Context> {
+            FAKE_HASH.start()
+        }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn hash(&self, data: &[u8]) -> hash::Output {
+            FAKE_HASH.hash(data)
+        }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn output_len(&self) -> usize {
+            FAKE_HASH.output_len()
+        }
+
+        fn algorithm(&self) -> HashAlgorithm {
+            HashAlgorithm(123)
+        }
     }
 }
