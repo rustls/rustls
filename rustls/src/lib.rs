@@ -271,9 +271,6 @@
 //! Here's a list of what features are exposed by the rustls crate and what
 //! they mean.
 //!
-//! - `std` (enabled by default): enable the high-level (buffered) Connection API and other functionality
-//!   which relies on the `std` library.
-//!
 //! - `log` (enabled by default): make the rustls crate depend on the `log` crate.
 //!   rustls outputs interesting protocol-level messages at `trace!` and `debug!` level,
 //!   and protocol-level errors at `warn!` and `error!` level.  The log messages do not
