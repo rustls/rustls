@@ -19,6 +19,8 @@ mod tests_with_ring {
     mod ffdhe;
     #[path = "api/io.rs"]
     mod io;
+    #[path = "api/kernel.rs"]
+    mod kernel;
     #[path = "api/kx.rs"]
     mod kx;
     #[path = "api/quic.rs"]
@@ -54,6 +56,8 @@ mod tests_with_aws_lc_rs {
     mod ffdhe;
     #[path = "api/io.rs"]
     mod io;
+    #[path = "api/kernel.rs"]
+    mod kernel;
     #[path = "api/kx.rs"]
     mod kx;
     #[path = "api/quic.rs"]

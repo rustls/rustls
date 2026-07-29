@@ -7,6 +7,7 @@ use std::sync::MutexGuard;
 use super::receive::{Discard, JoinOutput};
 use crate::client::ClientSide;
 use crate::common_state::UnborrowedPayload;
+use crate::conn::kernel::KernelConnection;
 use crate::conn::{
     ConnectionCore, MessageIter, ReceivePath, SendOutput, SendPath, TlsInputBuffer, WrittenInto,
 };
@@ -17,7 +18,7 @@ use crate::lock::Mutex;
 use crate::msgs::{AlertLevel, Delocator, Message};
 use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
-use crate::{ConnectionOutputs, Error, SideData};
+use crate::{ConnectionOutputs, Error, ExtractedSecrets, SideData};
 
 /// A post-handshake connection which has been split by direction.
 ///
@@ -32,6 +33,50 @@ pub struct SplitConnection<Side: SideData> {
     pub receive: ReceiveTraffic<Side>,
     /// Facts about the connection established during the handshake.
     pub outputs: ConnectionOutputs,
+}
+
+impl<Side: SideData> SplitConnection<Side> {
+    /// Extract secrets and a [`KernelConnection`], so they can be used when
+    /// configuring kTLS, for example.
+    ///
+    /// Should be used with care as it exposes secret key material.
+    ///
+    /// The returned [`KernelConnection`] continues to own the connection's
+    /// secrets, so it can compute new traffic secrets on key update and (for
+    /// client connections) accept session tickets.  See the [`kernel`] module
+    /// documentation for the details.
+    ///
+    /// This fails if:
+    ///
+    /// - the connection was not made with [`enable_secret_extraction`] set.
+    /// - there is any buffered TLS data to send.  Obtain it first with
+    ///   [`SendTraffic::take_data()`].
+    ///
+    /// [`kernel`]: crate::kernel
+    /// [`enable_secret_extraction`]: crate::ClientConfig::enable_secret_extraction
+    pub fn dangerous_into_kernel_connection(
+        self,
+    ) -> Result<(ExtractedSecrets, KernelConnection<Side>), Error> {
+        let Self {
+            send,
+            receive,
+            outputs,
+        } = self;
+
+        // drop our handle on the send path, so `receive` holds the only one.
+        drop(send);
+
+        let ReceiveTraffic {
+            state, recv, send, ..
+        } = receive;
+
+        ConnectionCore::<Side>::from_parts_into_kernel_connection(
+            &mut send.lock().unwrap(),
+            recv,
+            outputs,
+            state,
+        )
+    }
 }
 
 impl<Side: SideData> TryFrom<ConnectionCore<Side>> for SplitConnection<Side> {
