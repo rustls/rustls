@@ -45,7 +45,10 @@ impl Retrieved<&Tls13ClientSessionValue> {
             .retrieved_at
             .as_secs()
             .saturating_sub(self.value.common.epoch);
-        let age_millis = age_secs as u32 * 1000;
+        // nb. tickets have an upper age limit of ~7 days, well short of the 49 days here
+        let age_millis = u32::try_from(age_secs)
+            .unwrap_or(u32::MAX)
+            .saturating_mul(1000);
         age_millis.wrapping_add(self.value.age_add)
     }
 }
