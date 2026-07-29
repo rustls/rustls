@@ -197,9 +197,7 @@ impl KernelConnection<ClientSide> {
         // on a non-TLS 1.3 connection since a parsing error isn't the real issue
         // here.
         if self.protocol_version() != ProtocolVersion::TLSv1_3 {
-            return Err(Error::General(
-                "TLS 1.2 session tickets may not be sent once the handshake has completed".into(),
-            ));
+            return Err(ApiMisuse::KernelSessionTicketHandlingNotAvailableForTls12.into());
         }
 
         let nst = NewSessionTicketPayloadTls13::read_bytes(payload)?;
