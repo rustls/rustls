@@ -2792,7 +2792,9 @@ impl<'a> HandshakeMessagePayload<'a> {
 
     pub(crate) fn encoding_for_binder_signing(&self) -> Vec<u8> {
         let mut ret = self.get_encoding();
-        let ret_len = ret.len() - self.total_binder_length();
+        let ret_len = ret
+            .len()
+            .saturating_sub(self.total_binder_length());
         ret.truncate(ret_len);
         ret
     }
