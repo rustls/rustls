@@ -33,6 +33,7 @@ use crate::msgs::{
 use crate::pki_types::PrivateKeyDer;
 use crate::pki_types::pem::PemObject;
 use crate::sync::Arc;
+use crate::tls13::Tls13ProtocolSuite;
 use crate::tls13::key_schedule::{derive_traffic_iv, derive_traffic_key};
 use crate::verify::{
     HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
@@ -98,7 +99,7 @@ fn tls13_client_session_value_roundtrip() {
             },
         },
         Tls13ClientSessionInput {
-            suite: TEST_PROVIDER.tls13_cipher_suites[0],
+            suite: Tls13ProtocolSuite::Tcp(TEST_PROVIDER.tls13_cipher_suites[0]),
             peer_identity: peer_identity.clone(),
             quic_params: Some(SizedPayload::<u16, MaybeEmpty>::from(vec![
                 0xaa, 0xbb, 0xcc, 0xdd,
@@ -112,7 +113,10 @@ fn tls13_client_session_value_roundtrip() {
     session.encode(&mut encoded);
     let decoded = Tls13Session::from_slice(&encoded, &TEST_PROVIDER).unwrap();
 
-    assert_eq!(decoded.suite.common.suite, session.suite.common.suite);
+    assert_eq!(
+        decoded.suite.suite().common.suite,
+        session.suite.suite().common.suite
+    );
     assert_eq!(decoded.secret.bytes(), session.secret.bytes());
     assert_eq!(decoded.age_add, age_add);
     assert_eq!(decoded.max_early_data_size, session.max_early_data_size);

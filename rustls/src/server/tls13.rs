@@ -87,9 +87,11 @@ mod client_hello {
         HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random, ServerExtensions,
         ServerExtensionsInput, ServerHelloPayload, SessionId, SizedPayload,
     };
+    use crate::quic;
     use crate::sealed::Sealed;
     use crate::server::Tls13ServerSessionValue;
     use crate::server::hs::{ClientHelloInput, ExpectClientHello, ServerHandler, Tls13Extensions};
+    use crate::tls13::Tls13ProtocolSuite;
     use crate::tls13::key_schedule::{
         KeyScheduleEarlyServer, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
@@ -212,14 +214,18 @@ mod client_hello {
                 };
             };
 
-            let mut resuming = handle_psk_offer(
-                &input,
-                &transcript,
-                st.sni.as_ref(),
-                suite,
-                st.protocol,
-                &st.config,
-            )?;
+            let suite = match st.protocol {
+                Protocol::Tcp => Tls13ProtocolSuite::Tcp(suite),
+                Protocol::Quic(_) => Tls13ProtocolSuite::Quic(quic::Suite {
+                    inner: suite,
+                    quic: suite
+                        .quic
+                        .ok_or_else(|| Error::from(ApiMisuse::NoQuicCompatibleCipherSuites))?,
+                }),
+            };
+
+            let mut resuming =
+                handle_psk_offer(&input, &transcript, st.sni.as_ref(), suite, &st.config)?;
 
             if !input
                 .client_hello
@@ -257,7 +263,6 @@ mod client_hello {
                 &mut transcript,
                 &randoms,
                 suite,
-                st.protocol,
                 output,
                 &input.client_hello.session_id,
                 chosen_share_and_kxg,
@@ -288,7 +293,7 @@ mod client_hello {
                 doing_early_data,
             ) = emit_encrypted_extensions(
                 &mut flight,
-                suite,
+                suite.suite(),
                 output,
                 &mut ocsp_response,
                 input.client_hello,
@@ -366,7 +371,7 @@ mod client_hello {
             let hs = HandshakeState {
                 config: st.config,
                 transcript,
-                suite,
+                suite: suite.suite(),
                 alpn_protocol,
                 sni: st.sni,
                 resumption_data: st.resumption_data,
@@ -444,8 +449,7 @@ mod client_hello {
         input: &ClientHelloInput<'_>,
         transcript: &HandshakeHash,
         sni: Option<&DnsName<'_>>,
-        suite: &'static Tls13CipherSuite,
-        protocol: Protocol,
+        suite: Tls13ProtocolSuite,
         config: &ServerConfig,
     ) -> Result<Option<(usize, Tls13ServerSessionValue<'static>)>, Error> {
         let Some(psk_offer) = &input.client_hello.preshared_key_offer else {
@@ -481,14 +485,14 @@ mod client_hello {
             session.set_freshness(psk_id.obfuscated_ticket_age, now);
             if !session
                 .common
-                .can_resume(suite.common.suite, sni)
+                .can_resume(suite.suite().common.suite, sni)
             {
                 continue;
             }
 
             if !check_binder(
                 transcript,
-                &KeyScheduleEarlyServer::new(protocol, suite, session.secret.bytes())?,
+                &KeyScheduleEarlyServer::new(suite, session.secret.bytes())?,
                 input.message,
                 psk_offer.binders[i].as_ref(),
             ) {
@@ -526,8 +530,7 @@ mod client_hello {
     fn emit_server_hello(
         transcript: &mut HandshakeHash,
         randoms: &ConnectionRandoms,
-        suite: &'static Tls13CipherSuite,
-        protocol: Protocol,
+        suite: Tls13ProtocolSuite,
         output: &mut dyn Output<'_>,
         session_id: &SessionId,
         share_and_kxgroup: (&KeyShareEntry, &'static dyn SupportedKxGroup),
@@ -555,7 +558,7 @@ mod client_hello {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from(randoms.server),
                     session_id: *session_id,
-                    cipher_suite: suite.common.suite,
+                    cipher_suite: suite.suite().common.suite,
                     compression_method: Compression::Null,
                     extensions,
                 }),
@@ -570,8 +573,7 @@ mod client_hello {
 
         // Start key schedule
         let key_schedule_pre_handshake = if let Some((_, psk)) = resuming {
-            let early_key_schedule =
-                KeyScheduleEarlyServer::new(protocol, suite, psk.secret.bytes())?;
+            let early_key_schedule = KeyScheduleEarlyServer::new(suite, psk.secret.bytes())?;
             early_key_schedule.client_early_traffic_secret(
                 &client_hello_hash,
                 &*config.key_log,
@@ -592,7 +594,7 @@ mod client_hello {
 
             KeySchedulePreHandshake::from(early_key_schedule)
         } else {
-            KeySchedulePreHandshake::new(Side::Server, protocol, suite)?
+            KeySchedulePreHandshake::new(Side::Server, suite)?
         };
 
         // Do key exchange
