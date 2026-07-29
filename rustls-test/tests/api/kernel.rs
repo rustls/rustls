@@ -101,6 +101,21 @@ fn kernel_connection() {
     }
 }
 
+#[test]
+fn tls12_handle_new_session_ticket() {
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_TLS12_PROVIDER) {
+        let ((_, mut client_kernel), _) = kernel_pair(client_config, server_config);
+        assert_eq!(expect.version, ProtocolVersion::TLSv1_2);
+        assert_eq!(client_kernel.protocol_version(), ProtocolVersion::TLSv1_2);
+        assert_eq!(
+            client_kernel
+                .handle_new_session_ticket(b"")
+                .err(),
+            Some(ApiMisuse::KernelSessionTicketHandlingNotAvailableForTls12.into())
+        )
+    }
+}
+
 fn kernel_pair(
     client_config: Arc<ClientConfig>,
     server_config: Arc<ServerConfig>,

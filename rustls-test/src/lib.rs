@@ -529,21 +529,28 @@ pub struct MultiTest {
 impl MultiTest {
     pub fn new(provider: CryptoProvider) -> Self {
         let key_types = KeyType::all_for_provider(&provider).to_vec();
-        let mut providers = vec![(ProtocolVersion::TLSv1_3, Arc::new(provider.clone()))];
-        providers.push((
-            ProtocolVersion::TLSv1_3,
-            Arc::new(CryptoProvider {
-                tls12_cipher_suites: Cow::Borrowed(&[]),
-                ..provider.clone()
-            }),
-        ));
-        providers.push((
-            ProtocolVersion::TLSv1_2,
-            Arc::new(CryptoProvider {
-                tls13_cipher_suites: Cow::Borrowed(&[]),
-                ..provider
-            }),
-        ));
+        let mut providers = vec![];
+
+        if !provider.tls13_cipher_suites.is_empty() {
+            providers.push((ProtocolVersion::TLSv1_3, Arc::new(provider.clone())));
+            providers.push((
+                ProtocolVersion::TLSv1_3,
+                Arc::new(CryptoProvider {
+                    tls12_cipher_suites: Cow::Borrowed(&[]),
+                    ..provider.clone()
+                }),
+            ));
+        }
+
+        if !provider.tls12_cipher_suites.is_empty() {
+            providers.push((
+                ProtocolVersion::TLSv1_2,
+                Arc::new(CryptoProvider {
+                    tls13_cipher_suites: Cow::Borrowed(&[]),
+                    ..provider
+                }),
+            ));
+        }
 
         Self {
             providers,

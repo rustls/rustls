@@ -1679,6 +1679,11 @@ pub enum ApiMisuse {
     /// [`KernelConnection::update_tx_secret()`]: crate::conn::kernel::KernelConnection::update_tx_secret()
     KeyUpdateNotAvailableForTls12,
 
+    /// [`KernelConnection::handle_new_session_ticket()`] and associated are not available for TLS1.2 connections.
+    ///
+    /// [`KernelConnection::handle_new_session_ticket()`]: crate::conn::kernel::KernelConnection::handle_new_session_ticket()
+    KernelSessionTicketHandlingNotAvailableForTls12,
+
     /// [`ClientConnection::split()`] or [`ServerConnection::split()`] called during handshake.
     ///
     /// [`ServerConnection::split()`]: crate::server::ServerConnection::split()
