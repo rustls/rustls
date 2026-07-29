@@ -566,9 +566,13 @@ impl<Side: SideData> ConnectionCommon<Side> {
                 _ => None,
             })?;
 
+        let suite = Suite {
+            inner: suite,
+            quic: suite.quic?,
+        };
+
         Some(DirectionalKeys::new(
             suite,
-            suite.quic?,
             self.quic.early_secret.as_ref()?,
             self.quic.version,
         ))
@@ -664,8 +668,7 @@ impl QuicOutput for Quic {
         &mut self,
         client_secret: OkmBlock,
         server_secret: OkmBlock,
-        suite: &'static Tls13CipherSuite,
-        quic: &'static dyn Algorithm,
+        suite: Suite,
         side: Side,
     ) {
         self.events
@@ -674,7 +677,6 @@ impl QuicOutput for Quic {
                     client_secret,
                     server_secret,
                     suite,
-                    quic,
                     side,
                     self.version,
                 )),
@@ -685,18 +687,10 @@ impl QuicOutput for Quic {
         &mut self,
         client_secret: OkmBlock,
         server_secret: OkmBlock,
-        suite: &'static Tls13CipherSuite,
-        quic: &'static dyn Algorithm,
+        suite: Suite,
         side: Side,
     ) {
-        let mut secrets = Secrets::new(
-            client_secret,
-            server_secret,
-            suite,
-            quic,
-            side,
-            self.version,
-        );
+        let mut secrets = Secrets::new(client_secret, server_secret, suite, side, self.version);
         let keys = Keys::new(&secrets);
         secrets.update();
         self.events
@@ -720,8 +714,7 @@ pub(crate) trait QuicOutput {
         &mut self,
         client_secret: OkmBlock,
         server_secret: OkmBlock,
-        suite: &'static Tls13CipherSuite,
-        quic: &'static dyn Algorithm,
+        suite: Suite,
         side: Side,
     );
 
@@ -729,8 +722,7 @@ pub(crate) trait QuicOutput {
         &mut self,
         client_secret: OkmBlock,
         server_secret: OkmBlock,
-        suite: &'static Tls13CipherSuite,
-        quic: &'static dyn Algorithm,
+        suite: Suite,
         side: Side,
     );
 
@@ -745,8 +737,7 @@ pub struct Secrets {
     /// Secret used to encrypt packets transmitted by the server
     pub(crate) server: OkmBlock,
     /// Cipher suite used with these secrets
-    suite: &'static Tls13CipherSuite,
-    quic: &'static dyn Algorithm,
+    suite: Suite,
     side: Side,
     version: Version,
 }
@@ -755,8 +746,7 @@ impl Secrets {
     pub(crate) fn new(
         client: OkmBlock,
         server: OkmBlock,
-        suite: &'static Tls13CipherSuite,
-        quic: &'static dyn Algorithm,
+        suite: Suite,
         side: Side,
         version: Version,
     ) -> Self {
@@ -764,7 +754,6 @@ impl Secrets {
             client,
             server,
             suite,
-            quic,
             side,
             version,
         }
@@ -780,6 +769,7 @@ impl Secrets {
     pub(crate) fn update(&mut self) {
         self.client = hkdf_expand_label_block(
             self.suite
+                .inner
                 .hkdf_provider
                 .expander_for_okm(&self.client)
                 .as_ref(),
@@ -788,6 +778,7 @@ impl Secrets {
         );
         self.server = hkdf_expand_label_block(
             self.suite
+                .inner
                 .hkdf_provider
                 .expander_for_okm(&self.server)
                 .as_ref(),
@@ -814,13 +805,8 @@ pub struct DirectionalKeys {
 }
 
 impl DirectionalKeys {
-    pub(crate) fn new(
-        suite: &'static Tls13CipherSuite,
-        quic: &'static dyn Algorithm,
-        secret: &OkmBlock,
-        version: Version,
-    ) -> Self {
-        let builder = KeyBuilder::new(secret, version, quic, suite.hkdf_provider);
+    pub(crate) fn new(suite: Suite, secret: &OkmBlock, version: Version) -> Self {
+        let builder = KeyBuilder::new(secret, version, suite.quic, suite.inner.hkdf_provider);
         Self {
             header: builder.header_protection_key(),
             packet: builder.packet_key(),
@@ -1009,7 +995,12 @@ pub struct PacketKeySet {
 impl PacketKeySet {
     fn new(secrets: &Secrets) -> Self {
         let (local, remote) = secrets.local_remote();
-        let (version, alg, hkdf) = (secrets.version, secrets.quic, secrets.suite.hkdf_provider);
+        let (version, alg, hkdf) = (
+            secrets.version,
+            secrets.suite.quic,
+            secrets.suite.inner.hkdf_provider,
+        );
+
         Self {
             local: KeyBuilder::new(local, version, alg, hkdf).packet_key(),
             remote: KeyBuilder::new(remote, version, alg, hkdf).packet_key(),
@@ -1081,13 +1072,7 @@ pub struct Suite {
 impl Suite {
     /// Produce a set of initial keys given the connection ID, side and version
     pub fn keys(&self, client_dst_connection_id: &[u8], side: Side, version: Version) -> Keys {
-        Keys::initial(
-            version,
-            self.inner,
-            self.quic,
-            client_dst_connection_id,
-            side,
-        )
+        Keys::initial(version, *self, client_dst_connection_id, side)
     }
 }
 
@@ -1117,8 +1102,7 @@ impl Keys {
     /// Construct keys for use with initial packets
     pub fn initial(
         version: Version,
-        suite: &'static Tls13CipherSuite,
-        quic: &'static dyn Algorithm,
+        suite: Suite,
         client_dst_connection_id: &[u8],
         side: Side,
     ) -> Self {
@@ -1126,6 +1110,7 @@ impl Keys {
         const SERVER_LABEL: &[u8] = b"server in";
         let salt = version.initial_salt();
         let hs_secret = suite
+            .inner
             .hkdf_provider
             .extract_from_secret(Some(salt), client_dst_connection_id);
 
@@ -1133,18 +1118,18 @@ impl Keys {
             client: hkdf_expand_label_block(hs_secret.as_ref(), CLIENT_LABEL, &[]),
             server: hkdf_expand_label_block(hs_secret.as_ref(), SERVER_LABEL, &[]),
             suite,
-            quic,
             side,
             version,
         };
+
         Self::new(&secrets)
     }
 
     fn new(secrets: &Secrets) -> Self {
         let (local, remote) = secrets.local_remote();
         Self {
-            local: DirectionalKeys::new(secrets.suite, secrets.quic, local, secrets.version),
-            remote: DirectionalKeys::new(secrets.suite, secrets.quic, remote, secrets.version),
+            local: DirectionalKeys::new(secrets.suite, local, secrets.version),
+            remote: DirectionalKeys::new(secrets.suite, remote, secrets.version),
         }
     }
 }
@@ -1281,8 +1266,10 @@ mod tests {
                     0x4e, 0xb1, 0xe4, 0x38, 0xd8, 0x55,
                 ][..],
             ),
-            suite: TLS13_TEST_SUITE,
-            quic: &FakeAlgorithm,
+            suite: Suite {
+                inner: TLS13_TEST_SUITE,
+                quic: &FakeAlgorithm,
+            },
             side: Side::Client,
             version: Version::V1,
         };
