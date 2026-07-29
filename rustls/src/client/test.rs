@@ -13,11 +13,11 @@ use super::{Tls12Session, Tls13ClientSessionInput, Tls13Session};
 use crate::client::{ClientConfig, Resumption, Tls12Resumption};
 use crate::crypto::cipher::{EncodedMessage, MessageEncrypter, Payload, encode_record_header};
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
-use crate::crypto::test_provider::FakeKeyExchangeGroup;
+use crate::crypto::test_provider::{FakeKeyExchangeGroup, KEY_EXCHANGE_GROUP, TLS_TEST_SUITE};
 use crate::crypto::tls13::OkmBlock;
 use crate::crypto::{
     CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme, SingleCredential,
-    TEST_PROVIDER, tls12_only, tls13_only, tls13_suite,
+    TEST_PROVIDER, TLS13_TEST_SUITE, tls12_only, tls13_only, tls13_suite,
 };
 use crate::enums::{CertificateType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
@@ -32,6 +32,7 @@ use crate::msgs::{
 };
 use crate::pki_types::PrivateKeyDer;
 use crate::pki_types::pem::PemObject;
+use crate::suites::Suite;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::{derive_traffic_iv, derive_traffic_key};
 use crate::verify::{
@@ -288,12 +289,8 @@ fn cas_extension_in_client_hello_if_server_verifier_requests_it() {
 /// Regression test for <https://github.com/seanmonstar/reqwest/issues/2191>
 #[test]
 fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
-    let Some(provider) = x25519_provider(TEST_PROVIDER.clone()) else {
-        return;
-    };
-
     let verifier = Arc::new(ExpectSha1EcdsaVerifier::default());
-    let config = ClientConfig::builder(Arc::new(provider))
+    let config = ClientConfig::builder(Arc::new(TEST_PROVIDER))
         .dangerous()
         .with_custom_certificate_verifier(verifier.clone())
         .with_no_client_auth()
@@ -312,7 +309,7 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
             ServerHelloPayload {
                 random: Random([0u8; 32]),
                 compression_method: Compression::Null,
-                cipher_suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                cipher_suite: TLS_TEST_SUITE.suite(),
                 legacy_version: ProtocolVersion::TLSv1_2,
                 session_id: SessionId::empty(),
                 extensions: Box::new(ServerExtensions {
@@ -353,9 +350,14 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
                     params: ServerKeyExchangeParams::Ecdh(ServerEcdhParams {
                         curve_params: EcParameters {
                             curve_type: ECCurveType::NamedCurve,
-                            named_group: NamedGroup::X25519,
+                            named_group: KEY_EXCHANGE_GROUP.name(),
                         },
-                        public: SizedPayload::from(vec![0xab; 32]),
+                        public: KEY_EXCHANGE_GROUP
+                            .start()
+                            .unwrap()
+                            .pub_key()
+                            .to_vec()
+                            .into(),
                     }),
                 },
             )),
@@ -490,13 +492,9 @@ fn client_requiring_rpk_receives_server_ee(
     encrypted_extensions: EncryptedExtensions<'_>,
     provider: &CryptoProvider,
 ) {
-    let Some(provider) = x25519_provider(provider.clone()) else {
-        return;
-    };
-
     let provider = Arc::new(CryptoProvider {
         tls12_cipher_suites: Cow::default(),
-        ..provider
+        ..provider.clone()
     });
 
     let fake_server_crypto = Arc::new(FakeServerCrypto::new(provider.clone()));
@@ -521,13 +519,18 @@ fn client_requiring_rpk_receives_server_ee(
             ServerHelloPayload {
                 random: Random([0; 32]),
                 compression_method: Compression::Null,
-                cipher_suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
+                cipher_suite: TLS13_TEST_SUITE.suite(),
                 legacy_version: ProtocolVersion::TLSv1_3,
                 session_id: SessionId::empty(),
                 extensions: Box::new(ServerExtensions {
                     key_share: Some(KeyShareEntry {
-                        group: NamedGroup::X25519,
-                        payload: SizedPayload::from(vec![0xaa; 32]),
+                        group: KEY_EXCHANGE_GROUP.name(),
+                        payload: KEY_EXCHANGE_GROUP
+                            .start()
+                            .unwrap()
+                            .pub_key()
+                            .to_vec()
+                            .into(),
                     }),
                     ..ServerExtensions::default()
                 }),
@@ -669,16 +672,6 @@ fn client_key() -> PrivateKeyDer<'static> {
     .unwrap()
 }
 
-fn x25519_provider(provider: CryptoProvider) -> Option<CryptoProvider> {
-    // ensures X25519 is offered irrespective of cfg(feature = "fips"), which eases
-    // creation of fake server messages.
-    let x25519 = provider.find_kx_group(NamedGroup::X25519, ProtocolVersion::TLSv1_3)?;
-    Some(CryptoProvider {
-        kx_groups: Cow::Owned(vec![x25519]),
-        ..provider
-    })
-}
-
 #[derive(Clone, Debug)]
 struct ServerVerifierWithAuthorityNames(Arc<[DistinguishedName]>);
 
@@ -779,7 +772,7 @@ impl FakeServerCrypto {
             .get()
             .unwrap();
 
-        let cipher_suite = tls13_suite(CipherSuite::TLS13_AES_128_GCM_SHA256, &self.provider);
+        let cipher_suite = tls13_suite(TLS13_TEST_SUITE.suite(), &self.provider);
         let expander = cipher_suite
             .hkdf_provider
             .expander_for_okm(&OkmBlock::new(secret));

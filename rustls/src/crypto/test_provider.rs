@@ -81,7 +81,7 @@ pub(crate) const TLS13_TEST_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {
     quic: None,
 };
 
-const TLS_TEST_SUITE: &Tls12CipherSuite = &Tls12CipherSuite {
+pub(crate) const TLS_TEST_SUITE: &Tls12CipherSuite = &Tls12CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite(0xff12),
         hash_provider: FAKE_HASH,
@@ -292,7 +292,8 @@ impl crypto::kx::ActiveKeyExchange for ActiveKeyExchange {
     }
 }
 
-const KEY_EXCHANGE_GROUP: &dyn SupportedKxGroup = &FakeKeyExchangeGroup(NamedGroup(0xfe00));
+pub(crate) const KEY_EXCHANGE_GROUP: &dyn SupportedKxGroup =
+    &FakeKeyExchangeGroup(NamedGroup(0xfe00));
 
 #[derive(Debug)]
 pub(crate) struct FakeKeyExchangeGroup(pub(crate) NamedGroup);

@@ -16,21 +16,21 @@ use crate::crypto::kx::{
     ActiveKeyExchange, KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange,
     SupportedKxGroup,
 };
-use crate::crypto::test_provider::{FAKE_HASH, FAKE_HMAC};
+use crate::crypto::test_provider::{FAKE_HASH, FAKE_HMAC, KEY_EXCHANGE_GROUP, TLS_TEST_SUITE};
 use crate::crypto::{
     CertificateIdentity, CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme,
-    SingleCredential, TEST_PROVIDER, tls12, tls12_only,
+    SingleCredential, TEST_PROVIDER, TLS13_TEST_SUITE, tls12, tls12_only,
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible};
 use crate::msgs::{
     ClientExtensions, ClientHelloPayload, Codec, Compression, HEADER_SIZE, HandshakeMessagePayload,
     HandshakePayload, KeyShareEntry, Message, MessagePayload, Random, Reader, SessionId,
-    SizedPayload, SupportedProtocolVersions,
+    SupportedProtocolVersions,
 };
 use crate::pki_types::pem::PemObject;
 use crate::pki_types::{CertificateDer, FipsStatus, PrivateKeyDer};
-use crate::suites::CipherSuiteCommon;
+use crate::suites::{CipherSuiteCommon, Suite};
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
@@ -327,9 +327,7 @@ fn server_chooses_ffdhe_group_for_client_hello(
 
 #[test]
 fn test_server_requiring_rpk_client_rejects_x509_client() {
-    let Some(server_config) = server_config_for_rpk(TEST_PROVIDER.clone()) else {
-        return;
-    };
+    let server_config = server_config_for_rpk(TEST_PROVIDER.clone());
 
     let mut ch = minimal_client_hello();
     ch.extensions.client_certificate_types = Some(vec![CertificateType::X509]);
@@ -354,9 +352,7 @@ fn test_server_requiring_rpk_client_rejects_x509_client() {
 
 #[test]
 fn test_rpk_only_server_rejects_x509_only_client() {
-    let Some(server_config) = server_config_for_rpk(TEST_PROVIDER.clone()) else {
-        return;
-    };
+    let server_config = server_config_for_rpk(TEST_PROVIDER.clone());
 
     let mut ch = minimal_client_hello();
     ch.extensions.server_certificate_types = Some(vec![CertificateType::X509]);
@@ -380,21 +376,12 @@ fn test_rpk_only_server_rejects_x509_only_client() {
     );
 }
 
-fn server_config_for_rpk(provider: CryptoProvider) -> Option<ServerConfig> {
-    let provider = CryptoProvider {
-        kx_groups: Cow::Owned(vec![
-            provider.find_kx_group(NamedGroup::X25519, ProtocolVersion::TLSv1_2)?,
-        ]),
-        ..provider
-    };
-
+fn server_config_for_rpk(provider: CryptoProvider) -> ServerConfig {
     let credentials = SingleCredential::from(server_credentials(&provider));
-    Some(
-        ServerConfig::builder(Arc::new(provider))
-            .with_no_client_auth()
-            .with_server_credential_resolver(Arc::new(credentials))
-            .unwrap(),
-    )
+    ServerConfig::builder(Arc::new(provider))
+        .with_no_client_auth()
+        .with_server_credential_resolver(Arc::new(credentials))
+        .unwrap()
 }
 
 fn server_credentials(provider: &CryptoProvider) -> Credentials {
@@ -505,7 +492,7 @@ fn minimal_client_hello() -> ClientHelloPayload {
         client_version: ProtocolVersion::TLSv1_3,
         random: Random::from([0u8; 32]),
         session_id: SessionId::empty(),
-        cipher_suites: vec![CipherSuite(0xff13), CipherSuite(0xff12)],
+        cipher_suites: vec![TLS13_TEST_SUITE.suite(), TLS_TEST_SUITE.suite()],
         compression_methods: vec![Compression::Null],
         extensions: Box::new(ClientExtensions {
             signature_schemes: Some(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
@@ -515,8 +502,13 @@ fn minimal_client_hello() -> ClientHelloPayload {
                 tls13: true,
             }),
             key_shares: Some(vec![KeyShareEntry {
-                group: NamedGroup::from(0xfe00),
-                payload: SizedPayload::from(vec![0xab; 32]),
+                group: KEY_EXCHANGE_GROUP.name(),
+                payload: KEY_EXCHANGE_GROUP
+                    .start()
+                    .unwrap()
+                    .pub_key()
+                    .to_vec()
+                    .into(),
             }]),
             extended_master_secret_request: Some(()),
             ..ClientExtensions::default()
