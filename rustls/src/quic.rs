@@ -1091,6 +1091,19 @@ impl Suite {
     }
 }
 
+impl TryFrom<&'static Tls13CipherSuite> for Suite {
+    type Error = ApiMisuse;
+
+    fn try_from(suite: &'static Tls13CipherSuite) -> Result<Self, Self::Error> {
+        Ok(Self {
+            inner: suite,
+            quic: suite
+                .quic
+                .ok_or(ApiMisuse::NoQuicCompatibleCipherSuites)?,
+        })
+    }
+}
+
 /// Complete set of keys used to communicate with the peer
 #[expect(clippy::exhaustive_structs)]
 pub struct Keys {
