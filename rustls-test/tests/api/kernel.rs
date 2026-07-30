@@ -6,13 +6,15 @@
 
 use std::sync::Arc;
 
-use rustls::client::ClientSide;
+use rustls::client::{ClientSide, Resumption};
 use rustls::enums::ProtocolVersion;
-use rustls::error::ApiMisuse;
+use rustls::error::{ApiMisuse, InvalidMessage};
 use rustls::kernel::KernelConnection;
 use rustls::server::ServerSide;
-use rustls::{ClientConfig, ConnectionTrafficSecrets, ExtractedSecrets, ServerConfig, VecInput};
-use rustls_test::{MultiTest, do_handshake, make_pair_for_configs};
+use rustls::{
+    ClientConfig, ConnectionTrafficSecrets, Error, ExtractedSecrets, ServerConfig, VecInput,
+};
+use rustls_test::{ClientStorage, ClientStorageOp, MultiTest, do_handshake, make_pair_for_configs};
 
 use super::provider;
 
@@ -113,6 +115,58 @@ fn tls12_handle_new_session_ticket() {
                 .err(),
             Some(ApiMisuse::KernelSessionTicketHandlingNotAvailableForTls12.into())
         )
+    }
+}
+
+#[test]
+fn tls13_handle_new_session_ticket() {
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_TLS13_PROVIDER) {
+        let storage = Arc::new(ClientStorage::new());
+
+        let mut client_config = Arc::unwrap_or_clone(client_config);
+        client_config.resumption = Resumption::store(storage.clone());
+        let client_config = Arc::new(client_config);
+
+        let ((_, mut client_kernel), _) = kernel_pair(client_config, server_config);
+
+        assert_eq!(expect.version, ProtocolVersion::TLSv1_3);
+        assert_eq!(client_kernel.protocol_version(), ProtocolVersion::TLSv1_3);
+
+        // malformed tickets are rejected
+        assert!(matches!(
+            client_kernel
+                .handle_new_session_ticket(b"")
+                .err(),
+            Some(Error::InvalidMessage(InvalidMessage::MissingData(_)))
+        ));
+        assert!(matches!(
+            client_kernel
+                .handle_new_session_ticket(
+                    b"\x01\x02\x03\x04\
+                      \xf1\xf2\xf3\xf4\
+                      \x03\x6e\x6e\x6e\
+                      \x00\x02\x74\x74\
+                      \x00\x00\xee"
+                )
+                .err(),
+            Some(Error::InvalidMessage(InvalidMessage::TrailingData(_)))
+        ));
+
+        // valid ticket is stored
+        storage.ops_and_reset();
+        client_kernel
+            .handle_new_session_ticket(
+                b"\x01\x02\x03\x04\
+                  \xf1\xf2\xf3\xf4\
+                  \x03\x6e\x6e\x6e\
+                  \x00\x02\x74\x74\
+                  \x00\x00",
+            )
+            .unwrap();
+        assert!(matches!(
+            storage.ops_and_reset()[..],
+            [ClientStorageOp::InsertTls13Ticket(_)]
+        ));
     }
 }
 
