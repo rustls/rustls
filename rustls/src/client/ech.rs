@@ -715,7 +715,7 @@ impl EchState {
         // Construct the inner hello message that will be used for the transcript.
         let inner_hello_msg = Message {
             version: match retryreq {
-                // <https://datatracker.ietf.org/doc/html/rfc8446#section-5.1>:
+                // <https://datatracker.ietf.org/doc/html/rfc9846#section-5.1>:
                 // "This value MUST be set to 0x0303 for all records generated
                 //  by a TLS 1.3 implementation ..."
                 Some(_) => ProtocolVersion::TLSv1_2,

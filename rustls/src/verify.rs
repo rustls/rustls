@@ -31,7 +31,7 @@ pub trait ServerVerifier: Debug + Send + Sync {
     /// the implementer to handle invalid data. It is recommended that the implementer returns
     /// [`Error::InvalidCertificate`] containing [`CertificateError::BadEncoding`] when these cases are encountered.
     ///
-    /// [Certificate]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.4.2
+    /// [Certificate]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.5.1
     /// [`CertificateError::BadEncoding`]: crate::error::CertificateError::BadEncoding
     fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error>;
 
@@ -93,7 +93,7 @@ pub trait ServerVerifier: Debug + Send + Sync {
     /// If specified, will be sent as the [`certificate_authorities`] extension in ClientHello.
     /// Note that this is only applicable to TLS 1.3.
     ///
-    /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
+    /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.4
     fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
         None
     }
@@ -197,8 +197,8 @@ pub trait ClientVerifier: Debug + Send + Sync {
     ///
     /// [subjects]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6
     /// [RFC 5280 A.1]: https://www.rfc-editor.org/rfc/rfc5280#appendix-A.1
-    /// [`CertificateRequest`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.3.2
-    /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
+    /// [`CertificateRequest`]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.4.2
+    /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.4
     fn root_hint_subjects(&self) -> Arc<[DistinguishedName]>;
 
     /// Return `true` to require a client certificate and `false` to make
@@ -384,7 +384,7 @@ impl PartialEq for DistinguishedName {
     }
 }
 
-/// RFC 8446: `DistinguishedName authorities<3..2^16-1>;` however,
+/// RFC 9846: `DistinguishedName authorities<3..2^16-1>;` however,
 /// RFC 5246: `DistinguishedName certificate_authorities<0..2^16-1>;`
 impl TlsListElement for DistinguishedName {
     const SIZE_LEN: ListLength = ListLength::U16;

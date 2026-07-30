@@ -826,7 +826,7 @@ impl KeySchedule {
 
     /// Input the empty secret.
     ///
-    /// RFC 8446: "If a given secret is not available, then the
+    /// RFC 9846: "If a given secret is not available, then the
     /// 0-value consisting of a string of Hash.length bytes set
     /// to zeros is used."
     fn input_empty(&mut self) {
@@ -955,7 +955,7 @@ impl KeyScheduleSuite {
     /// Sign the finished message consisting of `hs_hash` using a current
     /// traffic secret.
     ///
-    /// See RFC 8446 section 4.4.4.
+    /// See RFC 9846 section 4.5.3.
     fn sign_finish(&self, base_key: &OkmBlock, hs_hash: &hash::Output) -> hmac::PublicTag {
         self.sign_verify_data(base_key, hs_hash)
     }
@@ -963,7 +963,7 @@ impl KeyScheduleSuite {
     /// Sign the finished message consisting of `hs_hash` using the key material
     /// `base_key`.
     ///
-    /// See RFC 8446 section 4.4.4.
+    /// See RFC 9846 section 4.5.3.
     fn sign_verify_data(&self, base_key: &OkmBlock, hs_hash: &hash::Output) -> hmac::PublicTag {
         let suite = self.state.suite();
         let expander = suite
@@ -1031,7 +1031,7 @@ impl KeyScheduleSuite {
 
 /// [HKDF-Expand-Label] where the output is an AEAD key.
 ///
-/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc8446#section-7.1>
+/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc9846#section-7.1>
 pub(crate) fn derive_traffic_key(
     expander: &dyn HkdfExpander,
     aead_alg: &dyn Tls13AeadAlgorithm,
@@ -1041,7 +1041,7 @@ pub(crate) fn derive_traffic_key(
 
 /// [HKDF-Expand-Label] where the output is an IV with a specified length.
 ///
-/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc8446#section-7.1>
+/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc9846#section-7.1>
 pub(crate) fn derive_traffic_iv(expander: &dyn HkdfExpander, iv_len: usize) -> Iv {
     hkdf_expand_label_iv(expander, b"iv", &[], iv_len)
 }
@@ -1049,7 +1049,7 @@ pub(crate) fn derive_traffic_iv(expander: &dyn HkdfExpander, iv_len: usize) -> I
 /// [HKDF-Expand-Label] where the output length is a compile-time constant, and therefore
 /// it is infallible.
 ///
-/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc8446#section-7.1>
+/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc9846#section-7.1>
 pub(crate) fn hkdf_expand_label<T: From<[u8; N]>, const N: usize>(
     expander: &dyn HkdfExpander,
     label: &[u8],

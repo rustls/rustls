@@ -459,7 +459,7 @@ mod client_hello {
         // "A client MUST provide a "psk_key_exchange_modes" extension if it
         //  offers a "pre_shared_key" extension. If clients offer
         //  "pre_shared_key" without a "psk_key_exchange_modes" extension,
-        //  servers MUST abort the handshake." - RFC 8446 4.2.9
+        //  servers MUST abort the handshake." - RFC 9846 section 4.3.9
         if input
             .client_hello
             .preshared_key_modes
@@ -690,7 +690,7 @@ mod client_hello {
          *  - The selected cipher suite
          *  - The selected ALPN [RFC 7301] protocol, if any"
          *
-         * (RFC 8446, 4.2.10) */
+         * (RFC 9846, section 4.3.10) */
         let early_data_possible = early_data_requested
             && resume.is_fresh()
             && resume.common.cipher_suite == suite.common.suite
@@ -891,7 +891,7 @@ impl ExpectAndSkipRejectedEarlyData {
         /* "The server then ignores early data by skipping all records with an external
          *  content type of "application_data" (indicating that they are encrypted),
          *  up to the configured max_early_data_size."
-         * (RFC 8446, 4.2.10) */
+         * (RFC 9846, section 4.3.10) */
         if let MessagePayload::ApplicationData(skip_data) = &input.message.payload {
             if skip_data.bytes().len() <= self.skip_data_left {
                 self.skip_data_left -= skip_data.bytes().len();
@@ -1397,7 +1397,7 @@ impl ExpectFinished {
             if ticketer.is_none() {
                 payload.extensions.max_early_data_size = Some(config.max_early_data_size);
             } else {
-                // We implement RFC 8446 section 8.1: by enforcing that 0-RTT is
+                // We implement RFC 9846 section 8.1: by enforcing that 0-RTT is
                 // only possible if using stateful resumption
                 warn!("early_data with stateless resumption is not allowed");
             }

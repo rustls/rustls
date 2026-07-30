@@ -324,7 +324,7 @@ pub const NONCE_LEN: usize = 12;
 
 /// Returns a TLS1.3 `additional_data` encoding.
 ///
-/// See RFC 8446 s5.2 for the `additional_data` definition.
+/// See RFC 9846 s5.2 for the `additional_data` definition.
 #[inline]
 pub fn make_tls13_aad(payload_len: usize) -> [u8; 5] {
     let version = ProtocolVersion::TLSv1_2.to_array();

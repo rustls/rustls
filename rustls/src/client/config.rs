@@ -102,7 +102,7 @@ pub struct ClientConfig {
     /// Setting this value to a little less than the TCP MSS may improve latency
     /// for stream-y workloads.
     ///
-    /// [TLS maximum]: https://datatracker.ietf.org/doc/html/rfc8446#section-5.1
+    /// [TLS maximum]: https://datatracker.ietf.org/doc/html/rfc9846#section-5.1
     pub max_fragment_size: Option<usize>,
 
     /// Whether to send the Server Name Indication (SNI) extension

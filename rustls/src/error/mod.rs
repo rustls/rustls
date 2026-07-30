@@ -591,7 +591,7 @@ impl From<&CertificateError> for AlertDescription {
             | UnhandledCriticalExtension
             | NotValidForName
             | NotValidForNameContext { .. } => Self::BadCertificate,
-            // RFC 5246/RFC 8446
+            // RFC 5246/RFC 9846
             // certificate_expired
             //  A certificate has expired or **is not currently valid**.
             Expired | ExpiredContext { .. } | NotValidYet | NotValidYetContext { .. } => {
@@ -610,7 +610,7 @@ impl From<&CertificateError> for AlertDescription {
             | UnsupportedSignatureAlgorithmForPublicKey { .. } => Self::DecryptError,
             InvalidPurpose | InvalidPurposeContext { .. } => Self::UnsupportedCertificate,
             ApplicationVerificationFailure => Self::AccessDenied,
-            // RFC 5246/RFC 8446
+            // RFC 5246/RFC 9846
             // certificate_unknown
             //  Some other (unspecified) issue arose in processing the
             //  certificate, rendering it unacceptable.
