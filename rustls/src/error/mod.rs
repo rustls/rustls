@@ -175,6 +175,7 @@ impl TryFrom<&Error> for AlertDescription {
             Error::PeerIncompatible(e) => Self::from(*e),
             Error::PeerSentOversizedRecord => Self::RecordOverflow,
             Error::RejectedEch(_) => Self::EncryptedClientHelloRequired,
+            Error::General(_) => Self::GeneralError,
 
             _ => return Err(()),
         })
@@ -916,6 +917,12 @@ enum_builder! {
         /// <https://datatracker.ietf.org/doc/html/rfc9846#section-6.2-4.48.1>
         CertificateRequired => 0x74,
 
+        /// An error condition in cases when either no more specific error is available
+        /// or the sender wishes to conceal the specific error code.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc9846#section-6.2-4.49>
+        GeneralError => 0x75,
+
         /// A client ALPN extension advertises only protocols that the server does not support.
         ///
         /// <https://datatracker.ietf.org/doc/html/rfc9846#section-6.2-4.52.1>
@@ -964,6 +971,7 @@ impl fmt::Display for AlertDescription {
             AlertDescriptionName::UnsupportedExtension => {
                 write!(f, "rejected an unsolicited extension")
             }
+            AlertDescriptionName::GeneralError => write!(f, "experienced a general error"),
 
             // these are deprecated by TLS1.3 and should be very rare (but possible
             // with TLS1.2 or earlier peers)
