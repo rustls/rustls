@@ -254,7 +254,7 @@
     "TLS-TLS12-AES_128_GCM_SHA256-server": ":INCOMPATIBLE:",
     "TLS-TLS12-AES_256_GCM_SHA384-server": ":INCOMPATIBLE:",
     "TLS-TLS12-CHACHA20_POLY1305_SHA256-server": ":INCOMPATIBLE:",
-    "TLS13-HRR-InvalidCompressionMethod": ":BAD_HANDSHAKE_MSG:",
+    "TLS13-HRR-InvalidCompressionMethod": ":UNSUPPORTED_COMPRESSION:",
     "TLS13-InvalidCompressionMethod": ":UNSUPPORTED_COMPRESSION_ALGORITHM:",
     "TLS13-WrongOuterRecord-TLS": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
     "TooManyChangeCipherSpec-Client-TLS13": ":ILLEGAL_MIDDLEBOX_CHANGE_CIPHER_SPEC:",
@@ -306,7 +306,8 @@
     "GarbageCertificate-Client-TLS13": "remote error: bad certificate",
     "GarbageCertificate-Server-TLS12": "remote error: bad certificate",
     "GarbageCertificate-Server-TLS13": "remote error: bad certificate",
-    "SkipEarlyData-SecondClientHelloEarlyData-TLS13": "remote error: illegal parameter"
+    "SkipEarlyData-SecondClientHelloEarlyData-TLS13": "remote error: illegal parameter",
+    "TLS13-HRR-InvalidCompressionMethod": "remote error: illegal parameter"
   },
   "HalfRTTTickets": 0
 }

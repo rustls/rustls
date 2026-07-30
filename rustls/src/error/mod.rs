@@ -1140,6 +1140,7 @@ impl From<InvalidMessage> for AlertDescription {
             InvalidMessage::PreSharedKeyIsNotFinalExtension => Self::IllegalParameter,
             InvalidMessage::DuplicateExtension(_) => Self::IllegalParameter,
             InvalidMessage::MisplacedExtension(_) => Self::IllegalParameter,
+            InvalidMessage::UnsupportedCompression => Self::IllegalParameter,
             InvalidMessage::UnknownHelloRetryRequestExtension => Self::UnsupportedExtension,
             InvalidMessage::CertificatePayloadTooLarge => Self::BadCertificate,
             _ => Self::DecodeError,
