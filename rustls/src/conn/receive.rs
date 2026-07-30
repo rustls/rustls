@@ -8,7 +8,8 @@ use super::send::{SendOutput, SendPath};
 use super::split::SendAdapter;
 use crate::SideData;
 use crate::common_state::{
-    ConnectionOutput, Event, Output, OutputEvent, Side, UnborrowedPayload, maybe_send_fatal_alert,
+    ConnectionOutput, Event, Output, OutputEvent, Protocol, Side, UnborrowedPayload,
+    maybe_send_fatal_alert,
 };
 use crate::conn::private::SideOutput;
 use crate::conn::{ConnectionCommon, StateMachine};
@@ -18,8 +19,8 @@ use crate::crypto::cipher::{
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::msgs::{
-    AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, Delocator,
-    HandshakeAlignedProof, Locator, Message, MessagePayload,
+    AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, Delocator, Epoch,
+    HandshakeAlignedProof, Locator, Message, MessagePayload, U48,
 };
 use crate::quic::QuicOutput;
 use crate::tracing::{trace, warn};
@@ -206,6 +207,7 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
 
 pub(crate) struct ReceivePath {
     side: Side,
+    protocol: Protocol,
     pub(crate) decrypt_state: DecryptionState,
     pub(crate) may_receive_application_data: bool,
     /// If the peer has signaled end of stream.
@@ -222,10 +224,11 @@ pub(crate) struct ReceivePath {
 }
 
 impl ReceivePath {
-    pub(crate) fn new(side: Side) -> Self {
+    pub(crate) fn new(side: Side, protocol: Protocol) -> Self {
         Self {
             side,
-            decrypt_state: DecryptionState::new(),
+            protocol,
+            decrypt_state: DecryptionState::new(side),
             may_receive_application_data: false,
             has_received_close_notify: false,
             temper_counters: TemperCounters::default(),
@@ -256,9 +259,16 @@ impl ReceivePath {
                 }));
             }
 
-            let (message, bounds) = loop {
+            let (message, bounds, epoch, record_seq) = loop {
                 match self.deframe_decrypted(buffer, &locator)? {
-                    DeframeResult::Decrypted(decrypted, bounds) => break (decrypted, bounds),
+                    DeframeResult::Decrypted {
+                        decrypted: plaintext,
+                        bounds,
+                        epoch,
+                        record_seq,
+                    } => {
+                        break (plaintext, bounds, epoch, record_seq);
+                    }
                     DeframeResult::DecryptionFailed => continue,
                     DeframeResult::None => return Ok(None),
                 }
@@ -276,6 +286,16 @@ impl ReceivePath {
                 // records, there MUST NOT be any other records between them."
                 // https://www.rfc-editor.org/rfc/rfc9846#section-5.1
                 return Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
+            }
+
+            if self
+                .negotiated_version()
+                .is_datagram_tls()
+            {
+                self.decrypt_state
+                    .anti_replay()
+                    .observe(record_seq)
+                    .map_err(|e| Error::DtlsRecordAntiReplay(e))?;
             }
 
             match message.payload.len() {
@@ -311,9 +331,15 @@ impl ReceivePath {
             }
 
             let message = unborrowed.reborrow(&Delocator::new(buffer));
-            self.deframer
-                .input_message(message.version.version(), bounds, buffer);
-            self.deframer.coalesce(buffer)?;
+            if self.protocol.is_dtls() {
+                self.deframer
+                    .input_message_dtls(message, bounds)?;
+                self.deframer.coalesce_dtls(buffer);
+            } else {
+                self.deframer
+                    .input_message(message.version.version(), bounds, buffer);
+                self.deframer.coalesce(buffer)?;
+            }
         }
     }
 
@@ -322,11 +348,27 @@ impl ReceivePath {
         buffer: &'b mut [u8],
         locator: &Locator,
     ) -> Result<DeframeResult<'b>, Error> {
-        let (message, bounds) = match self.deframer.deframe(buffer) {
-            Some(Ok(Deframed { message, bounds })) => (message, bounds),
+        std::println!(
+            "{:?} deframing with epoch {:?} read seq {}",
+            self.side,
+            self.decrypt_state.epoch(),
+            self.decrypt_state.read_seq()
+        );
+        let (message, bounds, epoch, record_seq) = match self.deframer.deframe(
+            buffer,
+            self.decrypt_state.epoch(),
+            self.decrypt_state.read_seq(),
+        ) {
+            Some(Ok(Deframed {
+                message,
+                bounds,
+                epoch,
+                record_seq,
+            })) => (message, bounds, epoch, record_seq),
             Some(Err(err)) => return Err(err),
             None => return Ok(DeframeResult::None),
         };
+        std::println!("{:?} deframed from wire: {record_seq}", self.side);
 
         let allowed_plaintext = match message.typ {
             // CCS messages are always plaintext.
@@ -338,7 +380,7 @@ impl ReceivePath {
             //   expect any plaintext.
             // * The payload size is indicative of a plaintext alert message.
             ContentType::Alert
-                if matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+                if self.negotiated_version() == ProtocolVersion::TLSv1_3
                     && !self.decrypt_state.has_decrypted()
                     && message.payload.len() <= 2 =>
             {
@@ -349,23 +391,30 @@ impl ReceivePath {
         };
 
         if allowed_plaintext && !self.deframer.is_active() {
-            return Ok(DeframeResult::Decrypted(
-                Decrypted {
+            return Ok(DeframeResult::Decrypted {
+                decrypted: Decrypted {
                     plaintext: message.into_plain_message(),
                     want_close_before_decrypt: false,
                 },
                 bounds,
-            ));
+                epoch,
+                record_seq,
+            });
         }
 
         match self
             .decrypt_state
-            .decrypt_incoming(message)?
+            .decrypt_incoming(message, record_seq)?
         {
             Some(decrypted) => {
                 // After decryption, the payload is shorter
                 let bounds = locator.locate(decrypted.plaintext.payload);
-                Ok(DeframeResult::Decrypted(decrypted, bounds))
+                Ok(DeframeResult::Decrypted {
+                    decrypted,
+                    bounds,
+                    epoch,
+                    record_seq,
+                })
             }
 
             // failed decryption during trial decryption is not allowed to be
@@ -424,7 +473,7 @@ impl ReceivePath {
 
     fn drop_tls13_ccs(&mut self, msg: &EncodedMessage<&'_ [u8]>) -> Result<bool, Error> {
         if self.may_receive_application_data
-            || !matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+            || self.negotiated_version() != ProtocolVersion::TLSv1_3
         {
             return Ok(false);
         }
@@ -448,7 +497,7 @@ impl ReceivePath {
         send: &mut dyn SendOutput,
     ) -> Result<bool, Error> {
         if !self.may_receive_application_data
-            || matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+            || self.negotiated_version() == ProtocolVersion::TLSv1_3
         {
             return Ok(false);
         }
@@ -488,7 +537,7 @@ impl ReceivePath {
         if alert.level == AlertLevel::Warning {
             self.temper_counters
                 .received_warning_alert()?;
-            if matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+            if self.negotiated_version() == ProtocolVersion::TLSv1_3
                 && alert.description != AlertDescription::UserCanceled
             {
                 return Err(PeerMisbehaved::IllegalWarningAlert(alert.description).into());
@@ -505,10 +554,28 @@ impl ReceivePath {
 
         Err(err)
     }
+
+    pub(crate) fn negotiated_version(&self) -> ProtocolVersion {
+        if let Some(version) = self.negotiated_version {
+            version
+        }
+        // If the negotiated version has not been set yet, then we are early in the handshake and
+        // will behave as though doing (D)TLS 1.2 for backward compatibility
+        else if self.protocol.is_dtls() {
+            ProtocolVersion::DTLSv1_2
+        } else {
+            ProtocolVersion::TLSv1_2
+        }
+    }
 }
 
 enum DeframeResult<'b> {
-    Decrypted(Decrypted<'b>, Range<usize>),
+    Decrypted {
+        decrypted: Decrypted<'b>,
+        bounds: Range<usize>,
+        epoch: Epoch,
+        record_seq: u64,
+    },
     DecryptionFailed,
     None,
 }

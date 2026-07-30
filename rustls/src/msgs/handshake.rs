@@ -138,6 +138,15 @@ impl AsRef<[u8]> for SessionId {
     }
 }
 
+impl From<[u8; 32]> for SessionId {
+    fn from(value: [u8; 32]) -> Self {
+        Self {
+            data: value,
+            len: 32,
+        }
+    }
+}
+
 impl fmt::Debug for SessionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         hex(f, &self.data[..self.len])
@@ -283,6 +292,8 @@ impl TlsListElement for KeyShareEntry {
 pub(crate) struct SupportedProtocolVersions {
     pub(crate) tls13: bool,
     pub(crate) tls12: bool,
+    pub(crate) dtls13: bool,
+    pub(crate) dtls12: bool,
 }
 
 impl SupportedProtocolVersions {
@@ -292,6 +303,12 @@ impl SupportedProtocolVersions {
             return true;
         }
         if self.tls12 && filter(ProtocolVersion::TLSv1_2) {
+            return true;
+        }
+        if self.dtls13 && filter(ProtocolVersion::DTLSv1_3) {
+            return true;
+        }
+        if self.dtls12 && filter(ProtocolVersion::DTLSv1_2) {
             return true;
         }
         false
@@ -311,21 +328,36 @@ impl Codec<'_> for SupportedProtocolVersions {
         if self.tls12 {
             ProtocolVersion::TLSv1_2.encode(inner.buf);
         }
+        if self.dtls13 {
+            ProtocolVersion::DTLSv1_3.encode(inner.buf);
+        }
+        if self.dtls12 {
+            ProtocolVersion::DTLSv1_2.encode(inner.buf);
+        }
     }
 
     fn read(reader: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let mut tls12 = false;
         let mut tls13 = false;
+        let mut dtls12 = false;
+        let mut dtls13 = false;
 
         for pv in TlsListIter::<ProtocolVersion>::new(reader)? {
             match pv? {
                 ProtocolVersion::TLSv1_3 => tls13 = true,
                 ProtocolVersion::TLSv1_2 => tls12 = true,
+                ProtocolVersion::DTLSv1_3 => dtls13 = true,
+                ProtocolVersion::DTLSv1_2 => dtls12 = true,
                 _ => continue,
             };
         }
 
-        Ok(Self { tls13, tls12 })
+        Ok(Self {
+            tls13,
+            tls12,
+            dtls13,
+            dtls12,
+        })
     }
 }
 

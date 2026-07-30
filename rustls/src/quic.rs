@@ -736,7 +736,7 @@ impl Quic {
         debug_assert!(
             matches!(
                 m.payload,
-                MessagePayload::Handshake { .. } | MessagePayload::HandshakeFlight(_)
+                MessagePayload::Handshake { .. } | MessagePayload::HandshakeFlight { .. }
             ),
             "QUIC uses TLS for the cryptographic handshake only"
         );

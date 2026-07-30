@@ -583,7 +583,7 @@ impl ConnectionCommon<ServerSide> {
         extra_exts: ServerExtensionsInput,
         protocol: Protocol,
     ) -> Result<Self, Error> {
-        let mut common = CommonState::new(Side::Server, config.fips());
+        let mut common = CommonState::new(Side::Server, config.fips(), protocol);
         common
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
@@ -604,7 +604,7 @@ impl ConnectionCommon<ServerSide> {
         Self::new(
             ReadClientHello::new(protocol).into(),
             ServerConnectionData::default(),
-            CommonState::new(Side::Server, FipsStatus::Unvalidated),
+            CommonState::new(Side::Server, FipsStatus::Unvalidated, protocol),
         )
     }
 }

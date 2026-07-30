@@ -776,9 +776,10 @@ impl EchState {
                 // (retryreq == None means we're in the "initial ClientHello" case)
                 None => EncodableVersion::InitialClientHello(Protocol::Tcp),
             },
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::ClientHello(inner_hello),
-            )),
+            payload: MessagePayload::handshake(
+                HandshakeMessagePayload(HandshakePayload::ClientHello(inner_hello)),
+                0.into(),
+            ),
         };
 
         // Update the inner transcript buffer with the inner hello message.
@@ -809,6 +810,7 @@ impl EchState {
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(
                     server_hello.clone(),
                 )),
+                seq: 0.into(),
             },
         }
     }
@@ -827,6 +829,7 @@ impl EchState {
             payload: MessagePayload::Handshake {
                 encoded: Payload::new(hmp_encoded),
                 parsed: hmp,
+                seq: 0.into(),
             },
         }
     }
@@ -888,9 +891,10 @@ mod tests {
         };
         let message = Message {
             version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::ServerHello(server_hello.clone()),
-            )),
+            payload: MessagePayload::handshake(
+                HandshakeMessagePayload(HandshakePayload::ServerHello(server_hello.clone())),
+                0.into(),
+            ),
         };
         let Message {
             payload:
@@ -1059,8 +1063,8 @@ mod tests {
         // a HelloRetryRequest without `encrypted_client_hello` rejects our ECH offer
         let hrr = Message {
             version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::HelloRetryRequest(HelloRetryRequest {
+            payload: MessagePayload::handshake(
+                HandshakeMessagePayload(HandshakePayload::HelloRetryRequest(HelloRetryRequest {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     session_id: first.session_id,
                     cipher_suite: first.cipher_suites[0],
@@ -1069,17 +1073,17 @@ mod tests {
                         supported_versions: Some(ProtocolVersion::TLSv1_3),
                         ..HelloRetryRequestExtensions::default()
                     },
-                }),
-            )),
+                })),
+                66.into(),
+            ),
         };
         let mut input = VecInput::default();
         input
             .read(&mut hrr.into_wire_bytes().as_slice())
             .unwrap();
         let mut retry_flight = Vec::new();
-        conn.process_new_packets(&mut input, &mut retry_flight)
-            .handle_all(&mut Vec::new())
-            .unwrap();
+        let h = conn.process_new_packets(&mut input, &mut retry_flight);
+        h.handle_all(&mut Vec::new()).unwrap();
 
         // we continue with a second outer hello: it must conceal the ticket too, and
         // must re-offer the first hello's GREASE identity as a genuine PSK offer would

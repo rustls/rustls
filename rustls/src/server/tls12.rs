@@ -25,8 +25,9 @@ use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbe
 use crate::hash_hs::HandshakeHash;
 use crate::msgs::{
     CertificateChain, ChangeCipherSpecPayload, ClientKeyExchangeParams, Codec,
-    HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload, Message, MessagePayload,
-    NewSessionTicketPayload, NewSessionTicketPayloadTls13, Reader, SessionId,
+    EncrypterDecrypterPurpose, HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload,
+    HandshakeSequenceNumber, Message, MessagePayload, NewSessionTicketPayload,
+    NewSessionTicketPayloadTls13, Reader, SessionId,
 };
 use crate::server::hs::{VerifyClientIdentity, VerifyClientIdentityInternal};
 use crate::suites::PartiallyExtractedSecrets;
@@ -72,8 +73,8 @@ mod client_hello {
     use crate::crypto::{SelectedCredential, Signer};
     use crate::msgs::{
         CertificateRequestPayload, CertificateStatus, ClientCertificateType, ClientHelloPayload,
-        ClientSessionTicket, Compression, Random, ServerExtensionsInput, ServerHelloPayload,
-        ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
+        ClientSessionTicket, Compression, EncrypterDecrypterPurpose, Random, ServerExtensionsInput,
+        ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
     };
     use crate::sealed::Sealed;
     use crate::server::hs::{ClientHelloInput, ExpectClientHello, ServerHandler, Tls12Extensions};
@@ -100,8 +101,8 @@ mod client_hello {
                 .transcript
                 .start(suite.common.hash_provider, version)?;
 
-            // -- TLS1.2 only from hereon in --
-            transcript.add_message(input.message);
+            // -- (D)TLS1.2 only from hereon in --
+            transcript.add_message(&input.message);
 
             if input
                 .client_hello
@@ -176,8 +177,7 @@ mod client_hello {
 
             output.output(OutputEvent::HandshakeKind(HandshakeKind::Full));
 
-            let mut flight = HandshakeFlightTls12::new(&mut transcript);
-
+            let mut flight = HandshakeFlightTls12::new(&mut transcript, st.protocol.is_dtls());
             let Tls12Extensions {
                 alpn_protocol,
                 send_ticket,
@@ -195,14 +195,23 @@ mod client_hello {
                 &randoms,
                 st.extra_exts,
             )?;
-            emit_certificate(&mut flight, &credentials);
+            emit_certificate(&mut flight, &credentials, output.outbound_handshake_seq());
             match ocsp_response {
                 None | Some([]) => {}
-                Some(response) => emit_cert_status(&mut flight, response),
+                Some(response) => {
+                    emit_cert_status(&mut flight, response, output.outbound_handshake_seq());
+                }
             }
-            let server_kx = emit_server_kx(&mut flight, kx_group, credentials.signer, &randoms)?;
-            let doing_client_auth = emit_certificate_req(&mut flight, &st.config)?;
-            emit_server_hello_done(&mut flight);
+            let server_kx = emit_server_kx(
+                &mut flight,
+                kx_group,
+                credentials.signer,
+                &randoms,
+                output.outbound_handshake_seq(),
+            )?;
+            let doing_client_auth =
+                emit_certificate_req(&mut flight, &st.config, output.outbound_handshake_seq())?;
+            emit_server_hello_done(&mut flight, output.outbound_handshake_seq());
 
             flight.finish(output);
             let hs = HandshakeState {
@@ -323,7 +332,8 @@ mod client_hello {
         }
 
         let session_id = input.client_hello.session_id;
-        let mut flight = HandshakeFlightTls12::new(&mut transcript);
+
+        let mut flight = HandshakeFlightTls12::new(&mut transcript, version.is_datagram_tls());
         let Tls12Extensions {
             alpn_protocol,
             send_ticket,
@@ -400,6 +410,7 @@ mod client_hello {
                 .suite()
                 .common
                 .confidentiality_limit,
+            EncrypterDecrypterPurpose::ApplicationData,
         );
         emit_finished(version, &secrets, &mut hs.transcript, output, &proof);
 
@@ -446,20 +457,34 @@ mod client_hello {
         }));
 
         trace!("sending server hello {sh:?}");
-        flight.add(sh);
+        flight.add(sh, output.outbound_handshake_seq());
         Ok(out)
     }
 
-    fn emit_certificate(flight: &mut HandshakeFlightTls12<'_>, credentials: &SelectedCredential) {
-        flight.add(HandshakeMessagePayload(HandshakePayload::Certificate(
-            CertificateChain::from_signer(credentials),
-        )));
+    fn emit_certificate(
+        flight: &mut HandshakeFlightTls12<'_>,
+        credentials: &SelectedCredential,
+        seq: HandshakeSequenceNumber,
+    ) {
+        flight.add(
+            HandshakeMessagePayload(HandshakePayload::Certificate(
+                CertificateChain::from_signer(credentials),
+            )),
+            seq,
+        );
     }
 
-    fn emit_cert_status(flight: &mut HandshakeFlightTls12<'_>, ocsp: &[u8]) {
-        flight.add(HandshakeMessagePayload(
-            HandshakePayload::CertificateStatus(CertificateStatus::new(ocsp)),
-        ));
+    fn emit_cert_status(
+        flight: &mut HandshakeFlightTls12<'_>,
+        ocsp: &[u8],
+        seq: HandshakeSequenceNumber,
+    ) {
+        flight.add(
+            HandshakeMessagePayload(HandshakePayload::CertificateStatus(CertificateStatus::new(
+                ocsp,
+            ))),
+            seq,
+        );
     }
 
     fn emit_server_kx(
@@ -467,6 +492,7 @@ mod client_hello {
         selected_group: &'static dyn SupportedKxGroup,
         credentials: Box<dyn Signer>,
         randoms: &ConnectionRandoms,
+        seq: HandshakeSequenceNumber,
     ) -> Result<GroupAndKeyExchange, Error> {
         let kx = selected_group.start()?.into_single();
         let kx_params = ServerKeyExchangeParams::new(&*kx);
@@ -484,9 +510,10 @@ mod client_hello {
             dss: DigitallySignedStruct::new(sigscheme, sig),
         });
 
-        flight.add(HandshakeMessagePayload(
-            HandshakePayload::ServerKeyExchange(skx),
-        ));
+        flight.add(
+            HandshakeMessagePayload(HandshakePayload::ServerKeyExchange(skx)),
+            seq,
+        );
         Ok(GroupAndKeyExchange {
             kx,
             group: selected_group,
@@ -496,6 +523,7 @@ mod client_hello {
     fn emit_certificate_req(
         flight: &mut HandshakeFlightTls12<'_>,
         config: &ServerConfig,
+        seq: HandshakeSequenceNumber,
     ) -> Result<bool, Error> {
         let client_auth = &config.verifier;
 
@@ -522,12 +550,15 @@ mod client_hello {
         let creq = HandshakeMessagePayload(HandshakePayload::CertificateRequest(cr));
 
         trace!("Sending CertificateRequest {creq:?}");
-        flight.add(creq);
+        flight.add(creq, seq);
         Ok(true)
     }
 
-    fn emit_server_hello_done(flight: &mut HandshakeFlightTls12<'_>) {
-        flight.add(HandshakeMessagePayload(HandshakePayload::ServerHelloDone));
+    fn emit_server_hello_done(flight: &mut HandshakeFlightTls12<'_>, seq: HandshakeSequenceNumber) {
+        flight.add(
+            HandshakeMessagePayload(HandshakePayload::ServerHelloDone),
+            seq,
+        );
     }
 }
 
@@ -808,10 +839,16 @@ impl ExpectCcs {
             }
         };
 
+        std::println!("tls 12 server setting message decrypter");
         output
             .receive()
             .decrypt_state
-            .set_message_decrypter(decrypter, &proof);
+            .set_message_decrypter(
+                decrypter,
+                &proof,
+                EncrypterDecrypterPurpose::ApplicationData,
+                self.hs.version,
+            );
 
         Ok(Box::new(ExpectFinished {
             hs: self.hs,
@@ -944,12 +981,12 @@ fn emit_ticket(
 
     let m = Message {
         version: EncodableVersion::Legacy(version),
-        payload: MessagePayload::handshake(HandshakeMessagePayload(
-            HandshakePayload::NewSessionTicket(NewSessionTicketPayload::new(
-                ticket_lifetime,
-                ticket,
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::NewSessionTicket(
+                NewSessionTicketPayload::new(ticket_lifetime, ticket),
             )),
-        )),
+            output.outbound_handshake_seq(),
+        ),
     };
 
     transcript.add_message(&m);
@@ -980,9 +1017,10 @@ fn emit_finished(
 
     let f = Message {
         version: EncodableVersion::Legacy(version),
-        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Finished(
-            verify_data_payload,
-        ))),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::Finished(verify_data_payload)),
+            output.outbound_handshake_seq(),
+        ),
     };
 
     transcript.add_message(&f);
@@ -1081,6 +1119,7 @@ impl ExpectFinished {
                     .suite()
                     .common
                     .confidentiality_limit,
+                EncrypterDecrypterPurpose::ApplicationData,
             );
             emit_finished(
                 self.hs.version,

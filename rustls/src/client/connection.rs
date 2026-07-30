@@ -271,7 +271,7 @@ impl ConnectionCommon<ClientSide> {
         protocol: Protocol,
         tls: &mut Vec<u8>,
     ) -> Result<Self, Error> {
-        let mut common_state = CommonState::new(Side::Client, config.fips());
+        let mut common_state = CommonState::new(Side::Client, config.fips(), protocol);
         common_state
             .send
             .set_max_fragment_size(config.max_fragment_size)?;

@@ -31,10 +31,14 @@
 //!
 //! <https://langsec.org/ForWantOfANail-h2hc2014.pdf>
 
+use core::cmp::min_by_key;
+
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use crate::crypto::cipher::{EncodableVersion, EncodedMessage, MessageError, Payload};
+use crate::crypto::cipher::{
+    EncodableVersion, EncodedMessage, EncodingContext, MessageError, Payload,
+};
 use crate::enums::{ContentType, ContentTypeName, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, InvalidMessage};
 use crate::verify::DigitallySignedStruct;
@@ -53,7 +57,7 @@ mod codec;
 use codec::U24;
 pub(crate) use codec::{
     CERTIFICATE_MAX_SIZE_LIMIT, Codec, LengthPrefixedBuffer, ListLength, MaybeEmpty, NonEmpty,
-    Reader, SizedPayload, TlsListElement, hex, put_u16, put_u64,
+    Reader, SizedPayload, TlsListElement, U48, hex, put_u16, put_u64,
 };
 
 mod deframer;
@@ -99,6 +103,8 @@ mod handshake_test;
 pub mod fuzzing {
     pub use super::deframer::fuzz_deframer;
     use super::{Codec, EncodedMessage, Fragmenter, Message, Payload, Reader};
+    use crate::common_state::Protocol;
+    use crate::crypto::cipher::EncodingContext;
     use crate::server::ServerSessionValue;
 
     pub fn fuzz_fragmenter(data: &[u8]) {
@@ -108,7 +114,7 @@ pub mod fuzzing {
         };
 
         let mut frg = Fragmenter::default();
-        frg.set_max_fragment_size(Some(32))
+        frg.set_max_fragment_size(Some(32), Protocol::Tcp)
             .unwrap();
         for msg in frg.fragment(msg.typ, msg.version, msg.payload.bytes().into(), 0) {
             Message::try_from(&EncodedMessage {
@@ -134,7 +140,7 @@ pub mod fuzzing {
         let expected_version = msg.version.encode();
         let enc = EncodedMessage::<Payload<'_>>::from(msg)
             .borrow_outbound()
-            .to_unencrypted_bytes();
+            .to_unencrypted_bytes(EncodingContext::new());
         //println!("data = {:?}", &data[..rdr.used()]);
         assert_eq!(enc[0], data[0]);
         // The version bytes will have been rewritten by `EncodableVersion`
@@ -170,21 +176,33 @@ impl<'a> Message<'a> {
         }
     }
 
-    pub(crate) fn build_key_update_notify(version: ProtocolVersion) -> Self {
+    pub(crate) fn build_key_update_notify(
+        version: ProtocolVersion,
+        seq: HandshakeSequenceNumber,
+    ) -> Self {
         Self {
             version: EncodableVersion::Legacy(version),
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
-            )),
+            payload: MessagePayload::handshake(
+                HandshakeMessagePayload(HandshakePayload::KeyUpdate(
+                    KeyUpdateRequest::UpdateNotRequested,
+                )),
+                seq,
+            ),
         }
     }
 
-    pub(crate) fn build_key_update_request(version: ProtocolVersion) -> Self {
+    pub(crate) fn build_key_update_request(
+        version: ProtocolVersion,
+        seq: HandshakeSequenceNumber,
+    ) -> Self {
         Self {
             version: EncodableVersion::Legacy(version),
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateRequested),
-            )),
+            payload: MessagePayload::handshake(
+                HandshakeMessagePayload(HandshakePayload::KeyUpdate(
+                    KeyUpdateRequest::UpdateRequested,
+                )),
+                seq,
+            ),
         }
     }
 
@@ -200,7 +218,7 @@ impl<'a> Message<'a> {
     pub(crate) fn into_wire_bytes(self) -> Vec<u8> {
         EncodedMessage::<Payload<'_>>::from(self)
             .borrow_outbound()
-            .to_unencrypted_bytes()
+            .to_unencrypted_bytes(EncodingContext::new())
     }
 
     pub(crate) fn handshake_type(&self) -> Option<HandshakeType> {
@@ -237,9 +255,16 @@ impl<'a> TryFrom<&'a EncodedMessage<Payload<'a>>> for Message<'a> {
     }
 }
 
+pub(crate) struct MessageHeader {
+    pub(crate) typ: ContentType,
+    pub(crate) version: ProtocolVersion,
+    pub(crate) epoch_and_sequence: Option<(Epoch, u64)>,
+    pub(crate) len: u16,
+}
+
 pub(crate) fn read_opaque_message_header(
     r: &mut Reader<'_>,
-) -> Result<(ContentType, ProtocolVersion, u16), MessageError> {
+) -> Result<MessageHeader, MessageError> {
     let typ = ContentType::read(r).map_err(|_| MessageError::TooShortForHeader)?;
     // Don't accept any new content-types.
     if ContentTypeName::try_from(typ).is_err() {
@@ -247,10 +272,19 @@ pub(crate) fn read_opaque_message_header(
     }
 
     let version = ProtocolVersion::read(r).map_err(|_| MessageError::TooShortForHeader)?;
-    // Accept only versions 0x03XX for any XX.
-    if version.0 & 0xff00 != 0x0300 {
+    // Accept only versions 0x03XX (TLS) or 0xfe (DTLS) for any XX
+    let allowed_version_high_bytes = [0x0300, 0xfe00].as_slice();
+    if !allowed_version_high_bytes.contains(&(version.0 & 0xff00)) {
         return Err(MessageError::UnknownProtocolVersion);
     }
+
+    let epoch_and_sequence = if version.is_datagram_tls() {
+        let epoch = Epoch::read(r, version).map_err(|_| MessageError::TooShortForHeader)?;
+        let record_seq = U48::read(r).map_err(|_| MessageError::TooShortForHeader)?;
+        Some((epoch, record_seq.0))
+    } else {
+        None
+    };
 
     let len = u16::read(r).map_err(|_| MessageError::TooShortForHeader)?;
 
@@ -266,7 +300,12 @@ pub(crate) fn read_opaque_message_header(
         return Err(MessageError::MessageTooLarge);
     }
 
-    Ok((typ, version, len))
+    Ok(MessageHeader {
+        typ,
+        version,
+        epoch_and_sequence,
+        len,
+    })
 }
 
 #[non_exhaustive]
@@ -275,11 +314,13 @@ pub(crate) enum MessagePayload<'a> {
     Alert(AlertMessagePayload),
     // one handshake message, parsed
     Handshake {
+        seq: HandshakeSequenceNumber,
         parsed: HandshakeMessagePayload<'a>,
         encoded: Payload<'a>,
     },
-    // (potentially) multiple handshake messages, unparsed
-    HandshakeFlight(Payload<'a>),
+    // (potentially) multiple handshake messages, of various handshake types,
+    // encoded
+    HandshakeFlight(Vec<(HandshakeType, HandshakeSequenceNumber, Vec<u8>)>),
     ChangeCipherSpec(ChangeCipherSpecPayload),
     ApplicationData(Payload<'a>),
 }
@@ -289,16 +330,24 @@ impl<'a> MessagePayload<'a> {
         match self {
             Self::Alert(x) => x.encode(bytes),
             Self::Handshake { encoded, .. } => bytes.extend(encoded.bytes()),
-            Self::HandshakeFlight(x) => bytes.extend(x.bytes()),
+            Self::HandshakeFlight(encoded) => {
+                for (_, _, encoded) in encoded {
+                    bytes.extend(encoded)
+                }
+            }
             Self::ChangeCipherSpec(x) => x.encode(bytes),
             Self::ApplicationData(x) => x.encode(bytes),
         }
     }
 
-    pub(crate) fn handshake(parsed: HandshakeMessagePayload<'a>) -> Self {
+    pub(crate) fn handshake(
+        parsed: HandshakeMessagePayload<'a>,
+        seq: HandshakeSequenceNumber,
+    ) -> Self {
         Self::Handshake {
             encoded: Payload::new(parsed.get_encoding()),
             parsed,
+            seq,
         }
     }
 
@@ -312,9 +361,30 @@ impl<'a> MessagePayload<'a> {
             ContentType::ApplicationData => Ok(Self::ApplicationData(Payload::Borrowed(payload))),
             ContentType::Alert => AlertMessagePayload::read(&mut r).map(MessagePayload::Alert),
             ContentType::Handshake => {
+                // Strip out handshake fragment fields from DTLS messages, because we don't want
+                // them anymore!
+                let (payload, seq) = if vers.is_datagram_tls() {
+                    let mut payload_without_handshake_fragments =
+                        Vec::with_capacity(payload.len() - DTLS_HANDSHAKE_HEADER_EXTRA);
+
+                    // Copy in msg_type (1 byte) + length (3 bytes)
+                    payload_without_handshake_fragments.extend(&payload[..1 + 3]);
+
+                    // Skip msg_typ (1 byte) + length (3 bytes) + message_seq (2 bytes) +
+                    // fragment_offset (3 bytes) + fragment_length (3 bytes)
+                    payload_without_handshake_fragments.extend(&payload[1 + 3 + 2 + 3 + 3..]);
+
+                    (
+                        Payload::Owned(payload_without_handshake_fragments),
+                        HandshakeSequenceNumber::read_bytes(&payload[1 + 3..1 + 3 + 2])?,
+                    )
+                } else {
+                    (Payload::Borrowed(payload), 0.into())
+                };
                 HandshakeMessagePayload::read_version(&mut r, vers).map(|parsed| Self::Handshake {
                     parsed,
-                    encoded: Payload::Borrowed(payload),
+                    encoded: payload,
+                    seq,
                 })
             }
             ContentType::ChangeCipherSpec => {
@@ -327,7 +397,7 @@ impl<'a> MessagePayload<'a> {
     pub(crate) fn content_type(&self) -> ContentType {
         match self {
             Self::Alert(_) => ContentType::Alert,
-            Self::Handshake { .. } | Self::HandshakeFlight(_) => ContentType::Handshake,
+            Self::Handshake { .. } | Self::HandshakeFlight { .. } => ContentType::Handshake,
             Self::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
             Self::ApplicationData(_) => ContentType::ApplicationData,
         }
@@ -337,11 +407,16 @@ impl<'a> MessagePayload<'a> {
         use MessagePayload::*;
         match self {
             Alert(x) => Alert(x),
-            Handshake { parsed, encoded } => Handshake {
+            Handshake {
+                parsed,
+                encoded,
+                seq,
+            } => Handshake {
                 parsed: parsed.into_owned(),
                 encoded: encoded.into_owned(),
+                seq,
             },
-            HandshakeFlight(x) => HandshakeFlight(x.into_owned()),
+            HandshakeFlight(x) => HandshakeFlight(x),
             ChangeCipherSpec(x) => ChangeCipherSpec(x),
             ApplicationData(x) => ApplicationData(x.into_owned()),
         }
@@ -388,6 +463,10 @@ impl<'a> HandshakeMessagePayload<'a> {
     ) -> Result<Self, InvalidMessage> {
         let typ = HandshakeType::read(r)?;
         let len = U24::read(r)?.0 as usize;
+        if vers.is_datagram_tls() {
+            // Skip the DTLS seq and fragment fields, which are no longer meaningful
+            let _ = r.take(DTLS_HANDSHAKE_HEADER_EXTRA);
+        }
         r.sub(len)?
             .all("HandshakeMessagePayload", |sub| {
                 Ok(Self(match typ {
@@ -412,7 +491,10 @@ impl<'a> HandshakeMessagePayload<'a> {
                             HandshakePayload::ServerHello(shp)
                         }
                     }
-                    HandshakeType::Certificate if vers == ProtocolVersion::TLSv1_3 => {
+                    HandshakeType::Certificate
+                        if vers == ProtocolVersion::TLSv1_3
+                            || vers == ProtocolVersion::DTLSv1_3 =>
+                    {
                         let p = CertificatePayloadTls13::read(sub)?;
                         HandshakePayload::CertificateTls13(p)
                     }
@@ -427,7 +509,10 @@ impl<'a> HandshakeMessagePayload<'a> {
                     HandshakeType::ClientKeyExchange => {
                         HandshakePayload::ClientKeyExchange(Payload::read(sub))
                     }
-                    HandshakeType::CertificateRequest if vers == ProtocolVersion::TLSv1_3 => {
+                    HandshakeType::CertificateRequest
+                        if vers == ProtocolVersion::TLSv1_3
+                            || vers == ProtocolVersion::DTLSv1_3 =>
+                    {
                         let p = CertificateRequestPayloadTls13::read(sub)?;
                         HandshakePayload::CertificateRequestTls13(p)
                     }
@@ -443,7 +528,10 @@ impl<'a> HandshakeMessagePayload<'a> {
                     HandshakeType::CertificateVerify => {
                         HandshakePayload::CertificateVerify(DigitallySignedStruct::read(sub)?)
                     }
-                    HandshakeType::NewSessionTicket if vers == ProtocolVersion::TLSv1_3 => {
+                    HandshakeType::NewSessionTicket
+                        if vers == ProtocolVersion::TLSv1_3
+                            || vers == ProtocolVersion::DTLSv1_3 =>
+                    {
                         let p = NewSessionTicketPayloadTls13::read(sub)?;
                         HandshakePayload::NewSessionTicketTls13(p)
                     }
@@ -693,8 +781,501 @@ impl Codec<'_> for ChangeCipherSpecPayload {
     }
 }
 
-/// Content type, version and size.
+/// Cryptographic epoch used in [Datagram TLS 1.2][1] and [1.3][2].
+///
+/// Epoch 0 is used for early, unencrypted handshake messages.
+///
+/// In DTLS 1.3, epochs 1 and 2 are
+/// reserved for client early data and encrypted handshake messages, respectively ([3]). Epochs 3
+/// and above are application data and post-handshake messages ([4]).
+///
+/// In DTLS 1.2, epoch 1 is used for Finished messages and application data. Epochs 2 and above
+/// would be used after re-negotiation (or any other "cipher state change", [1]), but rustls does
+/// not support re-negotiation/re-handshaking in TLS 1.2.
+///
+/// [1]: https://datatracker.ietf.org/doc/html/rfc6347#section-4.1
+/// [2]: https://datatracker.ietf.org/doc/html/rfc9147#section-4
+/// [3]: https://www.rfc-editor.org/info/rfc9147/#section-6.1
+/// [4]: https://www.rfc-editor.org/info/rfc9846/#section-4.7
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub(crate) enum Epoch {
+    /// Unencrypted messages.
+    ///
+    /// Epoch 0, used for messages before any encryption keys are negotiated, meaning all handshake
+    /// messages except `Finished` for DTLS 1.2 and `HelloRequest`, `ClientHello`, and `ServerHello`
+    /// for DTLS 1.3.
+    ///
+    /// <https://www.rfc-editor.org/info/rfc9147/#section-6.1>
+    Unencrypted,
+    /// Early data messages.
+    ///
+    /// Epoch 1, used when encrypting early data. This epoch is skipped if the client does not offer
+    /// early data. Only possible with (D)TLS 1.3.
+    ///
+    /// <https://www.rfc-editor.org/info/rfc9147/#section-6.1>
+    EarlyData,
+    /// Encrypted handshake messages.
+    ///
+    /// Epoch 2, used for encrypting handshake messages once a key has been negotiated, but before
+    /// the first handshake completes. This is only used in (D)TLS 1.3.
+    ///
+    /// <https://www.rfc-editor.org/info/rfc9147/#section-6.1>
+    EncryptedHandshakeMessages,
+    /// Application data and post-handshake messages.
+    ///
+    /// In DTLS 1.3, epochs 3 and above are for application data and post-handshake messages ([1]).
+    /// The epoch increments again whenever either side sends a KeyUpdate request.
+    ///
+    /// In DTLS 1.2, epoch 1 is used for Finished handshake messages and then application data.
+    /// Epochs 2 and above would be used after re-negotiation (or any other "cipher state change"
+    /// [2]), but rustls does not support re-negotiation/re-handshaking in TLS 1.2.
+    ///
+    /// [1]: https://www.rfc-editor.org/info/rfc9147/#section-6.1
+    /// [2]: https://datatracker.ietf.org/doc/html/rfc6347#section-4.1
+    ApplicationData(u16),
+}
+
+impl Epoch {
+    /// Create a new `Epoch`.
+    pub(crate) fn new(epoch: u16, version: ProtocolVersion) -> Self {
+        match (epoch, version) {
+            (0, _) => Self::Unencrypted,
+            (1, ProtocolVersion::DTLSv1_3) => Self::EarlyData,
+            (2, ProtocolVersion::DTLSv1_3) => Self::EncryptedHandshakeMessages,
+            (e, _) => Epoch::ApplicationData(e),
+        }
+    }
+
+    /// Epoch number.
+    pub(crate) fn number(&self) -> u16 {
+        match self {
+            Epoch::Unencrypted => 0,
+            Epoch::EarlyData => 1,
+            Epoch::EncryptedHandshakeMessages => 2,
+            Epoch::ApplicationData(epoch) => *epoch,
+        }
+    }
+
+    /// Whether this epoch comes before another.
+    pub(crate) fn before(&self, other: Epoch) -> bool {
+        match (*self, other) {
+            (
+                Self::Unencrypted,
+                Self::EarlyData | Self::EncryptedHandshakeMessages | Self::ApplicationData(_),
+            )
+            | (Self::EarlyData, Self::EncryptedHandshakeMessages | Self::ApplicationData(_))
+            | (Self::EncryptedHandshakeMessages, Self::ApplicationData(_)) => true,
+            (Self::ApplicationData(a), Self::ApplicationData(b)) if a < b => true,
+            _ => false,
+        }
+    }
+
+    /// Whether the provided epoch can be an immediate successor to this one.
+    pub(crate) fn successor(&self, other: Epoch) -> bool {
+        match (*self, other) {
+            (
+                Self::Unencrypted,
+                Self::EarlyData | Self::EncryptedHandshakeMessages | Self::ApplicationData(_),
+            )
+            | (Self::EarlyData, Self::EncryptedHandshakeMessages | Self::ApplicationData(_))
+            | (Self::EncryptedHandshakeMessages, Self::ApplicationData(_)) => true,
+            (Self::ApplicationData(this), Self::ApplicationData(other))
+                if other > this && other - this == 1 =>
+            {
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Compute additional data for record protection.
+    ///
+    /// For DTLS 1.2, this is the 16 bit epoch number concatenated with the 48 bit sequence number
+    /// that gets fed into the MAC ([1]).
+    ///
+    /// For all other protocol versions, this is the sequence number, possibly reconstructed per
+    /// [2].
+    ///
+    /// [1]: https://www.rfc-editor.org/info/rfc6347/#section-4.1.2.1
+    /// [2]: https://www.rfc-editor.org/info/rfc9147/#section-4.2.2
+    pub(crate) fn per_record_additional_data(
+        &self,
+        sequence: u64,
+        version: ProtocolVersion,
+    ) -> u64 {
+        match version {
+            ProtocolVersion::DTLSv1_2 => u64::from(self.number()).unbounded_shl(48) + sequence,
+            _ => sequence,
+        }
+    }
+
+    /// Increment this epoch to one suitable for the provided purpose.
+    ///
+    /// Panics if the requested epoch increment is impossible.
+    pub(crate) fn increment(
+        self,
+        purpose: EncrypterDecrypterPurpose,
+        version: ProtocolVersion,
+    ) -> Self {
+        let new_epoch = match (self, purpose, version) {
+            // Can go from unencrypted to early data, regardless of version.
+            (Self::Unencrypted, EncrypterDecrypterPurpose::EarlyData, _) => Self::EarlyData,
+            // Can go from unencrypted or early data to handshake messages, but only for 1.3
+            (
+                Self::Unencrypted | Self::EarlyData,
+                EncrypterDecrypterPurpose::HandshakeMessages,
+                ProtocolVersion::TLSv1_3 | ProtocolVersion::DTLSv1_3,
+            ) => Self::EncryptedHandshakeMessages,
+            // For 1.3, the first encrypted epoch is 3, and you can only go there from encrypted
+            // handshake messages or early data
+            (
+                Self::EncryptedHandshakeMessages | Self::EarlyData,
+                EncrypterDecrypterPurpose::ApplicationData,
+                ProtocolVersion::TLSv1_3 | ProtocolVersion::DTLSv1_3,
+            ) => Self::ApplicationData(3),
+            // For 1.2, the first encrypted epoch is 1 and you can only go there from unencrypted
+            (
+                Self::Unencrypted,
+                EncrypterDecrypterPurpose::ApplicationData,
+                ProtocolVersion::TLSv1_2 | ProtocolVersion::DTLSv1_2,
+            ) => Self::ApplicationData(1),
+            // For 1.3, go to the next application data epoch on re-key
+            (
+                Self::ApplicationData(e),
+                EncrypterDecrypterPurpose::ApplicationData,
+                ProtocolVersion::TLSv1_3 | ProtocolVersion::DTLSv1_3,
+            ) => Self::ApplicationData(e + 1),
+            // Special case for this transition to catch misuse under 1.2
+            (
+                Self::ApplicationData(_),
+                EncrypterDecrypterPurpose::ApplicationData,
+                ProtocolVersion::TLSv1_2 | ProtocolVersion::DTLSv1_2,
+            ) => panic!("rustls does not support rekey in (D)TLS 1.2"),
+            (..) => panic!("illegal epoch transition from {self:?} for {purpose:?}"),
+        };
+
+        std::println!("transitioning from {self:?} to {new_epoch:?} for {purpose:?}");
+
+        new_epoch
+    }
+
+    /// Read an `Epoch` value from a wire message.
+    pub(crate) fn read(
+        r: &mut Reader<'_>,
+        version: ProtocolVersion,
+    ) -> Result<Self, InvalidMessage> {
+        // This can't be a `Codec` implementation because we need to know the protocol version in use
+        // in order to interpret the value. Epoch 1 is Epoch::ApplicationData(1) for DTLS 1.2, but
+        // it's EarlyData for 1.3.
+        Ok(Self::new(u16::read(r)?, version))
+    }
+}
+
+/// Purpose of an encrypter or decrypter being set in the record layer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EncrypterDecrypterPurpose {
+    /// (En|De)cryption of early data.
+    EarlyData,
+    /// (En|De)cryption of handshake messages.
+    HandshakeMessages,
+    /// (En|De)cryption of application data.
+    ApplicationData,
+}
+
+/// Fragment of a DTLS handshake message used in [Datagram TLS 1.2][1] and [1.3][2].
+///
+/// [1]: https://datatracker.ietf.org/doc/html/rfc6347#section-4.2.2
+/// [2]: https://datatracker.ietf.org/doc/html/rfc9147#section-5.2
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DtlsHandshakeFragment<'a> {
+    pub(crate) msg_type: HandshakeType,
+    /// Total length of the message this is a fragment of. The value will be the same in all
+    /// fragments of a given message.
+    pub(crate) length: U24,
+    /// Sequence number of the message this is a fragment of. The value will be the same in all
+    /// fragments of a given message.
+    pub(crate) message_seq: HandshakeSequenceNumber,
+    /// The offset into the original message where this fragment begins. Equivalently, the sum of
+    /// the lengths of all previous fragments.
+    pub(crate) fragment_offset: U24,
+    /// The length of this fragment.
+    pub(crate) fragment_length: U24,
+    /// The fragment. Its length must be equal to `fragment_length`.
+    pub(crate) fragment: Payload<'a>,
+}
+
+impl<'a> Codec<'a> for DtlsHandshakeFragment<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.msg_type.encode(bytes);
+        self.length.encode(bytes);
+        self.message_seq.encode(bytes);
+        self.fragment_offset.encode(bytes);
+        self.fragment_length.encode(bytes);
+        self.fragment.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let msg_type = HandshakeType::read(r)?;
+        let length = U24::read(r)?;
+        let message_seq = HandshakeSequenceNumber::read(r)?;
+        let fragment_offset = U24::read(r)?;
+        let fragment_len = U24::read(r)?;
+        let fragment = Payload::Borrowed(
+            r.take(fragment_len.into())
+                .ok_or_else(|| InvalidMessage::MessageTooShort)?,
+        );
+
+        Ok(Self {
+            msg_type,
+            length,
+            message_seq,
+            fragment_offset,
+            fragment_length: fragment_len,
+            fragment,
+        })
+    }
+}
+
+/// DTLS 1.3 unified record header, specified in [RFC 9157 section 4][1].
+///
+/// The first byte of the unified header is a bitfield describing the remainder of the
+/// header:
+///
+///  0 1 2 3 4 5 6 7
+/// +-+-+-+-+-+-+-+-+
+/// |0|0|1|C|S|L|E E|
+/// +-+-+-+-+-+-+-+-+
+///
+///
+/// The first three bits are 001 to distinguish from content type fields of records in other
+/// protocols.
+/// "C" bit indicates whether the connection ID is present in the header. Its length will have
+/// previously been negotiated during the handshake.
+/// "S" bit indicates size of the sequence number.
+/// "L" bit indicates whether length is present.
+/// "EE" bits are low two bits of the epoch of the encrypted message.
+///
+/// [1]: https://datatracker.ietf.org/doc/html/rfc9147#section-4
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct UnifiedHeader {
+    /// An absent connection ID is represented by an empty `Vec`.
+    // TODO: implement connection IDs. We assume them to be 0 length/absent for now.
+    connection_id: Vec<u8>,
+    epoch: Epoch,
+    sequence: u64,
+    length: Option<u16>,
+}
+
+impl UnifiedHeader {
+    const FIXED_BITS: u8 = 0b0010_0000;
+    const FIXED_BITS_MASK: u8 = 0b1110_0000;
+    const C_BIT_MASK: u8 = 0b0001_0000;
+    const S_BIT_MASK: u8 = 0b0000_1000;
+    const L_BIT_MASK: u8 = 0b0000_0100;
+    const EE_BITS_MASK: u8 = 0b0000_0011;
+
+    pub(crate) fn is_unified_header(byte: u8) -> bool {
+        byte & Self::FIXED_BITS_MASK == Self::FIXED_BITS
+    }
+
+    pub(crate) fn new(len: u16, cx: EncodingContext) -> Self {
+        // truncate epoch to 2 bits
+        let epoch_low_bits = Epoch::new(cx.epoch.number() & 0b11, ProtocolVersion::DTLSv1_3);
+        // truncate sequence number to 16 bits
+        let sequence = cx.record_seq & 0xffff;
+        Self {
+            connection_id: Vec::new(),
+            epoch: epoch_low_bits,
+            sequence,
+            length: Some(len),
+        }
+    }
+
+    pub(crate) fn encode(&self, bytes: &mut [u8]) {
+        bytes[0] = Self::FIXED_BITS;
+
+        if self.connection_id.len() > 0 {
+            panic!("connection ID should always be empty for now");
+            // bitmask |= Self::C_BIT_MASK;
+            // header.extend(self.connection_id);
+        }
+
+        // Always encode sequence number as 2 bytes for simplicity
+        bytes[0] |= Self::S_BIT_MASK;
+        bytes[1..3].copy_from_slice(&(self.sequence as u16).to_be_bytes());
+        if let Some(length) = self.length {
+            bytes[0] |= Self::L_BIT_MASK;
+            bytes[3..5].copy_from_slice(&length.to_be_bytes());
+        }
+
+        debug_assert!(self.epoch.number() <= Self::EE_BITS_MASK as u16);
+        bytes[0] |= self.epoch.number() as u8;
+    }
+
+    /// Read a unified header from `r`.
+    ///
+    /// `current_epoch` is the epoch messages are expected to be in. `highest_seq` is the highest
+    /// observed record sequence number observed in that epoch. These are used to reconstruct the
+    /// full sequence number based on [RFC 9147 section 4.2.2][1].
+    ///
+    /// [1]: https://www.rfc-editor.org/info/rfc9147/#section-4.2.2
+    fn read(
+        r: &mut Reader<'_>,
+        current_epoch: Epoch,
+        highest_seq: u64,
+    ) -> Result<Self, InvalidMessage> {
+        let bitfield = u8::read(r)?;
+
+        if bitfield & Self::FIXED_BITS_MASK != Self::FIXED_BITS {
+            return Err(InvalidMessage::InvalidDtls13UnifiedHeader);
+        }
+
+        if bitfield & Self::C_BIT_MASK > 0 {
+            panic!("connection ID should never be set for now");
+            // TODO: handle connection ID properly. How do we figure out how long it should be, and
+            // how do we smuggle that information into a call to `Codec::read`?
+        }
+
+        let long_seq = bitfield & Self::S_BIT_MASK > 0;
+        let truncated_sequence_number = if long_seq {
+            // bit set: 2 byte seq
+            u16::read(r)?
+        } else {
+            // bit clear: 1 byte seq
+            u8::read(r)? as u16
+        };
+
+        // Reconstruct the sequence number based on the truncated sequence number in a DTLS 1.3
+        // unified header, per [RFC 9147, section 4.2.2][1]:
+        //
+        // > [I]mplementations SHOULD reconstruct the sequence number by computing the full
+        // > sequence number which is numerically closest to one plus the sequence number of
+        // > the highest successfully deprotected record in the current epoch.
+        //
+        // [1]: https://datatracker.ietf.org/doc/html/rfc9147#section-4.2.2
+        // First candidate: clear low bits of highest sequence we've seen and OR in the truncated
+        // sequence number
+        let reconstructed_seq_0: u64 = highest_seq
+            & if long_seq {
+                0xffff_ffff_ffff_0000
+            } else {
+                0xffff_ffff_ffff_ff00
+            }
+            | truncated_sequence_number as u64;
+        // Second candidate: flip the first bit to the left of the truncated portion
+        let reconstructed_seq_1 = reconstructed_seq_0 ^ if long_seq { 0x1_ffff } else { 0x0100 };
+        // Use whichever is closest to latest_seq+1
+        let sequence = min_by_key(reconstructed_seq_0, reconstructed_seq_1, |v| {
+            v.abs_diff(highest_seq + 1)
+        });
+
+        let length = if bitfield & Self::L_BIT_MASK > 0 {
+            Some(u16::read(r)?)
+        } else {
+            None
+        };
+
+        // Infer the 16 bit epoch based on the low bits in the header and most recently seen epoch.
+        let epoch_low_bits = bitfield & Self::EE_BITS_MASK;
+
+        Ok(Self {
+            connection_id: Vec::new(),
+            length,
+            epoch: Epoch::new(
+                current_epoch.number() | (epoch_low_bits as u16),
+                ProtocolVersion::DTLSv1_3,
+            ),
+            sequence,
+        })
+    }
+}
+
+/// Sequence numbers of TLS handshake messages.
+///
+/// This is distinct from [`HandshakeSequenceNumber`] to avoid confusing a specific sequence number
+/// with the sequence of handshake messages.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct HandshakeSequence(HandshakeSequenceNumber);
+
+impl HandshakeSequence {
+    /// Return the current number and increment the position in the sequence.
+    pub(crate) fn increment(&mut self) -> HandshakeSequenceNumber {
+        let old = self.0;
+        self.0 = HandshakeSequenceNumber::from(u16::from(old) + 1);
+        old
+    }
+}
+
+/// Sequence number in an individual TLS handshake message.
+///
+/// This is distinct from [`HandshakeSequence`] to avoid confusing a handshake's position in the
+/// sequence with a particular number encoded into a message.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
+pub(crate) struct HandshakeSequenceNumber(u16);
+
+impl HandshakeSequenceNumber {
+    pub(crate) fn to_wire_bytes(&self) -> [u8; 2] {
+        self.0.to_be_bytes()
+    }
+}
+
+impl Codec<'_> for HandshakeSequenceNumber {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.0.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        Ok(Self(u16::read(r)?))
+    }
+}
+
+impl From<u16> for HandshakeSequenceNumber {
+    fn from(value: u16) -> Self {
+        Self(value)
+    }
+}
+
+impl From<HandshakeSequenceNumber> for u16 {
+    fn from(value: HandshakeSequenceNumber) -> Self {
+        value.0
+    }
+}
+
+/// Length of the header on a TLS record.
+///
+/// Content type (1 byte), version (2 bytes) and size (2 bytes).
 pub(crate) const HEADER_SIZE: usize = 1 + 2 + 2;
+
+/// Length of the header on a full DTLS record.
+///
+/// This header is used for all DTLS 1.2 records and unencrypted DTLS 1.3 records that don't use a
+/// unified header.
+///
+/// TLS header size plus epoch (2 bytes) and sequence number (6 bytes).
+pub(crate) const DTLS_12_HEADER_SIZE: usize = HEADER_SIZE + 2 + 6;
+
+/// Length of the unified header on an encrypted DTLS 1.3 record.
+pub(crate) const DTLS_13_UNIFIED_HEADER_SIZE: usize = 1 + // bitmask
+            0 + // Assume no connection IDs for now
+            2 + // Always 2 bytes for seq. TODO(DTLS): truncate to 1 byte if seq is small enough
+            2; // 2 bytes for length. TODO(DTLS): can we ever omit length?
+
+/// Length of the header on a handshake message.
+///
+/// Does not include the record layer header. Handshake type (1 byte) and length (3 bytes).
+pub(crate) const HANDSHAKE_HEADER_SIZE: usize = 1 + 3;
+
+/// Length of extra fields in the handshake header for DTLS.
+///
+/// Message sequence (2 bytes), fragment offset (3 bytes) and fragment length (3 bytes).
+pub(crate) const DTLS_HANDSHAKE_HEADER_EXTRA: usize = 2 + 3 + 3;
+
+/// Length of the header on a DTLS handshake message.
+///
+/// Does not include the record layer header.
+pub(crate) const DTLS_HANDSHAKE_HEADER_SIZE: usize =
+    HANDSHAKE_HEADER_SIZE + DTLS_HANDSHAKE_HEADER_EXTRA;
 
 /// Maximum message payload size.
 /// That's 2^14 payload bytes and a 2KB allowance for ciphertext overheads.
@@ -708,6 +1289,7 @@ mod tests {
     use std::{format, fs, println};
 
     use super::*;
+    use crate::crypto::cipher::EncodingContext;
     use crate::error::AlertDescription;
 
     #[test]
@@ -738,7 +1320,7 @@ mod tests {
 
             let enc = EncodedMessage::<Payload<'_>>::from(msg)
                 .borrow_outbound()
-                .to_unencrypted_bytes();
+                .to_unencrypted_bytes(EncodingContext::new());
             // Check that round-tripped message matches the input, ignoring the protocol version
             // bytes, which will have been forced to a compatible TLS version.
             assert_eq!(bytes[0], enc[0]);
@@ -825,7 +1407,7 @@ mod tests {
     fn into_wire_format() {
         // Message::into_wire_bytes() include both message-level and handshake-level headers
         assert_eq!(
-            Message::build_key_update_request(ProtocolVersion::TLSv1_3).into_wire_bytes(),
+            Message::build_key_update_request(ProtocolVersion::TLSv1_3, 0.into()).into_wire_bytes(),
             &[0x16, 0x3, 0x3, 0x0, 0x5, 0x18, 0x0, 0x0, 0x1, 0x1]
         );
     }
@@ -840,7 +1422,7 @@ mod tests {
 
             let out = m
                 .borrow_outbound()
-                .to_unencrypted_bytes();
+                .to_unencrypted_bytes(EncodingContext::new());
             assert!(!out.is_empty());
 
             Message::try_from(&m).unwrap();

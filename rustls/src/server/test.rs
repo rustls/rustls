@@ -116,9 +116,10 @@ fn null_compression_required() {
 fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
     let m = Message {
         version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
-        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
-            hello,
-        ))),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::ClientHello(hello)),
+            0.into(),
+        ),
     };
 
     ClientHelloInput::from_input(&Input {
@@ -167,9 +168,10 @@ fn select_cipher_suite(
 ) -> Result<CipherSuite, Box<dyn error::Error>> {
     let ch = Message {
         version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
-        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
-            client_hello,
-        ))),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::ClientHello(client_hello)),
+            0.into(),
+        ),
     };
 
     let mut input = VecInput::default();
@@ -208,9 +210,10 @@ fn test_server_rejects_no_extended_main_secret_extension_when_require_ems_or_fip
         .take();
     let ch = Message {
         version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
-        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
-            ch,
-        ))),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::ClientHello(ch)),
+            0.into(),
+        ),
     };
     input
         .read(&mut ch.into_wire_bytes().as_slice())
@@ -291,9 +294,10 @@ fn server_chooses_ffdhe_group_for_client_hello(
     let mut input = VecInput::default();
     let ch = Message {
         version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
-        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
-            client_hello,
-        ))),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::ClientHello(client_hello)),
+            0.into(),
+        ),
     };
     input
         .read(&mut ch.into_wire_bytes().as_slice())
@@ -331,9 +335,10 @@ fn test_server_requiring_rpk_client_rejects_x509_client() {
     ch.extensions.client_certificate_types = Some(vec![CertificateType::X509]);
     let ch = Message {
         version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
-        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
-            ch,
-        ))),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::ClientHello(ch)),
+            0.into(),
+        ),
     };
 
     let mut conn = ServerConnection::new(Arc::new(server_config)).unwrap();
@@ -355,9 +360,10 @@ fn test_rpk_only_server_rejects_x509_only_client() {
     ch.extensions.server_certificate_types = Some(vec![CertificateType::X509]);
     let ch = Message {
         version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
-        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
-            ch,
-        ))),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::ClientHello(ch)),
+            0.into(),
+        ),
     };
 
     let mut conn = ServerConnection::new(Arc::new(server_config)).unwrap();
@@ -496,6 +502,7 @@ fn minimal_client_hello() -> ClientHelloPayload {
             supported_versions: Some(SupportedProtocolVersions {
                 tls12: true,
                 tls13: true,
+                ..Default::default()
             }),
             key_shares: Some(vec![KeyShareEntry {
                 group: KEY_EXCHANGE_GROUP.name(),

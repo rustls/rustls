@@ -9,11 +9,12 @@ use crate::client::EchStatus;
 use crate::conn::{Exporter, KeyingMaterialExporter, ReceivePath, SendOutput, SendPath};
 use crate::crypto::cipher::{EncodableVersion, Payload};
 use crate::crypto::kx::SupportedKxGroup;
-use crate::enums::{ApplicationProtocol, ProtocolVersion};
+use crate::enums::{ApplicationProtocol, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, ApiMisuse, Error};
 use crate::hash_hs::HandshakeHash;
 use crate::msgs::{
-    AlertLevel, Codec, Delocator, HandshakeMessagePayload, Locator, Message, MessagePayload,
+    AlertLevel, Codec, Delocator, HandshakeMessagePayload, HandshakeSequenceNumber, Locator,
+    Message, MessagePayload,
 };
 use crate::quic::{self, QuicOutput};
 use crate::suites::SupportedCipherSuite;
@@ -28,11 +29,11 @@ pub struct CommonState {
 }
 
 impl CommonState {
-    pub(crate) fn new(side: Side, fips: FipsStatus) -> Self {
+    pub(crate) fn new(side: Side, fips: FipsStatus, protocol: Protocol) -> Self {
         Self {
             outputs: ConnectionOutputs::default(),
-            send: SendPath::default(),
-            recv: ReceivePath::new(side),
+            send: SendPath::new(protocol, side),
+            recv: ReceivePath::new(side, protocol),
             fips,
         }
     }
@@ -295,6 +296,11 @@ pub(crate) trait Output<'m> {
     fn receive(&mut self) -> &mut ReceivePath;
 
     fn send(&mut self) -> &mut dyn SendOutput;
+
+    /// Get the next handshake sequence number to be used.
+    fn outbound_handshake_seq(&mut self) -> HandshakeSequenceNumber {
+        self.send().outbound_handshake_seq()
+    }
 }
 
 pub(crate) trait ConnectionOutput {
@@ -392,6 +398,8 @@ pub enum Protocol {
     Tcp,
     /// QUIC, standardized in RFC 9001
     Quic(quic::Version),
+    /// Datagram TLS, standardized in RFC6347 (1.2) and RFC9147 (1.3)
+    Udp,
 }
 
 impl Protocol {
@@ -402,41 +410,58 @@ impl Protocol {
     pub(crate) fn supports_version(&self, version: ProtocolVersion) -> bool {
         match self {
             Self::Quic(_) => version == ProtocolVersion::TLSv1_3,
-            Self::Tcp => true,
+            Self::Tcp => !version.is_datagram_tls(),
+            Self::Udp => version.is_datagram_tls(),
         }
+    }
+
+    pub(crate) fn is_dtls(&self) -> bool {
+        matches!(self, Self::Udp)
     }
 }
 
 pub(crate) struct HandshakeFlight<'a, const TLS13: bool> {
     pub(crate) transcript: &'a mut HandshakeHash,
-    body: Vec<u8>,
+    /// The handshake type and encoded payload of each handshake message in the
+    /// flight.
+    handshake_messages: Vec<(HandshakeType, HandshakeSequenceNumber, Vec<u8>)>,
+    is_dtls: bool,
 }
 
 impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
-    pub(crate) fn new(transcript: &'a mut HandshakeHash) -> Self {
+    pub(crate) fn new(transcript: &'a mut HandshakeHash, is_dtls: bool) -> Self {
         Self {
             transcript,
-            body: Vec::new(),
+            handshake_messages: Vec::new(),
+            is_dtls,
         }
     }
 
-    pub(crate) fn add(&mut self, hs: HandshakeMessagePayload<'_>) {
-        let start_len = self.body.len();
-        hs.encode(&mut self.body);
-        self.transcript
-            .add(&self.body[start_len..]);
+    pub(crate) fn add(&mut self, hs: HandshakeMessagePayload<'_>, seq: HandshakeSequenceNumber) {
+        let encoded = hs.get_encoding();
+        self.transcript.add(&encoded, seq);
+        self.handshake_messages
+            .push((hs.0.handshake_type(), seq, encoded));
     }
 
     pub(crate) fn finish(self, output: &mut dyn Output<'_>) {
         let m = Message {
-            version: EncodableVersion::Legacy(match TLS13 {
-                true => ProtocolVersion::TLSv1_3,
-                false => ProtocolVersion::TLSv1_2,
-            }),
-            payload: MessagePayload::HandshakeFlight(Payload::new(self.body)),
+            // No initial client hello is ever sent in a message flight, so we can assume ::Legacy
+            // here
+            version: EncodableVersion::Legacy(self.version()),
+            payload: MessagePayload::HandshakeFlight(self.handshake_messages),
         };
 
         output.send_msg(m, TLS13);
+    }
+
+    fn version(&self) -> ProtocolVersion {
+        match (TLS13, self.is_dtls) {
+            (true, true) => ProtocolVersion::DTLSv1_3,
+            (true, false) => ProtocolVersion::TLSv1_3,
+            (false, true) => ProtocolVersion::DTLSv1_2,
+            (false, false) => ProtocolVersion::TLSv1_2,
+        }
     }
 }
 

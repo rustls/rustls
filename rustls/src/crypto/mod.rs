@@ -23,6 +23,7 @@ use crate::{SupportedCipherSuite, Tls12CipherSuite, Tls13CipherSuite};
 
 /// TLS message encryption/decryption interfaces.
 pub mod cipher;
+pub use cipher::AntiReplay;
 
 mod enums;
 pub use enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, SignatureScheme};
@@ -331,8 +332,12 @@ impl CryptoProvider {
     /// is available.
     pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
         match v {
-            ProtocolVersion::TLSv1_2 => !self.tls12_cipher_suites.is_empty(),
-            ProtocolVersion::TLSv1_3 => !self.tls13_cipher_suites.is_empty(),
+            ProtocolVersion::TLSv1_2 | ProtocolVersion::DTLSv1_2 => {
+                !self.tls12_cipher_suites.is_empty()
+            }
+            ProtocolVersion::TLSv1_3 | ProtocolVersion::DTLSv1_3 => {
+                !self.tls13_cipher_suites.is_empty()
+            }
             _ => false,
         }
     }

@@ -207,7 +207,9 @@ impl ExpectServerHello {
 
         let config = &self.input.config;
 
-        let server_version = if server_hello.legacy_version == ProtocolVersion::TLSv1_2 {
+        let server_version = if server_hello.legacy_version == ProtocolVersion::TLSv1_2
+            || server_hello.legacy_version == ProtocolVersion::DTLSv1_2
+        {
             server_hello
                 .selected_version
                 .unwrap_or(server_hello.legacy_version)
@@ -226,6 +228,26 @@ impl ExpectServerHello {
                     output,
                 )
             }
+            ProtocolVersion::DTLSv1_3
+                if config.supports_version(ProtocolVersion::DTLSv1_3, self.input.protocol) =>
+            {
+                self.with_version::<Tls13CipherSuite>(
+                    ProtocolVersion::DTLSv1_3,
+                    server_hello,
+                    &input,
+                    output,
+                )
+            }
+            ProtocolVersion::DTLSv1_3
+                if config.supports_version(ProtocolVersion::DTLSv1_3, self.input.protocol) =>
+            {
+                self.with_version::<Tls13CipherSuite>(
+                    ProtocolVersion::DTLSv1_3,
+                    server_hello,
+                    &input,
+                    output,
+                )
+            }
             ProtocolVersion::TLSv1_2
                 if config.supports_version(ProtocolVersion::TLSv1_2, self.input.protocol) =>
             {
@@ -238,9 +260,19 @@ impl ExpectServerHello {
                 if server_hello.selected_version.is_some() {
                     return Err(PeerMisbehaved::SelectedTls12UsingTls13VersionExtension.into());
                 }
-
                 self.with_version::<Tls12CipherSuite>(
                     ProtocolVersion::TLSv1_2,
+                    server_hello,
+                    &input,
+                    output,
+                )
+            }
+            ProtocolVersion::DTLSv1_2
+                if config.supports_version(ProtocolVersion::DTLSv1_2, self.input.protocol) =>
+            {
+                // TODO(DTLS): do something about 0-RTT
+                self.with_version::<Tls12CipherSuite>(
+                    ProtocolVersion::DTLSv1_2,
                     server_hello,
                     &input,
                     output,
@@ -331,11 +363,12 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
-        let Some(ProtocolVersion::TLSv1_3) = hrr.supported_versions else {
-            return Err(PeerMisbehaved::IllegalHelloRetryRequestWithUnsupportedVersion.into());
+        let negotiated_version = match hrr.supported_versions {
+            Some(v @ ProtocolVersion::TLSv1_3 | v @ ProtocolVersion::DTLSv1_3) => v,
+            _ => {
+                return Err(PeerMisbehaved::IllegalHelloRetryRequestWithUnsupportedVersion.into());
+            }
         };
-        // If handling a HelloRetryRequest, we can only negotiate TLS 1.3
-        let negotiated_version = ProtocolVersion::TLSv1_3;
         output.output(OutputEvent::ProtocolVersion(negotiated_version));
 
         // Or asks us to use a ciphersuite we didn't offer.
@@ -536,6 +569,9 @@ impl ClientHelloInput {
         let key_share = if self
             .config
             .supports_version(ProtocolVersion::TLSv1_3, self.protocol)
+            || self
+                .config
+                .supports_version(ProtocolVersion::DTLSv1_3, self.protocol)
         {
             Some(tls13::initial_key_share(&self.config, &self.session_key)?)
         } else {
@@ -587,6 +623,9 @@ fn emit_client_hello_for_retry(
     let supported_versions = SupportedProtocolVersions {
         tls13: config.supports_version(ProtocolVersion::TLSv1_3, input.protocol),
         tls12: config.supports_version(ProtocolVersion::TLSv1_2, input.protocol) && !forbids_tls12,
+        dtls13: config.supports_version(ProtocolVersion::DTLSv1_3, input.protocol),
+        dtls12: config.supports_version(ProtocolVersion::DTLSv1_2, input.protocol)
+            && ech_state.is_none(),
     };
 
     // should be unreachable thanks to config builder
@@ -664,7 +703,7 @@ fn emit_client_hello_for_retry(
     };
 
     if let Some(GroupAndKeyShare { share, .. }) = &key_share {
-        debug_assert!(supported_versions.tls13);
+        debug_assert!(supported_versions.tls13 || supported_versions.dtls13);
         let mut shares = vec![KeyShareEntry::new(share.group(), share.pub_key())];
 
         if !retryreq
@@ -783,7 +822,10 @@ fn emit_client_hello_for_retry(
     }
 
     let mut chp_payload = ClientHelloPayload {
-        client_version: ProtocolVersion::TLSv1_2,
+        client_version: match input.protocol {
+            Protocol::Tcp | Protocol::Quic(_) => ProtocolVersion::TLSv1_2,
+            Protocol::Udp => ProtocolVersion::DTLSv1_2,
+        },
         random: input.random,
         session_id: input.session_id,
         cipher_suites,
@@ -869,20 +911,18 @@ fn emit_client_hello_for_retry(
         _ => None,
     };
 
+    let version = if input.protocol.is_dtls() {
+        ProtocolVersion::DTLSv1_2
+    } else {
+        ProtocolVersion::TLSv1_2
+    };
+    let version = match retryreq {
+        Some(_) => EncodableVersion::Legacy(version),
+        None => EncodableVersion::InitialClientHello(input.protocol),
+    };
     let ch = Message {
-        version: match retryreq {
-            // <https://datatracker.ietf.org/doc/html/rfc9846#section-5.1>:
-            // "This value MUST be set to 0x0303 for all records generated
-            //  by a TLS 1.3 implementation ..."
-            Some(_) => EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
-            // "... other than an initial ClientHello (i.e., one not
-            // generated after a HelloRetryRequest), where it MAY also be
-            // 0x0301 for compatibility purposes"
-            //
-            // (retryreq == None means we're in the "initial ClientHello" case)
-            None => EncodableVersion::InitialClientHello(input.protocol),
-        },
-        payload: MessagePayload::handshake(chp),
+        version,
+        payload: MessagePayload::handshake(chp, output.outbound_handshake_seq()),
     };
 
     if retryreq.is_some() {

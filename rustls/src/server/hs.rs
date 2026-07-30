@@ -525,30 +525,106 @@ impl ExpectClientHello {
         let tls13_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_3, self.protocol);
+        let dtls13_enabled = self
+            .config
+            .supports_version(ProtocolVersion::DTLSv1_3, self.protocol);
         let tls12_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_2, self.protocol);
+        let dtls12_enabled = self
+            .config
+            .supports_version(ProtocolVersion::DTLSv1_2, self.protocol);
 
-        // Are we doing TLS1.3?
+        // Determine protocol version to use based on what we are configured with and what the
+        // client indicates support for.
         if let Some(versions) = &input.client_hello.supported_versions {
-            if versions.tls13 && tls13_enabled {
-                self.with_version::<Tls13CipherSuite>(ProtocolVersion::TLSv1_3, input, output)
-            } else if !versions.tls12 || !tls12_enabled {
-                Err(PeerIncompatible::Tls12NotOfferedOrEnabled.into())
-            } else if self.protocol.is_quic() {
-                Err(PeerIncompatible::Tls13RequiredForQuic.into())
-            } else {
-                self.with_version::<Tls12CipherSuite>(ProtocolVersion::TLSv1_2, input, output)
+            // Client indicated supported versions in the supported versions extension
+            match self.protocol {
+                Protocol::Tcp => {
+                    if versions.tls13 && tls13_enabled {
+                        self.with_version::<Tls13CipherSuite>(
+                            ProtocolVersion::TLSv1_3,
+                            input,
+                            output,
+                        )
+                    } else if !versions.tls12 || !tls12_enabled {
+                        Err(PeerIncompatible::Tls12NotOfferedOrEnabled.into())
+                    } else if !versions.tls12 && (versions.dtls13 || versions.dtls12) {
+                        Err(PeerIncompatible::UdpRequiredForDtls.into())
+                    } else {
+                        self.with_version::<Tls12CipherSuite>(
+                            ProtocolVersion::TLSv1_2,
+                            input,
+                            output,
+                        )
+                    }
+                }
+                // TLS 1.3 is required for QUIC, and the client must indicate support explicitly
+                Protocol::Quic(..) => {
+                    if versions.tls13 && tls13_enabled {
+                        self.with_version::<Tls13CipherSuite>(
+                            ProtocolVersion::TLSv1_3,
+                            input,
+                            output,
+                        )
+                    } else {
+                        Err(PeerIncompatible::Tls13RequiredForQuic.into())
+                    }
+                }
+                Protocol::Udp => {
+                    if versions.dtls13 && dtls13_enabled {
+                        self.with_version::<Tls13CipherSuite>(
+                            ProtocolVersion::DTLSv1_3,
+                            input,
+                            output,
+                        )
+                    } else if !versions.dtls12 || !dtls12_enabled {
+                        Err(PeerIncompatible::Tls12NotOfferedOrEnabled.into())
+                    } else if !versions.dtls12 && (versions.tls13 || versions.tls12) {
+                        Err(PeerIncompatible::TcpOrQuicRequiredForTls.into())
+                    } else {
+                        self.with_version::<Tls12CipherSuite>(
+                            ProtocolVersion::DTLSv1_2,
+                            input,
+                            output,
+                        )
+                    }
+                }
             }
         } else if u16::from(input.client_hello.client_version) < u16::from(ProtocolVersion::TLSv1_2)
         {
+            // Client indicated a version in the legacy version field, but it's not TLS 1.2
             Err(PeerIncompatible::Tls12NotOffered.into())
-        } else if self.protocol.is_quic() {
-            Err(PeerIncompatible::Tls13RequiredForQuic.into())
-        } else if !tls12_enabled && tls13_enabled {
-            Err(PeerIncompatible::SupportedVersionsExtensionRequired.into())
         } else {
-            self.with_version::<Tls12CipherSuite>(ProtocolVersion::TLSv1_2, input, output)
+            // No supported versions indicated by the client. Fall back to (D)TLS 1.2 if enabled.
+            match self.protocol {
+                Protocol::Tcp => {
+                    if tls12_enabled {
+                        self.with_version::<Tls12CipherSuite>(
+                            ProtocolVersion::TLSv1_2,
+                            input,
+                            output,
+                        )
+                    } else {
+                        Err(PeerIncompatible::Tls12NotOfferedOrEnabled.into())
+                    }
+                }
+                Protocol::Quic(..) => {
+                    // Only TLS 1.3 is supported for QUIC, and the client must explicitly indicate support for it.
+                    Err(PeerIncompatible::Tls13RequiredForQuic.into())
+                }
+                Protocol::Udp => {
+                    if dtls12_enabled {
+                        self.with_version::<Tls12CipherSuite>(
+                            ProtocolVersion::DTLSv1_2,
+                            input,
+                            output,
+                        )
+                    } else {
+                        Err(PeerIncompatible::Tls12NotOfferedOrEnabled.into())
+                    }
+                }
+            }
         }
     }
 
@@ -599,13 +675,13 @@ impl ExpectClientHello {
             .collect::<Vec<_>>();
 
         let mut sig_schemes = input.sig_schemes.to_owned();
-        if version == ProtocolVersion::TLSv1_2 {
+        if version == ProtocolVersion::TLSv1_2 || version == ProtocolVersion::DTLSv1_2 {
             sig_schemes.retain(|scheme| {
                 client_suites
                     .iter()
                     .any(|&suite| suite.usable_for_signature_scheme(*scheme))
             });
-        } else if version == ProtocolVersion::TLSv1_3 {
+        } else if version == ProtocolVersion::TLSv1_3 || version == ProtocolVersion::DTLSv1_3 {
             sig_schemes.retain(SignatureScheme::supported_in_tls13);
         }
 

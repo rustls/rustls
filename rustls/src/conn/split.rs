@@ -15,7 +15,9 @@ use crate::crypto::cipher::{MessageEncrypter, OutboundPlain};
 use crate::enums::ProtocolVersion;
 use crate::error::{AlertDescription, ErrorWithAlert};
 use crate::lock::Mutex;
-use crate::msgs::{AlertLevel, Delocator, Message};
+use crate::msgs::{
+    AlertLevel, Delocator, EncrypterDecrypterPurpose, HandshakeSequenceNumber, Message,
+};
 use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::{ConnectionOutputs, Error, ExtractedSecrets, SideData};
@@ -494,9 +496,14 @@ impl SendOutput for SendAdapter<'_> {
             .note_key_update_response();
     }
 
-    fn set_encrypter(&mut self, cipher: Box<dyn MessageEncrypter>, max_messages: u64) {
+    fn set_encrypter(
+        &mut self,
+        cipher: Box<dyn MessageEncrypter>,
+        max_messages: u64,
+        purpose: EncrypterDecrypterPurpose,
+    ) {
         self.as_locked(false)
-            .set_encrypter(cipher, max_messages);
+            .set_encrypter(cipher, max_messages, purpose);
     }
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>) {
@@ -517,11 +524,17 @@ impl SendOutput for SendAdapter<'_> {
         self.as_locked(true)
             .send_msg(m, must_encrypt, tls)
     }
+
+    fn outbound_handshake_seq(&mut self) -> HandshakeSequenceNumber {
+        self.as_locked(false)
+            .outbound_handshake_seq()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common_state::{Protocol, Side};
     use crate::crypto::test_provider::Tls13Cipher;
 
     #[test]
@@ -532,9 +545,11 @@ mod tests {
         ));
         assert!(send_flag_for(|adapter| adapter.queue_requested_key_update()));
         assert!(!send_flag_for(|adapter| adapter.note_key_update_response()));
-        assert!(!send_flag_for(
-            |adapter| adapter.set_encrypter(Box::new(Tls13Cipher), 1234)
-        ));
+        assert!(!send_flag_for(|adapter| adapter.set_encrypter(
+            Box::new(Tls13Cipher),
+            1234,
+            EncrypterDecrypterPurpose::ApplicationData
+        )));
         // update_key_schedule too hard
         assert!(send_flag_for(|adapter| adapter.send_alert(
             AlertLevel::Fatal,
@@ -543,16 +558,25 @@ mod tests {
         )));
         assert!(!send_flag_for(|adapter| adapter.start_traffic()));
         assert!(send_flag_for(|adapter| adapter.send_msg(
-            Message::build_key_update_notify(ProtocolVersion::TLSv1_3),
-            false,
+            Message::build_key_update_notify(ProtocolVersion::TLSv1_3, 0.into()),
+            true,
             &mut tls,
         )));
     }
 
     fn send_flag_for(f: impl FnOnce(&mut SendAdapter<'_>)) -> bool {
-        let mut send = SendPath::default();
-        send.set_encrypter(Box::new(Tls13Cipher), 1234);
+        let mut send = SendPath::new(Protocol::Tcp, Side::Server);
         send.set_negotiated_version(ProtocolVersion::TLSv1_3);
+        send.set_encrypter(
+            Box::new(Tls13Cipher),
+            1234,
+            EncrypterDecrypterPurpose::HandshakeMessages,
+        );
+        send.set_encrypter(
+            Box::new(Tls13Cipher),
+            1234,
+            EncrypterDecrypterPurpose::ApplicationData,
+        );
 
         let send = Mutex::new(send);
 

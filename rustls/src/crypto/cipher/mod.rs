@@ -10,11 +10,14 @@ use crate::error::{ApiMisuse, Error};
 use crate::msgs::{put_u16, put_u64};
 use crate::suites::ConnectionTrafficSecrets;
 
+mod antireplay;
+pub use antireplay::AntiReplay;
+
 mod messages;
 pub(crate) use messages::encode_record_header;
 pub use messages::{
-    EncodableVersion, EncodedMessage, EncryptBuffer, InboundOpaque, MessageError, OutboundPlain,
-    Payload,
+    EncodableVersion, EncodedMessage, EncodingContext, EncryptBuffer, InboundOpaque, MessageError,
+    OutboundPlain, Payload,
 };
 
 mod record_layer;
