@@ -1947,9 +1947,11 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             | InvalidMessage::MissingData(_)
             | InvalidMessage::TrailingData(_)
             | InvalidMessage::UnexpectedMessage("HelloRetryRequest")
-            | InvalidMessage::NoSignatureSchemes
-            | InvalidMessage::UnsupportedCompression,
+            | InvalidMessage::NoSignatureSchemes,
         ) => quit(":BAD_HANDSHAKE_MSG:"),
+        Error::InvalidMessage(InvalidMessage::UnsupportedCompression) => {
+            quit(":UNSUPPORTED_COMPRESSION:")
+        }
         Error::InvalidMessage(InvalidMessage::InvalidCertRequest)
         | Error::InvalidMessage(InvalidMessage::InvalidDhParams)
         | Error::InvalidMessage(InvalidMessage::MissingKeyExchange) => quit(":BAD_HANDSHAKE_MSG:"),
