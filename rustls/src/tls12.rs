@@ -12,7 +12,6 @@ use crate::crypto::cipher::{AeadKey, MessageDecrypter, MessageEncrypter, Tls12Ae
 use crate::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::crypto::tls12::PrfSecret;
 use crate::crypto::{self, SignatureScheme, hash};
-use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error, InvalidMessage};
 use crate::msgs::{Codec, HandshakeAlignedProof, KxDecode, Reader};
 use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, Suite, SupportedCipherSuite};
@@ -100,7 +99,7 @@ impl Suite for Tls12CipherSuite {
     ///
     /// All TLS1.2 suites support TCP-TLS. No TLS1.2 suites support QUIC.
     fn usable_for_protocol(&self, proto: Protocol) -> bool {
-        matches!(proto, Protocol::Tcp)
+        matches!(proto, Protocol::Tcp | Protocol::Udp)
     }
 
     /// Say if the given `KeyExchangeAlgorithm` is supported by this cipher suite.
@@ -119,8 +118,6 @@ impl Suite for Tls12CipherSuite {
     fn common(&self) -> &CipherSuiteCommon {
         &self.common
     }
-
-    const VERSION: ProtocolVersion = ProtocolVersion::TLSv1_2;
 }
 
 impl From<&'static Tls12CipherSuite> for SupportedCipherSuite {

@@ -10,6 +10,7 @@ use pki_types::FipsStatus;
 use crate::common_state::{
     CommonState, ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent,
 };
+use crate::crypto::cipher::OutboundPlain;
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
 use crate::msgs::{Delocator, Message, Random, ServerExtensionsInput};
@@ -34,8 +35,6 @@ pub(crate) use send::{SendOutput, SendPath};
 
 pub(crate) mod split;
 use split::SplitConnection;
-
-use crate::crypto::cipher::OutboundPlain;
 
 /// A trait generalizing over buffered client or server connections.
 pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
@@ -800,7 +799,9 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
     fn output(&mut self, ev: OutputEvent<'_>) {
         if let OutputEvent::ProtocolVersion(ver) = ev {
             self.common.recv.negotiated_version = Some(ver);
-            self.common.send.negotiated_version(ver);
+            self.common
+                .send
+                .set_negotiated_version(ver);
         }
         self.common.outputs.handle(ev);
     }

@@ -84,6 +84,7 @@ mod server_hello {
     impl ClientHandler<Tls12CipherSuite> for Handler {
         fn handle_server_hello(
             &self,
+            version: ProtocolVersion,
             suite: &'static Tls12CipherSuite,
             server_hello: &ServerHelloPayload,
             Input { message, .. }: &Input<'_>,
@@ -93,7 +94,7 @@ mod server_hello {
             // Start our handshake hash, and input the server-hello.
             let mut transcript = st
                 .transcript_buffer
-                .start_hash(suite.common.hash_provider);
+                .start_hash(suite.common.hash_provider, version);
             transcript.add_message(message);
 
             let mut randoms = ConnectionRandoms::new(st.input.random, server_hello.random);
@@ -202,6 +203,7 @@ mod server_hello {
                         session_key,
                         using_ems,
                         transcript,
+                        version,
                     };
                     return if must_issue_new_ticket {
                         Ok(Box::new(ExpectNewTicket {
@@ -240,6 +242,7 @@ mod server_hello {
                     session_key,
                     using_ems,
                     transcript,
+                    version,
                 },
                 randoms,
                 suite,
@@ -471,14 +474,17 @@ impl From<Box<ExpectServerKx>> for ClientState {
 
 fn emit_certificate(
     transcript: &mut HandshakeHash,
+    version: ProtocolVersion,
     cert_chain: CertificateChain<'_>,
     output: &mut dyn Output<'_>,
 ) {
+    let payload = MessagePayload::handshake(
+        HandshakeMessagePayload(HandshakePayload::Certificate(cert_chain)),
+        output.outbound_handshake_seq(),
+    );
     let cert = Message {
-        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
-        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Certificate(
-            cert_chain,
-        ))),
+        version: EncodableVersion::Legacy(version),
+        payload,
     };
 
     transcript.add_message(&cert);
@@ -487,6 +493,7 @@ fn emit_certificate(
 
 fn emit_client_kx(
     transcript: &mut HandshakeHash,
+    version: ProtocolVersion,
     kxa: KeyExchangeAlgorithm,
     output: &mut dyn Output<'_>,
     pub_key: &[u8],
@@ -504,10 +511,11 @@ fn emit_client_kx(
     let pubkey = Payload::new(buf);
 
     let ckx = Message {
-        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
-        payload: MessagePayload::handshake(HandshakeMessagePayload(
-            HandshakePayload::ClientKeyExchange(pubkey),
-        )),
+        version: EncodableVersion::Legacy(version),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::ClientKeyExchange(pubkey)),
+            output.outbound_handshake_seq(),
+        ),
     };
 
     transcript.add_message(&ckx);
@@ -516,6 +524,7 @@ fn emit_client_kx(
 
 fn emit_certverify(
     transcript: &mut HandshakeHash,
+    version: ProtocolVersion,
     signer: Box<dyn Signer>,
     output: &mut dyn Output<'_>,
 ) -> Result<(), Error> {
@@ -528,10 +537,11 @@ fn emit_certverify(
     let body = DigitallySignedStruct::new(scheme, sig);
 
     let m = Message {
-        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
-        payload: MessagePayload::handshake(HandshakeMessagePayload(
-            HandshakePayload::CertificateVerify(body),
-        )),
+        version: EncodableVersion::Legacy(version),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::CertificateVerify(body)),
+            output.outbound_handshake_seq(),
+        ),
     };
 
     transcript.add_message(&m);
@@ -539,10 +549,10 @@ fn emit_certverify(
     Ok(())
 }
 
-fn emit_ccs(output: &mut dyn Output<'_>) {
+fn emit_ccs(hs: &HandshakeState, output: &mut dyn Output<'_>) {
     output.send_msg(
         Message {
-            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+            version: EncodableVersion::Legacy(hs.version),
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         },
         false,
@@ -550,6 +560,7 @@ fn emit_ccs(output: &mut dyn Output<'_>) {
 }
 
 fn emit_finished(
+    version: ProtocolVersion,
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
     output: &mut dyn Output<'_>,
@@ -560,10 +571,11 @@ fn emit_finished(
     let verify_data_payload = Payload::Borrowed(&verify_data);
 
     let f = Message {
-        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
-        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Finished(
-            verify_data_payload,
-        ))),
+        version: EncodableVersion::Legacy(version),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::Finished(verify_data_payload)),
+            output.outbound_handshake_seq(),
+        ),
     };
 
     transcript.add_message(&f);
@@ -800,7 +812,7 @@ impl ExpectServerDone {
                     CertificateChain::from_signer(credentials)
                 }
             };
-            emit_certificate(&mut self.hs.transcript, certs, output);
+            emit_certificate(&mut self.hs.transcript, self.hs.version, certs, output);
         }
 
         // 4a.
@@ -832,7 +844,13 @@ impl ExpectServerDone {
         let kx = skxg.start()?.into_single();
 
         // 4b.
-        emit_client_kx(&mut self.hs.transcript, self.suite.kx, output, kx.pub_key());
+        emit_client_kx(
+            &mut self.hs.transcript,
+            self.hs.version,
+            self.suite.kx,
+            output,
+            kx.pub_key(),
+        );
         // Note: EMS handshake hash only runs up to ClientKeyExchange.
         let ems_seed = self
             .hs
@@ -841,7 +859,12 @@ impl ExpectServerDone {
 
         // 4c.
         if let Some(ClientAuthDetails::Verify { credentials, .. }) = self.client_auth {
-            emit_certverify(&mut self.hs.transcript, credentials.signer, output)?;
+            emit_certverify(
+                &mut self.hs.transcript,
+                self.hs.version,
+                credentials.signer,
+                output,
+            )?;
         }
 
         // 4d. Derive secrets.
@@ -857,7 +880,7 @@ impl ExpectServerDone {
         output.output(OutputEvent::KeyExchangeGroup(skxg));
 
         // 4e. CCS. We are definitely going to switch on encryption.
-        emit_ccs(output);
+        emit_ccs(&self.hs, output);
 
         // 4f. Now commit secrets.
         self.hs.config.key_log.log(
@@ -876,7 +899,13 @@ impl ExpectServerDone {
         );
 
         // 5.
-        emit_finished(&secrets, &mut self.hs.transcript, output, &proof);
+        emit_finished(
+            self.hs.version,
+            &secrets,
+            &mut self.hs.transcript,
+            output,
+            &proof,
+        );
 
         if self.must_issue_new_ticket {
             Ok(Box::new(ExpectNewTicket {
@@ -1105,9 +1134,7 @@ impl ExpectFinished {
         let fin_verified =
             match ConstantTimeEq::ct_eq(&expect_verify_data[..], finished.bytes()).into() {
                 true => verify::FinishedMessageVerified::assertion(),
-                false => {
-                    return Err(PeerMisbehaved::IncorrectFinished.into());
-                }
+                false => return Err(PeerMisbehaved::IncorrectFinished.into()),
             };
 
         // Hash this message too.
@@ -1118,7 +1145,7 @@ impl ExpectFinished {
         st.save_session();
 
         if let Some((_, encrypter)) = st.resuming.take() {
-            emit_ccs(output);
+            emit_ccs(&st.hs, output);
             output.send().set_encrypter(
                 encrypter,
                 st.secrets
@@ -1126,7 +1153,13 @@ impl ExpectFinished {
                     .common
                     .confidentiality_limit,
             );
-            emit_finished(&st.secrets, &mut st.hs.transcript, output, &proof);
+            emit_finished(
+                st.hs.version,
+                &st.secrets,
+                &mut st.hs.transcript,
+                output,
+                &proof,
+            );
         }
 
         let extracted_secrets = st
@@ -1175,6 +1208,8 @@ struct HandshakeState {
     session_key: ClientSessionKey<'static>,
     using_ems: bool,
     transcript: HandshakeHash,
+    /// The protocol version negotiated for this handshake.
+    version: ProtocolVersion,
 }
 
 // -- Traffic transit state --

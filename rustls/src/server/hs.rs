@@ -513,35 +513,112 @@ impl ExpectClientHello {
         let tls13_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_3, self.protocol);
+        let dtls13_enabled = self
+            .config
+            .supports_version(ProtocolVersion::DTLSv1_3, self.protocol);
         let tls12_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_2, self.protocol);
+        let dtls12_enabled = self
+            .config
+            .supports_version(ProtocolVersion::DTLSv1_2, self.protocol);
 
-        // Are we doing TLS1.3?
+        // Determine protocol version to use based on what we are configured with and what the
+        // client indicates support for.
         if let Some(versions) = &input.client_hello.supported_versions {
-            if versions.tls13 && tls13_enabled {
-                self.with_version::<Tls13CipherSuite>(input, output)
-            } else if !versions.tls12 || !tls12_enabled {
-                Err(PeerIncompatible::Tls12NotOfferedOrEnabled.into())
-            } else if self.protocol.is_quic() {
-                Err(PeerIncompatible::Tls13RequiredForQuic.into())
-            } else {
-                self.with_version::<Tls12CipherSuite>(input, output)
+            // Client indicated supported versions in the supported versions extension
+            match self.protocol {
+                Protocol::Tcp => {
+                    if versions.tls13 && tls13_enabled {
+                        self.with_version::<Tls13CipherSuite>(
+                            ProtocolVersion::TLSv1_3,
+                            input,
+                            output,
+                        )
+                    } else if !versions.tls12 || !tls12_enabled {
+                        Err(PeerIncompatible::Tls12NotOfferedOrEnabled.into())
+                    } else if !versions.tls12 && (versions.dtls13 || versions.dtls12) {
+                        Err(PeerIncompatible::UdpRequiredForDtls.into())
+                    } else {
+                        self.with_version::<Tls12CipherSuite>(
+                            ProtocolVersion::TLSv1_2,
+                            input,
+                            output,
+                        )
+                    }
+                }
+                // TLS 1.3 is required for QUIC, and the client must indicate support explicitly
+                Protocol::Quic(..) => {
+                    if versions.tls13 && tls13_enabled {
+                        self.with_version::<Tls13CipherSuite>(
+                            ProtocolVersion::TLSv1_3,
+                            input,
+                            output,
+                        )
+                    } else {
+                        Err(PeerIncompatible::Tls13RequiredForQuic.into())
+                    }
+                }
+                Protocol::Udp => {
+                    if versions.dtls13 && dtls13_enabled {
+                        self.with_version::<Tls13CipherSuite>(
+                            ProtocolVersion::DTLSv1_3,
+                            input,
+                            output,
+                        )
+                    } else if !versions.dtls12 || !dtls12_enabled {
+                        Err(PeerIncompatible::Tls12NotOfferedOrEnabled.into())
+                    } else if !versions.dtls12 && (versions.tls13 || versions.tls12) {
+                        Err(PeerIncompatible::TcpOrQuicRequiredForTls.into())
+                    } else {
+                        self.with_version::<Tls12CipherSuite>(
+                            ProtocolVersion::DTLSv1_2,
+                            input,
+                            output,
+                        )
+                    }
+                }
             }
         } else if u16::from(input.client_hello.client_version) < u16::from(ProtocolVersion::TLSv1_2)
         {
+            // Client indicated a version in the legacy version field, but it's not TLS 1.2
             Err(PeerIncompatible::Tls12NotOffered.into())
-        } else if self.protocol.is_quic() {
-            Err(PeerIncompatible::Tls13RequiredForQuic.into())
-        } else if !tls12_enabled && tls13_enabled {
-            Err(PeerIncompatible::SupportedVersionsExtensionRequired.into())
         } else {
-            self.with_version::<Tls12CipherSuite>(input, output)
+            // No supported versions indicated by the client. Fall back to (D)TLS 1.2 if enabled.
+            match self.protocol {
+                Protocol::Tcp => {
+                    if tls12_enabled {
+                        self.with_version::<Tls12CipherSuite>(
+                            ProtocolVersion::TLSv1_2,
+                            input,
+                            output,
+                        )
+                    } else {
+                        Err(PeerIncompatible::Tls12NotOfferedOrEnabled.into())
+                    }
+                }
+                Protocol::Quic(..) => {
+                    // Only TLS 1.3 is supported for QUIC, and the client must explicitly indicate support for it.
+                    Err(PeerIncompatible::Tls13RequiredForQuic.into())
+                }
+                Protocol::Udp => {
+                    if dtls12_enabled {
+                        self.with_version::<Tls12CipherSuite>(
+                            ProtocolVersion::DTLSv1_2,
+                            input,
+                            output,
+                        )
+                    } else {
+                        Err(PeerIncompatible::Tls12NotOfferedOrEnabled.into())
+                    }
+                }
+            }
         }
     }
 
     fn with_version<T: Suite + 'static>(
         mut self,
+        version: ProtocolVersion,
         input: ClientHelloInput<'_>,
         output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error>
@@ -550,7 +627,7 @@ impl ExpectClientHello {
         SupportedCipherSuite: From<&'static T>,
         dyn CipherSuiteSelector: VersionSuiteSelector<T>,
     {
-        output.output(OutputEvent::ProtocolVersion(T::VERSION));
+        output.output(OutputEvent::ProtocolVersion(version));
 
         let sni = self
             .config
@@ -586,13 +663,13 @@ impl ExpectClientHello {
             .collect::<Vec<_>>();
 
         let mut sig_schemes = input.sig_schemes.to_owned();
-        if T::VERSION == ProtocolVersion::TLSv1_2 {
+        if version == ProtocolVersion::TLSv1_2 || version == ProtocolVersion::DTLSv1_2 {
             sig_schemes.retain(|scheme| {
                 client_suites
                     .iter()
                     .any(|&suite| suite.usable_for_signature_scheme(*scheme))
             });
-        } else if T::VERSION == ProtocolVersion::TLSv1_3 {
+        } else if version == ProtocolVersion::TLSv1_3 || version == ProtocolVersion::DTLSv1_3 {
             sig_schemes.retain(SignatureScheme::supported_in_tls13);
         }
 
@@ -604,11 +681,12 @@ impl ExpectClientHello {
                 input.client_hello,
                 Some(&sig_schemes),
                 sni.as_ref().map(Cow::Borrowed),
-                Some(T::VERSION),
+                Some(version),
             ))?;
         self.sni = sni;
 
         let (suite, skxg) = self.choose_suite_and_kx_group(
+            version,
             suites,
             credentials.signer.scheme(),
             input
@@ -624,11 +702,12 @@ impl ExpectClientHello {
 
         suite
             .server_handler()
-            .handle_client_hello(suite, skxg, credentials, input, self, output)
+            .handle_client_hello(version, suite, skxg, credentials, input, self, output)
     }
 
     fn choose_suite_and_kx_group<T: Suite + 'static>(
         &self,
+        version: ProtocolVersion,
         suites: &[&'static T],
         sig_scheme: SignatureScheme,
         client_groups: &[NamedGroup],
@@ -650,7 +729,7 @@ impl ExpectClientHello {
             let supported = self
                 .config
                 .provider
-                .find_kx_group(*offered_group, T::VERSION);
+                .find_kx_group(*offered_group, version);
 
             match offered_group.key_exchange_algorithm() {
                 KeyExchangeAlgorithm::DHE => {
@@ -667,7 +746,7 @@ impl ExpectClientHello {
             }
         }
 
-        let first_supported_dhe_kxg = if T::VERSION == ProtocolVersion::TLSv1_2 {
+        let first_supported_dhe_kxg = if version == ProtocolVersion::TLSv1_2 {
             // https://datatracker.ietf.org/doc/html/rfc7919#section-4 (paragraph 2)
             let first_supported_dhe_kxg = self
                 .config
@@ -723,7 +802,7 @@ impl ExpectClientHello {
                 suite.usable_for_kx_algorithm(kx_group.name().key_exchange_algorithm())
             });
 
-        if T::VERSION == ProtocolVersion::TLSv1_3 {
+        if version == ProtocolVersion::TLSv1_3 {
             // This unwrap is structurally guaranteed by the early return for `!ffdhe_possible && !ecdhe_possible`
             return Ok((suite, *maybe_skxg.unwrap()));
         }
@@ -778,6 +857,7 @@ impl From<Box<ExpectClientHello>> for ServerState {
 pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
     fn handle_client_hello(
         &self,
+        version: ProtocolVersion,
         suite: &'static T,
         kx_group: &'static dyn SupportedKxGroup,
         credentials: SelectedCredential,
@@ -840,10 +920,18 @@ pub(crate) enum HandshakeHashOrBuffer {
 }
 
 impl HandshakeHashOrBuffer {
-    pub(super) fn start(self, hash: &'static dyn Hash) -> Result<HandshakeHash, Error> {
+    pub(super) fn start(
+        self,
+        hash: &'static dyn Hash,
+        version: ProtocolVersion,
+    ) -> Result<HandshakeHash, Error> {
         match self {
-            Self::Buffer(inner) => Ok(inner.start_hash(hash)),
-            Self::Hash(inner) if inner.algorithm() == hash.algorithm() => Ok(inner),
+            Self::Buffer(inner) => Ok(inner.start_hash(hash, version)),
+            Self::Hash(inner)
+                if inner.algorithm() == hash.algorithm() && inner.version() == version =>
+            {
+                Ok(inner)
+            }
             _ => Err(PeerMisbehaved::HandshakeHashVariedAfterRetry.into()),
         }
     }

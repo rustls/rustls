@@ -5,7 +5,10 @@ use alloc::vec::Vec;
 
 use crate::crypto::cipher::Payload;
 use crate::error::InvalidMessage;
-use crate::msgs::{Codec, ListLength, NonEmpty, Reader, SizedPayload, TlsListElement};
+use crate::msgs::{
+    Codec, DTLS_12_HEADER_SIZE, DTLS_13_UNIFIED_HEADER_SIZE, DTLS_HANDSHAKE_HEADER_SIZE,
+    HANDSHAKE_HEADER_SIZE, HEADER_SIZE, ListLength, NonEmpty, Reader, SizedPayload, TlsListElement,
+};
 
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -169,6 +172,7 @@ enum_builder! {
         Handshake => 0x16,
         ApplicationData => 0x17,
         Heartbeat => 0x18,
+        Dtls13Ciphertext => 0x20,
     }
 }
 
@@ -187,6 +191,39 @@ enum_builder! {
         DTLSv1_0 => 0xFEFF,
         DTLSv1_2 => 0xFEFD,
         DTLSv1_3 => 0xFEFC,
+    }
+}
+
+impl ProtocolVersion {
+    /// Whether this protocol version is Datagram TLS.
+    pub fn is_datagram_tls(self) -> bool {
+        self == Self::DTLSv1_0 || self == Self::DTLSv1_2 || self == Self::DTLSv1_3
+    }
+
+    /// The size of a handshake message header in this protocol version.
+    pub fn handshake_header_size(self) -> usize {
+        if self.is_datagram_tls() {
+            DTLS_HANDSHAKE_HEADER_SIZE
+        } else {
+            HANDSHAKE_HEADER_SIZE
+        }
+    }
+
+    /// The size of a record header for an encrypted message in this protocol version.
+    pub fn encrypted_header_len(self) -> usize {
+        match self {
+            Self::DTLSv1_2 => DTLS_12_HEADER_SIZE,
+            Self::DTLSv1_3 => DTLS_13_UNIFIED_HEADER_SIZE,
+            _ => HEADER_SIZE,
+        }
+    }
+
+    /// The size of a record header for an unencrypted message in this protocol version.
+    pub fn unencrypted_header_len(self) -> usize {
+        match self {
+            Self::DTLSv1_2 | Self::DTLSv1_3 => DTLS_12_HEADER_SIZE,
+            _ => HEADER_SIZE,
+        }
     }
 }
 

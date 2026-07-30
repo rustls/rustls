@@ -4,7 +4,6 @@ use pki_types::FipsStatus;
 
 use crate::common_state::Protocol;
 use crate::crypto::{self, SignatureScheme, hash};
-use crate::enums::ProtocolVersion;
 use crate::quic;
 use crate::suites::{CipherSuiteCommon, Suite, SupportedCipherSuite};
 use crate::version::Tls13Version;
@@ -14,6 +13,7 @@ pub(crate) mod key_schedule;
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Tls13ProtocolSuite {
     Tcp(&'static Tls13CipherSuite),
+    Udp(&'static Tls13CipherSuite),
     Quic(quic::Suite),
 }
 
@@ -21,12 +21,17 @@ impl Tls13ProtocolSuite {
     pub(crate) fn suite(&self) -> &'static Tls13CipherSuite {
         match self {
             Self::Tcp(suite) => suite,
+            Self::Udp(suite) => suite,
             Self::Quic(quic) => quic.inner,
         }
     }
 
     pub(crate) fn is_quic(&self) -> bool {
         matches!(self, Self::Quic(_))
+    }
+
+    pub(crate) fn is_dtls(&self) -> bool {
+        matches!(self, Self::Udp(_))
     }
 }
 
@@ -111,10 +116,10 @@ impl Suite for Tls13CipherSuite {
 
     /// Does this suite support the `proto` protocol?
     ///
-    /// All TLS1.3 suites support TCP-TLS. QUIC support is conditional on `quic` slot.
+    /// All TLS1.3 suites support TCP-TLS and DTLS. QUIC support is conditional on `quic` slot.
     fn usable_for_protocol(&self, proto: Protocol) -> bool {
         match proto {
-            Protocol::Tcp => true,
+            Protocol::Tcp | Protocol::Udp => true,
             Protocol::Quic(_) => self.quic.is_some(),
         }
     }
@@ -126,8 +131,6 @@ impl Suite for Tls13CipherSuite {
     fn common(&self) -> &CipherSuiteCommon {
         &self.common
     }
-
-    const VERSION: ProtocolVersion = ProtocolVersion::TLSv1_3;
 }
 
 impl From<&'static Tls13CipherSuite> for SupportedCipherSuite {

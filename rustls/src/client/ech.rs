@@ -471,7 +471,7 @@ impl EchState {
         // Start the inner transcript hash now that we know the hash algorithm to use.
         let inner_transcript = self
             .inner_hello_transcript
-            .start_hash(hash);
+            .start_hash(hash, ProtocolVersion::TLSv1_3);
 
         // Fork the transcript that we've started with the inner hello to use for a confirmation step.
         // We need to preserve the original inner_transcript to use if this confirmation succeeds.
@@ -529,7 +529,7 @@ impl EchState {
         // 7.2.1
         let confirmation_transcript = self.inner_hello_transcript.clone();
         let mut confirmation_transcript =
-            confirmation_transcript.start_hash(cs.common.hash_provider);
+            confirmation_transcript.start_hash(cs.common.hash_provider, ProtocolVersion::TLSv1_3);
         confirmation_transcript.rollup_for_hrr();
         confirmation_transcript.add_message(&Self::hello_retry_request_conf(hrr));
 
@@ -566,7 +566,7 @@ impl EchState {
         let inner_transcript = self
             .inner_hello_transcript
             .clone()
-            .start_hash(hash);
+            .start_hash(hash, ProtocolVersion::TLSv1_3);
 
         let mut inner_transcript_buffer = inner_transcript.into_hrr_buffer(proof);
         inner_transcript_buffer.add_message(m);
@@ -727,9 +727,10 @@ impl EchState {
                 // (retryreq == None means we're in the "initial ClientHello" case)
                 None => EncodableVersion::InitialClientHello(Protocol::Tcp),
             },
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::ClientHello(inner_hello),
-            )),
+            payload: MessagePayload::handshake(
+                HandshakeMessagePayload(HandshakePayload::ClientHello(inner_hello)),
+                0.into(),
+            ),
         };
 
         // Update the inner transcript buffer with the inner hello message.
@@ -795,6 +796,7 @@ impl EchState {
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(
                     server_hello.clone(),
                 )),
+                seq: 0.into(),
             },
         }
     }
@@ -813,6 +815,7 @@ impl EchState {
             payload: MessagePayload::Handshake {
                 encoded: Payload::new(hmp_encoded),
                 parsed: hmp,
+                seq: 0.into(),
             },
         }
     }
@@ -858,9 +861,10 @@ mod tests {
         };
         let message = Message {
             version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::ServerHello(server_hello.clone()),
-            )),
+            payload: MessagePayload::handshake(
+                HandshakeMessagePayload(HandshakePayload::ServerHello(server_hello.clone())),
+                0.into(),
+            ),
         };
         let Message {
             payload:

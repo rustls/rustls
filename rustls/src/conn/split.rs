@@ -15,7 +15,7 @@ use crate::crypto::cipher::{MessageEncrypter, OutboundPlain};
 use crate::enums::ProtocolVersion;
 use crate::error::{AlertDescription, ErrorWithAlert};
 use crate::lock::Mutex;
-use crate::msgs::{AlertLevel, Delocator, Message};
+use crate::msgs::{AlertLevel, Delocator, HandshakeSequenceNumber, Message};
 use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::{ConnectionOutputs, Error, ExtractedSecrets, SideData};
@@ -515,9 +515,9 @@ impl<'a> SendAdapter<'a> {
 }
 
 impl SendOutput for SendAdapter<'_> {
-    fn negotiated_version(&mut self, version: ProtocolVersion) {
+    fn set_negotiated_version(&mut self, version: ProtocolVersion) {
         self.as_locked(false)
-            .negotiated_version(version);
+            .set_negotiated_version(version);
     }
 
     fn ensure_key_update_queued(&mut self) {
@@ -550,17 +550,23 @@ impl SendOutput for SendAdapter<'_> {
         self.as_locked(true)
             .send_msg(m, must_encrypt)
     }
+
+    fn outbound_handshake_seq(&mut self) -> HandshakeSequenceNumber {
+        self.as_locked(false)
+            .outbound_handshake_seq()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common_state::Protocol;
     use crate::crypto::test_provider::Tls13Cipher;
 
     #[test]
     fn send_adapter_flag() {
         assert!(!send_flag_for(
-            |adapter| adapter.negotiated_version(ProtocolVersion::TLSv1_3)
+            |adapter| adapter.set_negotiated_version(ProtocolVersion::TLSv1_3)
         ));
         assert!(send_flag_for(|adapter| adapter.ensure_key_update_queued()));
         assert!(!send_flag_for(
@@ -572,14 +578,16 @@ mod tests {
             AlertDescription::CertificateUnknown
         )));
         assert!(!send_flag_for(|adapter| adapter.start_traffic()));
-        assert!(send_flag_for(
-            |adapter| adapter.send_msg(Message::build_key_update_notify(), false)
-        ));
+        assert!(send_flag_for(|adapter| adapter.send_msg(
+            Message::build_key_update_notify(ProtocolVersion::TLSv1_3, 0.into()),
+            false,
+        )));
     }
 
     fn send_flag_for(f: impl FnOnce(&mut SendAdapter<'_>)) -> bool {
-        let mut send = SendPath::default();
+        let mut send = SendPath::new(Protocol::Tcp);
         send.set_encrypter(Box::new(Tls13Cipher), 1234);
+        send.set_negotiated_version(ProtocolVersion::TLSv1_3);
 
         let send = Mutex::new(send);
 

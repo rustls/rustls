@@ -33,9 +33,9 @@ use crate::log::{debug, trace, warn};
 use crate::msgs::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, ChangeCipherSpecPayload, ClientExtensions,
     Codec, EchConfigPayload, EncryptedExtensions, ExtensionType, HandshakeMessagePayload,
-    HandshakePayload, KeyShareEntry, KeyUpdateRequest, MaybeEmpty, Message, MessagePayload,
-    NewSessionTicketPayloadTls13, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer,
-    ServerHelloPayload, SizedPayload,
+    HandshakePayload, HandshakeSequenceNumber, KeyShareEntry, KeyUpdateRequest, MaybeEmpty,
+    Message, MessagePayload, NewSessionTicketPayloadTls13, PresharedKeyBinder,
+    PresharedKeyIdentity, PresharedKeyOffer, ServerHelloPayload, SizedPayload,
 };
 use crate::sealed::Sealed;
 use crate::suites::PartiallyExtractedSecrets;
@@ -96,6 +96,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
     /// "early_data" extension to the server.
     fn handle_server_hello(
         &self,
+        version: ProtocolVersion,
         suite: &'static Tls13CipherSuite,
         server_hello: &ServerHelloPayload,
         input: &Input<'_>,
@@ -105,7 +106,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         // Start our handshake hash, and input the server-hello.
         let mut transcript = st
             .transcript_buffer
-            .start_hash(suite.common.hash_provider);
+            .start_hash(suite.common.hash_provider, version);
         transcript.add_message(&input.message);
 
         let mut randoms = ConnectionRandoms::new(st.input.random, server_hello.random);
@@ -150,6 +151,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
 
         let suite = match protocol {
             Protocol::Tcp => Tls13ProtocolSuite::Tcp(suite),
+            Protocol::Udp => Tls13ProtocolSuite::Udp(suite),
             Protocol::Quic(_) => Tls13ProtocolSuite::Quic(quic::Suite::try_from(suite)?),
         };
 
@@ -262,7 +264,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             &proof,
         );
 
-        if !key_schedule.is_quic() {
+        if !key_schedule.is_quic() && !key_schedule.is_dtls() {
             emit_fake_ccs(&mut sent_tls13_fake_ccs, output);
         }
 
@@ -378,7 +380,15 @@ pub(super) fn fill_in_psk_binder(
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
     let binder_plaintext = hmp.encoding_for_binder_signing();
-    let handshake_hash = transcript.hash_given(key_schedule.hash(), &binder_plaintext);
+    let handshake_hash = transcript.hash_given(
+        key_schedule.hash(),
+        if key_schedule.is_dtls() {
+            ProtocolVersion::DTLSv1_3
+        } else {
+            ProtocolVersion::TLSv1_3
+        },
+        &binder_plaintext,
+    );
 
     // Run a fake key_schedule to simulate what the server will do if it chooses
     // to resume.
@@ -459,7 +469,15 @@ pub(super) fn derive_early_traffic_secret(
         emit_fake_ccs(sent_tls13_fake_ccs, output);
     }
 
-    let client_hello_hash = transcript_buffer.hash_given(hash_alg, &[]);
+    let client_hello_hash = transcript_buffer.hash_given(
+        hash_alg,
+        if early_key_schedule.is_dtls() {
+            ProtocolVersion::DTLSv1_3
+        } else {
+            ProtocolVersion::TLSv1_3
+        },
+        &[],
+    );
     early_key_schedule.client_early_traffic_secret(
         &client_hello_hash,
         key_log,
@@ -1195,11 +1213,12 @@ impl From<Box<ExpectCertificateVerify>> for ClientState {
 }
 
 fn emit_compressed_certificate_tls13(
+    config: &ClientConfig,
     flight: &mut HandshakeFlightTls13<'_>,
     credentials: &SelectedCredential,
     auth_context: Option<Vec<u8>>,
     compressor: &dyn compress::CertCompressor,
-    config: &ClientConfig,
+    seq: HandshakeSequenceNumber,
 ) {
     let mut cert_payload =
         CertificatePayloadTls13::new(credentials.identity.as_certificates(), None);
@@ -1212,18 +1231,22 @@ fn emit_compressed_certificate_tls13(
         .cert_compression_cache
         .compression_for(compressor, &cert_payload)
     else {
-        return emit_certificate_tls13(flight, Some(credentials), auth_context);
+        return emit_certificate_tls13(flight, Some(credentials), auth_context, seq);
     };
 
-    flight.add(HandshakeMessagePayload(
-        HandshakePayload::CompressedCertificate(compressed.compressed_cert_payload()),
-    ));
+    flight.add(
+        HandshakeMessagePayload(HandshakePayload::CompressedCertificate(
+            compressed.compressed_cert_payload(),
+        )),
+        seq,
+    );
 }
 
 fn emit_certificate_tls13(
     flight: &mut HandshakeFlightTls13<'_>,
     credentials: Option<&SelectedCredential>,
     auth_context: Option<Vec<u8>>,
+    seq: HandshakeSequenceNumber,
 ) {
     let mut cert_payload = match credentials {
         Some(credentials) => {
@@ -1233,14 +1256,16 @@ fn emit_certificate_tls13(
     };
 
     cert_payload.context = auth_context.unwrap_or_default().into();
-    flight.add(HandshakeMessagePayload(HandshakePayload::CertificateTls13(
-        cert_payload,
-    )));
+    flight.add(
+        HandshakeMessagePayload(HandshakePayload::CertificateTls13(cert_payload)),
+        seq,
+    );
 }
 
 fn emit_certverify_tls13(
     flight: &mut HandshakeFlightTls13<'_>,
     signer: Box<dyn Signer>,
+    seq: HandshakeSequenceNumber,
 ) -> Result<(), Error> {
     let message = construct_client_verify_message(&flight.transcript.current_hash());
 
@@ -1248,29 +1273,37 @@ fn emit_certverify_tls13(
     let sig = signer.sign(message.as_ref())?;
     let dss = DigitallySignedStruct::new(scheme, sig);
 
-    flight.add(HandshakeMessagePayload(
-        HandshakePayload::CertificateVerify(dss),
-    ));
+    flight.add(
+        HandshakeMessagePayload(HandshakePayload::CertificateVerify(dss)),
+        seq,
+    );
     Ok(())
 }
 
 fn emit_finished_tls13(
+    seq: HandshakeSequenceNumber,
     flight: &mut HandshakeFlightTls13<'_>,
     verify_data: &crypto::hmac::PublicTag,
 ) {
     let verify_data_payload = Payload::new(verify_data.as_ref());
 
-    flight.add(HandshakeMessagePayload(HandshakePayload::Finished(
-        verify_data_payload,
-    )));
+    flight.add(
+        HandshakeMessagePayload(HandshakePayload::Finished(verify_data_payload)),
+        seq,
+    );
 }
 
-fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn Output<'_>) {
+fn emit_end_of_early_data_tls13(
+    version: ProtocolVersion,
+    transcript: &mut HandshakeHash,
+    output: &mut dyn Output<'_>,
+) {
     let m = Message {
-        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
-        payload: MessagePayload::handshake(HandshakeMessagePayload(
-            HandshakePayload::EndOfEarlyData,
-        )),
+        version: EncodableVersion::Legacy(version),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::EndOfEarlyData),
+            output.outbound_handshake_seq(),
+        ),
     };
 
     transcript.add_message(&m);
@@ -1310,9 +1343,7 @@ impl ExpectFinished {
         let fin = match ConstantTimeEq::ct_eq(expect_verify_data.as_ref(), finished.bytes()).into()
         {
             true => verify::FinishedMessageVerified::assertion(),
-            false => {
-                return Err(PeerMisbehaved::IncorrectFinished.into());
-            }
+            false => return Err(PeerMisbehaved::IncorrectFinished.into()),
         };
 
         st.hs
@@ -1324,7 +1355,12 @@ impl ExpectFinished {
          * but appears in the transcript after the server Finished. */
         if st.in_early_traffic {
             if !st.hs.key_schedule.is_quic() {
-                emit_end_of_early_data_tls13(&mut st.hs.transcript, output);
+                // TODO(DTLS): handle early data and end thereof for DTLS
+                emit_end_of_early_data_tls13(
+                    ProtocolVersion::TLSv1_3,
+                    &mut st.hs.transcript,
+                    output,
+                );
             }
             output.emit(Event::EarlyData(EarlyDataEvent::Finished));
             st.hs
@@ -1332,7 +1368,14 @@ impl ExpectFinished {
                 .set_handshake_encrypter(output.send());
         }
 
-        let mut flight = HandshakeFlightTls13::new(&mut st.hs.transcript);
+        let mut flight = HandshakeFlightTls13::new(
+            &mut st.hs.transcript,
+            input
+                .message
+                .version
+                .version()
+                .is_datagram_tls(),
+        );
 
         /* Send our authentication/finished messages.  These are still encrypted
          * with our handshake keys. */
@@ -1341,7 +1384,12 @@ impl ExpectFinished {
                 ClientAuthDetails::Empty {
                     auth_context_tls13: auth_context,
                 } => {
-                    emit_certificate_tls13(&mut flight, None, auth_context);
+                    emit_certificate_tls13(
+                        &mut flight,
+                        None,
+                        auth_context,
+                        output.outbound_handshake_seq(),
+                    );
                 }
                 ClientAuthDetails::Verify {
                     auth_context_tls13: auth_context,
@@ -1349,7 +1397,12 @@ impl ExpectFinished {
                 } if st.ech.status == EchStatus::Rejected => {
                     // If ECH was offered, and rejected, we MUST respond with
                     // an empty certificate message.
-                    emit_certificate_tls13(&mut flight, None, auth_context);
+                    emit_certificate_tls13(
+                        &mut flight,
+                        None,
+                        auth_context,
+                        output.outbound_handshake_seq(),
+                    );
                 }
                 ClientAuthDetails::Verify {
                     credentials,
@@ -1358,16 +1411,26 @@ impl ExpectFinished {
                 } => {
                     if let Some(compressor) = compressor {
                         emit_compressed_certificate_tls13(
+                            &st.hs.config,
                             &mut flight,
                             &credentials,
                             auth_context,
                             compressor,
-                            &st.hs.config,
+                            output.outbound_handshake_seq(),
                         );
                     } else {
-                        emit_certificate_tls13(&mut flight, Some(&credentials), auth_context);
+                        emit_certificate_tls13(
+                            &mut flight,
+                            Some(&credentials),
+                            auth_context,
+                            output.outbound_handshake_seq(),
+                        );
                     }
-                    emit_certverify_tls13(&mut flight, credentials.signer)?;
+                    emit_certverify_tls13(
+                        &mut flight,
+                        credentials.signer,
+                        output.outbound_handshake_seq(),
+                    )?;
                 }
             }
         }
@@ -1382,7 +1445,7 @@ impl ExpectFinished {
                 &st.hs.randoms.client,
             );
 
-        emit_finished_tls13(&mut flight, &verify_data);
+        emit_finished_tls13(output.outbound_handshake_seq(), &mut flight, &verify_data);
         flight.finish(output);
 
         /* We're now sure this server supports TLS1.3.  But if we run out of TLS1.3 tickets
