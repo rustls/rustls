@@ -143,87 +143,87 @@ extension_struct! {
     ///
     /// Unknown extensions are dropped during parsing.
     pub(crate) struct ClientExtensions<'a> {
-        /// Requested server name indication (RFC6066)
+        /// Requested server name indication (RFC 6066)
         ExtensionType::ServerName =>
             pub(crate) server_name: Option<ServerNamePayload<'a>>,
 
-        /// Certificate status is requested (RFC6066)
+        /// Certificate status is requested (RFC 6066)
         ExtensionType::StatusRequest =>
             pub(crate) certificate_status_request: Option<CertificateStatusRequest>,
 
-        /// Supported groups (RFC4492/RFC8446)
+        /// Supported groups (RFC 4492/RFC 8446)
         ExtensionType::EllipticCurves =>
             pub(crate) named_groups: Option<Vec<NamedGroup>>,
 
-        /// Supported EC point formats (RFC4492)
+        /// Supported EC point formats (RFC 4492)
         ExtensionType::ECPointFormats =>
             pub(crate) ec_point_formats: Option<SupportedEcPointFormats>,
 
-        /// Supported signature schemes (RFC5246/RFC8446)
+        /// Supported signature schemes (RFC 5246/RFC 8446)
         ExtensionType::SignatureAlgorithms =>
             pub(crate) signature_schemes: Option<Vec<SignatureScheme>>,
 
-        /// Offered ALPN protocols (RFC6066)
+        /// Offered ALPN protocols (RFC 6066)
         ExtensionType::ALProtocolNegotiation =>
             pub(crate) protocols: Option<Vec<ApplicationProtocol<'a>>>,
 
-        /// Available client certificate types (RFC7250)
+        /// Available client certificate types (RFC 7250)
         ExtensionType::ClientCertificateType =>
             pub(crate) client_certificate_types: Option<Vec<CertificateType>>,
 
-        /// Acceptable server certificate types (RFC7250)
+        /// Acceptable server certificate types (RFC 7250)
         ExtensionType::ServerCertificateType =>
             pub(crate) server_certificate_types: Option<Vec<CertificateType>>,
 
-        /// Extended master secret is requested (RFC7627)
+        /// Extended master secret is requested (RFC 7627)
         ExtensionType::ExtendedMasterSecret =>
             pub(crate) extended_master_secret_request: Option<()>,
 
-        /// Offered certificate compression methods (RFC8879)
+        /// Offered certificate compression methods (RFC 8879)
         ExtensionType::CompressCertificate =>
             pub(crate) certificate_compression_algorithms: Option<Vec<CertificateCompressionAlgorithm>>,
 
-        /// Session ticket offer or request (RFC5077/RFC8446)
+        /// Session ticket offer or request (RFC 5077/RFC 8446)
         ExtensionType::SessionTicket =>
             pub(crate) session_ticket: Option<ClientSessionTicket>,
 
-        /// Offered preshared keys (RFC8446)
+        /// Offered preshared keys (RFC 8446)
         ExtensionType::PreSharedKey =>
             pub(crate) preshared_key_offer: Option<PresharedKeyOffer>,
 
-        /// Early data is requested (RFC8446)
+        /// Early data is requested (RFC 8446)
         ExtensionType::EarlyData =>
             pub(crate) early_data_request: Option<()>,
 
-        /// Supported TLS versions (RFC8446)
+        /// Supported TLS versions (RFC 8446)
         ExtensionType::SupportedVersions =>
             pub(crate) supported_versions: Option<SupportedProtocolVersions>,
 
-        /// Stateless HelloRetryRequest cookie (RFC8446)
+        /// Stateless HelloRetryRequest cookie (RFC 8446)
         ExtensionType::Cookie =>
             pub(crate) cookie: Option<SizedPayload<'a, u16, NonEmpty>>,
 
-        /// Offered preshared key modes (RFC8446)
+        /// Offered preshared key modes (RFC 8446)
         ExtensionType::PSKKeyExchangeModes =>
             pub(crate) preshared_key_modes: Option<PskKeyExchangeModes>,
 
-        /// Certificate authority names (RFC8446)
+        /// Certificate authority names (RFC 8446)
         ExtensionType::CertificateAuthorities =>
             pub(crate) certificate_authority_names: Option<Vec<DistinguishedName>>,
 
-        /// Offered key exchange shares (RFC8446)
+        /// Offered key exchange shares (RFC 8446)
         ExtensionType::KeyShare =>
             pub(crate) key_shares: Option<Vec<KeyShareEntry>>,
 
-        /// QUIC transport parameters (RFC9001)
+        /// QUIC transport parameters (RFC 9001)
         ExtensionType::TransportParameters =>
             pub(crate) transport_parameters: Option<Payload<'a>>,
 
-        /// Ticket request (RFC9149)
+        /// Ticket request (RFC 9149)
         ExtensionType::TicketRequest =>
             pub(crate) ticket_request: Option<ClientTicketRequest>,
 
-        /// Secure renegotiation (RFC5746)
+        /// Secure renegotiation (RFC 5746)
         ExtensionType::RenegotiationInfo =>
             pub(crate) renegotiation_info: Option<SizedPayload<'a, u8>>,
 
@@ -512,7 +512,7 @@ impl ServerNamePayload<'_> {
         }
     }
 
-    /// RFC6066: `ServerName server_name_list<1..2^16-1>`
+    /// RFC 6066: `ServerName server_name_list<1..2^16-1>`
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
         empty_error: InvalidMessage::IllegalEmptyList("ServerNames"),
     };
@@ -532,7 +532,7 @@ impl ServerNamePayload<'_> {
 ///
 /// This is possible because:
 ///
-/// - the spec (RFC6066) disallows multiple names for a given name type
+/// - the spec (RFC 6066) disallows multiple names for a given name type
 /// - name types other than ServerNameType::HostName are not defined, and they and
 ///   any data that follows them cannot be skipped over.
 impl<'a> Codec<'a> for ServerNamePayload<'a> {
@@ -571,7 +571,7 @@ impl<'a> Codec<'a> for ServerNamePayload<'a> {
             };
 
             // "The ServerNameList MUST NOT contain more than one name of
-            // the same name_type." - RFC6066
+            // the same name_type." - RFC 6066
             if found.is_some() {
                 warn!("Illegal SNI extension: duplicate host_name received");
                 return Err(InvalidMessage::InvalidServerName);
@@ -610,7 +610,7 @@ impl<'a> From<&DnsName<'a>> for ServerNamePayload<'static> {
 fn trim_hostname_trailing_dot_for_sni(dns_name: &DnsName<'_>) -> DnsName<'static> {
     let dns_name_str = dns_name.as_ref();
 
-    // RFC6066: "The hostname is represented as a byte string using
+    // RFC 6066: "The hostname is represented as a byte string using
     // ASCII encoding without a trailing dot"
     if dns_name_str.ends_with('.') {
         let trimmed = &dns_name_str[0..dns_name_str.len() - 1];
@@ -642,7 +642,7 @@ impl HostNamePayload {
     }
 }
 
-// --- RFC6066 certificate status request ---
+// --- RFC 6066 certificate status request ---
 
 #[derive(Clone, Debug)]
 pub(crate) enum CertificateStatusRequest {
@@ -710,7 +710,7 @@ impl Codec<'_> for OcspCertificateStatusRequest {
 
 wrapped_payload!(pub(crate) struct ResponderId, SizedPayload<u16, MaybeEmpty>,);
 
-/// RFC6066: `ResponderID responder_id_list<0..2^16-1>;`
+/// RFC 6066: `ResponderID responder_id_list<0..2^16-1>;`
 impl TlsListElement for ResponderId {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
@@ -749,7 +749,7 @@ impl Codec<'_> for PresharedKeyOffer {
 
 #[derive(Clone, Debug)]
 pub(crate) struct PresharedKeyIdentity {
-    /// RFC8446: `opaque identity<1..2^16-1>;`
+    /// RFC 8446: `opaque identity<1..2^16-1>;`
     pub(crate) identity: SizedPayload<'static, u16, NonEmpty>,
     pub(crate) obfuscated_ticket_age: u32,
 }
@@ -777,7 +777,7 @@ impl Codec<'_> for PresharedKeyIdentity {
     }
 }
 
-/// RFC8446: `PskIdentity identities<7..2^16-1>;`
+/// RFC 8446: `PskIdentity identities<7..2^16-1>;`
 impl TlsListElement for PresharedKeyIdentity {
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
         empty_error: InvalidMessage::IllegalEmptyList("PskIdentities"),
@@ -785,18 +785,18 @@ impl TlsListElement for PresharedKeyIdentity {
 }
 
 wrapped_payload!(
-    /// RFC8446: `opaque PskBinderEntry<32..255>;`
+    /// RFC 8446: `opaque PskBinderEntry<32..255>;`
     pub(crate) struct PresharedKeyBinder, SizedPayload<u8, NonEmpty>,
 );
 
-/// RFC8446: `PskBinderEntry binders<33..2^16-1>;`
+/// RFC 8446: `PskBinderEntry binders<33..2^16-1>;`
 impl TlsListElement for PresharedKeyBinder {
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
         empty_error: InvalidMessage::IllegalEmptyList("PskBinders"),
     };
 }
 
-/// RFC8446: `PskKeyExchangeMode ke_modes<1..255>;`
+/// RFC 8446: `PskKeyExchangeMode ke_modes<1..255>;`
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct PskKeyExchangeModes {
     pub(crate) psk_dhe: bool,

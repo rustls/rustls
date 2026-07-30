@@ -414,7 +414,7 @@ impl SignatureScheme {
     /// This prevents (eg) RSA_PKCS1_SHA256 being offered or accepted, even if our
     /// verifier supports it for other protocol versions.
     ///
-    /// See RFC8446 s4.2.3: <https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.3>
+    /// See RFC 8446 s4.2.3: <https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.3>
     ///
     /// This is a denylist so that newly-allocated `SignatureScheme`s values are
     /// allowed in TLS1.3 by default.
@@ -424,7 +424,7 @@ impl SignatureScheme {
         // This covers both disallowing SHA1 items in `SignatureScheme`, and
         // old hash functions.  See the section beginning "Legacy algorithms:"
         // and item starting "In TLS 1.2, the extension contained hash/signature
-        // pairs" in RFC8446 section 4.2.3.
+        // pairs" in RFC 8446 section 4.2.3.
         match HashAlgorithm::from(hash) {
             HashAlgorithm::NONE
             | HashAlgorithm::MD5
@@ -434,7 +434,7 @@ impl SignatureScheme {
         };
 
         // RSA-PKCS1 is also disallowed for TLS1.3, see the section beginning
-        // "RSASSA-PKCS1-v1_5 algorithms:" in RFC8446 section 4.2.3.
+        // "RSASSA-PKCS1-v1_5 algorithms:" in RFC 8446 section 4.2.3.
         //
         // (nb. SignatureAlgorithm::RSA is RSA-PKCS1, and does not cover RSA-PSS
         // or RSAE-PSS.)

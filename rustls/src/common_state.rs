@@ -387,9 +387,9 @@ pub enum Side {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(crate) enum Protocol {
-    /// TCP-TLS, standardized in RFC5246 and RFC8446
+    /// TCP-TLS, standardized in RFC 5246 and RFC 8446
     Tcp,
-    /// QUIC, standardized in RFC9001
+    /// QUIC, standardized in RFC 9001
     Quic(quic::Version),
 }
 

@@ -280,9 +280,9 @@
 //!   is used by default to provide built-in certificate verification.  Without this feature, users must
 //!   provide certificate verification themselves.
 //!
-//! - `brotli`: uses the `brotli` crate for RFC8879 certificate compression support.
+//! - `brotli`: uses the `brotli` crate for RFC 8879 certificate compression support.
 //!
-//! - `zlib`: uses the `zlib-rs` crate for RFC8879 certificate compression support.
+//! - `zlib`: uses the `zlib-rs` crate for RFC 8879 certificate compression support.
 //!
 //! [x25519mlkem768-manual]: manual::_05_defaults#about-the-post-quantum-secure-key-exchange-x25519mlkem768
 

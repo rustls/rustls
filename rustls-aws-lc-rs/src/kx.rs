@@ -216,7 +216,7 @@ impl fmt::Debug for KxGroup {
     }
 }
 
-/// Ephemeral ECDH on curve25519 (see RFC7748)
+/// Ephemeral ECDH on curve25519 (see RFC 7748)
 pub static X25519: &dyn SupportedKxGroup = &KxGroup {
     name: NamedGroup::X25519,
     agreement_algorithm: &agreement::X25519,

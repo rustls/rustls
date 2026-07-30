@@ -406,10 +406,10 @@ pub trait ActiveKeyExchange: Send + Sync {
     /// Return the public key being used.
     ///
     /// For ECDHE, the encoding required is defined in
-    /// [RFC8446 section 4.2.8.2](https://www.rfc-editor.org/rfc/rfc8446#section-4.2.8.2).
+    /// [RFC 8446 section 4.2.8.2](https://www.rfc-editor.org/rfc/rfc8446#section-4.2.8.2).
     ///
     /// For FFDHE, the encoding required is defined in
-    /// [RFC8446 section 4.2.8.1](https://www.rfc-editor.org/rfc/rfc8446#section-4.2.8.1).
+    /// [RFC 8446 section 4.2.8.1](https://www.rfc-editor.org/rfc/rfc8446#section-4.2.8.1).
     fn pub_key(&self) -> &[u8];
 
     /// FFDHE group the `ActiveKeyExchange` is operating in.

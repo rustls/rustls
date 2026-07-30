@@ -18,21 +18,21 @@ and are dependent on the provider used.
 * Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves `*`
 * Post-quantum hybrid key exchange with [X25519MLKEM768](https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/) [^2] `*`
 * AES128-GCM and AES256-GCM bulk encryption, with safe nonces `*`
-* ChaCha20-Poly1305 bulk encryption ([RFC7905](https://tools.ietf.org/html/rfc7905)) `*`
+* ChaCha20-Poly1305 bulk encryption ([RFC 7905](https://tools.ietf.org/html/rfc7905)) `*`
 * ALPN support
 * SNI support
 * Tunable fragment size to make TLS messages match size of underlying transport
 * Optional use of vectored IO to minimise system calls
 * TLS1.2 session resumption
-* TLS1.2 resumption via tickets ([RFC5077](https://tools.ietf.org/html/rfc5077))
+* TLS1.2 resumption via tickets ([RFC 5077](https://tools.ietf.org/html/rfc5077))
 * TLS1.3 resumption via tickets or session storage
 * TLS1.3 0-RTT data
 * Server and optional client authentication
-* Extended master secret support ([RFC7627](https://tools.ietf.org/html/rfc7627))
-* Exporters ([RFC5705](https://tools.ietf.org/html/rfc5705))
+* Extended master secret support ([RFC 7627](https://tools.ietf.org/html/rfc7627))
+* Exporters ([RFC 5705](https://tools.ietf.org/html/rfc5705))
 * OCSP stapling by servers
-* [RFC7250](https://tools.ietf.org/html/rfc7250) raw public keys for TLS1.3
-* [RFC8879](https://tools.ietf.org/html/rfc8879) certificate compression by clients
+* [RFC 7250](https://tools.ietf.org/html/rfc7250) raw public keys for TLS1.3
+* [RFC 8879](https://tools.ietf.org/html/rfc8879) certificate compression by clients
   and servers `*`
 * Client-side Encrypted client hello (ECH)
    ([RFC 9849](https://datatracker.ietf.org/doc/html/rfc9849)).

@@ -123,19 +123,19 @@ impl core::error::Error for UnsupportedOperationError {}
 pub struct KeyBlockShape {
     /// How long keys are.
     ///
-    /// `enc_key_length` terminology is from the standard ([RFC5246 A.6]).
+    /// `enc_key_length` terminology is from the standard ([RFC 5246 A.6]).
     ///
-    /// [RFC5246 A.6]: <https://www.rfc-editor.org/rfc/rfc5246#appendix-A.6>
+    /// [RFC 5246 A.6]: <https://www.rfc-editor.org/rfc/rfc5246#appendix-A.6>
     pub enc_key_len: usize,
 
     /// How long the fixed part of the 'IV' is.
     ///
-    /// `fixed_iv_length` terminology is from the standard ([RFC5246 A.6]).
+    /// `fixed_iv_length` terminology is from the standard ([RFC 5246 A.6]).
     ///
     /// This isn't usually an IV, but we continue the
     /// terminology misuse to match the standard.
     ///
-    /// [RFC5246 A.6]: <https://www.rfc-editor.org/rfc/rfc5246#appendix-A.6>
+    /// [RFC 5246 A.6]: <https://www.rfc-editor.org/rfc/rfc5246#appendix-A.6>
     pub fixed_iv_len: usize,
 
     /// This is a non-standard extension which extends the
@@ -324,7 +324,7 @@ pub const NONCE_LEN: usize = 12;
 
 /// Returns a TLS1.3 `additional_data` encoding.
 ///
-/// See RFC8446 s5.2 for the `additional_data` definition.
+/// See RFC 8446 s5.2 for the `additional_data` definition.
 #[inline]
 pub fn make_tls13_aad(payload_len: usize) -> [u8; 5] {
     let version = ProtocolVersion::TLSv1_2.to_array();
@@ -340,7 +340,7 @@ pub fn make_tls13_aad(payload_len: usize) -> [u8; 5] {
 
 /// Returns a TLS1.2 `additional_data` encoding.
 ///
-/// See RFC5246 s6.2.3.3 for the `additional_data` definition.
+/// See RFC 5246 s6.2.3.3 for the `additional_data` definition.
 #[inline]
 pub fn make_tls12_aad(
     seq: u64,

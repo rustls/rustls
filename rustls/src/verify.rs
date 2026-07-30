@@ -359,7 +359,7 @@ wrapped_payload!(
     /// }
     /// ```
     ///
-    /// The TLS encoding is defined in RFC5246: `opaque DistinguishedName<1..2^16-1>;`
+    /// The TLS encoding is defined in RFC 5246: `opaque DistinguishedName<1..2^16-1>;`
     pub struct DistinguishedName,
     SizedPayload<u16, NonEmpty>,
 );
@@ -384,8 +384,8 @@ impl PartialEq for DistinguishedName {
     }
 }
 
-/// RFC8446: `DistinguishedName authorities<3..2^16-1>;` however,
-/// RFC5246: `DistinguishedName certificate_authorities<0..2^16-1>;`
+/// RFC 8446: `DistinguishedName authorities<3..2^16-1>;` however,
+/// RFC 5246: `DistinguishedName certificate_authorities<0..2^16-1>;`
 impl TlsListElement for DistinguishedName {
     const SIZE_LEN: ListLength = ListLength::U16;
 }

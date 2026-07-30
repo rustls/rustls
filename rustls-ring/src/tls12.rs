@@ -315,7 +315,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
     }
 }
 
-/// The RFC7905/RFC7539 ChaCha20Poly1305 construction.
+/// The RFC 7905/RFC 7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
 /// TLS1.3 uses `TLS13MessageEncrypter`.
 struct ChaCha20Poly1305MessageEncrypter {
@@ -323,7 +323,7 @@ struct ChaCha20Poly1305MessageEncrypter {
     enc_offset: Iv,
 }
 
-/// The RFC7905/RFC7539 ChaCha20Poly1305 construction.
+/// The RFC 7905/RFC 7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
 /// TLS1.3 uses `TLS13MessageDecrypter`.
 struct ChaCha20Poly1305MessageDecrypter {

@@ -196,12 +196,12 @@ pub struct ServerConfig {
     ///
     /// If a client supports this extension, and advertises support
     /// for one of the compression algorithms included here, the
-    /// server certificate will be compressed according to [RFC8879].
+    /// server certificate will be compressed according to [RFC 8879].
     ///
     /// This only applies to TLS1.3 connections.  It is ignored for
     /// TLS1.2 connections.
     ///
-    /// [RFC8879]: https://datatracker.ietf.org/doc/rfc8879/
+    /// [RFC 8879]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_compressors: Vec<&'static dyn compress::CertCompressor>,
 
     /// Caching for compressed certificates.
@@ -212,7 +212,7 @@ pub struct ServerConfig {
 
     /// How to decompress the clients's certificate chain.
     ///
-    /// If this is non-empty, the [RFC8879] certificate compression
+    /// If this is non-empty, the [RFC 8879] certificate compression
     /// extension is offered when requesting client authentication,
     /// and any compressed certificates are transparently decompressed
     /// during the handshake.
@@ -220,7 +220,7 @@ pub struct ServerConfig {
     /// This only applies to TLS1.3 connections.  It is ignored for
     /// TLS1.2 connections.
     ///
-    /// [RFC8879]: https://datatracker.ietf.org/doc/rfc8879/
+    /// [RFC 8879]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_decompressors: Vec<&'static dyn compress::CertDecompressor>,
 
     /// Policy for how an invalid Server Name Indication (SNI) value from a client is handled.
@@ -549,7 +549,7 @@ impl<'a> ClientHello<'a> {
     /// Originally it was introduced as the "[`elliptic_curves`]" extension for TLS1.2.
     /// It described the elliptic curves supported by a client for all purposes: key
     /// exchange, signature verification (for server authentication), and signing (for
-    /// client auth).  Later [RFC7919] extended this to include FFDHE "named groups",
+    /// client auth).  Later [RFC 7919] extended this to include FFDHE "named groups",
     /// but FFDHE groups in this context only relate to key exchange.
     ///
     /// In TLS1.3 it was renamed to "[`named_groups`]" and now describes all types
@@ -557,7 +557,7 @@ impl<'a> ClientHello<'a> {
     /// used for signatures.
     ///
     /// [`elliptic_curves`]: https://datatracker.ietf.org/doc/html/rfc4492#section-5.1.1
-    /// [RFC7919]: https://datatracker.ietf.org/doc/html/rfc7919#section-2
+    /// [RFC 7919]: https://datatracker.ietf.org/doc/html/rfc7919#section-2
     /// [`named_groups`]:https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.7
     pub fn named_groups(&self) -> Option<&'a [NamedGroup]> {
         self.named_groups
@@ -566,7 +566,7 @@ impl<'a> ClientHello<'a> {
 
 /// A policy describing how an invalid Server Name Indication (SNI) value from a client is handled by the server.
 ///
-/// The only valid form of SNI according to relevant RFCs ([RFC6066], [RFC1035]) is
+/// The only valid form of SNI according to relevant RFCs ([RFC 6066], [RFC 1035]) is
 /// non-IP-address host name, however some misconfigured clients may send a bare IP address, or
 /// another invalid value. Some servers may wish to ignore these invalid values instead of producing
 /// an error.
@@ -576,8 +576,8 @@ impl<'a> ClientHello<'a> {
 ///
 /// When an SNI value is ignored, Rustls treats the client as if it sent no SNI at all.
 ///
-/// [RFC1035]: https://datatracker.ietf.org/doc/html/rfc1035#section-2.3.1
-/// [RFC6066]: https://datatracker.ietf.org/doc/html/rfc6066#section-3
+/// [RFC 1035]: https://datatracker.ietf.org/doc/html/rfc1035#section-2.3.1
+/// [RFC 6066]: https://datatracker.ietf.org/doc/html/rfc6066#section-3
 #[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
 #[non_exhaustive]
 pub enum InvalidSniPolicy {

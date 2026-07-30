@@ -1,7 +1,7 @@
 //! Certificate compression and decompression support
 //!
 //! This crate supports compression and decompression everywhere
-//! certificates are used, in accordance with [RFC8879][rfc8879].
+//! certificates are used, in accordance with [RFC 8879][rfc8879].
 //!
 //! Note that this is only supported for TLS1.3 connections.
 //!

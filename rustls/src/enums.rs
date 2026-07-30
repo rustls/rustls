@@ -82,7 +82,7 @@ impl<'a> Codec<'a> for ApplicationProtocol<'a> {
     }
 }
 
-/// RFC7301: `ProtocolName protocol_name_list<2..2^16-1>`
+/// RFC 7301: `ProtocolName protocol_name_list<2..2^16-1>`
 impl TlsListElement for ApplicationProtocol<'_> {
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
         empty_error: InvalidMessage::IllegalEmptyList("ProtocolNames"),
@@ -192,9 +192,9 @@ enum_builder! {
 
 enum_builder! {
     /// The "TLS Certificate Compression Algorithm IDs" TLS protocol enum.
-    /// Values in this enum are taken from [RFC8879].
+    /// Values in this enum are taken from [RFC 8879].
     ///
-    /// [RFC8879]: https://www.rfc-editor.org/rfc/rfc8879.html#section-7.3
+    /// [RFC 8879]: https://www.rfc-editor.org/rfc/rfc8879.html#section-7.3
     pub struct CertificateCompressionAlgorithm(pub u16);
 
     enum CertificateCompressionAlgorithmName {
