@@ -103,7 +103,7 @@ pub static RSA_PKCS1_2048_8192_SHA512: &dyn SignatureVerificationAlgorithm = &Ri
 /// RSA PKCS#1 1.5 signatures using SHA-256 for keys of 2048-8192 bits,
 /// with illegally absent AlgorithmIdentifier parameters.
 ///
-/// RFC4055 says on sha256WithRSAEncryption and company:
+/// RFC 4055 says on sha256WithRSAEncryption and company:
 ///
 /// >   When any of these four object identifiers appears within an
 /// >   AlgorithmIdentifier, the parameters MUST be NULL.  Implementations
@@ -123,7 +123,7 @@ pub static RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS: &dyn SignatureVerificationA
 /// RSA PKCS#1 1.5 signatures using SHA-384 for keys of 2048-8192 bits,
 /// with illegally absent AlgorithmIdentifier parameters.
 ///
-/// RFC4055 says on sha256WithRSAEncryption and company:
+/// RFC 4055 says on sha256WithRSAEncryption and company:
 ///
 /// >   When any of these four object identifiers appears within an
 /// >   AlgorithmIdentifier, the parameters MUST be NULL.  Implementations
@@ -143,7 +143,7 @@ pub static RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS: &dyn SignatureVerificationA
 /// RSA PKCS#1 1.5 signatures using SHA-512 for keys of 2048-8192 bits,
 /// with illegally absent AlgorithmIdentifier parameters.
 ///
-/// RFC4055 says on sha256WithRSAEncryption and company:
+/// RFC 4055 says on sha256WithRSAEncryption and company:
 ///
 /// >   When any of these four object identifiers appears within an
 /// >   AlgorithmIdentifier, the parameters MUST be NULL.  Implementations

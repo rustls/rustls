@@ -438,11 +438,11 @@ impl<'a> ReadEarlyData<'a> {
 
     /// Returns the "early" exporter that can derive key material for use in early data
     ///
-    /// See [RFC5705][] for general details on what exporters are, and [RFC8446 S7.5][] for
+    /// See [RFC 5705][] for general details on what exporters are, and [RFC 8446 S7.5][] for
     /// specific details on the "early" exporter.
     ///
     /// **Beware** that the early exporter requires care, as it is subject to the same
-    /// potential for replay as early data itself.  See [RFC8446 appendix E.5.1][] for
+    /// potential for replay as early data itself.  See [RFC 8446 appendix E.5.1][] for
     /// more detail.
     ///
     /// This function can be called at most once per connection. This function will error:
@@ -451,9 +451,9 @@ impl<'a> ReadEarlyData<'a> {
     /// If you are looking for the normal exporter, this is available from
     /// [`Connection::exporter()`].
     ///
-    /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
-    /// [RFC8446 S7.5]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.5
-    /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
+    /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
+    /// [RFC 8446 S7.5]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.5
+    /// [RFC 8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
     /// [`Connection::exporter()`]: crate::conn::Connection::exporter()
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         self.common.core.early_exporter()

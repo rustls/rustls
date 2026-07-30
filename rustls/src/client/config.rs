@@ -151,26 +151,26 @@ pub struct ClientConfig {
 
     /// How to decompress the server's certificate chain.
     ///
-    /// If this is non-empty, the [RFC8779] certificate compression
+    /// If this is non-empty, the [RFC 8779] certificate compression
     /// extension is offered, and any compressed certificates are
     /// transparently decompressed during the handshake.
     ///
     /// This only applies to TLS1.3 connections.  It is ignored for
     /// TLS1.2 connections.
     ///
-    /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
+    /// [RFC 8779]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_decompressors: Vec<&'static dyn compress::CertDecompressor>,
 
     /// How to compress the client's certificate chain.
     ///
     /// If a server supports this extension, and advertises support
     /// for one of the compression algorithms included here, the
-    /// client certificate will be compressed according to [RFC8779].
+    /// client certificate will be compressed according to [RFC 8779].
     ///
     /// This only applies to TLS1.3 connections.  It is ignored for
     /// TLS1.2 connections.
     ///
-    /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
+    /// [RFC 8779]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_compressors: Vec<&'static dyn compress::CertCompressor>,
 
     /// Caching for compressed certificates.

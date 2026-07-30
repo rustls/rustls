@@ -12,7 +12,7 @@ pub trait Hmac: Send + Sync {
     /// Prepare to use `key` as a HMAC key.
     fn with_key(&self, key: &[u8]) -> Box<dyn Key>;
 
-    /// Give the length of the underlying hash function.  In RFC2104 terminology this is `L`.
+    /// Give the length of the underlying hash function.  In RFC 2104 terminology this is `L`.
     fn hash_output_len(&self) -> usize;
 
     /// Return the FIPS validation status of this implementation.

@@ -147,7 +147,7 @@ impl ClientConnection {
 
     /// Returns an object that can derive key material from the agreed connection secrets.
     ///
-    /// See [RFC5705][] for more details on what this is for.
+    /// See [RFC 5705][] for more details on what this is for.
     ///
     /// This function can be called at most once per connection.
     ///
@@ -157,7 +157,7 @@ impl ClientConnection {
     ///   [`CommonState::is_handshaking`] first).
     /// - if called more than once per connection.
     ///
-    /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
+    /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         self.inner.core.exporter()
     }
@@ -285,7 +285,7 @@ impl ServerConnection {
 
     /// Returns an object that can derive key material from the agreed connection secrets.
     ///
-    /// See [RFC5705][] for more details on what this is for.
+    /// See [RFC 5705][] for more details on what this is for.
     ///
     /// This function can be called at most once per connection.
     ///
@@ -295,7 +295,7 @@ impl ServerConnection {
     ///   [`CommonState::is_handshaking`] first).
     /// - if called more than once per connection.
     ///
-    /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
+    /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         self.inner.core.exporter()
     }

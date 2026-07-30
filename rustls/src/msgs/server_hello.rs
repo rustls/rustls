@@ -42,7 +42,7 @@ impl Codec<'_> for ServerHelloPayload {
             let suite = CipherSuite::read(r)?;
             let compression = Compression::read(r)?;
 
-            // RFC5246:
+            // RFC 5246:
             // "The presence of extensions can be detected by determining whether
             //  there are bytes following the compression_method field at the end of
             //  the ServerHello."
@@ -98,62 +98,62 @@ impl DerefMut for ServerHelloPayload {
 
 extension_struct! {
     pub(crate) struct ServerExtensions<'a> {
-        /// Supported EC point formats (RFC4492)
+        /// Supported EC point formats (RFC 4492)
         ExtensionType::ECPointFormats =>
             pub(crate) ec_point_formats: Option<SupportedEcPointFormats>,
 
-        /// Server name indication acknowledgement (RFC6066)
+        /// Server name indication acknowledgement (RFC 6066)
         ExtensionType::ServerName =>
             pub(crate) server_name_ack: Option<()>,
 
-        /// Session ticket acknowledgement (RFC5077)
+        /// Session ticket acknowledgement (RFC 5077)
         ExtensionType::SessionTicket =>
             pub(crate) session_ticket_ack: Option<()>,
 
         ExtensionType::RenegotiationInfo =>
             pub(crate) renegotiation_info: Option<SizedPayload<'a, u8>>,
 
-        /// Selected ALPN protocol (RFC7301)
+        /// Selected ALPN protocol (RFC 7301)
         ExtensionType::ALProtocolNegotiation =>
             pub(crate) selected_protocol: Option<SingleProtocolName>,
 
-        /// Key exchange server share (RFC8446)
+        /// Key exchange server share (RFC 8446)
         ExtensionType::KeyShare =>
             pub(crate) key_share: Option<KeyShareEntry>,
 
-        /// Selected preshared key index (RFC8446)
+        /// Selected preshared key index (RFC 8446)
         ExtensionType::PreSharedKey =>
             pub(crate) preshared_key: Option<u16>,
 
-        /// Required client certificate type (RFC7250)
+        /// Required client certificate type (RFC 7250)
         ExtensionType::ClientCertificateType =>
             pub(crate) client_certificate_type: Option<CertificateType>,
 
-        /// Selected server certificate type (RFC7250)
+        /// Selected server certificate type (RFC 7250)
         ExtensionType::ServerCertificateType =>
             pub(crate) server_certificate_type: Option<CertificateType>,
 
-        /// Extended master secret is in use (RFC7627)
+        /// Extended master secret is in use (RFC 7627)
         ExtensionType::ExtendedMasterSecret =>
             pub(crate) extended_master_secret_ack: Option<()>,
 
-        /// Certificate status acknowledgement (RFC6066)
+        /// Certificate status acknowledgement (RFC 6066)
         ExtensionType::StatusRequest =>
             pub(crate) certificate_status_request_ack: Option<()>,
 
-        /// Selected TLS version (RFC8446)
+        /// Selected TLS version (RFC 8446)
         ExtensionType::SupportedVersions =>
             pub(crate) selected_version: Option<ProtocolVersion>,
 
-        /// QUIC transport parameters (RFC9001)
+        /// QUIC transport parameters (RFC 9001)
         ExtensionType::TransportParameters =>
             pub(crate) transport_parameters: Option<Payload<'a>>,
 
-        /// Early data is accepted (RFC8446)
+        /// Early data is accepted (RFC 8446)
         ExtensionType::EarlyData =>
             pub(crate) early_data_ack: Option<()>,
 
-        /// Ticket request hint (RFC9149)
+        /// Ticket request hint (RFC 9149)
         ExtensionType::TicketRequest =>
             pub(crate) ticket_request: Option<ServerTicketRequestHint>,
 
@@ -245,31 +245,31 @@ impl<'a> Codec<'a> for ServerExtensions<'a> {
 extension_struct! {
     /// The extensions carried in a TLS 1.3 EncryptedExtensions message.
     pub(crate) struct EncryptedExtensions<'a> {
-        /// Server name indication acknowledgement (RFC6066)
+        /// Server name indication acknowledgement (RFC 6066)
         ExtensionType::ServerName =>
             pub(crate) server_name_ack: Option<()>,
 
-        /// Selected ALPN protocol (RFC7301)
+        /// Selected ALPN protocol (RFC 7301)
         ExtensionType::ALProtocolNegotiation =>
             pub(crate) selected_protocol: Option<SingleProtocolName>,
 
-        /// Required client certificate type (RFC7250)
+        /// Required client certificate type (RFC 7250)
         ExtensionType::ClientCertificateType =>
             pub(crate) client_certificate_type: Option<CertificateType>,
 
-        /// Selected server certificate type (RFC7250)
+        /// Selected server certificate type (RFC 7250)
         ExtensionType::ServerCertificateType =>
             pub(crate) server_certificate_type: Option<CertificateType>,
 
-        /// QUIC transport parameters (RFC9001)
+        /// QUIC transport parameters (RFC 9001)
         ExtensionType::TransportParameters =>
             pub(crate) transport_parameters: Option<Payload<'a>>,
 
-        /// Early data is accepted (RFC8446)
+        /// Early data is accepted (RFC 8446)
         ExtensionType::EarlyData =>
             pub(crate) early_data_ack: Option<()>,
 
-        /// Ticket request hint (RFC9149)
+        /// Ticket request hint (RFC 9149)
         ExtensionType::TicketRequest =>
             pub(crate) ticket_request: Option<ServerTicketRequestHint>,
 

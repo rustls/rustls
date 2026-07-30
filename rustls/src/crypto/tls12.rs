@@ -49,7 +49,7 @@ impl PrfSecret for PrfSecretUsingHmac {
 
 /// An instantiation of the TLS1.2 PRF with a specific, implicit hash function.
 ///
-/// See the definition in [RFC5246 section 5](https://www.rfc-editor.org/rfc/rfc5246#section-5).
+/// See the definition in [RFC 5246 section 5](https://www.rfc-editor.org/rfc/rfc5246#section-5).
 ///
 /// See [`PrfUsingHmac`] as a route to implementing this trait with just
 /// an implementation of [`hmac::Hmac`].

@@ -153,7 +153,7 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
         // thus, this `unwrap()` is unreachable.
         //
         // `TlsProtocolId::TLS13` is deliberate: we reuse the nonce construction from
-        // RFC7905 and TLS13: a random starting point, XOR'd with the sequence number.  This means
+        // RFC 7905 and TLS13: a random starting point, XOR'd with the sequence number.  This means
         // `TlsProtocolId::TLS12` (which wants to see a plain sequence number) is unsuitable.
         //
         // The most important property is that nonce is unique per key, which is satisfied by
@@ -337,7 +337,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
     }
 }
 
-/// The RFC7905/RFC7539 ChaCha20Poly1305 construction.
+/// The RFC 7905/RFC 7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
 /// TLS1.3 uses `TLS13MessageEncrypter`.
 struct ChaCha20Poly1305MessageEncrypter {
@@ -345,7 +345,7 @@ struct ChaCha20Poly1305MessageEncrypter {
     enc_offset: Iv,
 }
 
-/// The RFC7905/RFC7539 ChaCha20Poly1305 construction.
+/// The RFC 7905/RFC 7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
 /// TLS1.3 uses `TLS13MessageDecrypter`.
 struct ChaCha20Poly1305MessageDecrypter {

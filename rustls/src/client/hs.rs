@@ -453,7 +453,7 @@ impl ClientHelloInput {
                     ClientSessionValue::Tls12(inner) => {
                         // If we have a ticket, we use the sessionid as a signal that
                         // we're  doing an abbreviated handshake.  See section 3.4 in
-                        // RFC5077.
+                        // RFC 5077.
                         if !inner.ticket().is_empty() {
                             inner.session_id = SessionId::random(config.provider().secure_random)?;
                         }

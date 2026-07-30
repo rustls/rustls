@@ -82,7 +82,7 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
 
     /// Returns an object that can derive key material from the agreed connection secrets.
     ///
-    /// See [RFC5705][] for more details on what this is for.
+    /// See [RFC 5705][] for more details on what this is for.
     ///
     /// This function can be called at most once per connection.
     ///
@@ -92,7 +92,7 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     ///   [`Self::is_handshaking()`] first).
     /// - if called more than once per connection.
     ///
-    /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
+    /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
     fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error>;
 
     /// Extract secrets, so they can be used when configuring kTLS, for example.
@@ -688,14 +688,14 @@ impl KeyingMaterialExporter {
     /// by the function and returned via the Ok result to ensure no key
     /// material leaks if the function fails.
     ///
-    /// See [RFC5705][] for more details on what this does and is for.  In
+    /// See [RFC 5705][] for more details on what this does and is for.  In
     /// other libraries this is often named `SSL_export_keying_material()`
     /// or `SslExportKeyingMaterial()`.
     ///
     /// This function is not meaningful if `output.len()` is zero and will
     /// return an error in that case.
     ///
-    /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
+    /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
     pub fn derive<T: AsMut<[u8]>>(
         &self,
         label: &[u8],
@@ -721,7 +721,7 @@ impl Debug for KeyingMaterialExporter {
 
 /// This trait is for any object that can export keying material.
 ///
-/// The terminology comes from [RFC5705](https://datatracker.ietf.org/doc/html/rfc5705)
+/// The terminology comes from [RFC 5705](https://datatracker.ietf.org/doc/html/rfc5705)
 /// but doesn't really involve "exporting" key material (in the usual meaning of "export"
 /// -- of moving an artifact from one domain to another) but is best thought of as key
 /// diversification using an existing secret.  That secret is implicit in this interface,
