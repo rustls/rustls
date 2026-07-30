@@ -113,7 +113,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
             } else if msg.payload.is_empty()
                 && matches!(msg.typ, ContentType::Handshake | ContentType::Alert)
             {
-                // <https://datatracker.ietf.org/doc/html/rfc8446#section-5.4>
+                // <https://datatracker.ietf.org/doc/html/rfc9846#section-5.4>
                 output
                     .other
                     .send
@@ -142,7 +142,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
 
             if self.recv.has_received_close_notify {
                 // "Any data received after a closure alert has been received MUST be ignored."
-                // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
+                // -- <https://datatracker.ietf.org/doc/html/rfc9846#section-6.1>
 
                 // First, discard actually-processed bytes.
                 self.input
@@ -244,7 +244,7 @@ impl ReceivePath {
                 // "Handshake messages MUST NOT be interleaved with other record
                 // types.  That is, if a handshake message is split over two or more
                 // records, there MUST NOT be any other records between them."
-                // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
+                // https://www.rfc-editor.org/rfc/rfc9846#section-5.1
                 return Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
             }
 

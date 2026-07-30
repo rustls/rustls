@@ -73,7 +73,7 @@ impl EncodedMessage<&'_ [u8]> {
     ///
     /// We passthrough ChangeCipherSpec messages in the deframer without decrypting them.
     /// Note: this is prior to the record layer, so is unencrypted. See
-    /// third paragraph of section 5 in RFC 8446.
+    /// third paragraph of section 5 in RFC 9846.
     pub(crate) fn is_valid_ccs(&self) -> bool {
         self.typ == ContentType::ChangeCipherSpec && self.payload == [0x01]
     }
@@ -531,7 +531,7 @@ impl DerefMut for InboundOpaque<'_> {
 ///
 /// `p` is a message payload, immediately post-decryption.  This function
 /// removes zero padding bytes, until a non-zero byte is encountered which is
-/// the content type, which is returned.  See RFC 8446 s5.2.
+/// the content type, which is returned.  See RFC 9846 s5.2.
 ///
 /// ContentType(0) is returned if the message payload is empty or all zeroes.
 fn unpad_tls13_payload(p: &mut InboundOpaque<'_>) -> ContentType {

@@ -53,7 +53,7 @@ clean shutdown. And if an application always uses messages with length framing (
 messages are never delimited by the close of the TCP connection), it can unconditionally
 ignore `UnexpectedEof` errors from rustls.
 
-[^2]: <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
+[^2]: <https://datatracker.ietf.org/doc/html/rfc9846#section-6.1>
 
 # Debugging
 

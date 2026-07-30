@@ -95,7 +95,7 @@ pub struct ServerConfig {
     /// Setting this value to a little less than the TCP MSS may improve latency
     /// for stream-y workloads.
     ///
-    /// [TLS maximum]: https://datatracker.ietf.org/doc/html/rfc8446#section-5.1
+    /// [TLS maximum]: https://datatracker.ietf.org/doc/html/rfc9846#section-5.1
     /// [ServerConnection::new]: crate::server::ServerConnection::new
     pub max_fragment_size: Option<usize>,
 
@@ -422,7 +422,7 @@ pub struct ClientHello<'a> {
     pub(super) cipher_suites: &'a [CipherSuite],
     /// The [certificate_authorities] extension, if it was sent by the client.
     ///
-    /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
+    /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.4
     pub(super) certificate_authorities: Option<&'a [DistinguishedName]>,
     pub(super) named_groups: Option<&'a [NamedGroup]>,
 }
@@ -537,7 +537,7 @@ impl<'a> ClientHello<'a> {
     ///
     /// Returns `None` if the client did not send this extension.
     ///
-    /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
+    /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.4
     pub fn certificate_authorities(&self) -> Option<&'a [DistinguishedName]> {
         self.certificate_authorities
     }
@@ -558,7 +558,7 @@ impl<'a> ClientHello<'a> {
     ///
     /// [`elliptic_curves`]: https://datatracker.ietf.org/doc/html/rfc4492#section-5.1.1
     /// [RFC 7919]: https://datatracker.ietf.org/doc/html/rfc7919#section-2
-    /// [`named_groups`]:https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.7
+    /// [`named_groups`]:https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.7
     pub fn named_groups(&self) -> Option<&'a [NamedGroup]> {
         self.named_groups
     }

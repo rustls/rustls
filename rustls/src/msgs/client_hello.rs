@@ -151,7 +151,7 @@ extension_struct! {
         ExtensionType::StatusRequest =>
             pub(crate) certificate_status_request: Option<CertificateStatusRequest>,
 
-        /// Supported groups (RFC 4492/RFC 8446)
+        /// Supported groups (RFC 4492/RFC 9846)
         ExtensionType::EllipticCurves =>
             pub(crate) named_groups: Option<Vec<NamedGroup>>,
 
@@ -159,7 +159,7 @@ extension_struct! {
         ExtensionType::ECPointFormats =>
             pub(crate) ec_point_formats: Option<SupportedEcPointFormats>,
 
-        /// Supported signature schemes (RFC 5246/RFC 8446)
+        /// Supported signature schemes (RFC 5246/RFC 9846)
         ExtensionType::SignatureAlgorithms =>
             pub(crate) signature_schemes: Option<Vec<SignatureScheme>>,
 
@@ -183,35 +183,35 @@ extension_struct! {
         ExtensionType::CompressCertificate =>
             pub(crate) certificate_compression_algorithms: Option<Vec<CertificateCompressionAlgorithm>>,
 
-        /// Session ticket offer or request (RFC 5077/RFC 8446)
+        /// Session ticket offer or request (RFC 5077)
         ExtensionType::SessionTicket =>
             pub(crate) session_ticket: Option<ClientSessionTicket>,
 
-        /// Offered preshared keys (RFC 8446)
+        /// Offered preshared keys (RFC 9846)
         ExtensionType::PreSharedKey =>
             pub(crate) preshared_key_offer: Option<PresharedKeyOffer>,
 
-        /// Early data is requested (RFC 8446)
+        /// Early data is requested (RFC 9846)
         ExtensionType::EarlyData =>
             pub(crate) early_data_request: Option<()>,
 
-        /// Supported TLS versions (RFC 8446)
+        /// Supported TLS versions (RFC 9846)
         ExtensionType::SupportedVersions =>
             pub(crate) supported_versions: Option<SupportedProtocolVersions>,
 
-        /// Stateless HelloRetryRequest cookie (RFC 8446)
+        /// Stateless HelloRetryRequest cookie (RFC 9846)
         ExtensionType::Cookie =>
             pub(crate) cookie: Option<SizedPayload<'a, u16, NonEmpty>>,
 
-        /// Offered preshared key modes (RFC 8446)
+        /// Offered preshared key modes (RFC 9846)
         ExtensionType::PSKKeyExchangeModes =>
             pub(crate) preshared_key_modes: Option<PskKeyExchangeModes>,
 
-        /// Certificate authority names (RFC 8446)
+        /// Certificate authority names (RFC 9846)
         ExtensionType::CertificateAuthorities =>
             pub(crate) certificate_authority_names: Option<Vec<DistinguishedName>>,
 
-        /// Offered key exchange shares (RFC 8446)
+        /// Offered key exchange shares (RFC 9846)
         ExtensionType::KeyShare =>
             pub(crate) key_shares: Option<Vec<KeyShareEntry>>,
 
@@ -749,7 +749,7 @@ impl Codec<'_> for PresharedKeyOffer {
 
 #[derive(Clone, Debug)]
 pub(crate) struct PresharedKeyIdentity {
-    /// RFC 8446: `opaque identity<1..2^16-1>;`
+    /// RFC 9846: `opaque identity<1..2^16-1>;`
     pub(crate) identity: SizedPayload<'static, u16, NonEmpty>,
     pub(crate) obfuscated_ticket_age: u32,
 }
@@ -777,7 +777,7 @@ impl Codec<'_> for PresharedKeyIdentity {
     }
 }
 
-/// RFC 8446: `PskIdentity identities<7..2^16-1>;`
+/// RFC 9846: `PskIdentity identities<7..2^16-1>;`
 impl TlsListElement for PresharedKeyIdentity {
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
         empty_error: InvalidMessage::IllegalEmptyList("PskIdentities"),
@@ -785,18 +785,18 @@ impl TlsListElement for PresharedKeyIdentity {
 }
 
 wrapped_payload!(
-    /// RFC 8446: `opaque PskBinderEntry<32..255>;`
+    /// RFC 9846: `opaque PskBinderEntry<32..255>;`
     pub(crate) struct PresharedKeyBinder, SizedPayload<u8, NonEmpty>,
 );
 
-/// RFC 8446: `PskBinderEntry binders<33..2^16-1>;`
+/// RFC 9846: `PskBinderEntry binders<33..2^16-1>;`
 impl TlsListElement for PresharedKeyBinder {
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
         empty_error: InvalidMessage::IllegalEmptyList("PskBinders"),
     };
 }
 
-/// RFC 8446: `PskKeyExchangeMode ke_modes<1..255>;`
+/// RFC 9846: `PskKeyExchangeMode ke_modes<1..255>;`
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct PskKeyExchangeModes {
     pub(crate) psk_dhe: bool,

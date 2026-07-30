@@ -191,7 +191,7 @@ impl TlsListElement for NamedGroup {
     };
 }
 
-/// RFC 8446: `SignatureScheme supported_signature_algorithms<2..2^16-2>;`
+/// RFC 9846: `SignatureScheme supported_signature_algorithms<2..2^16-2>;`
 impl TlsListElement for SignatureScheme {
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
         empty_error: InvalidMessage::NoSignatureSchemes,
@@ -238,7 +238,7 @@ impl AsRef<ApplicationProtocol<'static>> for SingleProtocolName {
 #[derive(Clone, Debug)]
 pub(crate) struct KeyShareEntry {
     pub(crate) group: NamedGroup,
-    /// RFC 8446: `opaque key_exchange<1..2^16-1>;`
+    /// RFC 9846: `opaque key_exchange<1..2^16-1>;`
     pub(crate) payload: SizedPayload<'static, u16, NonEmpty>,
 }
 
@@ -267,7 +267,7 @@ impl Codec<'_> for KeyShareEntry {
 
 // ---
 
-/// RFC 8446: `KeyShareEntry client_shares<0..2^16-1>;`
+/// RFC 9846: `KeyShareEntry client_shares<0..2^16-1>;`
 impl TlsListElement for KeyShareEntry {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
@@ -278,7 +278,7 @@ impl TlsListElement for KeyShareEntry {
 /// This is documented as a preference-order vector, but we (as a server)
 /// ignore the preference of the client.
 ///
-/// RFC 8446: `ProtocolVersion versions<2..254>;`
+/// RFC 9846: `ProtocolVersion versions<2..254>;`
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct SupportedProtocolVersions {
     pub(crate) tls13: bool,
@@ -390,7 +390,7 @@ pub(crate) struct ServerExtensionsInput {
     pub(crate) transport_parameters: Option<TransportParameters>,
 }
 
-/// RFC 8446: `CipherSuite cipher_suites<2..2^16-2>;`
+/// RFC 9846: `CipherSuite cipher_suites<2..2^16-2>;`
 impl TlsListElement for CipherSuite {
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
         empty_error: InvalidMessage::IllegalEmptyList("CipherSuites"),
@@ -1118,7 +1118,7 @@ impl CertificateRequestExtensions {
     /// CertificateRequest message.
     ///
     /// See RFC 9846 section 4.3 Table 1, plus `signed_certificate_timestamp` per
-    /// its IANA "TLS 1.3" registry entry (carried over from RFC 8446 section 4.2).
+    /// its IANA "TLS 1.3" registry entry (carried over from RFC 9846 section 4.3).
     pub(super) const UNPROCESSED: &'static [ExtensionType] = &[
         ExtensionType::ServerName,
         ExtensionType::StatusRequest,
@@ -1291,7 +1291,7 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
         let lifetime = Duration::from_secs(u32::read(r)? as u64);
         let age_add = u32::read(r)?;
         let nonce = SizedPayload::read(r)?.into_owned();
-        // nb. RFC 8446: `opaque ticket<1..2^16-1>;`
+        // nb. RFC 9846: `opaque ticket<1..2^16-1>;`
         let ticket = Arc::new(match SizedPayload::<u16, NonEmpty>::read(r) {
             Err(InvalidMessage::IllegalEmptyList(_)) => Err(InvalidMessage::EmptyTicketValue),
             Err(err) => Err(err),
@@ -1402,7 +1402,7 @@ impl CompressedCertificatePayload<'_> {
 /// In some cases a handshake message may be encoded differently depending on the purpose
 /// the encoded message is being used for.
 pub(crate) enum Encoding {
-    /// Standard RFC 8446 encoding.
+    /// Standard RFC 9846 encoding.
     Standard,
     /// Encoding for ECH confirmation for HRR.
     EchConfirmation,

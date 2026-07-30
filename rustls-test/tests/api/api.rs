@@ -637,7 +637,7 @@ fn server_rejects_empty_post_handshake_alert_fragment() {
     );
 
     // Encrypt and send an alert record whose (decrypted) fragment is empty.
-    // Per RFC 8446 section 5.4, empty handshake and alert fragments must be rejected.
+    // Per RFC 9846 section 5.4, empty handshake and alert fragments must be rejected.
     let mut raw_client = RawTls::new_client(client);
     raw_client.encrypt_and_send(
         &EncodedMessage {

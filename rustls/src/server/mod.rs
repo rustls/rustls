@@ -130,7 +130,7 @@ impl<'a> CommonServerSessionValue<'a> {
         // a different name. Instead, it proceeds with a full handshake to
         // establish a new session."
         //
-        // RFC 8446: "The server MUST ensure that it selects
+        // RFC 9846: "The server MUST ensure that it selects
         // a compatible PSK (if any) and cipher suite."
         self.cipher_suite == suite && self.sni.as_ref() == sni
     }

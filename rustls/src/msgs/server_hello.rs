@@ -117,11 +117,11 @@ extension_struct! {
         ExtensionType::ALProtocolNegotiation =>
             pub(crate) selected_protocol: Option<SingleProtocolName>,
 
-        /// Key exchange server share (RFC 8446)
+        /// Key exchange server share (RFC 9846)
         ExtensionType::KeyShare =>
             pub(crate) key_share: Option<KeyShareEntry>,
 
-        /// Selected preshared key index (RFC 8446)
+        /// Selected preshared key index (RFC 9846)
         ExtensionType::PreSharedKey =>
             pub(crate) preshared_key: Option<u16>,
 
@@ -141,7 +141,7 @@ extension_struct! {
         ExtensionType::StatusRequest =>
             pub(crate) certificate_status_request_ack: Option<()>,
 
-        /// Selected TLS version (RFC 8446)
+        /// Selected TLS version (RFC 9846)
         ExtensionType::SupportedVersions =>
             pub(crate) selected_version: Option<ProtocolVersion>,
 
@@ -149,7 +149,7 @@ extension_struct! {
         ExtensionType::TransportParameters =>
             pub(crate) transport_parameters: Option<Payload<'a>>,
 
-        /// Early data is accepted (RFC 8446)
+        /// Early data is accepted (RFC 9846)
         ExtensionType::EarlyData =>
             pub(crate) early_data_ack: Option<()>,
 
@@ -265,7 +265,7 @@ extension_struct! {
         ExtensionType::TransportParameters =>
             pub(crate) transport_parameters: Option<Payload<'a>>,
 
-        /// Early data is accepted (RFC 8446)
+        /// Early data is accepted (RFC 9846)
         ExtensionType::EarlyData =>
             pub(crate) early_data_ack: Option<()>,
 
@@ -323,7 +323,7 @@ impl EncryptedExtensions<'_> {
     /// of processing into struct fields.
     ///
     /// See RFC 9846 section 4.3 Table 1, plus `max_fragment_length` per its IANA
-    /// "TLS 1.3" registry entry (carried over from RFC 8446 section 4.2).
+    /// "TLS 1.3" registry entry (carried over from RFC 9846 section 4.3).
     pub(super) const UNPROCESSED: &'static [ExtensionType] = &[
         ExtensionType::MaxFragmentLength,
         ExtensionType::EllipticCurves,

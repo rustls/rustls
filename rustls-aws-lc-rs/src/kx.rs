@@ -250,7 +250,7 @@ pub static SECP384R1: &dyn SupportedKxGroup = &KxGroup {
 fn uncompressed_point(point: &[u8]) -> bool {
     // See `UncompressedPointRepresentation`, which is a retelling of
     // SEC1 section 2.3.3 "Elliptic-Curve-Point-to-Octet-String Conversion"
-    // <https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.8.2>
+    // <https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.8.2>
     matches!(point.first(), Some(0x04))
 }
 

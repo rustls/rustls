@@ -121,7 +121,7 @@ downgraded to SSLv3 after failed handshakes for later versions.
 
 rustls does not support CBC mode ciphersuites, or SSLv3.  Note that rustls does not need to implement `TLS_FALLBACK_SCSV`
 introduced as a countermeasure because it contains no ability to downgrade from TLS 1.2 to earlier protocol versions,
-and TLS 1.3 has protocol-level downgrade protection based on the [ServerHello server random value](https://www.rfc-editor.org/rfc/rfc8446#section-4.1.3).
+and TLS 1.3 has protocol-level downgrade protection based on the [ServerHello server random value](https://www.rfc-editor.org/rfc/rfc9846#section-4.2.3).
 
 ## GCM nonces
 

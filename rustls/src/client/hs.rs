@@ -303,14 +303,14 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // > the HelloRetryRequest has the same format as a ServerHello message,
         // > and the legacy_version, legacy_session_id_echo, cipher_suite, and
         // > legacy_compression_method fields have the same meaning
-        // <https://www.rfc-editor.org/rfc/rfc8446#section-4.1.4>
+        // <https://www.rfc-editor.org/rfc/rfc9846#section-4.2.4>
         //
         // and
         //
         // > A client which receives a legacy_session_id_echo field that does not
         // > match what it sent in the ClientHello MUST abort the handshake with an
         // > "illegal_parameter" alert.
-        // <https://www.rfc-editor.org/rfc/rfc8446#section-4.1.3>
+        // <https://www.rfc-editor.org/rfc/rfc9846#section-4.2.3>
         if hrr.session_id != self.next.input.session_id {
             return Err(PeerMisbehaved::IllegalHelloRetryRequestWithWrongSessionId.into());
         }
@@ -468,7 +468,7 @@ impl ClientHelloInput {
             }
         };
 
-        // https://tools.ietf.org/html/rfc8446#appendix-D.4
+        // https://tools.ietf.org/html/rfc9846#appendix-E.4
         // https://tools.ietf.org/html/rfc9001#section-8.4
         let session_id = match session_id {
             Some(session_id) => session_id,
@@ -845,7 +845,7 @@ fn emit_client_hello_for_retry(
 
     let ch = Message {
         version: match retryreq {
-            // <https://datatracker.ietf.org/doc/html/rfc8446#section-5.1>:
+            // <https://datatracker.ietf.org/doc/html/rfc9846#section-5.1>:
             // "This value MUST be set to 0x0303 for all records generated
             //  by a TLS 1.3 implementation ..."
             Some(_) => ProtocolVersion::TLSv1_2,
