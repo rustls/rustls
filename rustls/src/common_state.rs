@@ -6,12 +6,12 @@ use core::ops::{Deref, DerefMut, Range};
 use pki_types::{DnsName, FipsStatus};
 
 use crate::client::EchStatus;
-use crate::conn::{Exporter, ReceivePath, SendOutput, SendPath};
+use crate::conn::{Exporter, KeyingMaterialExporter, ReceivePath, SendOutput, SendPath};
 use crate::crypto::Identity;
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ApplicationProtocol, ProtocolVersion};
-use crate::error::{AlertDescription, Error};
+use crate::error::{AlertDescription, ApiMisuse, Error};
 use crate::hash_hs::HandshakeHash;
 use crate::msgs::{
     AlertLevel, Codec, Delocator, HandshakeMessagePayload, Locator, Message, MessagePayload,
@@ -34,6 +34,13 @@ impl CommonState {
             send: SendPath::default(),
             recv: ReceivePath::new(side),
             fips,
+        }
+    }
+
+    pub(crate) fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        match self.early_exporter.take() {
+            Some(inner) => Ok(KeyingMaterialExporter { inner }),
+            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
     }
 
