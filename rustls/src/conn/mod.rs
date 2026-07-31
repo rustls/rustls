@@ -253,16 +253,13 @@ impl<Side: SideData> ConnectionCommon<Side> {
         );
 
         // Release unsent buffered plaintext.
-        if self.send.may_send_application_data
-            && !self
-                .buffers
-                .sendable_plaintext
-                .is_empty()
-        {
-            self.core
-                .common
-                .send
-                .send_buffered_plaintext(&mut self.buffers.sendable_plaintext);
+        if self.send.may_send_application_data {
+            while let Some(buf) = self.buffers.sendable_plaintext.pop() {
+                self.core
+                    .common
+                    .send
+                    .send_appdata_encrypt(buf.as_slice().into());
+            }
         }
 
         Ok(IoState::new(
