@@ -104,19 +104,6 @@ impl ClientConnection {
         self.inner.core.side.ech_status
     }
 
-    fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
-        self.inner
-            .core
-            .side
-            .early_data
-            .check_write(data.len())
-            .map(|sz| {
-                self.inner
-                    .send
-                    .send_early_plaintext(&data[..sz])
-            })
-    }
-
     /// Returns the number of TLS1.3 tickets that have been received.
     pub fn tls13_tickets_received(&self) -> u32 {
         self.inner
@@ -282,7 +269,18 @@ impl<'a> WriteEarlyData<'a> {
 
 impl io::Write for WriteEarlyData<'_> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.sess.write_early_data(buf)
+        self.sess
+            .inner
+            .core
+            .side
+            .early_data
+            .check_write(buf.len())
+            .map(|sz| {
+                self.sess
+                    .inner
+                    .send
+                    .send_early_plaintext(&buf[..sz])
+            })
     }
 
     fn flush(&mut self) -> io::Result<()> {
