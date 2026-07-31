@@ -82,7 +82,9 @@ impl ClientConnection {
             early_data.state,
             EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted
         )
-        .then(|| WriteEarlyData::new(&mut self.inner.core))
+        .then(|| WriteEarlyData {
+            core: &mut self.inner.core,
+        })
     }
 
     /// Returns True if the server signalled it will process early data.
@@ -223,10 +225,6 @@ pub struct WriteEarlyData<'a> {
 }
 
 impl<'a> WriteEarlyData<'a> {
-    fn new(core: &'a mut ConnectionCore<ClientSide>) -> Self {
-        WriteEarlyData { core }
-    }
-
     /// How many bytes you may send.  Writes will become short
     /// once this reaches zero.
     pub fn bytes_left(&self) -> usize {
