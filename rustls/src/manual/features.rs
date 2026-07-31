@@ -28,7 +28,7 @@ and are dependent on the provider used.
 * TLS1.3 resumption via tickets or session storage
 * TLS1.3 0-RTT data
 * Server and optional client authentication
-* Extended master secret support ([RFC 7627](https://tools.ietf.org/html/rfc7627))
+* Extended main secret support ([RFC 7627](https://tools.ietf.org/html/rfc7627), renamed by [RFC 9846](https://tools.ietf.org/html/rfc9846))
 * Exporters ([RFC 5705](https://tools.ietf.org/html/rfc5705))
 * OCSP stapling by servers
 * [RFC 7250](https://tools.ietf.org/html/rfc7250) raw public keys for TLS1.3

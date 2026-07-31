@@ -219,7 +219,7 @@ fn test_client_rejects_hrr_with_varied_session_id() {
 }
 
 #[test]
-fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
+fn test_client_rejects_no_extended_main_secret_extension_when_require_ems_or_fips() {
     let mut config = ClientConfig::builder(Arc::new(TEST_PROVIDER.clone()))
         .with_root_certificates(roots())
         .with_no_client_auth()
@@ -258,7 +258,7 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_f
 
     assert_eq!(
         conn.process_new_packets(&mut input),
-        Err(PeerIncompatible::ExtendedMasterSecretExtensionRequired.into())
+        Err(PeerIncompatible::ExtendedMainSecretExtensionRequired.into())
     );
 }
 
@@ -317,7 +317,7 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
                 legacy_version: ProtocolVersion::TLSv1_2,
                 session_id: SessionId::empty(),
                 extensions: Box::new(ServerExtensions {
-                    extended_master_secret_ack: Some(()),
+                    extended_main_secret_ack: Some(()),
                     ..ServerExtensions::default()
                 }),
             },

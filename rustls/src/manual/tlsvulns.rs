@@ -159,7 +159,7 @@ rustls does not support renegotiation in TLSv1.2.  TLSv1.3 also no longer suppor
 introduced as a countermeasure to the previous protocol flaw.
 
 rustls does not support renegotiation for TLSv1.2 connections, or RSA key exchange, and both are required for this attack
-to work.  rustls implements the "Extended Master Secret" (RFC 7627) extension for TLSv1.2 which was standardised as a countermeasure.
+to work.  rustls implements the "Extended Main Secret" (RFC 7627, as renamed by RFC 9846) extension for TLSv1.2 which was standardised as a countermeasure.
 
 TLSv1.3 no longer supports renegotiation and RSA key exchange.  It also effectively incorporates the improvements made in RFC 7627.
 

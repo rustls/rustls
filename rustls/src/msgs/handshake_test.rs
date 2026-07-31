@@ -173,7 +173,7 @@ fn refuses_server_ext_with_unparsed_bytes() {
 
 #[test]
 fn refuses_encrypted_ext_with_misplaced_extension() {
-    for misplaced in [ExtensionType::KeyShare, ExtensionType::ExtendedMasterSecret] {
+    for misplaced in [ExtensionType::KeyShare, ExtensionType::ExtendedMainSecret] {
         assert_eq!(
             EncryptedExtensions::read_bytes(&empty_extension_list(misplaced)).unwrap_err(),
             InvalidMessage::MisplacedExtension(u16::from(misplaced))
@@ -606,34 +606,34 @@ fn client_extensions_ordering() {
 
     let psk_and_ech = ClientExtensions {
         early_data_request: Some(()),
-        extended_master_secret_request: Some(()),
+        extended_main_secret_request: Some(()),
         preshared_key_offer: Some(psk_offer.clone()),
         encrypted_client_hello: Some(EncryptedClientHello::Inner),
         ..Default::default()
     };
 
     let psk_and_ech_with_contiguous = ClientExtensions {
-        contiguous_extensions: vec![ExtensionType::ExtendedMasterSecret],
+        contiguous_extensions: vec![ExtensionType::ExtendedMainSecret],
         ..psk_and_ech.clone()
     };
 
     let ech = ClientExtensions {
         early_data_request: Some(()),
-        extended_master_secret_request: Some(()),
+        extended_main_secret_request: Some(()),
         encrypted_client_hello: Some(EncryptedClientHello::Inner),
         ..Default::default()
     };
 
     let psk = ClientExtensions {
         early_data_request: Some(()),
-        extended_master_secret_request: Some(()),
+        extended_main_secret_request: Some(()),
         preshared_key_offer: Some(psk_offer),
         ..Default::default()
     };
 
     let neither = ClientExtensions {
         early_data_request: Some(()),
-        extended_master_secret_request: Some(()),
+        extended_main_secret_request: Some(()),
         ..Default::default()
     };
 
@@ -1153,7 +1153,7 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
                     PresharedKeyBinder::from(vec![3, 4, 5]),
                 ],
             }),
-            extended_master_secret_request: Some(()),
+            extended_main_secret_request: Some(()),
             certificate_status_request: Some(CertificateStatusRequest::build_ocsp()),
             server_certificate_types: Some(vec![CertificateType::RawPublicKey]),
             client_certificate_types: Some(vec![CertificateType::RawPublicKey]),
@@ -1186,7 +1186,7 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
             encrypted_client_hello_ack: Some(ServerEncryptedClientHello {
                 retry_configs: vec![],
             }),
-            extended_master_secret_ack: Some(()),
+            extended_main_secret_ack: Some(()),
             certificate_status_request_ack: Some(()),
             selected_version: Some(ProtocolVersion::TLSv1_2),
             transport_parameters: Some(Payload::new(vec![1, 2, 3])),

@@ -101,12 +101,12 @@ mod client_hello {
 
             if input
                 .client_hello
-                .extended_master_secret_request
+                .extended_main_secret_request
                 .is_some()
             {
                 st.using_ems = true;
             } else if st.config.require_ems {
-                return Err(PeerIncompatible::ExtendedMasterSecretExtensionRequired.into());
+                return Err(PeerIncompatible::ExtendedMainSecretExtensionRequired.into());
             }
 
             // "RFC 4492 specified that if this extension is missing,
@@ -1041,7 +1041,7 @@ impl ExpectFinished {
                     .extract_secrets(Side::Server)
             });
 
-        output.output(OutputEvent::ExtendedMasterSecret(self.hs.using_ems));
+        output.output(OutputEvent::ExtendedMainSecret(self.hs.using_ems));
         output.output(OutputEvent::Exporter(self.secrets.into_exporter()));
         output.start_traffic();
 

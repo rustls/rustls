@@ -175,9 +175,9 @@ extension_struct! {
         ExtensionType::ServerCertificateType =>
             pub(crate) server_certificate_types: Option<Vec<CertificateType>>,
 
-        /// Extended master secret is requested (RFC 7627)
-        ExtensionType::ExtendedMasterSecret =>
-            pub(crate) extended_master_secret_request: Option<()>,
+        /// Extended main secret is requested (RFC 7627, as renamed by RFC 9846)
+        ExtensionType::ExtendedMainSecret =>
+            pub(crate) extended_main_secret_request: Option<()>,
 
         /// Offered certificate compression methods (RFC 8879)
         ExtensionType::CompressCertificate =>
@@ -254,7 +254,7 @@ impl ClientExtensions<'_> {
             protocols,
             client_certificate_types,
             server_certificate_types,
-            extended_master_secret_request,
+            extended_main_secret_request,
             certificate_compression_algorithms,
             session_ticket,
             preshared_key_offer,
@@ -285,7 +285,7 @@ impl ClientExtensions<'_> {
             }),
             client_certificate_types,
             server_certificate_types,
-            extended_master_secret_request,
+            extended_main_secret_request,
             certificate_compression_algorithms,
             session_ticket,
             preshared_key_offer,

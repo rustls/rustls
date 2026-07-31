@@ -97,7 +97,7 @@ pub struct ConnectionOutputs {
     negotiated_kx_group: Option<&'static dyn SupportedKxGroup>,
     alpn_protocol: Option<ApplicationProtocol<'static>>,
     peer_identity: Option<Identity<'static>>,
-    extended_master_secret: Option<bool>,
+    extended_main_secret: Option<bool>,
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
 }
@@ -151,15 +151,15 @@ impl ConnectionOutputs {
         self.negotiated_version
     }
 
-    /// Whether the Extended Master Secret extension was negotiated.
+    /// Whether the Extended Main Secret extension was negotiated.
     ///
     /// Returns:
     /// - `None` until the handshake reaches the point where this is known.
     /// - `None` for TLS 1.3, where the extension does not apply.
     /// - `Some(true)` for TLS 1.2 if the extension was negotiated.
     /// - `Some(false)` otherwise.
-    pub fn extended_master_secret(&self) -> Option<bool> {
-        self.extended_master_secret
+    pub fn extended_main_secret(&self) -> Option<bool> {
+        self.extended_main_secret
     }
 
     /// Which kind of handshake was performed.
@@ -195,7 +195,7 @@ impl ConnectionOutput for ConnectionOutputs {
             OutputEvent::CipherSuite(suite) => self.suite = Some(suite),
             OutputEvent::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
             OutputEvent::Exporter(exporter) => self.exporter = Some(exporter),
-            OutputEvent::ExtendedMasterSecret(ems) => self.extended_master_secret = Some(ems),
+            OutputEvent::ExtendedMainSecret(ems) => self.extended_main_secret = Some(ems),
             OutputEvent::HandshakeKind(hk) => {
                 assert!(self.handshake_kind.is_none());
                 self.handshake_kind = Some(hk);
@@ -221,7 +221,7 @@ impl fmt::Debug for ConnectionOutputs {
             negotiated_kx_group,
             alpn_protocol,
             peer_identity,
-            extended_master_secret,
+            extended_main_secret,
             exporter: _,
             early_exporter: _,
         } = self;
@@ -232,7 +232,7 @@ impl fmt::Debug for ConnectionOutputs {
             .field("negotiated_kx_group", negotiated_kx_group)
             .field("alpn_protocol", alpn_protocol)
             .field("peer_identity", peer_identity)
-            .field("extended_master_secret", extended_master_secret)
+            .field("extended_main_secret", extended_main_secret)
             .finish_non_exhaustive()
     }
 }
@@ -316,7 +316,7 @@ pub(crate) enum OutputEvent<'a> {
     CipherSuite(SupportedCipherSuite),
     EarlyExporter(Box<dyn Exporter>),
     Exporter(Box<dyn Exporter>),
-    ExtendedMasterSecret(bool),
+    ExtendedMainSecret(bool),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
     PeerIdentity(Identity<'static>),

@@ -142,10 +142,10 @@ mod server_hello {
 
             // Doing EMS?
             let using_ems = server_hello
-                .extended_master_secret_ack
+                .extended_main_secret_ack
                 .is_some();
             if config.require_ems && !using_ems {
-                return Err(PeerIncompatible::ExtendedMasterSecretExtensionRequired.into());
+                return Err(PeerIncompatible::ExtendedMainSecretExtensionRequired.into());
             }
 
             // Might the server send a ticket?
@@ -1136,7 +1136,7 @@ impl ExpectFinished {
             .then(|| st.secrets.extract_secrets(Side::Client));
 
         output.output(OutputEvent::PeerIdentity(st.peer_identity));
-        output.output(OutputEvent::ExtendedMasterSecret(st.hs.using_ems));
+        output.output(OutputEvent::ExtendedMainSecret(st.hs.using_ems));
         output.output(OutputEvent::Exporter(st.secrets.into_exporter()));
         output.start_traffic();
 
