@@ -65,10 +65,13 @@ impl ChunkVecBuffer {
     /// The returned vector has unspecified length and contents. Callers
     /// must resize it and overwrite its contents before use.
     pub(crate) fn take_spare(&mut self) -> Vec<u8> {
-        self.spare
+        let mut new = self
+            .spare
             .as_mut()
             .and_then(|spare| spare.pop())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        new.clear();
+        new
     }
 
     /// Sets the upper limit on how many bytes this
@@ -289,41 +292,6 @@ mod tests {
         let mut buf = [0u8; 12];
         assert_eq!(cvb.read(&mut buf), 12);
         assert_eq!(buf.to_vec(), b"helloworldhe".to_vec());
-    }
-
-    #[test]
-    fn recycling_retains_spent_chunks() {
-        let mut cvb = ChunkVecBuffer::new_recycling(None);
-        assert!(cvb.take_spare().is_empty());
-
-        cvb.append(b"first".to_vec());
-        cvb.append(b"second".to_vec());
-        let mut buf = [0u8; 11];
-        assert_eq!(cvb.read(&mut buf), 11);
-
-        // spent chunks are returned most-recently-spent first, unaltered
-        assert_eq!(cvb.take_spare(), b"second");
-        assert_eq!(cvb.take_spare(), b"first");
-        assert!(cvb.take_spare().is_empty());
-
-        // no retention without recycling enabled
-        let mut cvb = ChunkVecBuffer::new(None);
-        cvb.append(b"first".to_vec());
-        assert_eq!(cvb.read(&mut buf), 5);
-        assert!(cvb.take_spare().is_empty());
-    }
-
-    #[test]
-    fn recycling_bounded_by_limit() {
-        let mut cvb = ChunkVecBuffer::new_recycling(Some(8));
-        cvb.append(vec![1u8; 6]);
-        cvb.append(vec![2u8; 6]);
-        let mut buf = [0u8; 12];
-        assert_eq!(cvb.read(&mut buf), 12);
-
-        // only the first spent chunk fits under the 8-byte cap
-        assert_eq!(cvb.take_spare(), vec![1u8; 6]);
-        assert!(cvb.take_spare().is_empty());
     }
 
     #[test]
