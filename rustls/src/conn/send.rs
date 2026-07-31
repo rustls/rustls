@@ -168,12 +168,6 @@ impl SendPath {
         self.send_appdata_encrypt(payload.split_at(len).0)
     }
 
-    pub(crate) fn send_buffered_plaintext(&mut self, plaintext: &mut ChunkVecBuffer) {
-        while let Some(buf) = plaintext.pop() {
-            self.send_appdata_encrypt(buf.as_slice().into());
-        }
-    }
-
     /// Like send_msg_encrypt, but operate on an appdata directly.
     pub(crate) fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
         let len = payload.len();
