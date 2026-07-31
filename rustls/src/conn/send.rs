@@ -168,7 +168,7 @@ impl SendOutput for SendPath {
         self.negotiated_version = Some(version);
     }
 
-    fn ensure_key_update_queued(&mut self) {
+    fn queue_key_update(&mut self) {
         if let KeyUpdateRemote::Queued(_) = &self.key_update_remote {
             return;
         }
@@ -269,7 +269,7 @@ enum KeyUpdateRemote {
 pub(crate) trait SendOutput {
     fn negotiated_version(&mut self, version: ProtocolVersion);
 
-    fn ensure_key_update_queued(&mut self);
+    fn queue_key_update(&mut self);
 
     fn set_encrypter(&mut self, cipher: Box<dyn MessageEncrypter>, max_messages: u64);
 

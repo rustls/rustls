@@ -478,11 +478,10 @@ impl SendOutput for SendAdapter<'_> {
             .negotiated_version(version);
     }
 
-    fn ensure_key_update_queued(&mut self) {
+    fn queue_key_update(&mut self) {
         // waking the sender here is a policy decision to encourage timely execution of
         // the write-side key update, it is not strictly required at a protocol level.
-        self.as_locked(true)
-            .ensure_key_update_queued();
+        self.as_locked(true).queue_key_update();
     }
 
     fn set_encrypter(&mut self, cipher: Box<dyn MessageEncrypter>, max_messages: u64) {
@@ -521,7 +520,7 @@ mod tests {
         assert!(!send_flag_for(
             |adapter| adapter.negotiated_version(ProtocolVersion::TLSv1_3)
         ));
-        assert!(send_flag_for(|adapter| adapter.ensure_key_update_queued()));
+        assert!(send_flag_for(|adapter| adapter.queue_key_update()));
         assert!(!send_flag_for(
             |adapter| adapter.set_encrypter(Box::new(Tls13Cipher), 1234)
         ));
