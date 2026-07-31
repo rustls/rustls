@@ -200,7 +200,8 @@ impl SendPath {
             return Err(Error::HandshakeNotComplete);
         };
 
-        ks.request_key_update_and_update_encrypter(self);
+        self.send_msg(Message::build_key_update_request(), true);
+        ks.update_encrypter(self);
         self.refresh_traffic_keys_pending = false;
         self.tls13_key_schedule = Some(ks);
         Ok(())
