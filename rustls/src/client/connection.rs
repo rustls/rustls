@@ -77,17 +77,12 @@ impl ClientConnection {
     /// in this case the data is lost but the connection continues.  You
     /// can tell this happened using `is_early_data_accepted`.
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
-        if self
-            .inner
-            .core
-            .side
-            .early_data
-            .is_enabled()
-        {
-            Some(WriteEarlyData::new(&mut self.inner.core))
-        } else {
-            None
-        }
+        let early_data = &mut self.inner.core.side.early_data;
+        matches!(
+            early_data.state,
+            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted
+        )
+        .then(|| WriteEarlyData::new(&mut self.inner.core))
     }
 
     /// Returns True if the server signalled it will process early data.
@@ -384,13 +379,6 @@ pub(super) struct EarlyData {
 }
 
 impl EarlyData {
-    fn is_enabled(&self) -> bool {
-        matches!(
-            self.state,
-            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted
-        )
-    }
-
     fn bytes_left(&self) -> usize {
         self.left
     }
