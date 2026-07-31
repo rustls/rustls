@@ -7,7 +7,7 @@ use crate::crypto::cipher::{
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
 use crate::log::{debug, error};
-use crate::msgs::{AlertLevel, HEADER_SIZE, Message, MessageFragmenter};
+use crate::msgs::{AlertLevel, Message, MessageFragmenter};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
 
@@ -83,58 +83,21 @@ impl SendPath {
         }
     }
 
-    /// Encrypt application data from `payload` directly into `out`.
+    /// Encrypt application data from `payload` directly into `tls`.
     ///
     /// Any records already queued inside the connection (for example, a
     /// pending `key_update`) are written to `out` first.
-    ///
-    /// Records are written while `out` has space for them. The returned
-    /// [`WrittenInto`] indicates how much of `payload` was consumed and how many
-    /// bytes were written. The caller should call `write_appdata_into()` again with
-    /// the unconsumed remainder of `payload` once it has disposed of the written bytes.
-    pub(crate) fn write_appdata_into(
-        &mut self,
-        payload: OutboundPlain<'_>,
-        out: &mut [u8],
-    ) -> Result<WrittenInto, Error> {
+    pub(crate) fn write_appdata_into(&mut self, payload: OutboundPlain<'_>, tls: &mut Vec<u8>) {
         debug_assert!(self.encrypt_state.is_encrypting());
-        let mut written = self.sendable_tls.read(out);
-        let mut consumed = 0;
-
-        for m in self
-            .message_fragmenter
-            .fragment_payload(
-                ContentType::ApplicationData,
-                ProtocolVersion::TLSv1_2,
-                payload,
-            )
-        {
-            self.preflight_encrypt(0)?;
-            self.perhaps_write_key_update();
-            written += self
-                .sendable_tls
-                .read(&mut out[written..]);
-
-            let fragment_len = m.payload.len();
-            if out.len() - written
-                < HEADER_SIZE
-                    + self
-                        .encrypt_state
-                        .encrypted_len(fragment_len)
-            {
-                break;
-            }
-
-            written += self
-                .encrypt_state
-                .encrypt_outgoing_into(m, &mut out[written..]);
-            consumed += fragment_len;
-        }
-
-        Ok(WrittenInto {
-            plaintext_consumed: consumed,
-            tls_written: written,
-        })
+        self.send_messages::<true>(
+            self.message_fragmenter
+                .fragment_payload(
+                    ContentType::ApplicationData,
+                    ProtocolVersion::TLSv1_2,
+                    payload,
+                ),
+            tls,
+        );
     }
 
     /// Send plaintext application data, fragmenting and
