@@ -337,11 +337,31 @@ impl SideOutput for ClientConnectionData {
         match ev {
             Event::EchStatus(ech) => self.ech_status = ech,
             Event::EarlyData(event) => match event {
-                EarlyDataEvent::Enable(sz) => self.early_data.enable(sz),
-                EarlyDataEvent::Start => self.early_data.start(),
-                EarlyDataEvent::Accepted => self.early_data.accepted(),
-                EarlyDataEvent::Rejected => self.early_data.rejected(),
-                EarlyDataEvent::Finished => self.early_data.finished(),
+                EarlyDataEvent::Enable(sz) => {
+                    assert_eq!(self.early_data.state, EarlyDataState::Disabled);
+                    self.early_data.state = EarlyDataState::Ready;
+                    self.early_data.left = sz;
+                }
+                EarlyDataEvent::Start => {
+                    assert_eq!(self.early_data.state, EarlyDataState::Ready);
+                    self.early_data.state = EarlyDataState::Sending;
+                }
+                EarlyDataEvent::Accepted => {
+                    trace!("EarlyData accepted");
+                    assert_eq!(self.early_data.state, EarlyDataState::Sending);
+                    self.early_data.state = EarlyDataState::Accepted;
+                }
+                EarlyDataEvent::Rejected => {
+                    trace!("EarlyData rejected");
+                    self.early_data.state = EarlyDataState::Rejected;
+                }
+                EarlyDataEvent::Finished => {
+                    trace!("EarlyData finished");
+                    self.early_data.state = match self.early_data.state {
+                        EarlyDataState::Accepted => EarlyDataState::AcceptedFinished,
+                        _ => panic!("bad EarlyData state"),
+                    }
+                }
             },
             _ => unreachable!(),
         }
@@ -361,36 +381,6 @@ pub(super) struct EarlyData {
 }
 
 impl EarlyData {
-    fn enable(&mut self, max_data: usize) {
-        assert_eq!(self.state, EarlyDataState::Disabled);
-        self.state = EarlyDataState::Ready;
-        self.left = max_data;
-    }
-
-    fn start(&mut self) {
-        assert_eq!(self.state, EarlyDataState::Ready);
-        self.state = EarlyDataState::Sending;
-    }
-
-    fn rejected(&mut self) {
-        trace!("EarlyData rejected");
-        self.state = EarlyDataState::Rejected;
-    }
-
-    fn accepted(&mut self) {
-        trace!("EarlyData accepted");
-        assert_eq!(self.state, EarlyDataState::Sending);
-        self.state = EarlyDataState::Accepted;
-    }
-
-    pub(super) fn finished(&mut self) {
-        trace!("EarlyData finished");
-        self.state = match self.state {
-            EarlyDataState::Accepted => EarlyDataState::AcceptedFinished,
-            _ => panic!("bad EarlyData state"),
-        }
-    }
-
     fn is_enabled(&self) -> bool {
         matches!(
             self.state,
