@@ -96,6 +96,9 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     /// Note that other implementations (including rustls) may enforce limits on
     /// the number of `key_update` messages allowed on a given connection to prevent
     /// denial of service.  Therefore, this should be called sparingly.
+    ///
+    /// rustls only allows one outstanding request at a time; this function succeeds
+    /// but sends nothing if a request is already in-flight.
     fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error>;
 
     /// Writes a `close_notify` warning alert into `tls`.
