@@ -10,7 +10,7 @@ use crate::crypto::kx::SharedSecret;
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expand};
 use crate::crypto::{hash, hmac};
 use crate::error::{ApiMisuse, Error};
-use crate::msgs::{HandshakeAlignedProof, Message};
+use crate::msgs::HandshakeAlignedProof;
 use crate::tls13::Tls13ProtocolSuite;
 use crate::{ConnectionTrafficSecrets, KeyLog};
 
@@ -691,8 +691,7 @@ impl KeyScheduleTrafficSend {
         self.current = secret;
     }
 
-    pub(crate) fn request_key_update_and_update_encrypter(&mut self, send: &mut dyn SendOutput) {
-        send.send_msg(Message::build_key_update_request(), true);
+    pub(crate) fn update_encrypter(&mut self, send: &mut dyn SendOutput) {
         let secret = self.ks.derive_next(&self.current);
         self.ks.set_encrypter(&secret, send);
         self.current = secret;
