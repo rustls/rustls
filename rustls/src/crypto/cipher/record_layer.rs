@@ -32,9 +32,7 @@ impl EncryptionState {
     /// `plain` is a TLS message we'd like to send.  This function
     /// panics if the requisite keying material hasn't been established yet.
     ///
-    /// `record` is a spent buffer to reuse for the output (it may have any
-    /// length and contents, which are wholly overwritten). Pass an empty
-    /// vector if none is available.
+    /// The result including framing is appended to `output`.
     pub(crate) fn encrypt_outgoing(
         &mut self,
         plain: EncodedMessage<OutboundPlain<'_>>,
@@ -51,6 +49,7 @@ impl EncryptionState {
             written, needed,
             "MessageEncrypter::encrypt() returned wrong length"
         );
+        output.truncate(start + written);
     }
 
     /// Encrypt a TLS message directly into `out`, returning the encoded

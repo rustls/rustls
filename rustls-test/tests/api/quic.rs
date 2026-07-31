@@ -1263,16 +1263,21 @@ fn quic_client_ignores_stored_session_with_non_quic_suite() {
     let storage = Arc::new(ClientStorage::new());
     let mut client_config = make_client_config(KeyType::default(), &tcp_provider);
     client_config.resumption = Resumption::store(storage.clone());
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
     let (mut client, mut server) = make_pair_for_arc_configs(
         &Arc::new(client_config),
         &Arc::new(make_server_config(KeyType::default(), &tcp_provider)),
+        &mut client_output,
     );
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(
         &mut client_input,
+        &mut client_output,
         &mut client,
         &mut server_input,
+        &mut server_output,
         &mut server,
     );
     assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));

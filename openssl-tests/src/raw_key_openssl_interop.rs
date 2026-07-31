@@ -63,14 +63,21 @@ mod client {
     /// This client reads a message and then writes 'Hello from the client' to the server.
     pub(super) fn run_client(config: ClientConfig, port: u16) -> Result<String, io::Error> {
         let server_name = "0.0.0.0".try_into().unwrap();
+        let mut output = Vec::new();
         let mut conn = Arc::new(config)
             .connect(server_name)
-            .build()
+            .build(&mut output)
             .unwrap();
         let mut sock = TcpStream::connect(format!("[::]:{port}")).unwrap();
         let mut input = VecInput::default();
         let mut received_plaintext = Vec::new();
-        let mut tls = Stream::new(&mut input, &mut received_plaintext, &mut conn, &mut sock);
+        let mut tls = Stream::new(
+            &mut input,
+            &mut received_plaintext,
+            &mut output,
+            &mut conn,
+            &mut sock,
+        );
 
         let mut buf = vec![0; 128];
         let len = tls.read(&mut buf).unwrap();
@@ -147,7 +154,7 @@ mod client {
 }
 
 mod server {
-    use std::io::{self, Write};
+    use std::io;
     use std::net::TcpListener;
     use std::sync::Arc;
 
@@ -212,21 +219,40 @@ mod server {
         let mut conn = ServerConnection::new(Arc::new(config)).unwrap();
         let mut input = VecInput::default();
         let mut received_plaintext = Vec::new();
-        complete_io(&mut stream, &mut input, &mut received_plaintext, &mut conn)?;
+        let mut output = Vec::new();
+        complete_io(
+            &mut stream,
+            &mut input,
+            &mut received_plaintext,
+            &mut output,
+            &mut conn,
+        )?;
 
-        conn.writer()
-            .write_all(b"Hello from the server")?;
-        complete_io(&mut stream, &mut input, &mut received_plaintext, &mut conn)?;
+        conn.write_tls(b"Hello from the server".into(), &mut output)
+            .unwrap();
+        complete_io(
+            &mut stream,
+            &mut input,
+            &mut received_plaintext,
+            &mut output,
+            &mut conn,
+        )?;
 
         loop {
             if !received_plaintext.is_empty() {
-                conn.send_close_notify();
-                complete_io(&mut stream, &mut input, &mut received_plaintext, &mut conn)?;
+                conn.send_close_notify(&mut output);
+                complete_io(
+                    &mut stream,
+                    &mut input,
+                    &mut received_plaintext,
+                    &mut output,
+                    &mut conn,
+                )?;
                 return Ok(String::from_utf8_lossy(&received_plaintext).to_string());
             }
 
             input.read(&mut stream)?;
-            conn.process_new_packets(&mut input)
+            conn.process_new_packets(&mut input, &mut output)
                 .handle_all(&mut received_plaintext)
                 .unwrap();
         }

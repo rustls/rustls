@@ -44,11 +44,7 @@ impl<Side: SideData> SplitConnection<Side> {
     /// client connections) accept session tickets.  See the [`kernel`] module
     /// documentation for the details.
     ///
-    /// This fails if:
-    ///
-    /// - the connection was not made with [`enable_secret_extraction`] set.
-    /// - there is any buffered TLS data to send.  Obtain it first with
-    ///   [`SendTraffic::take_data()`].
+    /// This fails if the connection was not made with [`enable_secret_extraction`] set.
     ///
     /// [`kernel`]: crate::kernel
     /// [`enable_secret_extraction`]: crate::ClientConfig::enable_secret_extraction
@@ -105,55 +101,29 @@ pub struct SendTraffic(pub(crate) Arc<Mutex<SendPath>>);
 impl SendTraffic {
     /// Write application data to the peer.
     ///
-    /// The TLS data to send to the peer is returned. This data should then
-    /// be communicated to the peer, in order.
-    pub fn write(&mut self, application_data: OutboundPlain<'_>) -> Vec<Vec<u8>> {
-        let mut inner = self.0.lock().unwrap();
-        inner.send_appdata_encrypt(application_data);
-        inner.sendable_tls.take()
-    }
-
-    /// Write application data to the peer, encrypting directly into `tls`.
+    /// The TLS data to send to the peer is written into `tls`. This data should then be
+    /// communicated to the peer.
     ///
-    /// Unlike [`SendTraffic::write()`], this does not allocate or buffer
-    /// internally. Encrypted records are written straight into the caller's
-    /// buffer, along with any internally-queued records (such as a pending
-    /// `key_update`).
-    pub fn write_tls_into(&mut self, application_data: OutboundPlain<'_>, tls: &mut Vec<u8>) {
+    /// When you need to handle a [`ReceiveTrafficState::FlushSender`] state, you can call this
+    /// method with [`OutboundPlain::new_empty()`] to flush any pending TLS data to the peer.
+    pub fn write(&mut self, application_data: OutboundPlain<'_>, tls: &mut Vec<u8>) {
         let mut inner = self.0.lock().unwrap();
-        inner.write_appdata_into(application_data, tls)
+        inner.send_appdata_encrypt(application_data, tls);
     }
 
     /// Conclude sending traffic by sending a `close_notify` alert.
     ///
-    /// The alert is written into a Vec which is returned along with any pending data.
+    /// The alert is written into `tls` along with any pending data.
     /// This data should then be communicated to the peer.
     ///
     /// This is the final possible operation with a [`SendTraffic`].
-    pub fn close(mut self) -> Vec<Vec<u8>> {
+    pub fn close(self, tls: &mut Vec<u8>) {
         let mut inner = self.0.lock().unwrap();
-        inner.send_close_notify();
+        inner.send_close_notify(tls);
         drop(inner);
-        self.take_data()
     }
 
-    /// Obtain any pending data to write to the peer.
-    ///
-    /// Any such pending data will be output with any call to [`SendTraffic::write()`]
-    /// so there is no need to call this function if you have recently written data
-    /// using this.
-    ///
-    /// The TLS data to send to the peer is returned. This data should then
-    /// be communicated to the peer.
-    ///
-    /// This is useful to handle a [`ReceiveTrafficState::FlushSender`] event, but
-    /// where you don't have any plaintext to send.
-    pub fn take_data(&mut self) -> Vec<Vec<u8>> {
-        let mut inner = self.0.lock().unwrap();
-        inner.sendable_tls.take()
-    }
-
-    /// Sends a TLS1.3 `key_update` message to refresh a connection's keys.
+    /// Writes a TLS 1.3 `key_update` message into `tls` to refresh a connection's keys.
     ///
     /// The main reason to call this manually is to roll keys when it is known
     /// a connection will be idle for a long period.
@@ -168,21 +138,17 @@ impl SendTraffic {
     /// Once we receive that response, we refresh our decryption keys to match.
     /// At the end of this process, keys in both directions have been refreshed.
     ///
-    /// Note that this process does not happen synchronously: this call just
-    /// arranges that the `key_update` message will be included in the next
-    /// `write()` output.
-    ///
     /// This returns an error if a version prior to TLS1.3 is negotiated.
     ///
     /// # Usage advice
     /// Note that other implementations (including rustls) may enforce limits on
     /// the number of `key_update` messages allowed on a given connection to prevent
     /// denial of service. Therefore, this should be called sparingly.
-    pub fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
+    pub fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
         self.0
             .lock()
             .unwrap()
-            .refresh_traffic_keys()
+            .refresh_traffic_keys(tls)
     }
 }
 
@@ -216,10 +182,11 @@ impl<Side: SideData> ReceiveTraffic<Side> {
     /// which can be obtained from the returned [`ErrorWithAlert`] and sent
     /// to the peer. Following this, the underlying IO medium should be
     /// closed by the application.
-    pub fn read<'a>(
+    pub fn read<'a, 't>(
         self,
         input: &'a mut impl TlsInputBuffer,
-    ) -> Result<ReceiveTrafficState<'a, Side>, ErrorWithAlert> {
+        tls: &'t mut Vec<u8>,
+    ) -> Result<ReceiveTrafficState<'a, Side>, ErrorWithAlert<'t>> {
         let Self {
             state,
             mut recv,
@@ -236,7 +203,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             side: &mut Discard,
         };
 
-        let mut iter = MessageIter::<Side, _>::receive(input, &mut state, &mut recv, output);
+        let mut iter = MessageIter::<Side, _>::receive(input, tls, &mut state, &mut recv, output);
         let received_plain = match iter.next() {
             Some(Ok(payload)) => Some(payload),
             Some(Err(error)) => {
@@ -245,6 +212,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
                     send_adapter
                         .as_locked(false)
                         .deref_mut(),
+                    tls,
                 ));
             }
             None => None,
@@ -256,11 +224,19 @@ impl<Side: SideData> ReceiveTraffic<Side> {
         if let Some(unborrowed) = received_plain {
             let pending_discard = recv.deframer.take_discard();
             let UnborrowedPayload::Unborrowed(range) = unborrowed else {
-                return Err(Error::Unreachable("decrypted data should be borrowed").into());
+                return Err(ErrorWithAlert::new(
+                    Error::Unreachable("decrypted data should be borrowed"),
+                    send_adapter
+                        .as_locked(false)
+                        .deref_mut(),
+                    tls,
+                ));
             };
+
             if let SendAdapter::Locked { send_required, .. } = send_adapter {
                 pending_flush_sender |= send_required;
             }
+
             drop(send_adapter);
             return Ok(ReceiveTrafficState::Available(ReceivedApplicationData {
                 range,
@@ -517,18 +493,18 @@ impl SendOutput for SendAdapter<'_> {
             .update_key_schedule(schedule);
     }
 
-    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
+    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription, tls: &mut Vec<u8>) {
         self.as_locked(true)
-            .send_alert(level, desc)
+            .send_alert(level, desc, tls)
     }
 
     fn start_traffic(&mut self) {
         self.as_locked(false).start_traffic();
     }
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, tls: &mut Vec<u8>) {
         self.as_locked(true)
-            .send_msg(m, must_encrypt)
+            .send_msg(m, must_encrypt, tls)
     }
 }
 
@@ -539,6 +515,7 @@ mod tests {
 
     #[test]
     fn send_adapter_flag() {
+        let mut tls = Vec::new();
         assert!(!send_flag_for(
             |adapter| adapter.negotiated_version(ProtocolVersion::TLSv1_3)
         ));
@@ -549,12 +526,15 @@ mod tests {
         // update_key_schedule too hard
         assert!(send_flag_for(|adapter| adapter.send_alert(
             AlertLevel::Fatal,
-            AlertDescription::CertificateUnknown
+            AlertDescription::CertificateUnknown,
+            &mut tls,
         )));
         assert!(!send_flag_for(|adapter| adapter.start_traffic()));
-        assert!(send_flag_for(
-            |adapter| adapter.send_msg(Message::build_key_update_notify(), false)
-        ));
+        assert!(send_flag_for(|adapter| adapter.send_msg(
+            Message::build_key_update_notify(),
+            false,
+            &mut tls,
+        )));
     }
 
     fn send_flag_for(f: impl FnOnce(&mut SendAdapter<'_>)) -> bool {

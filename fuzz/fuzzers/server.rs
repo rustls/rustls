@@ -81,7 +81,7 @@ fn service_connection(
     loop {
         let rd = input.read(stream);
         if server
-            .process_new_packets(input)
+            .process_new_packets(input, &mut Vec::new())
             .handle_all(&mut Vec::new())
             .is_err()
         {
@@ -91,9 +91,5 @@ fn service_connection(
         if matches!(rd, Ok(0) | Err(_)) {
             break;
         }
-
-        // gather and discard written data
-        let mut wr = vec![];
-        server.write_tls(&mut &mut wr).unwrap();
     }
 }

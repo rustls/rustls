@@ -7,9 +7,8 @@ use crate::crypto::cipher::{
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
 use crate::log::{debug, error};
-use crate::msgs::{AlertLevel, Message, MessageFragmenter};
+use crate::msgs::{AlertLevel, HEADER_SIZE, Message, MessageFragmenter};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
-use crate::vecbuf::ChunkVecBuffer;
 
 /// The data path from us to the peer.
 pub(crate) struct SendPath {
@@ -20,7 +19,6 @@ pub(crate) struct SendPath {
     /// If we signaled end of stream.
     pub(crate) has_sent_close_notify: bool,
     message_fragmenter: MessageFragmenter,
-    pub(crate) sendable_tls: ChunkVecBuffer,
     queued_key_update_message: Option<Vec<u8>>,
     pub(crate) refresh_traffic_keys_pending: bool,
     negotiated_version: Option<ProtocolVersion>,
@@ -28,32 +26,16 @@ pub(crate) struct SendPath {
 }
 
 impl SendPath {
-    pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
-        debug_assert!(self.encrypt_state.is_encrypting());
-
-        // Limit on `sendable_tls` should apply to encrypted data but is enforced
-        // for plaintext data instead which does not include cipher+record overhead.
-        let len = self
-            .sendable_tls
-            .apply_limit(data.len());
-        if len == 0 {
-            // Don't send empty fragments.
-            return 0;
-        }
-
-        self.send_appdata_encrypt(data[..len].into())
-    }
-
-    pub(crate) fn send_close_notify(&mut self) {
+    pub(crate) fn send_close_notify(&mut self, tls: &mut Vec<u8>) {
         if self.has_sent_close_notify {
             return;
         }
         debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
         self.has_sent_close_notify = true;
-        self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
+        self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify, tls);
     }
 
-    fn preflight_encrypt(&mut self, n: usize) -> Result<(), Error> {
+    fn preflight_encrypt(&mut self, n: usize, tls: &mut Vec<u8>) -> Result<(), Error> {
         match self
             .encrypt_state
             .pre_encrypt_action(n as u64)
@@ -72,7 +54,7 @@ impl SendPath {
                         error!(
                             "traffic keys exhausted, closing connection to prevent security failure"
                         );
-                        self.send_close_notify();
+                        self.send_close_notify(tls);
                         Err(Error::EncryptError)
                     }
                 }
@@ -83,12 +65,13 @@ impl SendPath {
         }
     }
 
-    /// Encrypt application data from `payload` directly into `tls`.
-    ///
-    /// Any records already queued inside the connection (for example, a
-    /// pending `key_update`) are written to `out` first.
-    pub(crate) fn write_appdata_into(&mut self, payload: OutboundPlain<'_>, tls: &mut Vec<u8>) {
-        debug_assert!(self.encrypt_state.is_encrypting());
+    /// Like send_msg_encrypt, but operate on an appdata directly.
+    pub(crate) fn send_appdata_encrypt(
+        &mut self,
+        payload: OutboundPlain<'_>,
+        tls: &mut Vec<u8>,
+    ) -> usize {
+        let len = payload.len();
         self.send_messages::<true>(
             self.message_fragmenter
                 .fragment_payload(
@@ -98,57 +81,7 @@ impl SendPath {
                 ),
             tls,
         );
-        self.maybe_refresh_traffic_keys();
-    }
-
-    /// Send plaintext application data, fragmenting and
-    /// encrypting it as it goes out.
-    ///
-    /// If internal buffers are too small, this function will not accept
-    /// all the data.
-    pub(crate) fn buffer_plaintext(
-        &mut self,
-        payload: OutboundPlain<'_>,
-        sendable_plaintext: &mut ChunkVecBuffer,
-    ) -> usize {
-        self.perhaps_write_key_update();
-        if !self.may_send_application_data {
-            // If we haven't completed handshaking, buffer
-            // plaintext to send once we do.
-            return sendable_plaintext.append_limited_copy(payload);
-        }
-
-        // Limit on `sendable_tls` should apply to encrypted data but is enforced
-        // for plaintext data instead which does not include cipher+record overhead.
-        let len = self
-            .sendable_tls
-            .apply_limit(payload.len());
-        if len == 0 {
-            // Don't send empty fragments.
-            return 0;
-        }
-
-        debug_assert!(self.encrypt_state.is_encrypting());
-        let len = self.send_appdata_encrypt(payload.split_at(len).0);
-        self.maybe_refresh_traffic_keys();
-        len
-    }
-
-    /// Like send_msg_encrypt, but operate on an appdata directly.
-    pub(crate) fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
-        let len = payload.len();
-        let mut tls = self.sendable_tls.take_spare();
-        self.send_messages::<true>(
-            self.message_fragmenter
-                .fragment_payload(
-                    ContentType::ApplicationData,
-                    ProtocolVersion::TLSv1_2,
-                    payload,
-                ),
-            &mut tls,
-        );
-        self.sendable_tls.append(tls);
-        self.maybe_refresh_traffic_keys();
+        self.maybe_refresh_traffic_keys(tls);
         len
     }
 
@@ -158,10 +91,26 @@ impl SendPath {
         iter: impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>>,
         tls: &mut Vec<u8>,
     ) {
-        self.perhaps_write_key_update();
+        self.perhaps_write_key_update(tls);
+        let count = iter.len();
+        let mut iter = iter.peekable();
+        if let Some(first) = iter.peek() {
+            let record_len = HEADER_SIZE
+                + match MUST_ENCRYPT {
+                    true => self
+                        .encrypt_state
+                        .encrypted_len(first.payload.len()),
+                    false => first.payload.len(),
+                };
+            tls.reserve(count * record_len);
+        }
+
         for m in iter {
             // Alerts are always sendable -- never quashed by a PreEncryptAction.
-            if MUST_ENCRYPT && m.typ != ContentType::Alert && self.preflight_encrypt(0).is_err() {
+            if MUST_ENCRYPT
+                && m.typ != ContentType::Alert
+                && self.preflight_encrypt(0, tls).is_err()
+            {
                 return;
             }
 
@@ -179,9 +128,9 @@ impl SendPath {
         debug_assert!(self.encrypt_state.is_encrypting());
     }
 
-    fn perhaps_write_key_update(&mut self) {
-        if let Some(message) = self.queued_key_update_message.take() {
-            self.sendable_tls.append(message);
+    fn perhaps_write_key_update(&mut self, tls: &mut Vec<u8>) {
+        if let Some(mut message) = self.queued_key_update_message.take() {
+            tls.append(&mut message)
         }
     }
 
@@ -191,20 +140,20 @@ impl SendPath {
     }
 
     /// Trigger a `refresh_traffic_keys` if required.
-    fn maybe_refresh_traffic_keys(&mut self) {
+    fn maybe_refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) {
         if self.refresh_traffic_keys_pending {
-            let _ = self.refresh_traffic_keys();
+            let _ = self.refresh_traffic_keys(tls);
         }
     }
 
-    pub(crate) fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
+    pub(crate) fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
         let ks = self.tls13_key_schedule.take();
 
         let Some(mut ks) = ks else {
             return Err(Error::HandshakeNotComplete);
         };
 
-        self.send_msg(Message::build_key_update_request(), true);
+        self.send_msg(Message::build_key_update_request(), true, tls);
         ks.update_encrypter(self);
         self.refresh_traffic_keys_pending = false;
         self.tls13_key_schedule = Some(ks);
@@ -243,7 +192,7 @@ impl SendOutput for SendPath {
         self.tls13_key_schedule = Some(schedule);
     }
 
-    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
+    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription, tls: &mut Vec<u8>) {
         match level {
             AlertLevel::Fatal if self.has_sent_fatal_alert => return,
             AlertLevel::Fatal => self.has_sent_fatal_alert = true,
@@ -253,6 +202,7 @@ impl SendOutput for SendPath {
         self.send_msg(
             Message::build_alert(level, desc),
             self.encrypt_state.is_encrypting(),
+            tls,
         );
     }
 
@@ -262,18 +212,16 @@ impl SendOutput for SendPath {
     }
 
     /// Send a raw TLS message, fragmenting it if needed.
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, tls: &mut Vec<u8>) {
         let encoded = EncodedMessage::from(m);
         let fragments = self
             .message_fragmenter
             .fragment_message(&encoded);
 
-        let mut tls = self.sendable_tls.take_spare();
         match must_encrypt {
-            true => self.send_messages::<true>(fragments, &mut tls),
-            false => self.send_messages::<false>(fragments, &mut tls),
+            true => self.send_messages::<true>(fragments, tls),
+            false => self.send_messages::<false>(fragments, tls),
         }
-        self.sendable_tls.append(tls);
     }
 }
 
@@ -286,7 +234,6 @@ impl Default for SendPath {
             has_sent_fatal_alert: false,
             has_sent_close_notify: false,
             message_fragmenter: MessageFragmenter::default(),
-            sendable_tls: ChunkVecBuffer::new_recycling(Some(DEFAULT_BUFFER_LIMIT)),
             queued_key_update_message: None,
             refresh_traffic_keys_pending: false,
             negotiated_version: None,
@@ -304,26 +251,9 @@ pub(crate) trait SendOutput {
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>);
 
-    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription);
+    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription, tls: &mut Vec<u8>);
 
     fn start_traffic(&mut self);
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool);
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, tls: &mut Vec<u8>);
 }
-
-/// The outcome of encrypting application data into a caller-provided buffer.
-///
-/// Returned by [`SendTraffic::write_tls_into()`].
-///
-/// [`SendTraffic::write_tls_into()`]: crate::split::SendTraffic::write_tls_into()
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[non_exhaustive]
-pub struct WrittenInto {
-    /// How many plaintext bytes were consumed from the input payload.
-    pub plaintext_consumed: usize,
-
-    /// How many TLS bytes were written to the output buffer.
-    pub tls_written: usize,
-}
-
-pub(super) const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;

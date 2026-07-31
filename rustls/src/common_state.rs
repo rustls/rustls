@@ -44,22 +44,14 @@ impl CommonState {
         }
     }
 
-    /// Returns true if the caller should call [`Connection::write_tls`] as soon as possible.
+    /// Writes a `close_notify` warning alert to into the `tls` buffer.
+    ///
+    /// This informs the peer that the connection is being closed. Does nothing if any
+    /// `close_notify` or fatal alert was already sent.
     ///
     /// [`Connection::write_tls`]: crate::Connection::write_tls
-    pub fn wants_write(&self) -> bool {
-        !self.send.sendable_tls.is_empty()
-    }
-
-    /// Queues a `close_notify` warning alert to be sent in the next
-    /// [`Connection::write_tls`] call.  This informs the peer that the
-    /// connection is being closed.
-    ///
-    /// Does nothing if any `close_notify` or fatal alert was already sent.
-    ///
-    /// [`Connection::write_tls`]: crate::Connection::write_tls
-    pub fn send_close_notify(&mut self) {
-        self.send.send_close_notify()
+    pub fn send_close_notify(&mut self, tls: &mut Vec<u8>) {
+        self.send.send_close_notify(tls)
     }
 
     /// Returns true if the connection is currently performing the TLS handshake.
@@ -245,11 +237,11 @@ impl fmt::Debug for ConnectionOutputs {
 }
 
 /// Send an alert via `output` if `error` specifies one.
-pub(crate) fn maybe_send_fatal_alert(send: &mut dyn SendOutput, error: &Error) {
+pub(crate) fn maybe_send_fatal_alert(send: &mut dyn SendOutput, error: &Error, tls: &mut Vec<u8>) {
     let Ok(alert) = AlertDescription::try_from(error) else {
         return;
     };
-    send.send_alert(AlertLevel::Fatal, alert);
+    send.send_alert(AlertLevel::Fatal, alert, tls);
 }
 
 /// Describes which sort of handshake happened.

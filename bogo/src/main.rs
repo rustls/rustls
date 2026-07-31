@@ -35,7 +35,8 @@ use rustls::enums::{
     ApplicationProtocol, CertificateCompressionAlgorithm, CertificateType, ProtocolVersion,
 };
 use rustls::error::{
-    AlertDescription, CertificateError, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
+    AlertDescription, ApiMisuse, CertificateError, Error, InvalidMessage, PeerIncompatible,
+    PeerMisbehaved,
 };
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{
@@ -106,15 +107,16 @@ pub fn main() {
                 let server_name = ServerName::try_from(opts.host_name.as_str())
                     .unwrap()
                     .to_owned();
+                let mut output = Vec::new();
                 let sess = config
                     .connect(server_name)
-                    .build()
+                    .build(&mut output)
                     .unwrap();
-                exec(&opts, sess, &key_log, i);
+                exec(&opts, sess, output, &key_log, i);
             }
             SideConfig::Server(config) => {
                 let sess = ServerConnection::new(config.clone()).unwrap();
-                exec(&opts, sess, &key_log, i);
+                exec(&opts, sess, Vec::new(), &key_log, i);
             }
         }
 
@@ -144,6 +146,7 @@ pub fn main() {
 fn exec<S: SideData>(
     opts: &Options,
     mut sess: impl Connection<S> + 'static,
+    mut output: Vec<u8>,
     key_log: &KeyLogMemo,
     count: usize,
 ) {
@@ -158,6 +161,7 @@ fn exec<S: SideData>(
     let mut sent_exporter = false;
     let mut sent_key_update = false;
     let mut quench_writes = false;
+    let mut pending = Vec::new();
 
     conn.write_all(&opts.shim_id.to_le_bytes())
         .unwrap();
@@ -171,12 +175,14 @@ fn exec<S: SideData>(
                 .queue_early_data_after_received_messages
                 .is_empty()
             {
-                flush(&mut sess, &mut conn);
+                flush(&mut output, &mut conn);
                 for message_size_estimate in &opts.queue_early_data_after_received_messages {
                     state = read_n_bytes(
                         &mut buf,
                         opts,
                         &mut input,
+                        &mut output,
+                        &mut pending,
                         &mut sess,
                         &mut conn,
                         *message_size_estimate,
@@ -189,24 +195,29 @@ fn exec<S: SideData>(
                 let len = client(&mut sess)
                     .early_data()
                     .expect("0rtt not available")
-                    .write(b"hello")
-                    .expect("0rtt write failed");
-                sess.writer()
-                    .write_all(&b"hello"[len..])
-                    .unwrap();
+                    .write_tls(b"hello".into(), &mut output);
+                write_or_queue(&mut sess, &b"hello"[len..], &mut pending, &mut output).unwrap();
                 sent_message = true;
             } else if !opts.only_write_one_byte_after_handshake {
-                let _ = sess.writer().write_all(b"hello");
+                let _ = write_or_queue(&mut sess, b"hello", &mut pending, &mut output);
                 sent_message = true;
             }
         }
 
         if !quench_writes {
-            flush(&mut sess, &mut conn);
+            flush(&mut output, &mut conn);
         }
 
         if sess.wants_read() {
-            state = read_all_bytes(&mut buf, opts, &mut input, &mut sess, &mut conn);
+            state = read_all_bytes(
+                &mut buf,
+                opts,
+                &mut input,
+                &mut output,
+                &mut pending,
+                &mut sess,
+                &mut conn,
+            );
         }
 
         if let Some(state) = state {
@@ -238,8 +249,7 @@ fn exec<S: SideData>(
                 *b ^= 0xff;
             }
 
-            sess.writer()
-                .write_all(&data[..data_len])
+            write_or_queue(&mut sess, &data[..data_len], &mut pending, &mut output)
                 .expect("cannot echo early_data in 1rtt data");
         }
 
@@ -261,8 +271,7 @@ fn exec<S: SideData>(
                     &mut export,
                 )
                 .unwrap();
-            sess.writer()
-                .write_all(&export)
+            sess.write_tls((&export).into(), &mut output)
                 .unwrap();
             sent_exporter = true;
         }
@@ -273,37 +282,35 @@ fn exec<S: SideData>(
                 secrets.client_traffic_secret.len(),
                 secrets.server_traffic_secret.len()
             );
-            sess.writer()
-                .write_all(&(secrets.client_traffic_secret.len() as u16).to_le_bytes())
+            sess.write_tls(
+                (&(secrets.client_traffic_secret.len() as u16).to_le_bytes()).into(),
+                &mut output,
+            )
+            .unwrap();
+            sess.write_tls((&secrets.server_traffic_secret).into(), &mut output)
                 .unwrap();
-            sess.writer()
-                .write_all(&secrets.server_traffic_secret)
-                .unwrap();
-            sess.writer()
-                .write_all(&secrets.client_traffic_secret)
+            sess.write_tls((&secrets.client_traffic_secret).into(), &mut output)
                 .unwrap();
             sent_exporter = true;
         }
 
         if opts.send_key_update && !sent_key_update && !sess.is_handshaking() {
-            sess.refresh_traffic_keys().unwrap();
+            sess.refresh_traffic_keys(&mut output)
+                .unwrap();
             sent_key_update = true;
         }
 
         if !sess.is_handshaking() && opts.only_write_one_byte_after_handshake && !sent_message {
             println!("writing message and then only one byte of its tls frame");
-            flush(&mut sess, &mut conn);
+            flush(&mut output, &mut conn);
 
-            sess.writer()
-                .write_all(b"hello")
+            sess.write_tls(b"hello".into(), &mut output)
                 .unwrap();
             sent_message = true;
 
-            let mut one_byte = [0u8];
-            let mut cursor = io::Cursor::new(&mut one_byte[..]);
-            sess.write_tls(&mut cursor).unwrap();
-            conn.write_all(&one_byte)
+            conn.write_all(&output[..1])
                 .expect("IO error");
+            output.drain(..1);
 
             quench_writes = true;
         }
@@ -393,7 +400,7 @@ fn exec<S: SideData>(
         }
 
         if opts.shut_down_after_handshake && !sent_shutdown && !sess.is_handshaking() {
-            sess.send_close_notify();
+            sess.send_close_notify(&mut output);
             sent_shutdown = true;
         }
 
@@ -406,7 +413,7 @@ fn exec<S: SideData>(
             *b ^= 0xff;
         }
 
-        sess.writer().write_all(&buf).unwrap();
+        write_or_queue(&mut sess, &buf, &mut pending, &mut output).unwrap();
     }
 }
 
@@ -425,10 +432,35 @@ fn server(conn: &mut dyn Any) -> &mut ServerConnection {
         .unwrap()
 }
 
+/// Encrypt `plaintext` into `output`, or queue it in `pending` if the handshake
+/// is still in progress.
+///
+/// Queued plaintext is sent by `after_read()` once the handshake completes.
+fn write_or_queue<S: SideData>(
+    sess: &mut impl Connection<S>,
+    plaintext: &[u8],
+    pending: &mut Vec<u8>,
+    output: &mut Vec<u8>,
+) -> Result<(), Error> {
+    if plaintext.is_empty() {
+        return Ok(());
+    }
+
+    match sess.write_tls(plaintext.into(), output) {
+        Err(Error::ApiMisuse(ApiMisuse::WriteTlsBeforeHandshakeComplete)) => {
+            pending.extend_from_slice(plaintext);
+            Ok(())
+        }
+        rc => rc,
+    }
+}
+
 fn read_n_bytes<S: SideData>(
     buf: &mut Vec<u8>,
     opts: &Options,
     input: &mut VecInput,
+    output: &mut Vec<u8>,
+    pending: &mut Vec<u8>,
     sess: &mut impl Connection<S>,
     conn: &mut net::TcpStream,
     n: usize,
@@ -445,13 +477,15 @@ fn read_n_bytes<S: SideData>(
         Err(err) => panic!("invalid read: {err}"),
     };
 
-    after_read(buf, opts, input, sess, conn)
+    after_read(buf, opts, input, output, pending, sess, conn)
 }
 
 fn read_all_bytes<S: SideData>(
     buf: &mut Vec<u8>,
     opts: &Options,
     input: &mut VecInput,
+    output: &mut Vec<u8>,
+    pending: &mut Vec<u8>,
     sess: &mut impl Connection<S>,
     conn: &mut net::TcpStream,
 ) -> Option<IoState> {
@@ -461,35 +495,48 @@ fn read_all_bytes<S: SideData>(
         Err(err) => panic!("invalid read: {err}"),
     };
 
-    after_read(buf, opts, input, sess, conn)
+    after_read(buf, opts, input, output, pending, sess, conn)
 }
 
 fn after_read<S: SideData>(
     buf: &mut Vec<u8>,
     opts: &Options,
     input: &mut VecInput,
+    output: &mut Vec<u8>,
+    pending: &mut Vec<u8>,
     sess: &mut impl Connection<S>,
     conn: &mut net::TcpStream,
 ) -> Option<IoState> {
-    let error = match sess
-        .process_new_packets(input)
+    let state = match sess
+        .process_new_packets(input, output)
         .handle_all(buf)
     {
-        Ok(state) => return Some(state),
-        Err(error) => error,
+        Ok(state) => state,
+        Err(error) => {
+            flush(output, conn); /* send any alerts before exiting */
+            orderly_close(conn);
+            handle_err(opts, error);
+        }
     };
 
-    flush(sess, conn); /* send any alerts before exiting */
-    orderly_close(conn);
-    handle_err(opts, error);
+    if !pending.is_empty() {
+        match sess.write_tls(pending.as_slice().into(), output) {
+            Ok(()) => pending.clear(),
+            Err(Error::ApiMisuse(ApiMisuse::WriteTlsBeforeHandshakeComplete)) => {}
+            Err(err) => panic!("cannot send queued plaintext: {err:?}"),
+        }
+    }
+
+    Some(state)
 }
 
-fn flush<S: SideData>(sess: &mut impl Connection<S>, conn: &mut net::TcpStream) {
-    while sess.wants_write() {
-        if let Err(err) = sess.write_tls(conn) {
+fn flush(output: &mut Vec<u8>, conn: &mut net::TcpStream) {
+    if !output.is_empty() {
+        if let Err(err) = conn.write_all(output) {
             println!("IO error: {err:?}");
             process::exit(0);
         }
+        output.clear();
     }
     conn.flush().unwrap();
 }

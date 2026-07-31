@@ -109,14 +109,18 @@ impl ClientConnection {
             ..Quic::default()
         };
 
+        let mut tls = Vec::new();
         let inner = ConnectionCore::for_client(
             config,
             name,
             exts,
             Some(&mut quic),
             Protocol::Quic(version),
+            &mut tls,
         )?;
 
+        // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
+        debug_assert!(tls.is_empty());
         Ok(Self {
             inner: ConnectionCommon::new(inner, quic),
         })
@@ -482,6 +486,7 @@ impl Accepted {
     ) -> Result<ServerHandshake, Error> {
         check_server_config(&config)?;
 
+        let mut tls = Vec::new();
         self.inner.core.accepted(
             self.choose_config,
             ServerExtensionsInput {
@@ -491,8 +496,11 @@ impl Accepted {
             },
             Some(&mut self.inner.quic),
             config,
+            &mut tls,
         )?;
 
+        // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
+        debug_assert!(tls.is_empty());
         output.extend(self.inner.events());
 
         ServerHandshake::try_from(self.inner)
@@ -585,7 +593,8 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .deframer
             .input_quic(input.slice_mut())?;
 
-        let mut iter = MessageIter::new(input, Some(&mut self.quic), &mut self.core);
+        let mut tls = Vec::new();
+        let mut iter = MessageIter::new(input, &mut tls, Some(&mut self.quic), &mut self.core);
         let result = match iter.next() {
             Some(Ok(_)) | None => Ok(()),
             Some(Err(e)) => Err(e),

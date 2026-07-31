@@ -44,9 +44,11 @@ fn main() -> Result<(), Box<dyn StdError>> {
     let mut conn = ServerConnection::new(Arc::new(config))?;
     let mut input = VecInput::default();
     let mut received_plaintext = Vec::new();
+    let mut output = Vec::new();
     let mut tls_stream = Stream::new(
         &mut input,
         &mut received_plaintext,
+        &mut output,
         &mut conn,
         &mut tcp_stream,
     );

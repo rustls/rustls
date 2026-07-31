@@ -13,13 +13,20 @@ use rustls_test::{KeyType, do_handshake, make_pair};
 
 #[test]
 fn split_pairwise() {
-    let (mut client, mut server) =
-        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair(
+        KeyType::default(),
+        &super::provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
+        &mut client_output,
         &mut client,
         &mut server_input,
+        &mut server_output,
         &mut server,
     );
 
@@ -62,10 +69,11 @@ fn split_pairwise() {
             .map(|kxg| kxg.name()),
     );
 
-    let flight = client_send.write(b"client to server".as_slice().into());
+    let mut flight = Vec::new();
+    client_send.write(b"client to server".as_slice().into(), &mut flight);
     server_recv = check_receive_all(
         server_recv,
-        single(flight),
+        flight,
         ExpectData {
             expected: b"client to server",
             then: ExpectReadMore,
@@ -73,10 +81,11 @@ fn split_pairwise() {
     )
     .unwrap();
 
-    let flight = server_send.write(b"server to client".as_slice().into());
+    let mut flight = Vec::new();
+    server_send.write(b"server to client".as_slice().into(), &mut flight);
     client_recv = check_receive_all(
         client_recv,
-        single(flight),
+        flight,
         ExpectData {
             expected: b"server to client",
             then: ExpectReadMore,
@@ -84,19 +93,30 @@ fn split_pairwise() {
     )
     .unwrap();
 
-    check_receive_all(server_recv, single(client_send.close()), ExpectCloseNotify);
-    check_receive_all(client_recv, single(server_send.close()), ExpectCloseNotify);
+    let mut flight = Vec::new();
+    client_send.close(&mut flight);
+    check_receive_all(server_recv, flight, ExpectCloseNotify);
+    let mut flight = Vec::new();
+    server_send.close(&mut flight);
+    check_receive_all(client_recv, flight, ExpectCloseNotify);
 }
 
 #[test]
 fn split_incremental() {
-    let (mut client, mut server) =
-        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair(
+        KeyType::default(),
+        &super::provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
+        &mut client_output,
         &mut client,
         &mut server_input,
+        &mut server_output,
         &mut server,
     );
 
@@ -111,8 +131,8 @@ fn split_incremental() {
         outputs: _,
     } = server.split().unwrap();
 
-    let flight = client_send.write(b"client to server".as_slice().into());
-    let flight = single(flight);
+    let mut flight = Vec::new();
+    client_send.write(b"client to server".as_slice().into(), &mut flight);
 
     // messages are not consumed until they are fully provided.
     for ll in 1..flight.len() - 1 {
@@ -131,47 +151,21 @@ fn split_incremental() {
 }
 
 #[test]
-fn split_write_tls_into() {
-    let (mut client, mut server) =
-        make_pair(KeyType::EcdsaP256, &super::provider::DEFAULT_PROVIDER);
-    let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
-    do_handshake(
-        &mut client_input,
-        &mut client,
-        &mut server_input,
-        &mut server,
-    );
-
-    let SplitConnection {
-        send: mut client_send,
-        ..
-    } = client.split().unwrap();
-    let SplitConnection {
-        receive: server_recv,
-        ..
-    } = server.split().unwrap();
-
-    let mut tls = Vec::with_capacity(16_384);
-    client_send.write_tls_into(b"client to server".as_slice().into(), &mut tls);
-    check_receive_all(
-        server_recv,
-        tls,
-        ExpectData {
-            expected: b"client to server",
-            then: ExpectReadMore,
-        },
-    );
-}
-
-#[test]
 fn split_client_tickets_received() {
-    let (mut client, mut server) =
-        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair(
+        KeyType::default(),
+        &super::provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
+        &mut client_output,
         &mut client,
         &mut server_input,
+        &mut server_output,
         &mut server,
     );
 
@@ -187,7 +181,12 @@ fn split_client_tickets_received() {
 
 #[test]
 fn split_fails_during_handshake() {
-    let (client, server) = make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
+    let mut client_output = Vec::new();
+    let (client, server) = make_pair(
+        KeyType::default(),
+        &super::provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
     assert_eq!(
         client.split().err(),
         Some(Error::ApiMisuse(ApiMisuse::SplitDuringHandshake))
@@ -200,13 +199,20 @@ fn split_fails_during_handshake() {
 
 #[test]
 fn key_update() {
-    let (mut client, mut server) =
-        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair(
+        KeyType::default(),
+        &super::provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
+        &mut client_output,
         &mut client,
         &mut server_input,
+        &mut server_output,
         &mut server,
     );
 
@@ -221,32 +227,35 @@ fn key_update() {
         ..
     } = server.split().unwrap();
 
+    let mut flight = Vec::new();
     client_send
-        .refresh_traffic_keys()
+        .refresh_traffic_keys(&mut flight)
         .unwrap();
     server_recv = check_receive_all(
         server_recv,
-        single(client_send.take_data()),
+        flight,
         ExpectFlushSender {
             then: ExpectReadMore,
         },
     )
     .unwrap();
 
-    let flight = server_send.write(b"server to client".as_slice().into());
+    let mut flight = Vec::new();
+    server_send.write(b"server to client".as_slice().into(), &mut flight);
     check_receive_all(
         client_recv,
-        flight.concat(),
+        flight,
         ExpectData {
             expected: b"server to client",
             then: ExpectReadMore,
         },
     );
 
-    let flight = client_send.write(b"client to server".as_slice().into());
+    let mut flight = Vec::new();
+    client_send.write(b"client to server".as_slice().into(), &mut flight);
     check_receive_all(
         server_recv,
-        single(flight),
+        flight,
         ExpectData {
             expected: b"client to server",
             then: ExpectReadMore,
@@ -256,13 +265,20 @@ fn key_update() {
 
 #[test]
 fn key_update_alongside_data() {
-    let (mut client, mut server) =
-        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair(
+        KeyType::default(),
+        &super::provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
+        &mut client_output,
         &mut client,
         &mut server_input,
+        &mut server_output,
         &mut server,
     );
 
@@ -277,13 +293,14 @@ fn key_update_alongside_data() {
 
     // arrange a flight that contains a key-update followed by application data.
     // both the application data and `FlushSender` should be emitted.
+    let mut flight = Vec::new();
     client_send
-        .refresh_traffic_keys()
+        .refresh_traffic_keys(&mut flight)
         .unwrap();
-    let flight = client_send.write(b"client to server".as_slice().into());
+    client_send.write(b"client to server".as_slice().into(), &mut flight);
     check_receive_all(
         server_recv,
-        flight.concat(),
+        flight,
         ExpectData {
             expected: b"client to server",
             then: ExpectFlushSender {
@@ -295,13 +312,20 @@ fn key_update_alongside_data() {
 
 #[test]
 fn close_alongside_data() {
-    let (mut client, mut server) =
-        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair(
+        KeyType::default(),
+        &super::provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
+        &mut client_output,
         &mut client,
         &mut server_input,
+        &mut server_output,
         &mut server,
     );
 
@@ -314,9 +338,9 @@ fn close_alongside_data() {
         ..
     } = server.split().unwrap();
 
-    let mut flight = client_send.write(b"client to server".as_slice().into());
-    flight.extend(client_send.close());
-    let mut flight = flight.concat();
+    let mut flight = Vec::new();
+    client_send.write(b"client to server".as_slice().into(), &mut flight);
+    client_send.close(&mut flight);
     flight.extend(b"rubbish");
 
     // receive of appdata does not consume subsequent data
@@ -334,34 +358,42 @@ fn close_alongside_data() {
 
 #[test]
 fn read_invalid_data_and_send_alert() {
-    let (mut client, mut server) =
-        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair(
+        KeyType::default(),
+        &super::provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
+        &mut client_output,
         &mut client,
         &mut server_input,
+        &mut server_output,
         &mut server,
     );
 
     let receive = client.split().unwrap().receive;
 
-    let mut err = receive
-        .read(&mut SliceInput::new(&mut [0u8; 5]))
+    let mut alert = Vec::new();
+    let err = receive
+        .read(&mut SliceInput::new(&mut [0u8; 5]), &mut alert)
         .err()
         .unwrap();
-    let data = err.take_tls_data().unwrap();
     assert_eq!(
         err.error,
         Error::InvalidMessage(InvalidMessage::InvalidContentType)
     );
+    assert!(!err.tls().is_empty());
 
     server_input
-        .read(&mut Cursor::new(data))
+        .read(&mut Cursor::new(err.tls()))
         .unwrap();
     assert_eq!(
         server
-            .process_new_packets(&mut server_input)
+            .process_new_packets(&mut server_input, &mut server_output)
             .handle_all(&mut Vec::new())
             .err(),
         Some(Error::AlertReceived(AlertDescription::DecodeError))
@@ -375,7 +407,10 @@ fn check_receive<Side: SideData>(
     mut consume_state: impl ConsumeReceiveState,
 ) -> (Vec<u8>, Option<ReceiveTraffic<Side>>) {
     let mut inp = SliceInput::new(&mut chunk);
-    let recv = consume_state.consume(dbg!(recv.read(&mut inp).unwrap()));
+    let recv = consume_state.consume(dbg!(
+        recv.read(&mut inp, &mut Vec::new())
+            .unwrap()
+    ));
     let used = inp.into_used();
     chunk.drain(..used);
     (chunk, recv)
@@ -388,7 +423,10 @@ fn check_receive_all<Side: SideData>(
     mut consume_state: impl ConsumeReceiveState,
 ) -> Option<ReceiveTraffic<Side>> {
     let mut inp = SliceInput::new(&mut chunk);
-    let recv = consume_state.consume(dbg!(recv.read(&mut inp).unwrap()));
+    let recv = consume_state.consume(dbg!(
+        recv.read(&mut inp, &mut Vec::new())
+            .unwrap()
+    ));
     assert_eq!(inp.into_used(), chunk.len());
     recv
 }
@@ -464,10 +502,4 @@ impl ConsumeReceiveState for ExpectCloseNotify {
             other => panic!("unexpected state for ExpectCloseNotify: got {other:?}"),
         }
     }
-}
-
-#[track_caller]
-fn single(mut flight: Vec<Vec<u8>>) -> Vec<u8> {
-    assert_eq!(flight.len(), 1);
-    flight.remove(0)
 }

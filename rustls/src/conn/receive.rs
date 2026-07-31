@@ -24,6 +24,7 @@ use crate::quic::QuicOutput;
 
 pub(crate) struct MessageIter<'a, 'm, Side: SideData, Send: SendOutput + 'a> {
     pub(super) input: &'m mut dyn TlsInputBuffer,
+    pub(super) tls: &'a mut Vec<u8>,
     pub(super) recv: &'a mut ReceivePath,
     pub(super) state: &'a mut Result<Side::State, Error>,
     pub(super) output: JoinOutput<'a, Send>,
@@ -32,12 +33,14 @@ pub(crate) struct MessageIter<'a, 'm, Side: SideData, Send: SendOutput + 'a> {
 impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
     pub(crate) fn new(
         input: &'m mut dyn TlsInputBuffer,
+        tls: &'a mut Vec<u8>,
         quic: Option<&'a mut dyn QuicOutput>,
         conn: &'a mut ConnectionCore<Side>,
     ) -> Self {
         Self {
-            recv: &mut conn.common.recv,
             input,
+            tls,
+            recv: &mut conn.common.recv,
             state: &mut conn.state,
             output: JoinOutput {
                 outputs: &mut conn.common.outputs,
@@ -52,13 +55,15 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
 impl<'a, 'm, 's, Side: SideData> MessageIter<'a, 'm, Side, SendAdapter<'s>> {
     pub(super) fn receive(
         input: &'m mut dyn TlsInputBuffer,
+        tls: &'a mut Vec<u8>,
         state: &'a mut Result<Side::State, Error>,
         recv: &'a mut ReceivePath,
         output: JoinOutput<'a, SendAdapter<'s>>,
     ) -> Self {
         Self {
-            recv,
             input,
+            tls,
+            recv,
             state,
             output,
         }
@@ -83,6 +88,7 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
 
             let mut output = CaptureAppData {
                 recv: self.recv,
+                tls: self.tls,
                 other: &mut self.output,
                 plaintext_locator: &locator,
                 received_plaintext: &mut plaintext,
@@ -92,7 +98,7 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
             let opt_msg = match res {
                 Ok(opt_msg) => opt_msg,
                 Err(e) => {
-                    maybe_send_fatal_alert(output.other.send, &e);
+                    maybe_send_fatal_alert(output.other.send, &e, output.tls);
                     if let Error::DecryptError = e {
                         st.handle_decrypt_error();
                     }
@@ -111,37 +117,40 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
             } = msg;
 
             if want_close_before_decrypt {
-                output
-                    .other
-                    .send
-                    .send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
+                output.other.send.send_alert(
+                    AlertLevel::Warning,
+                    AlertDescription::CloseNotify,
+                    output.tls,
+                );
             } else if msg.payload.is_empty()
                 && matches!(msg.typ, ContentType::Handshake | ContentType::Alert)
             {
                 // <https://datatracker.ietf.org/doc/html/rfc9846#section-5.4>
-                output
-                    .other
-                    .send
-                    .send_alert(AlertLevel::Fatal, AlertDescription::UnexpectedMessage);
+                output.other.send.send_alert(
+                    AlertLevel::Fatal,
+                    AlertDescription::UnexpectedMessage,
+                    output.tls,
+                );
                 let error = Error::from(PeerMisbehaved::EmptyFragment);
                 *self.state = Err(error.clone());
                 return Some(Err(error));
             }
 
             let hs_aligned = output.recv.deframer.aligned();
-            let result = match output
-                .recv
-                .receive_message(msg, hs_aligned, output.other.send)
-            {
-                Ok(Some(input)) => st.handle(input, &mut output),
-                Ok(None) => Ok(st),
-                Err(e) => Err(e),
-            };
+            let result =
+                match output
+                    .recv
+                    .receive_message(msg, hs_aligned, output.tls, output.other.send)
+                {
+                    Ok(Some(input)) => st.handle(input, &mut output),
+                    Ok(None) => Ok(st),
+                    Err(e) => Err(e),
+                };
 
             match result {
                 Ok(new) => st = new,
                 Err(e) => {
-                    maybe_send_fatal_alert(output.other.send, &e);
+                    maybe_send_fatal_alert(output.other.send, &e, output.tls);
                     *self.state = Err(e.clone());
                     return Some(Err(e));
                 }
@@ -365,6 +374,7 @@ impl ReceivePath {
         &mut self,
         msg: EncodedMessage<&'a [u8]>,
         aligned_handshake: Option<HandshakeAlignedProof>,
+        tls: &mut Vec<u8>,
         send: &mut dyn SendOutput,
     ) -> Result<Option<Input<'a>>, Error> {
         // Drop CCS messages during handshake in TLS1.3
@@ -384,7 +394,7 @@ impl ReceivePath {
 
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
-        if self.reject_renegotiation_request(&message, send)? {
+        if self.reject_renegotiation_request(&message, tls, send)? {
             return Ok(None);
         }
 
@@ -416,6 +426,7 @@ impl ReceivePath {
     fn reject_renegotiation_request(
         &mut self,
         msg: &Message<'_>,
+        tls: &mut Vec<u8>,
         send: &mut dyn SendOutput,
     ) -> Result<bool, Error> {
         if !self.may_receive_application_data
@@ -436,7 +447,7 @@ impl ReceivePath {
             .received_renegotiation_request()?;
         let desc = AlertDescription::NoRenegotiation;
         warn!("sending warning alert {desc:?}");
-        send.send_alert(AlertLevel::Warning, desc);
+        send.send_alert(AlertLevel::Warning, desc, tls);
         Ok(true)
     }
 
@@ -487,6 +498,7 @@ enum DeframeResult<'b> {
 struct CaptureAppData<'a, 'j, 'm, Send: SendOutput + 'a> {
     recv: &'a mut ReceivePath,
     other: &'a mut JoinOutput<'j, Send>,
+    tls: &'a mut Vec<u8>,
     /// Store a [`Locator`] initialized from the current receive buffer
     ///
     /// Allows received plaintext data to be unborrowed and stored in
@@ -521,7 +533,7 @@ impl<'a, 'm, Send: SendOutput + 'a> Output<'m> for CaptureAppData<'a, '_, 'm, Se
             None => self
                 .other
                 .send
-                .send_msg(m, must_encrypt),
+                .send_msg(m, must_encrypt, self.tls),
         }
     }
 

@@ -184,12 +184,11 @@ fn test_client_rejects_hrr_with_varied_session_id() {
         .with_root_certificates(roots())
         .with_no_client_auth()
         .unwrap();
+    let mut tls = Vec::new();
     let mut conn = Arc::new(config)
         .connect(ServerName::try_from("localhost").unwrap())
-        .build()
+        .build(&mut tls)
         .unwrap();
-    let mut sent = Vec::new();
-    conn.write_tls(&mut sent).unwrap();
 
     // server replies with HRR, but does not echo `session_id` as required.
     let hrr = Message {
@@ -230,12 +229,11 @@ fn test_client_rejects_no_extended_main_secret_extension_when_require_ems_or_fip
     }
 
     let config = Arc::new(config);
+    let mut tls = Vec::new();
     let mut conn = config
         .connect(ServerName::try_from("localhost").unwrap())
-        .build()
+        .build(&mut tls)
         .unwrap();
-    let mut sent = Vec::new();
-    conn.write_tls(&mut sent).unwrap();
 
     let sh = Message {
         version: ProtocolVersion::TLSv1_3,
@@ -299,12 +297,11 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
         .with_no_client_auth()
         .unwrap();
 
+    let mut tls = Vec::new();
     let mut conn = Arc::new(config)
         .connect(ServerName::try_from("localhost").unwrap())
-        .build()
+        .build(&mut tls)
         .unwrap();
-    let mut sent = Vec::new();
-    conn.write_tls(&mut sent).unwrap();
 
     let sh = Message {
         version: ProtocolVersion::TLSv1_2,
@@ -505,12 +502,11 @@ fn client_requiring_rpk_receives_server_ee(
         .unwrap();
     config.key_log = fake_server_crypto.clone();
 
+    let mut tls = Vec::new();
     let mut conn = Arc::new(config)
         .connect(ServerName::try_from("localhost").unwrap())
-        .build()
+        .build(&mut tls)
         .unwrap();
-    let mut sent = Vec::new();
-    conn.write_tls(&mut sent).unwrap();
 
     let sh = Message {
         version: ProtocolVersion::TLSv1_3,
@@ -602,12 +598,11 @@ fn client_receives_tls13_server_hello_with_raw_extension(
         .with_no_client_auth()
         .unwrap();
 
+    let mut tls = Vec::new();
     let mut conn = Arc::new(config)
         .connect(ServerName::try_from("localhost").unwrap())
-        .build()
+        .build(&mut tls)
         .unwrap();
-    let mut sent = Vec::new();
-    conn.write_tls(&mut sent).unwrap();
 
     // `ServerExtensions` cannot encode an extension type it does not model,
     // so assemble the ServerHello body by hand and have
@@ -644,7 +639,7 @@ fn client_receives_tls13_server_hello_with_raw_extension(
     input
         .read(&mut sh.into_wire_bytes().as_slice())
         .unwrap();
-    conn.process_new_packets(&mut input)
+    conn.process_new_packets(&mut input, &mut tls)
         .handle_all(&mut Vec::new())
         .map(|_| ())
 }
@@ -838,11 +833,10 @@ fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
 }
 
 fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPayload, Error> {
-    let mut conn = Arc::new(config)
-        .connect(ServerName::try_from("localhost").unwrap())
-        .build()?;
     let mut bytes = Vec::new();
-    conn.write_tls(&mut bytes).unwrap();
+    Arc::new(config)
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build(&mut bytes)?;
 
     let message = EncodedMessage::<Payload<'_>>::read(&mut Reader::new(&bytes))
         .unwrap()
@@ -938,7 +932,7 @@ fn roots() -> RootCertStore {
 }
 
 fn process(input: &mut VecInput, conn: &mut ClientConnection) -> Result<(), Error> {
-    conn.process_new_packets(input)
+    conn.process_new_packets(input, &mut Vec::new())
         .handle_all(&mut Vec::new())?;
     Ok(())
 }

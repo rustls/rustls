@@ -106,9 +106,8 @@ fn main() {
                 other => panic!("unexpected ServerHandshake state {other:?}"),
             };
 
-            stream
-                .write_all(&output.concat())
-                .unwrap();
+            stream.write_all(&output).unwrap();
+            output.clear();
         };
     }
 }

@@ -3,8 +3,8 @@
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::fmt;
 use core::ops::Deref;
-use core::{fmt, mem};
 use std::time::SystemTimeError;
 
 use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
@@ -1632,14 +1632,6 @@ pub enum ApiMisuse {
     /// is available.
     SecretExtractionRequiresPriorOptIn,
 
-    /// Secret extraction operation attempted without first extracting all pending
-    /// TLS data.
-    ///
-    /// See [`Self::SecretExtractionRequiresPriorOptIn`] for a list of the affected
-    /// functions.  You must ensure any prior generated TLS records are extracted
-    /// from the library before using one of these functions.
-    SecretExtractionWithPendingSendableData,
-
     /// Attempt to verify a certificate with an unsupported type.
     ///
     /// A verifier indicated support for a certificate type but then failed to verify the peer's
@@ -1696,12 +1688,6 @@ pub enum ApiMisuse {
     /// [`ClientConnection::split()`]: crate::client::ClientConnection::split()
     SplitDuringHandshake,
 
-    /// [`ClientConnection::split()`] or [`ServerConnection::split()`] called with pending plaintext or TLS data.
-    ///
-    /// [`ServerConnection::split()`]: crate::server::ServerConnection::split()
-    /// [`ClientConnection::split()`]: crate::client::ClientConnection::split()
-    SplitWithPendingBuffers,
-
     /// An output buffer provided for encryption was too small.
     EncryptBufferTooSmall {
         /// The minimum required buffer length
@@ -1709,6 +1695,12 @@ pub enum ApiMisuse {
         /// The buffer length actually provided
         provided: usize,
     },
+
+    /// Plaintext cannot be encrypted before the handshake is complete.
+    WriteTlsBeforeHandshakeComplete,
+
+    /// Plaintext cannot be encrypted after the send path has been closed.
+    WriteTlsAfterSendPathClosed,
 }
 
 impl fmt::Display for ApiMisuse {
@@ -1765,33 +1757,32 @@ pub use other_error::OtherError;
 
 /// An [`Error`] along with the (possibly encrypted) alert to send to
 /// the peer.
-pub struct ErrorWithAlert {
+///
+/// This borrows the output buffer passed to the operation that failed;
+/// the alert (if one is to be sent) has been appended to that buffer.
+pub struct ErrorWithAlert<'a> {
     /// The error
     pub error: Error,
-    pub(crate) data: Vec<u8>,
+    pub(crate) tls: &'a mut Vec<u8>,
 }
 
-impl ErrorWithAlert {
-    pub(crate) fn new(error: Error, send_path: &mut SendPath) -> Self {
-        maybe_send_fatal_alert(send_path, &error);
-        Self {
-            error,
-            data: send_path.sendable_tls.take_one_vec(),
-        }
+impl<'a> ErrorWithAlert<'a> {
+    pub(crate) fn new(error: Error, send_path: &mut SendPath, tls: &'a mut Vec<u8>) -> Self {
+        maybe_send_fatal_alert(send_path, &error, tls);
+        Self { error, tls }
     }
 
-    /// Consume any pending TLS data.
+    /// Yields remaining TLS data, if any, to send to the peer.
     ///
-    /// The returned buffer will contain the alert, if one is to be sent.
-    pub fn take_tls_data(&mut self) -> Option<Vec<u8>> {
-        match self.data.is_empty() {
-            true => None,
-            false => Some(mem::take(&mut self.data)),
-        }
+    /// The returned slice is the contents of the output buffer passed to the failed operation:
+    /// the alert (if one is to be sent) and any TLS data generated before the error.  Send it to
+    /// the peer before closing the connection.
+    pub fn tls(&self) -> &[u8] {
+        self.tls
     }
 }
 
-impl Deref for ErrorWithAlert {
+impl Deref for ErrorWithAlert<'_> {
     type Target = Error;
 
     fn deref(&self) -> &Self::Target {
@@ -1799,21 +1790,11 @@ impl Deref for ErrorWithAlert {
     }
 }
 
-/// Direct conversion with no alert.
-impl From<Error> for ErrorWithAlert {
-    fn from(error: Error) -> Self {
-        Self {
-            error,
-            data: Vec::new(),
-        }
-    }
-}
-
-impl fmt::Debug for ErrorWithAlert {
+impl fmt::Debug for ErrorWithAlert<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ErrorWithAlert")
             .field("error", &self.error)
-            .field("data", &self.data.len())
+            .field("tls", &self.tls.len())
             .finish_non_exhaustive()
     }
 }

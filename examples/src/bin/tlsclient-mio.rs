@@ -19,6 +19,7 @@
 //!
 //! [mio]: https://docs.rs/mio/latest/mio/
 
+use core::mem;
 use std::borrow::Cow;
 use std::io::{self, Read, Write};
 use std::net::ToSocketAddrs;
@@ -48,20 +49,26 @@ struct TlsClient {
     tls_conn: ClientConnection,
     input: VecInput,
     received_plaintext: Vec<u8>,
+    output: Vec<u8>,
+    pending: Vec<u8>,
 }
 
 impl TlsClient {
     fn new(sock: TcpStream, server_name: ServerName<'static>, cfg: Arc<ClientConfig>) -> Self {
+        let mut output = Vec::new();
+        let tls_conn = cfg
+            .connect(server_name)
+            .build(&mut output)
+            .unwrap();
         Self {
             socket: sock,
             closing: false,
             clean_closure: false,
-            tls_conn: cfg
-                .connect(server_name)
-                .build()
-                .unwrap(),
+            tls_conn,
             input: VecInput::default(),
             received_plaintext: Vec::new(),
+            output,
+            pending: Vec::new(),
         }
     }
 
@@ -86,11 +93,26 @@ impl TlsClient {
     fn read_source_to_end(&mut self, rd: &mut dyn Read) -> io::Result<usize> {
         let mut buf = Vec::new();
         let len = rd.read_to_end(&mut buf)?;
-        self.tls_conn
-            .writer()
-            .write_all(&buf)
-            .unwrap();
+        self.queue_plaintext(&buf);
         Ok(len)
+    }
+
+    /// Queue `plaintext` to be sent to the server once the handshake completes.
+    fn queue_plaintext(&mut self, plaintext: &[u8]) {
+        self.pending
+            .extend_from_slice(plaintext);
+    }
+
+    /// Encrypt any queued plaintext once the handshake has completed.
+    fn flush_pending(&mut self) {
+        if self.tls_conn.is_handshaking() || self.pending.is_empty() {
+            return;
+        }
+
+        let pending = mem::take(&mut self.pending);
+        self.tls_conn
+            .write_tls((&pending).into(), &mut self.output)
+            .unwrap();
     }
 
     /// We're ready to do a read.
@@ -123,7 +145,7 @@ impl TlsClient {
         // TLS protocol problems and are fatal.
         let mut iter = self
             .tls_conn
-            .process_new_packets(&mut self.input);
+            .process_new_packets(&mut self.input, &mut self.output);
 
         // Having read some TLS data, and processed any new messages,
         // we might have new plaintext as a result.
@@ -152,12 +174,15 @@ impl TlsClient {
             self.clean_closure = true;
             self.closing = true;
         }
+
+        // Once the handshake has completed, encrypt any plaintext that
+        // was queued while it was in progress.
+        self.flush_pending();
     }
 
     fn do_write(&mut self) {
-        self.tls_conn
-            .write_tls(&mut self.socket)
-            .unwrap();
+        let len = self.socket.write(&self.output).unwrap();
+        self.output.drain(..len);
     }
 
     /// Registers self as a 'listener' in mio::Registry
@@ -176,11 +201,11 @@ impl TlsClient {
             .unwrap();
     }
 
-    /// Use wants_read/wants_write to register for different mio-level
-    /// IO readiness events.
+    /// Use wants_read and buffered TLS output to register for different
+    /// mio-level IO readiness events.
     fn event_set(&self) -> mio::Interest {
         let rd = self.tls_conn.wants_read();
-        let wr = self.tls_conn.wants_write();
+        let wr = !self.output.is_empty();
 
         if rd && wr {
             mio::Interest::READABLE | mio::Interest::WRITABLE
@@ -193,32 +218,6 @@ impl TlsClient {
 
     fn is_closed(&self) -> bool {
         self.closing
-    }
-}
-
-impl Write for TlsClient {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        self.tls_conn.writer().write(bytes)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.tls_conn.writer().flush()
-    }
-}
-
-impl Read for TlsClient {
-    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-        let len = Ord::min(bytes.len(), self.received_plaintext.len());
-        let Some(src) = self.received_plaintext.get(..len) else {
-            return Ok(0);
-        };
-
-        let Some(dst) = bytes.get_mut(..len) else {
-            return Ok(0);
-        };
-
-        dst.copy_from_slice(src);
-        Ok(len)
     }
 }
 
@@ -573,9 +572,7 @@ fn main() {
                                close\r\nAccept-Encoding: identity\r\n\r\n",
             args.hostname
         );
-        tlsclient
-            .write_all(httpreq.as_bytes())
-            .unwrap();
+        tlsclient.queue_plaintext(httpreq.as_bytes());
     } else {
         let mut stdin = io::stdin();
         tlsclient

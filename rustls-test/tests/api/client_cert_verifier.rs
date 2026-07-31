@@ -39,13 +39,18 @@ fn client_verifier_works() {
             Arc::new(MockClientVerifier::new(ver_ok, kt, &provider))
         }))
     {
-        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let err = do_handshake_until_error(
             &mut client_input,
+            &mut client_output,
             &mut client,
             &mut server_input,
+            &mut server_output,
             &mut server,
         );
         assert_eq!(err, Ok(()));
@@ -63,13 +68,18 @@ fn client_verifier_no_schemes() {
             Arc::new(verifier)
         }))
     {
-        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let err = do_handshake_until_error(
             &mut client_input,
+            &mut client_output,
             &mut client,
             &mut server_input,
+            &mut server_output,
             &mut server,
         );
         assert_eq!(
@@ -92,6 +102,8 @@ fn client_verifier_no_auth_yes_root() {
     {
         let mut server = ServerConnection::new(server_config).unwrap();
 
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
         let mut client = Arc::new(
             ClientConfig::builder(Arc::new(provider::DEFAULT_PROVIDER))
                 .with_root_certificates(expect.key_type.client_root_store())
@@ -99,15 +111,17 @@ fn client_verifier_no_auth_yes_root() {
                 .unwrap(),
         )
         .connect(server_name("localhost"))
-        .build()
+        .build(&mut client_output)
         .unwrap();
 
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let errs = do_handshake_until_both_error(
             &mut client_input,
+            &mut client_output,
             &mut client,
             &mut server_input,
+            &mut server_output,
             &mut server,
         );
         assert_eq!(
@@ -132,16 +146,20 @@ fn client_verifier_fails_properly() {
         }))
     {
         let mut server = ServerConnection::new(server_config).unwrap();
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
         let mut client = client_config
             .connect(server_name("localhost"))
-            .build()
+            .build(&mut client_output)
             .unwrap();
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let err = do_handshake_until_error(
             &mut client_input,
+            &mut client_output,
             &mut client,
             &mut server_input,
+            &mut server_output,
             &mut server,
         );
         assert_eq!(
@@ -167,13 +185,18 @@ fn server_allow_any_anonymous_or_authenticated_client() {
             )
         }))
     {
-        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake(
             &mut client_input,
+            &mut client_output,
             &mut client,
             &mut server_input,
+            &mut server_output,
             &mut server,
         );
         assert_eq!(
@@ -192,13 +215,18 @@ fn client_auth_works() {
     for (client_config, server_config, _) in
         MultiTest::new(provider::DEFAULT_PROVIDER).require_client_auth()
     {
-        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake(
             &mut client_input,
+            &mut client_output,
             &mut client,
             &mut server_input,
+            &mut server_output,
             &mut server,
         );
     }
@@ -252,14 +280,18 @@ fn client_mandatory_auth_client_revocation_works() {
 
         // Connecting to the server with a CRL that indicates the client certificate is revoked
         // should fail with the expected error.
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
         let (mut client, mut server) =
-            make_pair_for_arc_configs(&client_config, &revoked_server_config);
+            make_pair_for_arc_configs(&client_config, &revoked_server_config, &mut client_output);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let err = do_handshake_until_error(
             &mut client_input,
+            &mut client_output,
             &mut client,
             &mut server_input,
+            &mut server_output,
             &mut server,
         );
         assert_eq!(
@@ -270,14 +302,21 @@ fn client_mandatory_auth_client_revocation_works() {
         );
         // Connecting to the server missing CRL information for the client certificate should
         // fail with the expected unknown revocation status error.
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&client_config, &missing_client_crl_server_config);
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) = make_pair_for_arc_configs(
+            &client_config,
+            &missing_client_crl_server_config,
+            &mut client_output,
+        );
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let res = do_handshake_until_error(
             &mut client_input,
+            &mut client_output,
             &mut client,
             &mut server_input,
+            &mut server_output,
             &mut server,
         );
         assert_eq!(
@@ -288,14 +327,21 @@ fn client_mandatory_auth_client_revocation_works() {
         );
         // Connecting to the server missing CRL information for the client should not error
         // if the server's verifier allows unknown revocation status.
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&client_config, &allow_missing_client_crl_server_config);
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) = make_pair_for_arc_configs(
+            &client_config,
+            &allow_missing_client_crl_server_config,
+            &mut client_output,
+        );
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake_until_error(
             &mut client_input,
+            &mut client_output,
             &mut client,
             &mut server_input,
+            &mut server_output,
             &mut server,
         )
         .unwrap();
@@ -334,14 +380,21 @@ fn client_mandatory_auth_intermediate_revocation_works() {
         ));
 
         // When checking the full chain, we expect an error - the intermediate is revoked.
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&client_config, &full_chain_server_config);
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) = make_pair_for_arc_configs(
+            &client_config,
+            &full_chain_server_config,
+            &mut client_output,
+        );
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let err = do_handshake_until_error(
             &mut client_input,
+            &mut client_output,
             &mut client,
             &mut server_input,
+            &mut server_output,
             &mut server,
         );
         assert_eq!(
@@ -352,13 +405,18 @@ fn client_mandatory_auth_intermediate_revocation_works() {
         );
         // However, when checking just the EE cert we expect no error - the intermediate's
         // revocation status should not be checked.
-        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &ee_server_config);
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&client_config, &ee_server_config, &mut client_output);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake_until_error(
             &mut client_input,
+            &mut client_output,
             &mut client,
             &mut server_input,
+            &mut server_output,
             &mut server,
         )
         .unwrap();
@@ -378,14 +436,19 @@ fn client_optional_auth_client_revocation_works() {
             &provider,
         ));
 
-        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
         // Because the client certificate is revoked, the handshake should fail.
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let err = do_handshake_until_error(
             &mut client_input,
+            &mut client_output,
             &mut client,
             &mut server_input,
+            &mut server_output,
             &mut server,
         );
         assert_eq!(
