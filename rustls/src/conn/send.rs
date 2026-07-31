@@ -171,6 +171,7 @@ impl SendPath {
     /// Like send_msg_encrypt, but operate on an appdata directly.
     pub(crate) fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
         let len = payload.len();
+        let mut tls = self.sendable_tls.take_spare();
         self.send_messages::<true>(
             self.message_fragmenter
                 .fragment_payload(
@@ -178,7 +179,9 @@ impl SendPath {
                     ProtocolVersion::TLSv1_2,
                     payload,
                 ),
+            &mut tls,
         );
+        self.sendable_tls.append(tls);
         len
     }
 
@@ -186,6 +189,7 @@ impl SendPath {
     fn send_messages<'a, const MUST_ENCRYPT: bool>(
         &mut self,
         iter: impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>>,
+        tls: &mut Vec<u8>,
     ) {
         self.perhaps_write_key_update();
         for m in iter {
@@ -194,14 +198,12 @@ impl SendPath {
                 return;
             }
 
-            let mut tls = self.sendable_tls.take_spare();
             match MUST_ENCRYPT {
                 true => self
                     .encrypt_state
-                    .encrypt_outgoing(m, &mut tls),
-                false => m.encode_unencrypted(&mut tls),
+                    .encrypt_outgoing(m, tls),
+                false => m.encode_unencrypted(tls),
             }
-            self.sendable_tls.append(tls);
         }
     }
 
@@ -297,10 +299,13 @@ impl SendOutput for SendPath {
         let fragments = self
             .message_fragmenter
             .fragment_message(&encoded);
+
+        let mut tls = self.sendable_tls.take_spare();
         match must_encrypt {
-            true => self.send_messages::<true>(fragments),
-            false => self.send_messages::<false>(fragments),
+            true => self.send_messages::<true>(fragments, &mut tls),
+            false => self.send_messages::<false>(fragments, &mut tls),
         }
+        self.sendable_tls.append(tls);
     }
 }
 
