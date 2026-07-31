@@ -336,11 +336,13 @@ impl SideOutput for ClientConnectionData {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::EchStatus(ech) => self.ech_status = ech,
-            Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accepted(),
-            Event::EarlyData(EarlyDataEvent::Enable(sz)) => self.early_data.enable(sz),
-            Event::EarlyData(EarlyDataEvent::Finished) => self.early_data.finished(),
-            Event::EarlyData(EarlyDataEvent::Start) => self.early_data.start(),
-            Event::EarlyData(EarlyDataEvent::Rejected) => self.early_data.rejected(),
+            Event::EarlyData(event) => match event {
+                EarlyDataEvent::Enable(sz) => self.early_data.enable(sz),
+                EarlyDataEvent::Start => self.early_data.start(),
+                EarlyDataEvent::Accepted => self.early_data.accepted(),
+                EarlyDataEvent::Rejected => self.early_data.rejected(),
+                EarlyDataEvent::Finished => self.early_data.finished(),
+            },
             _ => unreachable!(),
         }
     }
