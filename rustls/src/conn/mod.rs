@@ -433,13 +433,6 @@ impl<Side: SideData> ConnectionCore<Side> {
             None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
     }
-
-    pub(crate) fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        match self.common.early_exporter.take() {
-            Some(inner) => Ok(KeyingMaterialExporter { inner }),
-            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
-        }
-    }
 }
 
 impl ConnectionCore<ServerSide> {

@@ -456,7 +456,7 @@ impl<'a> ReadEarlyData<'a> {
     /// [RFC 9846 appendix F.5.1]: https://datatracker.ietf.org/doc/html/rfc9846#appendix-F.5.1
     /// [`Connection::exporter()`]: crate::conn::Connection::exporter()
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.common.core.early_exporter()
+        self.common.core.common.early_exporter()
     }
 }
 
