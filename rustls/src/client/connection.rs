@@ -77,14 +77,14 @@ impl ClientConnection {
     /// in this case the data is lost but the connection continues.  You
     /// can tell this happened using `is_early_data_accepted`.
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
-        let early_data = &mut self.inner.core.side.early_data;
-        matches!(
-            early_data.state,
-            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted
-        )
-        .then(|| WriteEarlyData {
-            core: &mut self.inner.core,
-        })
+        let ConnectionCore { side, common, .. } = &mut self.inner.core;
+        let early_data = side.early_data.as_mut()?;
+        match early_data.state {
+            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted => {
+                Some(WriteEarlyData { early_data, common })
+            }
+            _ => None,
+        }
     }
 
     /// Returns True if the server signalled it will process early data.
@@ -221,14 +221,15 @@ impl ClientConnectionBuilder {
 ///
 /// This type implements [`io::Write`].
 pub struct WriteEarlyData<'a> {
-    core: &'a mut ConnectionCore<ClientSide>,
+    early_data: &'a mut EarlyData,
+    common: &'a mut CommonState,
 }
 
 impl<'a> WriteEarlyData<'a> {
     /// How many bytes you may send.  Writes will become short
     /// once this reaches zero.
     pub fn bytes_left(&self) -> usize {
-        self.core.side.early_data.left
+        self.early_data.left
     }
 
     /// Returns the "early" exporter that can derive key material for use in early data
@@ -251,27 +252,25 @@ impl<'a> WriteEarlyData<'a> {
     /// [RFC 9846 appendix F.5.1]: https://datatracker.ietf.org/doc/html/rfc9846#appendix-F.5.1
     /// [`Connection::exporter()`]: crate::conn::Connection::exporter()
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.core.common.early_exporter()
+        self.common.early_exporter()
     }
 }
 
 impl io::Write for WriteEarlyData<'_> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let state = &mut self.core.side.early_data;
+        let state = &mut self.early_data;
         let buf = match state.state {
-            EarlyDataState::Disabled => unreachable!(),
             EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted => {
                 let take = Ord::min(buf.len(), state.left);
                 state.left -= take;
                 &buf[..take]
             }
-            EarlyDataState::Rejected | EarlyDataState::AcceptedFinished => {
+            EarlyDataState::AcceptedFinished => {
                 return Err(io::Error::from(io::ErrorKind::InvalidInput));
             }
         };
 
         Ok(self
-            .core
             .common
             .send
             .send_early_plaintext(buf))
@@ -310,8 +309,11 @@ impl ConnectionCore<ClientSide> {
 
     pub(crate) fn is_early_data_accepted(&self) -> bool {
         matches!(
-            self.side.early_data.state,
-            EarlyDataState::Accepted | EarlyDataState::AcceptedFinished
+            &self.side.early_data,
+            Some(EarlyData {
+                state: EarlyDataState::Accepted | EarlyDataState::AcceptedFinished,
+                ..
+            })
         )
     }
 }
@@ -332,32 +334,26 @@ impl SideOutput for ClientConnectionData {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::EchStatus(ech) => self.ech_status = ech,
-            Event::EarlyData(event) => match event {
-                EarlyDataEvent::Enable(sz) => {
-                    assert_eq!(self.early_data.state, EarlyDataState::Disabled);
-                    self.early_data.state = EarlyDataState::Ready;
-                    self.early_data.left = sz;
+            Event::EarlyData(event) => match (event, &mut self.early_data) {
+                (EarlyDataEvent::Enable(sz), None) => self.early_data = Some(EarlyData::new(sz)),
+                (EarlyDataEvent::Start, Some(early_data)) => {
+                    assert_eq!(early_data.state, EarlyDataState::Ready);
+                    early_data.state = EarlyDataState::Sending;
                 }
-                EarlyDataEvent::Start => {
-                    assert_eq!(self.early_data.state, EarlyDataState::Ready);
-                    self.early_data.state = EarlyDataState::Sending;
-                }
-                EarlyDataEvent::Accepted => {
+                (EarlyDataEvent::Accepted, Some(early_data)) => {
                     trace!("EarlyData accepted");
-                    assert_eq!(self.early_data.state, EarlyDataState::Sending);
-                    self.early_data.state = EarlyDataState::Accepted;
+                    assert_eq!(early_data.state, EarlyDataState::Sending);
+                    early_data.state = EarlyDataState::Accepted;
                 }
-                EarlyDataEvent::Rejected => {
-                    trace!("EarlyData rejected");
-                    self.early_data.state = EarlyDataState::Rejected;
-                }
-                EarlyDataEvent::Finished => {
+                (EarlyDataEvent::Rejected, _) => self.early_data = None,
+                (EarlyDataEvent::Finished, Some(early_data)) => {
                     trace!("EarlyData finished");
-                    self.early_data.state = match self.early_data.state {
+                    early_data.state = match early_data.state {
                         EarlyDataState::Accepted => EarlyDataState::AcceptedFinished,
                         _ => panic!("bad EarlyData state"),
                     }
                 }
+                _ => unreachable!(),
             },
             _ => unreachable!(),
         }
@@ -366,23 +362,28 @@ impl SideOutput for ClientConnectionData {
 
 #[derive(Default)]
 pub(crate) struct ClientConnectionData {
-    early_data: EarlyData,
+    early_data: Option<EarlyData>,
     ech_status: EchStatus,
 }
 
-#[derive(Default)]
 pub(super) struct EarlyData {
     state: EarlyDataState,
     left: usize,
 }
 
-#[derive(Debug, Default, PartialEq)]
+impl EarlyData {
+    fn new(left: usize) -> Self {
+        Self {
+            state: EarlyDataState::Ready,
+            left,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
 enum EarlyDataState {
-    #[default]
-    Disabled,
     Ready,
     Sending,
     Accepted,
     AcceptedFinished,
-    Rejected,
 }
