@@ -84,7 +84,7 @@ impl ClientConnection {
             .early_data
             .is_enabled()
         {
-            Some(WriteEarlyData::new(self))
+            Some(WriteEarlyData::new(&mut self.inner.core))
         } else {
             None
         }
@@ -224,23 +224,18 @@ impl ClientConnectionBuilder {
 ///
 /// This type implements [`io::Write`].
 pub struct WriteEarlyData<'a> {
-    sess: &'a mut ClientConnection,
+    core: &'a mut ConnectionCore<ClientSide>,
 }
 
 impl<'a> WriteEarlyData<'a> {
-    fn new(sess: &'a mut ClientConnection) -> Self {
-        WriteEarlyData { sess }
+    fn new(core: &'a mut ConnectionCore<ClientSide>) -> Self {
+        WriteEarlyData { core }
     }
 
     /// How many bytes you may send.  Writes will become short
     /// once this reaches zero.
     pub fn bytes_left(&self) -> usize {
-        self.sess
-            .inner
-            .core
-            .side
-            .early_data
-            .bytes_left()
+        self.core.side.early_data.bytes_left()
     }
 
     /// Returns the "early" exporter that can derive key material for use in early data
@@ -263,23 +258,21 @@ impl<'a> WriteEarlyData<'a> {
     /// [RFC 9846 appendix F.5.1]: https://datatracker.ietf.org/doc/html/rfc9846#appendix-F.5.1
     /// [`Connection::exporter()`]: crate::conn::Connection::exporter()
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.sess.inner.core.early_exporter()
+        self.core.early_exporter()
     }
 }
 
 impl io::Write for WriteEarlyData<'_> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let limit = self
-            .sess
-            .inner
             .core
             .side
             .early_data
             .check_write(buf.len())?;
 
         Ok(self
-            .sess
-            .inner
+            .core
+            .common
             .send
             .send_early_plaintext(&buf[..limit]))
     }
