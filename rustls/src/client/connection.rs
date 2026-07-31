@@ -359,20 +359,6 @@ pub(super) struct EarlyData {
 }
 
 impl EarlyData {
-    fn is_enabled(&self) -> bool {
-        matches!(
-            self.state,
-            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted
-        )
-    }
-
-    fn is_accepted(&self) -> bool {
-        matches!(
-            self.state,
-            EarlyDataState::Accepted | EarlyDataState::AcceptedFinished
-        )
-    }
-
     fn enable(&mut self, max_data: usize) {
         assert_eq!(self.state, EarlyDataState::Disabled);
         self.state = EarlyDataState::Ready;
@@ -401,6 +387,20 @@ impl EarlyData {
             EarlyDataState::Accepted => EarlyDataState::AcceptedFinished,
             _ => panic!("bad EarlyData state"),
         }
+    }
+
+    fn is_enabled(&self) -> bool {
+        matches!(
+            self.state,
+            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted
+        )
+    }
+
+    fn is_accepted(&self) -> bool {
+        matches!(
+            self.state,
+            EarlyDataState::Accepted | EarlyDataState::AcceptedFinished
+        )
     }
 
     fn bytes_left(&self) -> usize {
