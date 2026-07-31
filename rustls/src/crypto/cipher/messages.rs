@@ -141,9 +141,15 @@ impl EncodedMessage<OutboundPlain<'_>> {
         let len = self.payload.len();
         debug_assert!(len <= usize::from(u16::MAX));
         let mut buf = Vec::with_capacity(HEADER_SIZE + len);
-        buf.extend_from_slice(&encode_record_header(self.typ, self.version, len as u16));
-        self.payload.copy_to_vec(&mut buf);
+        self.encode_unencrypted(&mut buf);
         buf
+    }
+
+    pub(crate) fn encode_unencrypted(&self, buf: &mut Vec<u8>) {
+        let len = self.payload.len();
+        debug_assert!(len <= usize::from(u16::MAX));
+        buf.extend_from_slice(&encode_record_header(self.typ, self.version, len as u16));
+        self.payload.copy_to_vec(buf);
     }
 
     #[expect(dead_code)]
