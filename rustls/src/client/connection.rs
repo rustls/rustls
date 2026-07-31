@@ -230,7 +230,7 @@ impl<'a> WriteEarlyData<'a> {
     /// How many bytes you may send.  Writes will become short
     /// once this reaches zero.
     pub fn bytes_left(&self) -> usize {
-        self.core.side.early_data.bytes_left()
+        self.core.side.early_data.left
     }
 
     /// Returns the "early" exporter that can derive key material for use in early data
@@ -376,12 +376,6 @@ pub(crate) struct ClientConnectionData {
 pub(super) struct EarlyData {
     state: EarlyDataState,
     left: usize,
-}
-
-impl EarlyData {
-    fn bytes_left(&self) -> usize {
-        self.left
-    }
 }
 
 #[derive(Debug, Default, PartialEq)]
