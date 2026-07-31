@@ -1289,7 +1289,7 @@ impl From<PeerMisbehaved> for AlertDescription {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PeerIncompatible {
     EcPointsExtensionRequired,
-    ExtendedMasterSecretExtensionRequired,
+    ExtendedMainSecretExtensionRequired,
     IncorrectCertificateTypeExtension,
     KeyShareExtensionRequired,
     MultipleRawKeys,

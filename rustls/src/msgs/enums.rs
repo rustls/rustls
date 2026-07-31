@@ -60,7 +60,7 @@ enum_builder! {
         ClientCertificateType => 0x0013,
         ServerCertificateType => 0x0014,
         Padding => 0x0015,
-        ExtendedMasterSecret => 0x0017,
+        ExtendedMainSecret => 0x0017,
         CompressCertificate => 0x001b,
         SessionTicket => 0x0023,
         PreSharedKey => 0x0029,

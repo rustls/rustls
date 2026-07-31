@@ -603,7 +603,7 @@ fn emit_client_hello_for_retry(
                 .supported_verify_schemes(),
         ),
         protocols: extra_exts.protocols.clone(),
-        extended_master_secret_request: Some(()),
+        extended_main_secret_request: Some(()),
         supported_versions: Some(supported_versions),
         ..Default::default()
     });

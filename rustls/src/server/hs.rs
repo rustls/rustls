@@ -146,7 +146,7 @@ impl Tls12Extensions {
 
         // Confirm use of EMS if offered.
         if using_ems {
-            extensions.extended_master_secret_ack = Some(());
+            extensions.extended_main_secret_ack = Some(());
         }
 
         // Send confirmation of OCSP staple request if we will send one.

@@ -133,9 +133,9 @@ extension_struct! {
         ExtensionType::ServerCertificateType =>
             pub(crate) server_certificate_type: Option<CertificateType>,
 
-        /// Extended master secret is in use (RFC 7627)
-        ExtensionType::ExtendedMasterSecret =>
-            pub(crate) extended_master_secret_ack: Option<()>,
+        /// Extended main secret is in use (RFC 7627, as renamed by RFC 9846)
+        ExtensionType::ExtendedMainSecret =>
+            pub(crate) extended_main_secret_ack: Option<()>,
 
         /// Certificate status acknowledgement (RFC 6066)
         ExtensionType::StatusRequest =>
@@ -177,7 +177,7 @@ impl ServerExtensions<'_> {
             preshared_key,
             client_certificate_type,
             server_certificate_type,
-            extended_master_secret_ack,
+            extended_main_secret_ack,
             certificate_status_request_ack,
             selected_version,
             transport_parameters,
@@ -196,7 +196,7 @@ impl ServerExtensions<'_> {
             preshared_key,
             client_certificate_type,
             server_certificate_type,
-            extended_master_secret_ack,
+            extended_main_secret_ack,
             certificate_status_request_ack,
             selected_version,
             transport_parameters: transport_parameters.map(|x| x.into_owned()),

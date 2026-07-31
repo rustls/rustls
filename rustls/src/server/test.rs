@@ -185,7 +185,7 @@ fn select_cipher_suite(
 }
 
 #[test]
-fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
+fn test_server_rejects_no_extended_main_secret_extension_when_require_ems_or_fips() {
     let provider = tls12_only(TEST_PROVIDER.clone());
     let mut config = ServerConfig::builder(provider.into())
         .with_no_client_auth()
@@ -202,7 +202,7 @@ fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_f
 
     let mut ch = minimal_client_hello();
     ch.extensions
-        .extended_master_secret_request
+        .extended_main_secret_request
         .take();
     let ch = Message {
         version: ProtocolVersion::TLSv1_3,
@@ -217,7 +217,7 @@ fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_f
     assert_eq!(
         conn.process_new_packets(&mut input),
         Err(Error::PeerIncompatible(
-            PeerIncompatible::ExtendedMasterSecretExtensionRequired
+            PeerIncompatible::ExtendedMainSecretExtensionRequired
         ))
     );
 }
@@ -510,7 +510,7 @@ fn minimal_client_hello() -> ClientHelloPayload {
                     .to_vec()
                     .into(),
             }]),
-            extended_master_secret_request: Some(()),
+            extended_main_secret_request: Some(()),
             ..ClientExtensions::default()
         }),
     }

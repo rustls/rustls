@@ -935,16 +935,16 @@ fn test_tls13_exporter() {
 }
 
 #[test]
-fn test_extended_master_secret_reporting() {
-    // TLS 1.2: rustls always offers the Extended Master Secret extension, so a
+fn test_extended_main_secret_reporting() {
+    // TLS 1.2: rustls always offers the Extended Main Secret extension, so a
     // rustls<->rustls 1.2 handshake negotiates it and reports `Some(true)` on
     // both ends.
     let provider = provider::DEFAULT_TLS12_PROVIDER;
     let client_config = make_client_config(KeyType::default(), &provider);
     let server_config = make_server_config(KeyType::default(), &provider);
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-    assert_eq!(client.extended_master_secret(), None);
-    assert_eq!(server.extended_master_secret(), None);
+    assert_eq!(client.extended_main_secret(), None);
+    assert_eq!(server.extended_main_secret(), None);
 
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
@@ -953,10 +953,10 @@ fn test_extended_master_secret_reporting() {
         &mut server_input,
         &mut server,
     );
-    assert_eq!(client.extended_master_secret(), Some(true));
-    assert_eq!(server.extended_master_secret(), Some(true));
+    assert_eq!(client.extended_main_secret(), Some(true));
+    assert_eq!(server.extended_main_secret(), Some(true));
 
-    // TLS 1.3 has no Extended Master Secret extension (the property is intrinsic
+    // TLS 1.3 has no Extended Main Secret extension (the property is intrinsic
     // to its key schedule), so it is reported as `None`.
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let client_config = make_client_config(KeyType::default(), &provider);
@@ -969,8 +969,8 @@ fn test_extended_master_secret_reporting() {
         &mut server_input,
         &mut server,
     );
-    assert_eq!(client.extended_master_secret(), None);
-    assert_eq!(server.extended_master_secret(), None);
+    assert_eq!(client.extended_main_secret(), None);
+    assert_eq!(server.extended_main_secret(), None);
 }
 
 #[test]

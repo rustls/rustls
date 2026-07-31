@@ -631,7 +631,7 @@ impl EchState {
             // to the inner hello.
             if matches!(
                 ext,
-                ExtensionType::ExtendedMasterSecret
+                ExtensionType::ExtendedMainSecret
                     | ExtensionType::SessionTicket
                     | ExtensionType::ECPointFormats
             ) {
