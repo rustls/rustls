@@ -1526,7 +1526,9 @@ impl ExpectTraffic {
 
         match *key_update_request {
             KeyUpdateRequest::UpdateNotRequested => {}
-            KeyUpdateRequest::UpdateRequested => output.send().ensure_key_update_queued(),
+            KeyUpdateRequest::UpdateRequested => output
+                .send()
+                .queue_requested_key_update(),
             _ => return Err(InvalidMessage::InvalidKeyUpdate.into()),
         }
 
