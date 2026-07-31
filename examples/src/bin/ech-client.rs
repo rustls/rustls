@@ -126,9 +126,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     for i in 0..args.num_reqs {
         trace!("\nRequest {} of {}", i + 1, args.num_reqs);
+        let mut output = Vec::new();
         let mut conn = config
             .connect(server_name.clone())
-            .build()?;
+            .build(&mut output)?;
         // The "outer" server that we're connecting to.
         let sock_addr = (args.outer_hostname.as_str(), args.port)
             .to_socket_addrs()?
@@ -137,7 +138,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut sock = TcpStream::connect(sock_addr)?;
         let mut input = VecInput::default();
         let mut received_plaintext = Vec::new();
-        let mut tls = Stream::new(&mut input, &mut received_plaintext, &mut conn, &mut sock);
+        let mut tls = Stream::new(
+            &mut input,
+            &mut received_plaintext,
+            &mut output,
+            &mut conn,
+            &mut sock,
+        );
 
         // Trim a leading '/' from the user-supplied path so we never emit a request line
         // like `GET //foo HTTP/1.1`.

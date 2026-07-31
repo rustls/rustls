@@ -14,11 +14,11 @@ use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, MessageHandler,
-    MessageIter, SideData, StateMachine, TlsInputBuffer, Writer,
+    MessageIter, SideData, StateMachine, TlsInputBuffer,
 };
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::cipher::Payload;
+use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::error::Error;
 use crate::log::trace;
 use crate::msgs::ServerExtensionsInput;
@@ -139,27 +139,21 @@ impl ServerConnection {
 }
 
 impl Connection<ServerSide> for ServerConnection {
-    fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
-        self.inner.write_tls(wr)
+    fn write_tls(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error> {
+        self.inner.write_tls(plaintext, tls)
     }
 
     fn wants_read(&self) -> bool {
         self.inner.wants_read()
     }
 
-    fn wants_write(&self) -> bool {
-        self.inner.wants_write()
-    }
-
-    fn writer(&mut self) -> Writer<'_> {
-        self.inner.writer()
-    }
-
     fn process_new_packets<'a, 'm>(
         &'a mut self,
         input: &'m mut dyn TlsInputBuffer,
+        tls: &'a mut Vec<u8>,
     ) -> MessageHandler<'a, 'm, ServerSide> {
-        self.inner.process_new_packets(input)
+        self.inner
+            .process_new_packets(input, tls)
     }
 
     fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
@@ -170,16 +164,12 @@ impl Connection<ServerSide> for ServerConnection {
         self.inner.dangerous_extract_secrets()
     }
 
-    fn set_buffer_limit(&mut self, limit: Option<usize>) {
-        self.inner.set_buffer_limit(limit)
+    fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
+        self.inner.refresh_traffic_keys(tls)
     }
 
-    fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
-        self.inner.refresh_traffic_keys()
-    }
-
-    fn send_close_notify(&mut self) {
-        self.inner.send_close_notify();
+    fn send_close_notify(&mut self, tls: &mut Vec<u8>) {
+        self.inner.send_close_notify(tls);
     }
 
     fn is_handshaking(&self) -> bool {
@@ -293,9 +283,9 @@ impl NeedsInput {
     pub fn process(
         mut self,
         input: &mut dyn TlsInputBuffer,
-        output: &mut Vec<Vec<u8>>,
+        tls: &mut Vec<u8>,
     ) -> Result<ServerHandshake, Error> {
-        let mut iter = MessageIter::new(input, None, &mut self.inner);
+        let mut iter = MessageIter::new(input, tls, None, &mut self.inner);
         let r = loop {
             match iter.next() {
                 Some(Ok(_)) => {}
@@ -323,15 +313,6 @@ impl NeedsInput {
                 .take_discard(),
         );
 
-        while let Some(chunk) = self
-            .inner
-            .common
-            .send
-            .sendable_tls
-            .pop()
-        {
-            output.push(chunk);
-        }
         r?;
         ServerHandshake::try_from(self.inner)
     }
@@ -378,23 +359,20 @@ impl Accepted {
     pub fn choose_config(
         mut self,
         config: Arc<ServerConfig>,
-        output: &mut Vec<Vec<u8>>,
+        tls: &mut Vec<u8>,
     ) -> Result<ServerHandshake, Error> {
         let result = self.inner.accepted(
             self.choose_config,
             ServerExtensionsInput::default(),
             None,
             config,
+            tls,
         );
 
         let send_path = &mut self.inner.common.send;
 
         if let Err(err) = &result {
-            maybe_send_fatal_alert(send_path, err);
-        }
-
-        while let Some(chunk) = send_path.sendable_tls.pop() {
-            output.push(chunk);
+            maybe_send_fatal_alert(send_path, err, tls);
         }
 
         result?;
@@ -472,7 +450,7 @@ pub(super) enum EarlyDataState {
 impl EarlyDataState {
     fn accept(&mut self) {
         *self = Self::Accepted {
-            received: ChunkVecBuffer::new(None),
+            received: ChunkVecBuffer::new(),
         };
     }
 

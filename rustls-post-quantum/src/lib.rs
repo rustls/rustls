@@ -326,6 +326,8 @@ mod tests {
 
         let mut roots = RootCertStore::empty();
         roots.add(issuer.der().clone()).unwrap();
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
         let mut client = Arc::new(
             ClientConfig::builder(provider)
                 .with_root_certificates(roots)
@@ -333,7 +335,7 @@ mod tests {
                 .unwrap(),
         )
         .connect("localhost".try_into().unwrap())
-        .build()
+        .build(&mut client_output)
         .unwrap();
 
         let mut client_input = VecInput::default();
@@ -341,8 +343,10 @@ mod tests {
         let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
         do_handshake(
             &mut client_input,
+            &mut client_output,
             &mut client,
             &mut server_input,
+            &mut server_output,
             &mut server,
         );
     }

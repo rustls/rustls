@@ -346,6 +346,18 @@ impl<'a> From<&'a [u8]> for OutboundPlain<'a> {
     }
 }
 
+impl<'a, const N: usize> From<&'a [u8; N]> for OutboundPlain<'a> {
+    fn from(payload: &'a [u8; N]) -> Self {
+        Self::Single(payload)
+    }
+}
+
+impl<'a> From<&'a Vec<u8>> for OutboundPlain<'a> {
+    fn from(payload: &'a Vec<u8>) -> Self {
+        Self::Single(payload)
+    }
+}
+
 /// A fixed-size buffer into which a [`MessageEncrypter`][] writes an encrypted message payload.
 ///
 /// This wraps the output buffer passed to [`MessageEncrypter::encrypt()`][], tracking how

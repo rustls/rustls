@@ -30,14 +30,21 @@ fn main() {
         .try_into()
         .unwrap();
 
+    let mut output = Vec::new();
     let mut conn = Arc::new(config)
         .connect(server_name)
-        .build()
+        .build(&mut output)
         .unwrap();
     let mut sock = TcpStream::connect("pq.cloudflareresearch.com:443").unwrap();
     let mut input = VecInput::default();
     let mut received_plaintext = Vec::new();
-    let mut tls = Stream::new(&mut input, &mut received_plaintext, &mut conn, &mut sock);
+    let mut tls = Stream::new(
+        &mut input,
+        &mut received_plaintext,
+        &mut output,
+        &mut conn,
+        &mut sock,
+    );
     tls.write_all(
         concat!(
             "GET /cdn-cgi/trace HTTP/1.0\r\n",

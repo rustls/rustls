@@ -57,15 +57,18 @@ fn main() -> Result<(), Box<dyn StdError>> {
         let mut conn = ServerConnection::new(Arc::new(config.clone()))?;
 
         let mut input = VecInput::default();
+        let mut output = Vec::new();
         let mut buf = Vec::new();
         let mut did_early_data = false;
         'handshake: while conn.is_handshaking() {
-            while conn.wants_write() {
-                if conn.write_tls(&mut stream)? == 0 {
+            while !output.is_empty() {
+                let len = stream.write(&output)?;
+                if len == 0 {
                     // EOF
                     stream.flush()?;
                     break 'handshake;
                 }
+                output.drain(..len);
             }
             stream.flush()?;
 
@@ -79,10 +82,10 @@ fn main() -> Result<(), Box<dyn StdError>> {
             }
 
             if let Err(e) = conn
-                .process_new_packets(&mut input)
+                .process_new_packets(&mut input, &mut output)
                 .handle_all(&mut Vec::new())
             {
-                let _ignored = conn.write_tls(&mut stream);
+                let _ignored = stream.write_all(&output);
                 stream.flush()?;
 
                 return Err(io::Error::new(io::ErrorKind::InvalidData, e).into());
@@ -110,9 +113,8 @@ fn main() -> Result<(), Box<dyn StdError>> {
 
         println!("Handshake complete\n");
 
-        conn.writer()
-            .write_all(b"Hello from the server")?;
-        conn.send_close_notify();
-        complete_io(&mut stream, &mut input, &mut buf, &mut conn)?;
+        conn.write_tls(b"Hello from the server".into(), &mut output)?;
+        conn.send_close_notify(&mut output);
+        complete_io(&mut stream, &mut input, &mut buf, &mut output, &mut conn)?;
     }
 }

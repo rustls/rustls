@@ -39,11 +39,12 @@ fn test_early_exporter() {
             let mut server = rustls::ServerConnection::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
             let mut input = VecInput::default();
+            let mut output = Vec::new();
 
             // read clienthello and then inspect early_data status
             input.read(&mut tcp_stream).unwrap();
             server
-                .process_new_packets(&mut input)
+                .process_new_packets(&mut input, &mut output)
                 .handle_all(&mut Vec::new())
                 .unwrap();
 
@@ -66,15 +67,24 @@ fn test_early_exporter() {
                 b"no early data\n".to_vec()
             };
 
+            complete_io(
+                &mut tcp_stream,
+                &mut input,
+                &mut received_plaintext,
+                &mut output,
+                &mut server,
+            )
+            .unwrap();
+
             server
-                .writer()
-                .write_all(&message)
+                .write_tls((&message).into(), &mut output)
                 .unwrap();
 
             complete_io(
                 &mut tcp_stream,
                 &mut input,
                 &mut received_plaintext,
+                &mut output,
                 &mut server,
             )
             .unwrap();

@@ -24,7 +24,6 @@
 #![allow(clippy::duplicate_mod)]
 
 use std::env;
-use std::io::Write;
 use std::sync::Arc;
 
 use rustls::{Connection, VecInput};
@@ -43,22 +42,27 @@ fn exercise_key_log_file_for_client() {
             client_config.key_log = Arc::new(KeyLogFile::new());
             let client_config = Arc::new(client_config);
 
+            let mut client_output = Vec::new();
+            let mut server_output = Vec::new();
             let (mut client, mut server) =
-                make_pair_for_arc_configs(&client_config, &server_config);
+                make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
             let mut client_input = VecInput::default();
             let mut server_input = VecInput::default();
 
-            assert_eq!(5, client.writer().write(b"hello").unwrap());
-
             do_handshake(
                 &mut client_input,
+                &mut client_output,
                 &mut client,
                 &mut server_input,
+                &mut server_output,
                 &mut server,
             );
-            transfer(&mut client, &mut server_input);
+            client
+                .write_tls(b"hello".into(), &mut client_output)
+                .unwrap();
+            transfer(&mut client_output, &mut server_input);
             server
-                .process_new_packets(&mut server_input)
+                .process_new_packets(&mut server_input, &mut server_output)
                 .handle_all(&mut Vec::new())
                 .unwrap();
         }
@@ -75,22 +79,27 @@ fn exercise_key_log_file_for_server() {
             server_config.key_log = Arc::new(KeyLogFile::new());
             let server_config = Arc::new(server_config);
 
+            let mut client_output = Vec::new();
+            let mut server_output = Vec::new();
             let (mut client, mut server) =
-                make_pair_for_arc_configs(&client_config, &server_config);
+                make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
             let mut client_input = VecInput::default();
             let mut server_input = VecInput::default();
 
-            assert_eq!(5, client.writer().write(b"hello").unwrap());
-
             do_handshake(
                 &mut client_input,
+                &mut client_output,
                 &mut client,
                 &mut server_input,
+                &mut server_output,
                 &mut server,
             );
-            transfer(&mut client, &mut server_input);
+            client
+                .write_tls(b"hello".into(), &mut client_output)
+                .unwrap();
+            transfer(&mut client_output, &mut server_input);
             server
-                .process_new_packets(&mut server_input)
+                .process_new_packets(&mut server_input, &mut server_output)
                 .handle_all(&mut Vec::new())
                 .unwrap();
         }

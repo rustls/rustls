@@ -20,7 +20,7 @@ fuzz_target!(|data: &[u8]| {
     let hostname = "localhost".try_into().unwrap();
     let mut client = config
         .connect(hostname)
-        .build()
+        .build(&mut Vec::new())
         .unwrap();
 
     let mut stream = io::Cursor::new(data);
@@ -28,7 +28,7 @@ fuzz_target!(|data: &[u8]| {
     loop {
         let rd = input.read(&mut stream);
         if client
-            .process_new_packets(&mut input)
+            .process_new_packets(&mut input, &mut Vec::new())
             .handle_all(&mut Vec::new())
             .is_err()
         {
@@ -38,9 +38,5 @@ fuzz_target!(|data: &[u8]| {
         if matches!(rd, Ok(0) | Err(_)) {
             break;
         }
-
-        // gather and discard written data
-        let mut wr = vec![];
-        client.write_tls(&mut &mut wr).unwrap();
     }
 });

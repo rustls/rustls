@@ -184,16 +184,18 @@
 //! #     .unwrap());
 //!
 //! let example_com = "example.com".try_into().unwrap();
+//! let mut output = Vec::new();
 //! let mut client = client_config.connect(example_com)
-//!     .build()
+//!     .build(&mut output)
 //!     .unwrap();
 //! ```
 //!
-//! Now you should do appropriate IO for the `client` object.  If `client.wants_read()` yields
-//! true, you should call `client.process_new_packets()` with the data from the underlying connection.
-//! Likewise, if `client.wants_write()` yields true, you should call `client.write_tls()`
-//! when the underlying connection is able to send data.  You should continue doing this
-//! as long as the connection is valid.
+//! Now you should do appropriate IO for the `client` object.  Operations that produce TLS
+//! data to send to the peer -- such as `build()` above and `client.process_new_packets()` --
+//! append it to the `Vec<u8>` you pass; write those bytes to the underlying connection
+//! whenever it is able to send data.  If `client.wants_read()` yields true, you should
+//! call `client.process_new_packets()` with the data from the underlying connection.
+//! You should continue doing this as long as the connection is valid.
 //!
 //! `process_new_packets()` will yield a [`MessageHandler`], which can be used to read all
 //! buffered messages at once (via [`MessageHandler::handle_all()`]) or one at a time (via
@@ -203,17 +205,16 @@
 //! future calls to `MessageHandler` methods will do nothing and yield the same error.
 //!
 //! Newly received data is available by copying from the `Payload` data returned by
-//! `next_payload()` or written into the given buffer by `handle_all()`.  You can send data to the
-//! peer by calling `client.writer()` (which implements `io::Write` trait).  Note that
-//! `client.writer().write()` buffers data you send if the TLS connection is not yet established:
-//! this is useful for writing (say) a HTTP request, but this is buffered so avoid large amounts
-//! of data.
+//! `next_payload()` or written into the given buffer by `handle_all()`.  You can send data
+//! to the peer by calling `client.write_tls()`, which encrypts it into TLS records appended
+//! to your output buffer.  Note that this is only possible once the handshake has completed.
 //!
 //! The following code uses a fictional socket IO API for illustration, and does not handle
 //! errors.
 //!
 //! ```rust,no_run
 //! # let mut client: rustls::ClientConnection = panic!();
+//! # let mut output: Vec<u8> = Vec::new();
 //! # struct Socket { }
 //! # impl Socket {
 //! #   fn ready_for_write(&self) -> bool { false }
@@ -236,22 +237,28 @@
 //! use std::io;
 //! use rustls::{Connection, VecInput};
 //!
-//! client.writer().write(b"GET / HTTP/1.0\r\n\r\n").unwrap();
 //! let mut socket = connect("example.com", 443);
 //! let mut input = VecInput::default();
+//! let mut sent_request = false;
 //! loop {
 //!   if client.wants_read() && socket.ready_for_read() {
 //!     input.read(&mut socket).unwrap();
 //!     let mut plaintext = Vec::new();
 //!     client
-//!       .process_new_packets(&mut input)
+//!       .process_new_packets(&mut input, &mut output)
 //!       .handle_all(&mut plaintext)
 //!       .unwrap();
 //!     io::stdout().write(&plaintext).unwrap();
 //!   }
 //!
-//!   if client.wants_write() && socket.ready_for_write() {
-//!     client.write_tls(&mut socket).unwrap();
+//!   if !sent_request && !client.is_handshaking() {
+//!     client.write_tls(b"GET / HTTP/1.0\r\n\r\n".into(), &mut output).unwrap();
+//!     sent_request = true;
+//!   }
+//!
+//!   if !output.is_empty() && socket.ready_for_write() {
+//!     let written = socket.write(&output).unwrap();
+//!     output.drain(..written);
 //!   }
 //!
 //!   socket.wait_for_something_to_happen();
@@ -385,13 +392,12 @@ pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
 pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind};
 pub use crate::conn::{
     Connection, IoState, KeyingMaterialExporter, MessageHandler, SideData, SliceInput,
-    TlsInputBuffer, VecInput, Writer, kernel,
+    TlsInputBuffer, VecInput, kernel,
 };
 /// Types related to "split" mode.
 ///
 /// See [`split::SplitConnection`] for more information.
 pub mod split {
-    pub use crate::conn::WrittenInto;
     pub use crate::conn::split::{
         FlushSender, ReceiveTraffic, ReceiveTrafficState, ReceivedApplicationData, SendTraffic,
         SplitConnection,

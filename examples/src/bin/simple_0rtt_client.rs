@@ -29,9 +29,10 @@ fn start_connection(config: &Arc<ClientConfig>, domain_name: &str, port: u16) {
     let server_name = ServerName::try_from(domain_name)
         .expect("invalid DNS name")
         .to_owned();
+    let mut output = Vec::new();
     let mut conn = config
         .connect(server_name)
-        .build()
+        .build(&mut output)
         .unwrap();
     let mut sock = TcpStream::connect(format!("{domain_name}:{port}")).unwrap();
     sock.set_nodelay(true).unwrap();
@@ -44,18 +45,23 @@ fn start_connection(config: &Arc<ClientConfig>, domain_name: &str, port: u16) {
     );
 
     // If early data is available with this server, then early_data()
-    // will yield Some(WriteEarlyData) and WriteEarlyData implements
-    // io::Write.  Use this to send the request.
+    // will yield Some(WriteEarlyData).  Use this to encrypt the
+    // request into TLS records right after the ClientHello.
     if let Some(mut early_data) = conn.early_data() {
-        early_data
-            .write_all(request.as_bytes())
-            .unwrap();
+        let len = early_data.write_tls(request.as_bytes().into(), &mut output);
+        assert_eq!(len, request.len(), "request exceeds early data limit");
         println!("  * 0-RTT request sent");
     }
 
     let mut input = VecInput::default();
     let mut received_plaintext = Vec::new();
-    let mut stream = Stream::new(&mut input, &mut received_plaintext, &mut conn, &mut sock);
+    let mut stream = Stream::new(
+        &mut input,
+        &mut received_plaintext,
+        &mut output,
+        &mut conn,
+        &mut sock,
+    );
 
     // Complete handshake.
     stream.flush().unwrap();

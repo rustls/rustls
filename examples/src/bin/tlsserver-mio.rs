@@ -19,6 +19,7 @@
 //!
 //! [mio]: https://docs.rs/mio/latest/mio/
 
+use core::mem;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -131,6 +132,8 @@ struct OpenConnection {
     tls_conn: ServerConnection,
     back: Option<TcpStream>,
     input: VecInput,
+    output: Vec<u8>,
+    pending: Vec<u8>,
     sent_http_response: bool,
 }
 
@@ -178,6 +181,8 @@ impl OpenConnection {
             tls_conn,
             back,
             input: VecInput::default(),
+            output: Vec::new(),
+            pending: Vec::new(),
             sent_http_response: false,
         }
     }
@@ -191,6 +196,7 @@ impl OpenConnection {
             self.do_tls_read();
             self.try_plain_read();
             self.try_back_read();
+            self.flush_pending();
         }
 
         if ev.is_writable() {
@@ -240,7 +246,7 @@ impl OpenConnection {
         // Process newly-received TLS messages.
         if let Err(err) = self
             .tls_conn
-            .process_new_packets(&mut self.input)
+            .process_new_packets(&mut self.input, &mut self.output)
             .handle_all(&mut Vec::new())
         {
             error!("cannot process packet: {err:?}");
@@ -257,7 +263,7 @@ impl OpenConnection {
         let mut received_plaintext = Vec::new();
         let iter = self
             .tls_conn
-            .process_new_packets(&mut self.input);
+            .process_new_packets(&mut self.input, &mut self.output);
         match iter.handle_all(&mut received_plaintext) {
             Ok(_) => {}
             Err(error) => {
@@ -309,25 +315,47 @@ impl OpenConnection {
                 debug!("back eof");
                 self.closing = true;
             }
-            Some(len) => {
-                self.tls_conn
-                    .writer()
-                    .write_all(&buf[..len])
-                    .unwrap();
-            }
+            Some(len) => self.send_plaintext(&buf[..len]),
             None => {}
         };
+    }
+
+    /// Encrypt `plaintext` into `output`, or queue it if the handshake is
+    /// still in progress (which can happen if plaintext arrives as early data).
+    fn send_plaintext(&mut self, plaintext: &[u8]) {
+        match self.tls_conn.is_handshaking() {
+            true => self
+                .pending
+                .extend_from_slice(plaintext),
+            false => {
+                self.flush_pending();
+                self.tls_conn
+                    .write_tls(plaintext.into(), &mut self.output)
+                    .unwrap();
+            }
+        }
+    }
+
+    /// Encrypt plaintext that was queued while the handshake was in progress.
+    fn flush_pending(&mut self) {
+        if self.tls_conn.is_handshaking() || self.pending.is_empty() {
+            return;
+        }
+
+        let pending = mem::take(&mut self.pending);
+        self.tls_conn
+            .write_tls((&pending).into(), &mut self.output)
+            .unwrap();
+        if self.sent_http_response {
+            self.tls_conn
+                .send_close_notify(&mut self.output);
+        }
     }
 
     /// Process some amount of received plaintext.
     fn incoming_plaintext(&mut self, buf: &[u8]) {
         match self.mode {
-            ServerMode::Echo => {
-                self.tls_conn
-                    .writer()
-                    .write_all(buf)
-                    .unwrap();
-            }
+            ServerMode::Echo => self.send_plaintext(buf),
             ServerMode::Http => {
                 self.send_http_response_once();
             }
@@ -345,18 +373,21 @@ impl OpenConnection {
         let response =
             b"HTTP/1.0 200 OK\r\nConnection: close\r\n\r\nHello world from rustls tlsserver\r\n";
         if !self.sent_http_response {
-            self.tls_conn
-                .writer()
-                .write_all(response)
-                .unwrap();
+            self.send_plaintext(response);
             self.sent_http_response = true;
-            self.tls_conn.send_close_notify();
+            // If the response was queued until the handshake completes,
+            // flush_pending() sends the close_notify instead.
+            if !self.tls_conn.is_handshaking() {
+                self.tls_conn
+                    .send_close_notify(&mut self.output);
+            }
         }
     }
 
     fn tls_write(&mut self) -> io::Result<usize> {
-        self.tls_conn
-            .write_tls(&mut self.socket)
+        let len = self.socket.write(&self.output)?;
+        self.output.drain(..len);
+        Ok(len)
     }
 
     fn do_tls_write_and_handle_error(&mut self) {
@@ -398,10 +429,10 @@ impl OpenConnection {
     }
 
     /// What IO events we're currently waiting for,
-    /// based on wants_read/wants_write.
+    /// based on wants_read and buffered TLS output.
     fn event_set(&self) -> mio::Interest {
         let rd = self.tls_conn.wants_read();
-        let wr = self.tls_conn.wants_write();
+        let wr = !self.output.is_empty();
 
         if rd && wr {
             mio::Interest::READABLE | mio::Interest::WRITABLE

@@ -1,9 +1,6 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::mem;
-use std::io;
-
-use crate::crypto::cipher::OutboundPlain;
 
 /// This is a byte buffer that is built from a deque of byte vectors.
 ///
@@ -17,72 +14,14 @@ pub(crate) struct ChunkVecBuffer {
     prefix_used: usize,
 
     chunks: VecDeque<Vec<u8>>,
-
-    /// The total upper limit (in bytes) of this object.
-    limit: Option<usize>,
-
-    /// Fully-consumed chunks retained for reuse via `take_spare()`.
-    ///
-    /// `None` means recycling is disabled and spent chunks are freed.
-    /// Retention is opt-in (via `new_recycling()`) because it only pays
-    /// off for a buffer whose owner takes chunks back out, i.e. the send
-    /// path's `sendable_tls`. Elsewhere it would hold dead memory for
-    /// the connection's lifetime.
-    spare: Option<Vec<Vec<u8>>>,
 }
 
 impl ChunkVecBuffer {
-    pub(crate) fn new(limit: Option<usize>) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             prefix_used: 0,
             chunks: VecDeque::new(),
-            limit,
-            spare: None,
         }
-    }
-
-    /// Like `new()`, but fully-consumed chunks are retained and can be
-    /// reused via `take_spare()`.
-    ///
-    /// The total capacity retained this way is bounded by `limit`. The
-    /// `ChunkVecBuffer` never holds more spare capacity than it is allowed
-    /// to hold queued data. An unlimited buffer retains every spent chunk,
-    /// so its spare capacity is bounded by its peak queued size.
-    ///
-    /// Since chunks are only spent by being consumed, retained chunks only
-    /// ever contain data that has already been written to the wire.
-    pub(crate) fn new_recycling(limit: Option<usize>) -> Self {
-        Self {
-            prefix_used: 0,
-            chunks: VecDeque::new(),
-            limit,
-            spare: Some(Vec::new()),
-        }
-    }
-
-    /// Take a previously-spent chunk for reuse, if one is available.
-    ///
-    /// The returned vector has unspecified length and contents. Callers
-    /// must resize it and overwrite its contents before use.
-    pub(crate) fn take_spare(&mut self) -> Vec<u8> {
-        let mut new = self
-            .spare
-            .as_mut()
-            .and_then(|spare| spare.pop())
-            .unwrap_or_default();
-        new.clear();
-        new
-    }
-
-    /// Sets the upper limit on how many bytes this
-    /// object can store.
-    ///
-    /// Setting a lower limit than the currently stored
-    /// data is not an error.
-    ///
-    /// A [`None`] limit is interpreted as no limit.
-    pub(crate) fn set_limit(&mut self, new_limit: Option<usize>) {
-        self.limit = new_limit;
     }
 
     /// If we're empty
@@ -91,6 +30,7 @@ impl ChunkVecBuffer {
     }
 
     /// How many bytes we're storing
+    #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.chunks
             .iter()
@@ -111,31 +51,6 @@ impl ChunkVecBuffer {
         }
 
         len
-    }
-
-    pub(crate) fn take(&mut self) -> Vec<Vec<u8>> {
-        if self.chunks.is_empty() {
-            return Vec::new();
-        }
-
-        let mut chunks = Vec::from(mem::take(&mut self.chunks));
-        // slice off `prefix_used` if needed (uncommon)
-        let prefix = mem::take(&mut self.prefix_used);
-        chunks[0].drain(0..prefix);
-        chunks
-    }
-
-    pub(crate) fn take_one_vec(&mut self) -> Vec<u8> {
-        // `pop()` slices off `prefix_used`
-        let Some(mut first) = self.pop() else {
-            return Vec::new();
-        };
-
-        while let Some(chunk) = self.chunks.pop_front() {
-            first.extend_from_slice(&chunk);
-        }
-
-        first
     }
 
     /// Take one of the chunks from this object.
@@ -162,26 +77,6 @@ impl ChunkVecBuffer {
 }
 
 impl ChunkVecBuffer {
-    /// Append a copy of `bytes`, perhaps a prefix if
-    /// we're near the limit.
-    pub(crate) fn append_limited_copy(&mut self, payload: OutboundPlain<'_>) -> usize {
-        let take = self.apply_limit(payload.len());
-        self.append(payload.split_at(take).0.to_vec());
-        take
-    }
-
-    /// For a proposed append of `len` bytes, how many
-    /// bytes should we actually append to adhere to the
-    /// currently set `limit`?
-    pub(crate) fn apply_limit(&self, len: usize) -> usize {
-        let Some(limit) = self.limit else {
-            return len;
-        };
-
-        let space = limit.saturating_sub(self.len());
-        Ord::min(len, space)
-    }
-
     /// Read data out of this object, writing it into `buf`
     /// and returning how many bytes were written there.
     pub(crate) fn read(&mut self, buf: &mut [u8]) -> usize {
@@ -211,66 +106,13 @@ impl ChunkVecBuffer {
             }
 
             self.prefix_used -= buf.len();
-            if let Some(spent) = self.chunks.pop_front() {
-                self.recycle(spent);
-            }
+            self.chunks.pop_front();
         }
 
         debug_assert_eq!(
             self.prefix_used, 0,
             "attempted to `ChunkVecBuffer::consume` more than available"
         );
-    }
-
-    /// Retain `spent` for reuse via `take_spare()`, if recycling is enabled and there is capacity
-    /// relative to the limit.
-    fn recycle(&mut self, spent: Vec<u8>) {
-        let Some(spare) = &mut self.spare else {
-            return;
-        };
-
-        if let Some(limit) = self.limit {
-            let retained = spare
-                .iter()
-                .map(|chunk| chunk.capacity())
-                .sum::<usize>();
-            if retained + spent.capacity() > limit {
-                return;
-            }
-        }
-
-        spare.push(spent);
-    }
-
-    /// Read data out of this object, passing it `wr`
-    pub(crate) fn write_to(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
-        if self.is_empty() {
-            return Ok(0);
-        }
-
-        let mut prefix = self.prefix_used;
-        let mut bufs = [io::IoSlice::new(&[]); 64];
-        for (iov, chunk) in bufs.iter_mut().zip(self.chunks.iter()) {
-            *iov = io::IoSlice::new(&chunk[prefix..]);
-            prefix = 0;
-        }
-        let len = Ord::min(bufs.len(), self.chunks.len());
-        let bufs = &bufs[..len];
-        let used = wr.write_vectored(bufs)?;
-        let available_bytes = bufs.iter().map(|ch| ch.len()).sum();
-
-        if used > available_bytes {
-            // This is really unrecoverable, since the amount of data written
-            // is now unknown.  Consume all the potentially-written data in
-            // case the caller ignores the error.
-            // See <https://github.com/rustls/rustls/issues/2316> for background.
-            self.consume(available_bytes);
-            return Err(io::Error::other(std::format!(
-                "illegal write_vectored return value ({used} > {available_bytes})"
-            )));
-        }
-        self.consume(used);
-        Ok(used)
     }
 }
 
@@ -282,38 +124,20 @@ mod tests {
     use super::ChunkVecBuffer;
 
     #[test]
-    fn short_append_copy_with_limit() {
-        let mut cvb = ChunkVecBuffer::new(Some(12));
-        assert_eq!(cvb.append_limited_copy(b"hello"[..].into()), 5);
-        assert_eq!(cvb.append_limited_copy(b"world"[..].into()), 5);
-        assert_eq!(cvb.append_limited_copy(b"hello"[..].into()), 2);
-        assert_eq!(cvb.append_limited_copy(b"world"[..].into()), 0);
-
-        let mut buf = [0u8; 12];
-        assert_eq!(cvb.read(&mut buf), 12);
-        assert_eq!(buf.to_vec(), b"helloworldhe".to_vec());
-    }
-
-    #[test]
-    fn take_slices_off_consumed_prefix() {
-        let mut cvb = ChunkVecBuffer::new(None);
+    fn pop_slices_off_consumed_prefix() {
+        let mut cvb = ChunkVecBuffer::new();
         cvb.append(b"hello".to_vec());
         cvb.append(b"world".to_vec());
         assert_eq!(cvb.read(&mut [0u8; 3]), 3);
-        assert_eq!(cvb.take(), [b"lo".to_vec(), b"world".to_vec()]);
-        assert_eq!(cvb.len(), 0);
-
-        let mut cvb = ChunkVecBuffer::new(None);
-        cvb.append(b"hello".to_vec());
-        cvb.append(b"world".to_vec());
-        assert_eq!(cvb.read(&mut [0u8; 3]), 3);
-        assert_eq!(cvb.take_one_vec(), b"loworld");
+        assert_eq!(cvb.pop(), Some(b"lo".to_vec()));
+        assert_eq!(cvb.pop(), Some(b"world".to_vec()));
+        assert_eq!(cvb.pop(), None);
         assert_eq!(cvb.len(), 0);
     }
 
     #[test]
     fn read_byte_by_byte() {
-        let mut cvb = ChunkVecBuffer::new(None);
+        let mut cvb = ChunkVecBuffer::new();
         cvb.append(b"test fixture data".to_vec());
         assert!(!cvb.is_empty());
         for expect in b"test fixture data" {
@@ -335,7 +159,7 @@ mod tests {
         for input_chunk_len in 1..64usize {
             for output_chunk_len in 1..65usize {
                 std::println!("check input={input_chunk_len} output={output_chunk_len}");
-                let mut cvb = ChunkVecBuffer::new(None);
+                let mut cvb = ChunkVecBuffer::new();
                 for chunk in input.chunks(input_chunk_len) {
                     cvb.append(chunk.to_vec());
                 }
@@ -363,7 +187,7 @@ mod benchmarks {
     #[bench]
     fn read_one_byte_from_large_message(b: &mut test::Bencher) {
         b.iter(|| {
-            let mut cvb = ChunkVecBuffer::new(None);
+            let mut cvb = ChunkVecBuffer::new();
             cvb.append(vec![0u8; 16_384]);
             assert_eq!(1, cvb.read(&mut [0u8]));
         });
@@ -372,7 +196,7 @@ mod benchmarks {
     #[bench]
     fn read_all_individual_from_large_message(b: &mut test::Bencher) {
         b.iter(|| {
-            let mut cvb = ChunkVecBuffer::new(None);
+            let mut cvb = ChunkVecBuffer::new();
             cvb.append(vec![0u8; 16_384]);
             loop {
                 if cvb.read(&mut [0u8]) == 0 {
@@ -385,7 +209,7 @@ mod benchmarks {
     #[bench]
     fn read_half_bytes_from_large_message(b: &mut test::Bencher) {
         b.iter(|| {
-            let mut cvb = ChunkVecBuffer::new(None);
+            let mut cvb = ChunkVecBuffer::new();
             cvb.append(vec![0u8; 16_384]);
             assert_eq!(8192, cvb.read(&mut [0u8; 8192]));
             assert_eq!(8192, cvb.read(&mut [0u8; 8192]));
@@ -395,7 +219,7 @@ mod benchmarks {
     #[bench]
     fn read_entire_large_message(b: &mut test::Bencher) {
         b.iter(|| {
-            let mut cvb = ChunkVecBuffer::new(None);
+            let mut cvb = ChunkVecBuffer::new();
             cvb.append(vec![0u8; 16_384]);
             assert_eq!(16_384, cvb.read(&mut [0u8; 16_384]));
         });

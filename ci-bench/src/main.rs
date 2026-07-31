@@ -247,6 +247,7 @@ fn main() -> anyhow::Result<()> {
                                     resumption_kind,
                                 ),
                                 input: VecInput::default(),
+                                output: Vec::new(),
                             },
                             bench.kind,
                             resumed_reps,
@@ -263,6 +264,7 @@ fn main() -> anyhow::Result<()> {
                                     resumption_kind,
                                 ),
                                 input: VecInput::default(),
+                                output: Vec::new(),
                             },
                             bench.kind,
                             resumed_reps,
@@ -308,6 +310,7 @@ fn main() -> anyhow::Result<()> {
                                 },
                                 config: ServerSideStepper::make_config(params, resumption_kind),
                                 input: VecInput::default(),
+                                output: Vec::new(),
                             },
                             bench.kind,
                             RESUMED_HANDSHAKE_RUNS,
@@ -327,6 +330,7 @@ fn main() -> anyhow::Result<()> {
                                 resumption_kind,
                                 config: ClientSideStepper::make_config(params, resumption_kind),
                                 input: VecInput::default(),
+                                output: Vec::new(),
                             },
                             bench.kind,
                             RESUMED_HANDSHAKE_RUNS,
@@ -700,6 +704,7 @@ struct ClientSideStepper<'a> {
     resumption_kind: ResumptionKind,
     config: Arc<ClientConfig>,
     input: VecInput,
+    output: Vec<u8>,
 }
 
 impl ClientSideStepper<'_> {
@@ -744,17 +749,17 @@ impl BenchStepper for ClientSideStepper<'_> {
         let mut client = self
             .config
             .connect(server_name)
-            .build()
+            .build(&mut self.output)
             .unwrap();
-        client.set_buffer_limit(None);
 
         loop {
-            send_handshake_message(&mut client, self.io.writer, self.io.handshake_buf).await?;
-            if !client.is_handshaking() && !client.wants_write() {
+            send_handshake_message(&mut self.output, self.io.writer).await?;
+            if !client.is_handshaking() && self.output.is_empty() {
                 break;
             }
             read_handshake_message(
                 &mut self.input,
+                &mut self.output,
                 &mut client,
                 self.io.reader,
                 self.io.handshake_buf,
@@ -769,6 +774,7 @@ impl BenchStepper for ClientSideStepper<'_> {
         {
             read_handshake_message(
                 &mut self.input,
+                &mut self.output,
                 &mut client,
                 self.io.reader,
                 self.io.handshake_buf,
@@ -789,8 +795,13 @@ impl BenchStepper for ClientSideStepper<'_> {
     }
 
     async fn transmit_data(&mut self, endpoint: &mut Self::Endpoint) -> anyhow::Result<()> {
-        let total_plaintext_read =
-            read_plaintext_to_end_bounded(&mut self.input, endpoint, self.io.reader).await?;
+        let total_plaintext_read = read_plaintext_to_end_bounded(
+            &mut self.input,
+            &mut self.output,
+            endpoint,
+            self.io.reader,
+        )
+        .await?;
         assert_eq!(total_plaintext_read, TRANSFER_PLAINTEXT_SIZE);
         Ok(())
     }
@@ -805,6 +816,7 @@ struct ServerSideStepper<'a> {
     io: StepperIo<'a>,
     config: Arc<ServerConfig>,
     input: VecInput,
+    output: Vec<u8>,
 }
 
 impl ServerSideStepper<'_> {
@@ -841,17 +853,17 @@ impl BenchStepper for ServerSideStepper<'_> {
 
     async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
         let mut server = ServerConnection::new(self.config.clone()).unwrap();
-        server.set_buffer_limit(None);
 
         while server.is_handshaking() {
             read_handshake_message(
                 &mut self.input,
+                &mut self.output,
                 &mut server,
                 self.io.reader,
                 self.io.handshake_buf,
             )
             .await?;
-            send_handshake_message(&mut server, self.io.writer, self.io.handshake_buf).await?;
+            send_handshake_message(&mut self.output, self.io.writer).await?;
         }
 
         Ok(server)
@@ -865,7 +877,13 @@ impl BenchStepper for ServerSideStepper<'_> {
     }
 
     async fn transmit_data(&mut self, endpoint: &mut Self::Endpoint) -> anyhow::Result<()> {
-        write_all_plaintext_bounded(endpoint, self.io.writer, TRANSFER_PLAINTEXT_SIZE).await?;
+        write_all_plaintext_bounded(
+            endpoint,
+            &mut self.output,
+            self.io.writer,
+            TRANSFER_PLAINTEXT_SIZE,
+        )
+        .await?;
         Ok(())
     }
 

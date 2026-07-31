@@ -1,7 +1,6 @@
 use alloc::vec::Vec;
 use core::fmt;
 use core::ops::Deref;
-use std::io;
 
 use pki_types::{FipsStatus, ServerName};
 
@@ -14,10 +13,11 @@ use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, MessageHandler,
-    SideCommonOutput, SideData, Writer,
+    SideCommonOutput, SideData,
 };
 #[cfg(doc)]
 use crate::crypto;
+use crate::crypto::cipher::OutboundPlain;
 use crate::enums::ApplicationProtocol;
 use crate::error::Error;
 use crate::log::trace;
@@ -111,27 +111,21 @@ impl ClientConnection {
 }
 
 impl Connection<ClientSide> for ClientConnection {
-    fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
-        self.inner.write_tls(wr)
+    fn write_tls(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error> {
+        self.inner.write_tls(plaintext, tls)
     }
 
     fn wants_read(&self) -> bool {
         self.inner.wants_read()
     }
 
-    fn wants_write(&self) -> bool {
-        self.inner.wants_write()
-    }
-
-    fn writer(&mut self) -> Writer<'_> {
-        self.inner.writer()
-    }
-
     fn process_new_packets<'a, 'm>(
         &'a mut self,
         input: &'m mut dyn TlsInputBuffer,
+        tls: &'a mut Vec<u8>,
     ) -> MessageHandler<'a, 'm, ClientSide> {
-        self.inner.process_new_packets(input)
+        self.inner
+            .process_new_packets(input, tls)
     }
 
     fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
@@ -142,16 +136,12 @@ impl Connection<ClientSide> for ClientConnection {
         self.inner.dangerous_extract_secrets()
     }
 
-    fn set_buffer_limit(&mut self, limit: Option<usize>) {
-        self.inner.set_buffer_limit(limit)
+    fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
+        self.inner.refresh_traffic_keys(tls)
     }
 
-    fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
-        self.inner.refresh_traffic_keys()
-    }
-
-    fn send_close_notify(&mut self) {
-        self.inner.send_close_notify();
+    fn send_close_notify(&mut self, tls: &mut Vec<u8>) {
+        self.inner.send_close_notify(tls);
     }
 
     fn is_handshaking(&self) -> bool {
@@ -188,7 +178,7 @@ impl ClientConnectionBuilder {
     }
 
     /// Finalize the builder and create the `ClientConnection`.
-    pub fn build(self) -> Result<ClientConnection, Error> {
+    pub fn build(self, tls: &mut Vec<u8>) -> Result<ClientConnection, Error> {
         let Self {
             config,
             name,
@@ -203,6 +193,7 @@ impl ClientConnectionBuilder {
                 ClientExtensionsInput::from_alpn(alpn_protocols),
                 None,
                 Protocol::Tcp,
+                tls,
             )?),
         })
     }
@@ -212,13 +203,34 @@ impl ClientConnectionBuilder {
 ///
 /// "Early data" is also known as "0-RTT data".
 ///
-/// This type implements [`io::Write`].
+/// Use [`Self::write_tls()`] to encrypt early data into TLS records.
 pub struct WriteEarlyData<'a> {
     early_data: &'a mut EarlyData,
     common: &'a mut CommonState,
 }
 
 impl<'a> WriteEarlyData<'a> {
+    /// Encrypt early data as TLS records and encode them into `tls`.
+    ///
+    /// Yields the number of bytes of `plaintext` that were consumed.  This may be less than
+    /// the length of `plaintext` if the server has limited the amount of early data that
+    /// may be sent.
+    pub fn write_tls(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> usize {
+        let state = &mut self.early_data;
+        let plaintext = match state.state {
+            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted => {
+                let take = Ord::min(plaintext.len(), state.left);
+                state.left -= take;
+                plaintext.split_at(take).0
+            }
+            EarlyDataState::AcceptedFinished => return 0,
+        };
+
+        self.common
+            .send
+            .send_appdata_encrypt(plaintext, tls)
+    }
+
     /// How many bytes you may send.  Writes will become short
     /// once this reaches zero.
     pub fn bytes_left(&self) -> usize {
@@ -249,31 +261,6 @@ impl<'a> WriteEarlyData<'a> {
     }
 }
 
-impl io::Write for WriteEarlyData<'_> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let state = &mut self.early_data;
-        let buf = match state.state {
-            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted => {
-                let take = Ord::min(buf.len(), state.left);
-                state.left -= take;
-                &buf[..take]
-            }
-            EarlyDataState::AcceptedFinished => {
-                return Err(io::Error::from(io::ErrorKind::InvalidInput));
-            }
-        };
-
-        Ok(self
-            .common
-            .send
-            .send_early_plaintext(buf))
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
 impl ConnectionCore<ClientSide> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
@@ -281,6 +268,7 @@ impl ConnectionCore<ClientSide> {
         extra_exts: ClientExtensionsInput,
         quic: Option<&mut dyn QuicOutput>,
         protocol: Protocol,
+        tls: &mut Vec<u8>,
     ) -> Result<Self, Error> {
         let mut common_state = CommonState::new(Side::Client, config.fips());
         common_state
@@ -292,6 +280,7 @@ impl ConnectionCore<ClientSide> {
             side: &mut data,
             quic,
             common: &mut common_state,
+            tls,
         };
 
         let input = ClientHelloInput::new(name, &extra_exts, protocol, &mut output, config)?;

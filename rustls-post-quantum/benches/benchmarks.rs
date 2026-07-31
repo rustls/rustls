@@ -8,7 +8,7 @@ use rustls::crypto::kx::{
     ActiveKeyExchange, HybridKeyExchange, NamedGroup, SharedSecret, StartedKeyExchange,
     SupportedKxGroup,
 };
-use rustls::{ClientConfig, Connection, Error, RootCertStore};
+use rustls::{ClientConfig, Error, RootCertStore};
 use rustls_aws_lc_rs::kx_group::{MLKEM768, X25519, X25519MLKEM768};
 
 fn bench_client(c: &mut Criterion) {
@@ -119,12 +119,13 @@ fn bench_clienthello(c: &mut Criterion) {
 }
 
 fn do_client_hello(config: &Arc<ClientConfig>) -> usize {
-    let mut conn = config
-        .connect("localhost".try_into().unwrap())
-        .build()
-        .unwrap();
     let mut buf = vec![];
-    let len = conn.write_tls(&mut &mut buf).unwrap();
+    let conn = config
+        .connect("localhost".try_into().unwrap())
+        .build(&mut buf)
+        .unwrap();
+    black_box(conn);
+    let len = buf.len();
     black_box(buf);
     len
 }
