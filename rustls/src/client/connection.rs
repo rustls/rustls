@@ -320,6 +320,38 @@ impl ConnectionCore<ClientSide> {
     }
 }
 
+/// State associated with a client connection.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Debug)]
+pub struct ClientSide;
+
+impl SideData for ClientSide {}
+
+impl crate::conn::private::Side for ClientSide {
+    type Data = ClientConnectionData;
+    type State = super::hs::ClientState;
+}
+
+impl SideOutput for ClientConnectionData {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev {
+            Event::EchStatus(ech) => self.ech_status = ech,
+            Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accepted(),
+            Event::EarlyData(EarlyDataEvent::Enable(sz)) => self.early_data.enable(sz),
+            Event::EarlyData(EarlyDataEvent::Finished) => self.early_data.finished(),
+            Event::EarlyData(EarlyDataEvent::Start) => self.early_data.start(),
+            Event::EarlyData(EarlyDataEvent::Rejected) => self.early_data.rejected(),
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct ClientConnectionData {
+    early_data: EarlyData,
+    ech_status: EchStatus,
+}
+
 #[derive(Default)]
 pub(super) struct EarlyData {
     state: EarlyDataState,
@@ -385,36 +417,4 @@ enum EarlyDataState {
     Accepted,
     AcceptedFinished,
     Rejected,
-}
-
-#[derive(Default)]
-pub(crate) struct ClientConnectionData {
-    early_data: EarlyData,
-    ech_status: EchStatus,
-}
-
-/// State associated with a client connection.
-#[expect(clippy::exhaustive_structs)]
-#[derive(Debug)]
-pub struct ClientSide;
-
-impl SideData for ClientSide {}
-
-impl crate::conn::private::Side for ClientSide {
-    type Data = ClientConnectionData;
-    type State = super::hs::ClientState;
-}
-
-impl SideOutput for ClientConnectionData {
-    fn emit(&mut self, ev: Event<'_>) {
-        match ev {
-            Event::EchStatus(ech) => self.ech_status = ech,
-            Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accepted(),
-            Event::EarlyData(EarlyDataEvent::Enable(sz)) => self.early_data.enable(sz),
-            Event::EarlyData(EarlyDataEvent::Finished) => self.early_data.finished(),
-            Event::EarlyData(EarlyDataEvent::Start) => self.early_data.start(),
-            Event::EarlyData(EarlyDataEvent::Rejected) => self.early_data.rejected(),
-            _ => unreachable!(),
-        }
-    }
 }
