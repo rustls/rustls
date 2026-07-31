@@ -316,7 +316,10 @@ impl ConnectionCore<ClientSide> {
     }
 
     pub(crate) fn is_early_data_accepted(&self) -> bool {
-        self.side.early_data.is_accepted()
+        matches!(
+            self.side.early_data.state,
+            EarlyDataState::Accepted | EarlyDataState::AcceptedFinished
+        )
     }
 }
 
@@ -385,13 +388,6 @@ impl EarlyData {
         matches!(
             self.state,
             EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted
-        )
-    }
-
-    fn is_accepted(&self) -> bool {
-        matches!(
-            self.state,
-            EarlyDataState::Accepted | EarlyDataState::AcceptedFinished
         )
     }
 
