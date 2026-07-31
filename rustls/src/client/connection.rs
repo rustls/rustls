@@ -301,7 +301,7 @@ impl ConnectionCore<ClientSide> {
         common_state
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
-        let mut data = ClientConnectionData::new();
+        let mut data = ClientConnectionData::default();
 
         let mut output = SideCommonOutput {
             side: &mut data,
@@ -320,19 +320,13 @@ impl ConnectionCore<ClientSide> {
     }
 }
 
+#[derive(Default)]
 pub(super) struct EarlyData {
     state: EarlyDataState,
     left: usize,
 }
 
 impl EarlyData {
-    fn new() -> Self {
-        Self {
-            state: EarlyDataState::Disabled,
-            left: 0,
-        }
-    }
-
     fn is_enabled(&self) -> bool {
         matches!(
             self.state,
@@ -382,8 +376,9 @@ impl EarlyData {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 enum EarlyDataState {
+    #[default]
     Disabled,
     Ready,
     Sending,
@@ -392,18 +387,10 @@ enum EarlyDataState {
     Rejected,
 }
 
+#[derive(Default)]
 pub(crate) struct ClientConnectionData {
     early_data: EarlyData,
     ech_status: EchStatus,
-}
-
-impl ClientConnectionData {
-    fn new() -> Self {
-        Self {
-            early_data: EarlyData::new(),
-            ech_status: EchStatus::default(),
-        }
-    }
 }
 
 /// State associated with a client connection.
