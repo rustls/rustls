@@ -141,14 +141,21 @@ impl SendPath {
             .set_max_fragment_size(new)
     }
 
-    /// Trigger a `refresh_traffic_keys` if required.
+    /// Trigger a `refresh_traffic_keys` if requested.
     fn maybe_refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) {
         if let KeyUpdateLocal::Requested = self.key_update_local {
-            let _ = self.refresh_traffic_keys(tls);
+            let _ = self.send_key_update_request(tls);
         }
     }
 
     pub(crate) fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
+        if let KeyUpdateLocal::Outstanding = self.key_update_local {
+            return Ok(());
+        }
+        self.send_key_update_request(tls)
+    }
+
+    fn send_key_update_request(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
         let ks = self.tls13_key_schedule.take();
 
         let Some(mut ks) = ks else {
@@ -157,7 +164,7 @@ impl SendPath {
 
         self.send_msg(Message::build_key_update_request(), true, tls);
         ks.update_encrypter(self);
-        self.key_update_local = KeyUpdateLocal::Idle;
+        self.key_update_local = KeyUpdateLocal::Outstanding;
         self.tls13_key_schedule = Some(ks);
         Ok(())
     }
@@ -182,6 +189,12 @@ impl SendOutput for SendPath {
         if let Some(mut ks) = self.tls13_key_schedule.take() {
             ks.update_encrypter_for_key_update(self);
             self.tls13_key_schedule = Some(ks);
+        }
+    }
+
+    fn note_key_update_response(&mut self) {
+        if let KeyUpdateLocal::Outstanding = self.key_update_local {
+            self.key_update_local = KeyUpdateLocal::Idle;
         }
     }
 
@@ -253,6 +266,9 @@ enum KeyUpdateLocal {
 
     /// A key update request should be sent at the next sending opportunity.
     Requested,
+
+    /// A key update request is outstanding; we await a response.
+    Outstanding,
 }
 
 /// State machine for TLS1.3 key updates triggered by peer.
@@ -270,6 +286,8 @@ pub(crate) trait SendOutput {
     fn negotiated_version(&mut self, version: ProtocolVersion);
 
     fn queue_key_update(&mut self);
+
+    fn note_key_update_response(&mut self);
 
     fn set_encrypter(&mut self, cipher: Box<dyn MessageEncrypter>, max_messages: u64);
 

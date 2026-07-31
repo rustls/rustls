@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use rustls::crypto::{Credentials, CryptoProvider};
 use rustls::{
     ClientConfig, ClientConnection, Connection, ConnectionTrafficSecrets, Error, KeyLog,
-    ServerConfig, ServerConnection, SupportedCipherSuite, VecInput,
+    ServerConfig, ServerConnection, SideData, SupportedCipherSuite, VecInput,
 };
 use rustls_test::{
     ClientConfigExt, KeyType, ServerConfigExt, aes_128_gcm_with_1024_confidentiality_limit,
@@ -553,6 +553,101 @@ fn test_refresh_traffic_keys() {
         &mut server_output,
         &mut server,
     );
+}
+
+#[test]
+fn test_refresh_traffic_keys_is_idempotent() {
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair(
+        KeyType::default(),
+        &provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+    test(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair(
+        KeyType::default(),
+        &provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+    test(
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+    );
+
+    fn test<L: SideData, R: SideData>(
+        left_input: &mut VecInput,
+        left_output: &mut Vec<u8>,
+        left: &mut impl Connection<L>,
+        right_input: &mut VecInput,
+        right_output: &mut Vec<u8>,
+        right: &mut impl Connection<R>,
+    ) {
+        // left sends a request
+        left.refresh_traffic_keys(left_output)
+            .unwrap();
+        assert!(transfer(left_output, right_input) > 0);
+
+        // but subsequent requests are ignored
+        for _ in 0..5 {
+            left.refresh_traffic_keys(left_output)
+                .unwrap();
+            assert_eq!(transfer(left_output, right_input), 0);
+        }
+
+        // left's request is received by right, enacted on next write,
+        // right's response received by left
+        right
+            .process_new_packets(right_input, right_output)
+            .handle_all(&mut Vec::new())
+            .unwrap();
+        right
+            .write_tls(b"yo".into(), right_output)
+            .unwrap();
+        assert!(transfer(right_output, left_input) > 0);
+        left.process_new_packets(left_input, left_output)
+            .handle_all(&mut Vec::new())
+            .unwrap();
+
+        // allows a further update to be sent.
+        left.refresh_traffic_keys(left_output)
+            .unwrap();
+        assert!(transfer(left_output, right_input) > 0);
+    }
 }
 
 #[test]
