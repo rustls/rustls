@@ -194,16 +194,14 @@ impl SendPath {
                 return;
             }
 
-            let record = match MUST_ENCRYPT {
-                true => {
-                    let mut tls = self.sendable_tls.take_spare();
-                    self.encrypt_state
-                        .encrypt_outgoing(m, &mut tls);
-                    tls
-                }
-                false => m.to_unencrypted_bytes(),
-            };
-            self.sendable_tls.append(record);
+            let mut tls = self.sendable_tls.take_spare();
+            match MUST_ENCRYPT {
+                true => self
+                    .encrypt_state
+                    .encrypt_outgoing(m, &mut tls),
+                false => m.encode_unencrypted(&mut tls),
+            }
+            self.sendable_tls.append(tls);
         }
     }
 
