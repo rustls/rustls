@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
+use core::fmt;
 use core::ops::Deref;
-use core::{fmt, mem};
 use std::io;
 
 use pki_types::{FipsStatus, ServerName};
@@ -264,17 +264,24 @@ impl<'a> WriteEarlyData<'a> {
 
 impl io::Write for WriteEarlyData<'_> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let limit = self
-            .core
-            .side
-            .early_data
-            .check_write(buf.len())?;
+        let state = &mut self.core.side.early_data;
+        let buf = match state.state {
+            EarlyDataState::Disabled => unreachable!(),
+            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted => {
+                let take = Ord::min(buf.len(), state.left);
+                state.left -= take;
+                &buf[..take]
+            }
+            EarlyDataState::Rejected | EarlyDataState::AcceptedFinished => {
+                return Err(io::Error::from(io::ErrorKind::InvalidInput));
+            }
+        };
 
         Ok(self
             .core
             .common
             .send
-            .send_early_plaintext(&buf[..limit]))
+            .send_early_plaintext(buf))
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -367,25 +374,6 @@ impl EarlyData {
         self.state = match self.state {
             EarlyDataState::Accepted => EarlyDataState::AcceptedFinished,
             _ => panic!("bad EarlyData state"),
-        }
-    }
-
-    fn check_write(&mut self, sz: usize) -> io::Result<usize> {
-        match self.state {
-            EarlyDataState::Disabled => unreachable!(),
-            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted => {
-                let take = if self.left < sz {
-                    mem::replace(&mut self.left, 0)
-                } else {
-                    self.left -= sz;
-                    sz
-                };
-
-                Ok(take)
-            }
-            EarlyDataState::Rejected | EarlyDataState::AcceptedFinished => {
-                Err(io::Error::from(io::ErrorKind::InvalidInput))
-            }
         }
     }
 
