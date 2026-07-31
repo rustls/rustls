@@ -195,9 +195,12 @@ impl SendPath {
             }
 
             let record = match MUST_ENCRYPT {
-                true => self
-                    .encrypt_state
-                    .encrypt_outgoing(m, self.sendable_tls.take_spare()),
+                true => {
+                    let mut tls = self.sendable_tls.take_spare();
+                    self.encrypt_state
+                        .encrypt_outgoing(m, &mut tls);
+                    tls
+                }
                 false => m.to_unencrypted_bytes(),
             };
             self.sendable_tls.append(record);
@@ -252,10 +255,10 @@ impl SendOutput for SendPath {
         }
 
         let message = EncodedMessage::<Payload<'static>>::from(Message::build_key_update_notify());
-        self.queued_key_update_message = Some(
-            self.encrypt_state
-                .encrypt_outgoing(message.borrow_outbound(), Vec::new()),
-        );
+        let mut tls = Vec::new();
+        self.encrypt_state
+            .encrypt_outgoing(message.borrow_outbound(), &mut tls);
+        self.queued_key_update_message = Some(tls);
 
         if let Some(mut ks) = self.tls13_key_schedule.take() {
             ks.update_encrypter_for_key_update(self);

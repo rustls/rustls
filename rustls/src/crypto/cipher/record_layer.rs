@@ -1,5 +1,4 @@
 use alloc::boxed::Box;
-use alloc::vec;
 use alloc::vec::Vec;
 use core::cmp::min;
 
@@ -39,21 +38,19 @@ impl EncryptionState {
     pub(crate) fn encrypt_outgoing(
         &mut self,
         plain: EncodedMessage<OutboundPlain<'_>>,
-        mut record: Vec<u8>,
-    ) -> Vec<u8> {
+        output: &mut Vec<u8>,
+    ) {
         // Contents are fully overwritten below, so zeroing is pure cost.
         // A fresh buffer gets pre-zeroed memory straight from the allocator
         // while a reused one zeroes only what `resize` grows.
         let needed = HEADER_SIZE + self.encrypted_len(plain.payload.len());
-        if record.capacity() == 0 {
-            record = vec![0u8; needed];
-        } else {
-            record.resize(needed, 0);
-        }
-
-        let written = self.encrypt_outgoing_into(plain, &mut record);
-        record.truncate(written);
-        record
+        let start = output.len();
+        output.resize(start + needed, 0);
+        let written = self.encrypt_outgoing_into(plain, &mut output[start..]);
+        debug_assert_eq!(
+            written, needed,
+            "MessageEncrypter::encrypt() returned wrong length"
+        );
     }
 
     /// Encrypt a TLS message directly into `out`, returning the encoded
