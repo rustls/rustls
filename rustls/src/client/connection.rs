@@ -269,18 +269,19 @@ impl<'a> WriteEarlyData<'a> {
 
 impl io::Write for WriteEarlyData<'_> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.sess
+        let limit = self
+            .sess
             .inner
             .core
             .side
             .early_data
-            .check_write(buf.len())
-            .map(|sz| {
-                self.sess
-                    .inner
-                    .send
-                    .send_early_plaintext(&buf[..sz])
-            })
+            .check_write(buf.len())?;
+
+        Ok(self
+            .sess
+            .inner
+            .send
+            .send_early_plaintext(&buf[..limit]))
     }
 
     fn flush(&mut self) -> io::Result<()> {
