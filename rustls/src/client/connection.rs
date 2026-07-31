@@ -371,11 +371,6 @@ impl EarlyData {
     }
 
     fn check_write(&mut self, sz: usize) -> io::Result<usize> {
-        self.check_write_opt(sz)
-            .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))
-    }
-
-    fn check_write_opt(&mut self, sz: usize) -> Option<usize> {
         match self.state {
             EarlyDataState::Disabled => unreachable!(),
             EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted => {
@@ -386,9 +381,11 @@ impl EarlyData {
                     sz
                 };
 
-                Some(take)
+                Ok(take)
             }
-            EarlyDataState::Rejected | EarlyDataState::AcceptedFinished => None,
+            EarlyDataState::Rejected | EarlyDataState::AcceptedFinished => {
+                Err(io::Error::from(io::ErrorKind::InvalidInput))
+            }
         }
     }
 
