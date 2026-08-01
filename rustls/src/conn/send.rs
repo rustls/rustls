@@ -98,6 +98,7 @@ impl SendPath {
                 ),
             tls,
         );
+        self.maybe_refresh_traffic_keys();
     }
 
     /// Send plaintext application data, fragmenting and
@@ -128,7 +129,9 @@ impl SendPath {
         }
 
         debug_assert!(self.encrypt_state.is_encrypting());
-        self.send_appdata_encrypt(payload.split_at(len).0)
+        let len = self.send_appdata_encrypt(payload.split_at(len).0);
+        self.maybe_refresh_traffic_keys();
+        len
     }
 
     /// Like send_msg_encrypt, but operate on an appdata directly.
@@ -145,6 +148,7 @@ impl SendPath {
             &mut tls,
         );
         self.sendable_tls.append(tls);
+        self.maybe_refresh_traffic_keys();
         len
     }
 
@@ -187,7 +191,7 @@ impl SendPath {
     }
 
     /// Trigger a `refresh_traffic_keys` if required.
-    pub(crate) fn maybe_refresh_traffic_keys(&mut self) {
+    fn maybe_refresh_traffic_keys(&mut self) {
         if self.refresh_traffic_keys_pending {
             let _ = self.refresh_traffic_keys();
         }
