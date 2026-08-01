@@ -562,7 +562,6 @@ impl<Side: SideData> PlaintextSink for ConnectionCommon<Side> {
             .common
             .send
             .buffer_plaintext(buf.into(), &mut self.buffers.sendable_plaintext);
-        self.send.maybe_refresh_traffic_keys();
         Ok(len)
     }
 
@@ -585,7 +584,6 @@ impl<Side: SideData> PlaintextSink for ConnectionCommon<Side> {
             .common
             .send
             .buffer_plaintext(payload, &mut self.buffers.sendable_plaintext);
-        self.send.maybe_refresh_traffic_keys();
         Ok(len)
     }
 

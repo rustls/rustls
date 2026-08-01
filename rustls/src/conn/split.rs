@@ -109,7 +109,6 @@ impl SendTraffic {
     /// be communicated to the peer, in order.
     pub fn write(&mut self, application_data: OutboundPlain<'_>) -> Vec<Vec<u8>> {
         let mut inner = self.0.lock().unwrap();
-        inner.maybe_refresh_traffic_keys();
         inner.send_appdata_encrypt(application_data);
         inner.sendable_tls.take()
     }
@@ -122,7 +121,6 @@ impl SendTraffic {
     /// `key_update`).
     pub fn write_tls_into(&mut self, application_data: OutboundPlain<'_>, tls: &mut Vec<u8>) {
         let mut inner = self.0.lock().unwrap();
-        inner.maybe_refresh_traffic_keys();
         inner.write_appdata_into(application_data, tls)
     }
 
@@ -152,7 +150,6 @@ impl SendTraffic {
     /// where you don't have any plaintext to send.
     pub fn take_data(&mut self) -> Vec<Vec<u8>> {
         let mut inner = self.0.lock().unwrap();
-        inner.maybe_refresh_traffic_keys();
         inner.sendable_tls.take()
     }
 
