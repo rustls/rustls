@@ -72,7 +72,7 @@ fn pairwise_tls13() {
 }
 
 fn test_version(provider: CryptoProvider) -> Transcript {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server_config = ServerConfig::builder(provider.clone().into())
         .with_no_client_auth()
