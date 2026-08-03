@@ -21,7 +21,7 @@
 
 use core::mem;
 use std::collections::HashMap;
-use std::io::{self, Read, Write};
+use std::io::{self, IsTerminal, Read, Write, stderr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{fs, net};
@@ -36,7 +36,7 @@ use rustls::server::{NoServerSessionStorage, WebPkiClientVerifier};
 use rustls::{Connection, RootCertStore, ServerConfig, ServerConnection, VecInput};
 use rustls_aws_lc_rs as provider;
 use rustls_util::KeyLogFile;
-use tracing::{debug, error};
+use tracing::{Level, debug, error};
 
 // Token for our listening socket.
 const LISTENER: mio::Token = mio::Token(0);
@@ -715,8 +715,10 @@ fn make_config(args: &Args) -> Arc<ServerConfig> {
 fn main() {
     let args = Args::parse();
     if args.verbose {
-        env_logger::Builder::new()
-            .parse_filters("trace")
+        tracing_subscriber::fmt()
+            .with_max_level(Level::TRACE)
+            .with_writer(stderr)
+            .with_ansi(stderr().is_terminal())
             .init();
     }
 

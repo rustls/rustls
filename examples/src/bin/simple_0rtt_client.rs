@@ -85,7 +85,7 @@ fn start_connection(config: &Arc<ClientConfig>, domain_name: &str, port: u16) {
 }
 
 fn main() {
-    env_logger::init();
+    tracing_subscriber::fmt::init();
 
     let mut args = env::args();
     args.next();
