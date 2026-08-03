@@ -63,15 +63,15 @@ information as possible.
 
 If your bug reproduces with one of the [Rustls examples] you can use the
 [`RUST_LOG`] environment variable to increase the log verbosity. If you're using
-your own application, you may need to configure it with a logging backend
-like `env_logger`.
+your own application, you may need to configure it with a tracing backend
+such as those available from [`tracing-subscriber`].
 
 Consider reproducing your bug with `RUST_LOG=rustls=trace` and sharing the result
 in a [GitHub gist].
 
 [Rustls examples]: https://github.com/rustls/rustls/tree/main/examples
-[`RUST_LOG`]: https://docs.rs/env_logger/latest/env_logger/#enabling-logging
-[`env_logger`]: https://docs.rs/env_logger/
+[`RUST_LOG`]: https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html
+[`tracing-subscriber`]: https://docs.rs/tracing-subscriber/latest/tracing_subscriber/
 [GitHub gist]: https://docs.github.com/en/get-started/writing-on-github/editing-and-sharing-content-with-gists/creating-gists
 
 ## Taking a packet capture
