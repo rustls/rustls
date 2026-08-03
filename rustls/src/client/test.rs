@@ -195,7 +195,7 @@ fn test_client_rejects_hrr_with_varied_session_id() {
 
     // server replies with HRR, but does not echo `session_id` as required.
     let hrr = Message {
-        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(
             HandshakePayload::HelloRetryRequest(HelloRetryRequest {
                 cipher_suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
@@ -241,7 +241,7 @@ fn test_client_rejects_no_extended_main_secret_extension_when_require_ems_or_fip
     conn.write_tls(&mut sent).unwrap();
 
     let sh = Message {
-        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
             ServerHelloPayload {
                 random: Random::new(config.provider().secure_random).unwrap(),
@@ -310,7 +310,7 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
     conn.write_tls(&mut sent).unwrap();
 
     let sh = Message {
-        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
             ServerHelloPayload {
                 random: Random([0u8; 32]),
@@ -333,7 +333,7 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
         .unwrap();
 
     let cert = Message {
-        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Certificate(
             CertificateChain(vec![CertificateDer::from(&b"does not matter"[..])]),
         ))),
@@ -345,7 +345,7 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
         .unwrap();
 
     let server_kx = Message {
-        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(
             HandshakePayload::ServerKeyExchange(ServerKeyExchangePayload::Known(
                 ServerKeyExchange {
@@ -376,7 +376,7 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
         .unwrap();
 
     let server_done = Message {
-        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(
             HandshakePayload::ServerHelloDone,
         )),
@@ -520,7 +520,7 @@ fn client_requiring_rpk_receives_server_ee(
     conn.write_tls(&mut sent).unwrap();
 
     let sh = Message {
-        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
             ServerHelloPayload {
                 random: Random([0; 32]),
@@ -551,7 +551,7 @@ fn client_requiring_rpk_receives_server_ee(
         .unwrap();
 
     let ee = Message {
-        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(
             HandshakePayload::EncryptedExtensions(Box::new(encrypted_extensions)),
         )),
@@ -645,7 +645,7 @@ fn client_receives_tls13_server_hello_with_raw_extension(
     drop(extensions);
 
     let sh = Message {
-        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Unknown((
             HandshakeType::ServerHello,
             Payload::new(body),

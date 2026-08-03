@@ -5,12 +5,11 @@ use ring::hkdf::{self, KeyType};
 use ring::{aead, hmac};
 use rustls::crypto::CipherSuite;
 use rustls::crypto::cipher::{
-    AeadKey, EncodableVersion, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter,
-    MessageEncrypter, Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError,
-    make_tls13_aad,
+    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
+    Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
-use rustls::enums::{ContentType, ProtocolVersion};
+use rustls::enums::ContentType;
 use rustls::error::Error;
 use rustls::version::TLS13_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite, crypto};
@@ -220,9 +219,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
 
         Ok(EncodedMessage {
             typ: ContentType::ApplicationData,
-            // Note: all TLS 1.3 application data records use TLSv1_2 (0x0303) as the legacy record
-            // protocol version, see https://www.rfc-editor.org/rfc/rfc9846#section-5.1
-            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+            version: msg.version,
             payload: payload.into_written(),
         })
     }

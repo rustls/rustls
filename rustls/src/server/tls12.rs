@@ -888,7 +888,7 @@ fn emit_ticket(
     let ticket_lifetime = ticketer.lifetime();
 
     let m = Message {
-        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(
             HandshakePayload::NewSessionTicket(NewSessionTicketPayload::new(
                 ticket_lifetime,
@@ -905,7 +905,7 @@ fn emit_ticket(
 fn emit_ccs(output: &mut dyn Output<'_>) {
     output.send_msg(
         Message {
-            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         },
         false,
@@ -923,7 +923,7 @@ fn emit_finished(
     let verify_data_payload = Payload::Borrowed(&verify_data);
 
     let f = Message {
-        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Finished(
             verify_data_payload,
         ))),

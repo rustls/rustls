@@ -378,7 +378,7 @@ pub mod internal {
 
 // The public interface is:
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
-pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind};
+pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind, Protocol};
 pub use crate::conn::{
     Connection, IoState, KeyingMaterialExporter, Reader, SideData, SliceInput, TlsInputBuffer,
     VecInput, Writer, kernel,

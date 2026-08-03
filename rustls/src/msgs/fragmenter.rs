@@ -134,7 +134,7 @@ mod tests {
     #[test]
     fn smoke() {
         let typ = ContentType::Handshake;
-        let version = EncodableVersion::Literal(ProtocolVersion::TLSv1_2);
+        let version = EncodableVersion::Legacy(ProtocolVersion::TLSv1_2);
         let data: Vec<u8> = (1..70u8).collect();
         let m = EncodedMessage {
             typ,
@@ -182,7 +182,7 @@ mod tests {
     fn non_fragment() {
         let m = EncodedMessage {
             typ: ContentType::Handshake,
-            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             payload: Payload::new(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
         };
 
@@ -197,7 +197,7 @@ mod tests {
             &q[0],
             PACKET_OVERHEAD + 8,
             &ContentType::Handshake,
-            &EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+            &EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             b"\x01\x02\x03\x04\x05\x06\x07\x08",
         );
     }
@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn fragment_multiple_slices() {
         let typ = ContentType::Handshake;
-        let version = EncodableVersion::Literal(ProtocolVersion::TLSv1_2);
+        let version = EncodableVersion::Legacy(ProtocolVersion::TLSv1_2);
         let payload_owner: Vec<&[u8]> = vec![&[b'a'; 8], &[b'b'; 12], &[b'c'; 32], &[b'd'; 20]];
         let borrowed_payload = OutboundPlain::new(&payload_owner);
         let mut frag = MessageFragmenter::default();
