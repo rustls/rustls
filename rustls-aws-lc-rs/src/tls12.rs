@@ -303,7 +303,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
         let aad = aead::Aad::from(make_tls12_aad(
             seq,
             msg.typ,
-            msg.version,
+            msg.version.version(),
             payload.len() - GCM_OVERHEAD,
         ));
 
@@ -336,7 +336,12 @@ impl MessageEncrypter for GcmMessageEncrypter {
         let total_len = self.encrypted_payload_len(msg.payload.len());
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
+        let aad = aead::Aad::from(make_tls12_aad(
+            seq,
+            msg.typ,
+            msg.version.encode(),
+            msg.payload.len(),
+        ));
 
         let payload = match msg.payload.single_chunk() {
             // Contiguous plaintext is sealed out-of-place, straight from the
@@ -415,10 +420,11 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
 
         let nonce =
             aead::Nonce::assume_unique_for_key(Nonce::new(&self.dec_offset, seq).to_array()?);
+
         let aad = aead::Aad::from(make_tls12_aad(
             seq,
             msg.typ,
-            msg.version,
+            msg.version.version(),
             payload.len() - CHACHAPOLY1305_OVERHEAD,
         ));
 
@@ -449,7 +455,12 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
 
         let nonce =
             aead::Nonce::assume_unique_for_key(Nonce::new(&self.enc_offset, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
+        let aad = aead::Aad::from(make_tls12_aad(
+            seq,
+            msg.typ,
+            msg.version.encode(),
+            msg.payload.len(),
+        ));
 
         let payload = match msg.payload.single_chunk() {
             // Contiguous plaintext is sealed out-of-place, straight from the
@@ -584,7 +595,7 @@ mod tests {
     use std::vec;
     use std::vec::Vec;
 
-    use rustls::crypto::cipher::InboundOpaque;
+    use rustls::crypto::cipher::{EncodableVersion, InboundOpaque};
     use rustls::enums::ContentType;
 
     use super::*;
@@ -611,7 +622,7 @@ mod tests {
                 let mut sealed = seal(suite, OutboundPlain::from(plain), 0x00);
                 let msg = EncodedMessage::new(
                     ContentType::ApplicationData,
-                    ProtocolVersion::TLSv1_2,
+                    EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
                     InboundOpaque(&mut sealed),
                 );
                 let shape = suite.aead_alg.key_block_shape();
@@ -635,7 +646,7 @@ mod tests {
         );
         let msg = EncodedMessage::new(
             ContentType::ApplicationData,
-            ProtocolVersion::TLSv1_2,
+            EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
             payload,
         );
         let mut out = vec![fill; encrypter.encrypted_payload_len(msg.payload.len())];

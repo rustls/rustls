@@ -4,8 +4,9 @@ use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
 use pki_types::FipsStatus;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
-    Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, EncodableVersion, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter,
+    MessageEncrypter, Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError,
+    make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::crypto::{self, CipherSuite};
@@ -290,7 +291,7 @@ impl MessageEncrypter for AeadMessageEncrypter {
 
         Ok(EncodedMessage {
             typ,
-            version: TLS13_LEGACY_RECORD_VERSION,
+            version: EncodableVersion::Literal(TLS13_LEGACY_RECORD_VERSION),
             payload,
         })
     }
@@ -312,7 +313,11 @@ impl MessageDecrypter for AeadMessageDecrypter {
         }
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(msg.typ, msg.version, payload.len()));
+        let aad = aead::Aad::from(make_tls13_aad(
+            msg.typ,
+            msg.version.version(),
+            payload.len(),
+        ));
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, payload)
@@ -381,7 +386,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
 
         Ok(EncodedMessage {
             typ,
-            version: TLS13_LEGACY_RECORD_VERSION,
+            version: EncodableVersion::Literal(TLS13_LEGACY_RECORD_VERSION),
             payload,
         })
     }
@@ -412,7 +417,11 @@ impl MessageDecrypter for GcmMessageDecrypter {
         }
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(msg.typ, msg.version, payload.len()));
+        let aad = aead::Aad::from(make_tls13_aad(
+            msg.typ,
+            msg.version.version(),
+            payload.len(),
+        ));
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, payload)
@@ -534,7 +543,7 @@ mod tests {
                 let mut sealed = seal(suite, OutboundPlain::from(plain), 0x00);
                 let msg = EncodedMessage::new(
                     ContentType::ApplicationData,
-                    TLS13_LEGACY_RECORD_VERSION,
+                    EncodableVersion::Literal(TLS13_LEGACY_RECORD_VERSION),
                     InboundOpaque(&mut sealed),
                 );
                 let mut decrypter = suite
@@ -555,7 +564,7 @@ mod tests {
             .encrypter(test_key(suite.aead_alg.key_len()), Iv::from(TEST_IV));
         let msg = EncodedMessage::new(
             ContentType::ApplicationData,
-            ProtocolVersion::TLSv1_3,
+            EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
             payload,
         );
         let mut out = vec![fill; encrypter.encrypted_payload_len(msg.payload.len())];

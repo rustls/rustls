@@ -275,7 +275,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
         let aad = aead::Aad::from(make_tls12_aad(
             seq,
             msg.typ,
-            msg.version,
+            msg.version.version(),
             payload.len() - GCM_OVERHEAD,
         ));
 
@@ -306,7 +306,12 @@ impl MessageEncrypter for GcmMessageEncrypter {
         let mut payload = EncryptBuffer::new(out, total_len)?;
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
+        let aad = aead::Aad::from(make_tls12_aad(
+            seq,
+            msg.typ,
+            msg.version.encode(),
+            msg.payload.len(),
+        ));
         payload.extend_from_slice(&nonce.as_ref()[4..]);
         payload.extend_from_chunks(&msg.payload);
 
@@ -366,7 +371,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         let aad = aead::Aad::from(make_tls12_aad(
             seq,
             msg.typ,
-            msg.version,
+            msg.version.version(),
             payload.len() - CHACHAPOLY1305_OVERHEAD,
         ));
 
@@ -398,7 +403,12 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
 
         let nonce =
             aead::Nonce::assume_unique_for_key(Nonce::new(&self.enc_offset, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
+        let aad = aead::Aad::from(make_tls12_aad(
+            seq,
+            msg.typ,
+            msg.version.encode(),
+            msg.payload.len(),
+        ));
         payload.extend_from_chunks(&msg.payload);
 
         match self

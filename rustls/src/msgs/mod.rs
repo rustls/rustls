@@ -34,7 +34,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use crate::crypto::cipher::{EncodedMessage, MessageError, Payload};
+use crate::crypto::cipher::{EncodableVersion, EncodedMessage, MessageError, Payload};
 use crate::enums::{ContentType, ContentTypeName, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, InvalidMessage};
 use crate::verify::DigitallySignedStruct;
@@ -147,14 +147,14 @@ pub mod fuzzing {
 /// A message with decoded payload
 #[derive(Debug)]
 pub(crate) struct Message<'a> {
-    pub version: ProtocolVersion,
+    pub version: EncodableVersion,
     pub payload: MessagePayload<'a>,
 }
 
 impl Message<'_> {
     pub(crate) fn build_alert(level: AlertLevel, desc: AlertDescription) -> Self {
         Self {
-            version: ProtocolVersion::TLSv1_2,
+            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::Alert(AlertMessagePayload {
                 level,
                 description: desc,
@@ -164,7 +164,7 @@ impl Message<'_> {
 
     pub(crate) fn build_key_update_notify() -> Self {
         Self {
-            version: ProtocolVersion::TLSv1_3,
+            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
             )),
@@ -173,7 +173,7 @@ impl Message<'_> {
 
     pub(crate) fn build_key_update_request() -> Self {
         Self {
-            version: ProtocolVersion::TLSv1_3,
+            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateRequested),
             )),
@@ -209,7 +209,7 @@ impl<'a> TryFrom<EncodedMessage<&'a [u8]>> for Message<'a> {
     fn try_from(plain: EncodedMessage<&'a [u8]>) -> Result<Self, Self::Error> {
         Ok(Self {
             version: plain.version,
-            payload: MessagePayload::new(plain.typ, plain.version, plain.payload)?,
+            payload: MessagePayload::new(plain.typ, plain.version.version(), plain.payload)?,
         })
     }
 }
@@ -220,7 +220,11 @@ impl<'a> TryFrom<&'a EncodedMessage<Payload<'a>>> for Message<'a> {
     fn try_from(plain: &'a EncodedMessage<Payload<'a>>) -> Result<Self, Self::Error> {
         Ok(Self {
             version: plain.version,
-            payload: MessagePayload::new(plain.typ, plain.version, plain.payload.bytes())?,
+            payload: MessagePayload::new(
+                plain.typ,
+                plain.version.version(),
+                plain.payload.bytes(),
+            )?,
         })
     }
 }

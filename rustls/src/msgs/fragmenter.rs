@@ -1,8 +1,8 @@
 use core::num::NonZeroUsize;
 
 use crate::Error;
-use crate::crypto::cipher::{EncodedMessage, OutboundPlain};
-use crate::enums::{ContentType, ProtocolVersion};
+use crate::crypto::cipher::{EncodableVersion, EncodedMessage, OutboundPlain};
+use crate::enums::ContentType;
 
 pub(crate) const MAX_FRAGMENT_LEN: NonZeroUsize = NonZeroUsize::new(16384).unwrap();
 pub(crate) const PACKET_OVERHEAD: usize = 1 + 2 + 2;
@@ -25,7 +25,7 @@ impl Fragmenter {
     pub(crate) fn fragment<'a>(
         &self,
         typ: ContentType,
-        version: ProtocolVersion,
+        version: EncodableVersion,
         payload: OutboundPlain<'a>,
         encryption_overhead: usize,
     ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> + use<'a> {
@@ -112,14 +112,14 @@ mod tests {
     use std::vec;
 
     use super::{Fragmenter, PACKET_OVERHEAD};
-    use crate::crypto::cipher::{EncodedMessage, OutboundPlain, Payload};
+    use crate::crypto::cipher::{EncodableVersion, EncodedMessage, OutboundPlain, Payload};
     use crate::enums::{ContentType, ProtocolVersion};
 
     fn msg_eq(
         m: &EncodedMessage<OutboundPlain<'_>>,
         total_len: usize,
         typ: &ContentType,
-        version: &ProtocolVersion,
+        version: &EncodableVersion,
         bytes: &[u8],
     ) {
         assert_eq!(&m.typ, typ);
@@ -134,7 +134,7 @@ mod tests {
     #[test]
     fn smoke() {
         let typ = ContentType::Handshake;
-        let version = ProtocolVersion::TLSv1_2;
+        let version = EncodableVersion::Literal(ProtocolVersion::TLSv1_2);
         let data: Vec<u8> = (1..70u8).collect();
         let m = EncodedMessage {
             typ,
@@ -182,7 +182,7 @@ mod tests {
     fn non_fragment() {
         let m = EncodedMessage {
             typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
+            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
             payload: Payload::new(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
         };
 
@@ -197,7 +197,7 @@ mod tests {
             &q[0],
             PACKET_OVERHEAD + 8,
             &ContentType::Handshake,
-            &ProtocolVersion::TLSv1_2,
+            &EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
             b"\x01\x02\x03\x04\x05\x06\x07\x08",
         );
     }
@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn fragment_multiple_slices() {
         let typ = ContentType::Handshake;
-        let version = ProtocolVersion::TLSv1_2;
+        let version = EncodableVersion::Literal(ProtocolVersion::TLSv1_2);
         let payload_owner: Vec<&[u8]> = vec![&[b'a'; 8], &[b'b'; 12], &[b'c'; 32], &[b'd'; 20]];
         let borrowed_payload = OutboundPlain::new(&payload_owner);
         let mut frag = Fragmenter::default();
@@ -243,7 +243,7 @@ mod tests {
         let q = frag
             .fragment(
                 ContentType::Handshake,
-                ProtocolVersion::TLSv1_2,
+                EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
                 p.bytes().into(),
                 13,
             )
