@@ -2058,7 +2058,6 @@ dependencies = [
 name = "rustls-util"
 version = "0.1.0-dev.1"
 dependencies = [
- "env_logger",
  "rustls 0.24.0-dev.1",
  "tracing",
 ]
