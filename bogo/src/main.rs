@@ -52,10 +52,16 @@ use rustls::{
     VecInput, compress,
 };
 use rustls_aws_lc_rs::hpke;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, fmt};
 
 pub fn main() {
     let mut args: Vec<_> = env::args().collect();
-    env_logger::init();
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_default_env())
+        .init();
 
     args.remove(0);
 
