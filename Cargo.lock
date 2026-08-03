@@ -2025,8 +2025,6 @@ dependencies = [
 name = "rustls-test"
 version = "0.1.0"
 dependencies = [
- "env_logger",
- "log",
  "macro_rules_attribute",
  "num-bigint 0.5.1",
  "rustls 0.24.0-dev.1",
@@ -2035,6 +2033,7 @@ dependencies = [
  "rustls-ring",
  "rustls-util",
  "rustls-webpki 0.104.0-alpha.7",
+ "tracing",
  "webpki-roots",
  "x509-parser",
 ]
