@@ -4,8 +4,9 @@ use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
 use pki_types::FipsStatus;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
-    Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, EncodableVersion, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter,
+    MessageEncrypter, Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError,
+    make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::crypto::{self, CipherSuite};
@@ -244,7 +245,7 @@ impl MessageEncrypter for AeadMessageEncrypter {
 
         Ok(EncodedMessage {
             typ,
-            version: TLS13_LEGACY_RECORD_VERSION,
+            version: EncodableVersion::Literal(TLS13_LEGACY_RECORD_VERSION),
             payload: payload.into_written(),
         })
     }
@@ -266,7 +267,11 @@ impl MessageDecrypter for AeadMessageDecrypter {
         }
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(msg.typ, msg.version, payload.len()));
+        let aad = aead::Aad::from(make_tls13_aad(
+            msg.typ,
+            msg.version.version(),
+            payload.len(),
+        ));
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, payload)
@@ -309,7 +314,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
 
         Ok(EncodedMessage {
             typ,
-            version: TLS13_LEGACY_RECORD_VERSION,
+            version: EncodableVersion::Literal(TLS13_LEGACY_RECORD_VERSION),
             payload: payload.into_written(),
         })
     }
@@ -340,7 +345,11 @@ impl MessageDecrypter for GcmMessageDecrypter {
         }
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(msg.typ, msg.version, payload.len()));
+        let aad = aead::Aad::from(make_tls13_aad(
+            msg.typ,
+            msg.version.version(),
+            payload.len(),
+        ));
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, payload)

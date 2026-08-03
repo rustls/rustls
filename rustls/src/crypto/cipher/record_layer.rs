@@ -296,6 +296,7 @@ const SEQ_HARD_LIMIT: u64 = u64::MAX - 1;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crypto::cipher::EncodableVersion;
     use crate::enums::{ContentType, ProtocolVersion};
     use crate::msgs::Deframer;
 
@@ -332,7 +333,7 @@ mod tests {
         record_layer
             .decrypt_incoming(EncodedMessage::new(
                 ContentType::Handshake,
-                ProtocolVersion::TLSv1_2,
+                EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
                 InboundOpaque(&mut [0xC0, 0xFF, 0xEE]),
             ))
             .unwrap();

@@ -5,8 +5,9 @@ use ring::hkdf::{self, KeyType};
 use ring::{aead, hmac};
 use rustls::crypto::CipherSuite;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
-    Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, EncodableVersion, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter,
+    MessageEncrypter, Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError,
+    make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::enums::{ContentType, ProtocolVersion};
@@ -220,7 +221,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
 
         Ok(EncodedMessage {
             typ,
-            version: TLS13_LEGACY_RECORD_VERSION,
+            version: EncodableVersion::Literal(TLS13_LEGACY_RECORD_VERSION),
             payload: payload.into_written(),
         })
     }
@@ -242,7 +243,11 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         }
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(msg.typ, msg.version, payload.len()));
+        let aad = aead::Aad::from(make_tls13_aad(
+            msg.typ,
+            msg.version.version(),
+            payload.len(),
+        ));
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, payload)
