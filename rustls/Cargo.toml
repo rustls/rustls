@@ -35,8 +35,6 @@ zlib-rs = { workspace = true, optional = true }
 
 [dev-dependencies]
 bencher = { workspace = true }
-env_logger = { workspace = true }
-log = { workspace = true }
 rcgen = { workspace = true }
 rustls-test = { workspace = true, default-features = false }
 time = { workspace = true }
