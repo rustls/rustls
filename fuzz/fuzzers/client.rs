@@ -9,7 +9,6 @@ use std::sync::Arc;
 use rustls::{ClientConfig, Connection, VecInput};
 
 fuzz_target!(|data: &[u8]| {
-    let _ = env_logger::try_init();
     let config = Arc::new(
         ClientConfig::builder(rustls_fuzzing_provider::PROVIDER.into())
             .dangerous()
