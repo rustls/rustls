@@ -15,7 +15,7 @@ use rustls::VecInput;
 use rustls_util::Stream;
 
 fn main() {
-    env_logger::init();
+    tracing_subscriber::fmt::init();
 
     let root_store = rustls::RootCertStore {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
