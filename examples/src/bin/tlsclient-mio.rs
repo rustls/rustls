@@ -21,7 +21,7 @@
 
 use core::mem;
 use std::borrow::Cow;
-use std::io::{self, Read, Write};
+use std::io::{self, IsTerminal, Read, Write, stderr};
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::{process, str};
@@ -37,6 +37,7 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use rustls::{ClientConfig, ClientConnection, Connection, RootCertStore, VecInput};
 use rustls_aws_lc_rs as provider;
 use rustls_util::KeyLogFile;
+use tracing::Level;
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -548,8 +549,10 @@ fn main() {
     let args = Args::parse();
 
     if args.verbose {
-        env_logger::Builder::new()
-            .parse_filters("trace")
+        tracing_subscriber::fmt()
+            .with_max_level(Level::TRACE)
+            .with_writer(stderr)
+            .with_ansi(stderr().is_terminal())
             .init();
     }
 

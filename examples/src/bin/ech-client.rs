@@ -30,7 +30,7 @@
 
 use core::error::Error;
 use std::fs;
-use std::io::{BufReader, Read, Write, stdout};
+use std::io::{BufReader, IsTerminal, Read, Write, stderr, stdout};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 
@@ -48,7 +48,7 @@ use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
 use rustls::{ClientConfig, Connection, RootCertStore, VecInput};
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls_util::{KeyLogFile, Stream};
-use tracing::trace;
+use tracing::{Level, trace};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -76,11 +76,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    // NOTE: we defer setting up env_logger and setting the trace default filter level until
+    // NOTE: we defer installing the tracing subscriber (with a `trace` level filter) until
     //       after doing the DNS-over-HTTPS lookup above - we don't want to muddy the output
     //       with the rustls debug logs from the lookup.
-    env_logger::Builder::new()
-        .parse_filters("trace")
+    tracing_subscriber::fmt()
+        .with_max_level(Level::TRACE)
+        .with_writer(stderr)
+        .with_ansi(stderr().is_terminal())
         .init();
 
     let ech_mode = match server_ech_configs.is_empty() {

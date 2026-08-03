@@ -7,7 +7,7 @@
 use core::ops::Add;
 use core::time::Duration;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{IsTerminal, Read, Write, stderr};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::{fs, thread};
@@ -20,13 +20,16 @@ use rustls::server::{ClientHello, ServerConfig, ServerHandshake, WebPkiClientVer
 use rustls::{RootCertStore, VecInput};
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 use rustls_util::KeyLogFile;
+use tracing::Level;
 
 fn main() {
     let args = Args::parse();
 
     if args.verbose {
-        env_logger::Builder::new()
-            .parse_filters("trace")
+        tracing_subscriber::fmt()
+            .with_max_level(Level::TRACE)
+            .with_writer(stderr)
+            .with_ansi(stderr().is_terminal())
             .init();
     }
 
