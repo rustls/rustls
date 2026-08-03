@@ -2005,12 +2005,12 @@ version = "0.3.0-dev.2"
 dependencies = [
  "aws-lc-rs",
  "criterion",
- "env_logger",
  "rcgen",
  "rustls 0.24.0-dev.1",
  "rustls-aws-lc-rs",
  "rustls-test",
  "rustls-util",
+ "tracing-subscriber",
  "webpki-roots",
 ]
 
