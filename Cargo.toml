@@ -62,13 +62,11 @@ byteorder = "1.4.3"
 clap = { version = "4.3.21", features = ["derive", "env"] }
 crabgrind = "0.3"
 criterion = "0.8"
-env_logger = "0.11"
 graviola = "0.4"
 hashbrown = { version = "0.17", default-features = false, features = ["default-hasher", "inline-more"] }
 hex = "0.4"
 hickory-resolver = { version = "0.26", features = ["https-aws-lc-rs", "webpki-roots"] }
 itertools = "0.15"
-log = { version = "0.4.8" }
 macro_rules_attribute = "0.2"
 mio = { version = "1", features = ["net", "os-poll"] }
 num-bigint = "0.5.0"

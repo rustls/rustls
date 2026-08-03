@@ -8,7 +8,7 @@ publish = false
 rustls = { path = "../rustls", default-features = false, features = ["tracing", "webpki"] }
 
 [dev-dependencies]
-env_logger = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [lints]
 workspace = true
