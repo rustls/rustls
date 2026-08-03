@@ -738,10 +738,6 @@ mod tests {
 
     #[test]
     fn can_read_safari_client_hello_with_ip_address_in_sni_extension() {
-        let _ = env_logger::Builder::new()
-            .filter(None, log::LevelFilter::Trace)
-            .try_init();
-
         let bytes = b"\
         \x16\x03\x01\x00\xeb\x01\x00\x00\xe7\x03\x03\xb6\x1f\xe4\x3a\x55\
         \x90\x3e\xc0\x28\x9c\x12\xe0\x5c\x84\xea\x90\x1b\xfb\x11\xfc\xbd\
