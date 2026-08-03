@@ -486,7 +486,7 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, output: &mut dyn Out
 
     output.send_msg(
         Message {
-            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         },
         false,
@@ -1269,7 +1269,7 @@ fn emit_finished_tls13(
 
 fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn Output<'_>) {
     let m = Message {
-        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(
             HandshakePayload::EndOfEarlyData,
         )),

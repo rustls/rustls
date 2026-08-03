@@ -554,7 +554,7 @@ mod client_hello {
         });
 
         let sh = Message {
-            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
@@ -615,7 +615,7 @@ mod client_hello {
 
     fn emit_fake_ccs(output: &mut dyn Output<'_>) {
         let m = Message {
-            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         };
         output.send_msg(m, false);
@@ -640,7 +640,7 @@ mod client_hello {
         };
 
         let m = Message {
-            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::HelloRetryRequest(req),
             )),

@@ -5,8 +5,8 @@ use std::sync::Arc;
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::ServerVerifier;
 use rustls::crypto::cipher::{
-    AeadKey, EncodableVersion, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape,
-    MessageDecrypter, MessageEncrypter, OutboundPlain, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
+    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter,
+    MessageEncrypter, OutboundPlain, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
     UnsupportedOperationError,
 };
 use rustls::crypto::kx::{
@@ -17,7 +17,7 @@ use rustls::crypto::{
     SelectedCredential, SignatureScheme, TicketProducer, WebPkiSupportedAlgorithms, hash, tls12,
     tls13,
 };
-use rustls::enums::{ContentType, ProtocolVersion};
+use rustls::enums::ContentType;
 use rustls::error::{PeerIncompatible, PeerMisbehaved};
 use rustls::pki_types::{
     AlgorithmIdentifier, CertificateDer, FipsStatus, InvalidSignature, PrivateKeyDer,
@@ -343,7 +343,7 @@ impl MessageEncrypter for Tls13Cipher {
 
         Ok(EncodedMessage {
             typ: ContentType::ApplicationData,
-            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+            version: m.version,
             payload: payload.into_written(),
         })
     }

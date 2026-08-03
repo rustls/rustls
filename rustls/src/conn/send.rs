@@ -77,7 +77,7 @@ impl SendPath {
             self.message_fragmenter
                 .fragment_payload(
                     ContentType::ApplicationData,
-                    EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+                    EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
                     payload,
                 ),
             tls,
