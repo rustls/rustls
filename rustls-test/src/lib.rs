@@ -2505,6 +2505,8 @@ pub struct CountingSubscriber {
 
 impl CountingSubscriber {
     pub fn new() -> Self {
+        TracingBug2874Workaround::init();
+
         let inner = Arc::new(CountingInner::default());
         Self {
             _guard: Some(subscriber::set_default(inner.clone())),
@@ -2586,4 +2588,41 @@ impl CountingData {
         }
         .push(message);
     }
+}
+
+#[derive(Debug)]
+struct TracingBug2874Workaround;
+
+impl TracingBug2874Workaround {
+    fn init() {
+        static FLOOR: OnceLock<()> = OnceLock::new();
+        FLOOR.get_or_init(|| {
+            subscriber::set_global_default(Self).unwrap();
+            tracing::callsite::rebuild_interest_cache();
+        });
+    }
+}
+
+impl subscriber::Subscriber for TracingBug2874Workaround {
+    fn register_callsite(&self, _metadata: &Metadata<'_>) -> subscriber::Interest {
+        subscriber::Interest::sometimes()
+    }
+
+    fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
+        false
+    }
+
+    fn event(&self, _event: &Event<'_>) {}
+
+    fn new_span(&self, _span: &span::Attributes<'_>) -> span::Id {
+        span::Id::from_u64(1)
+    }
+
+    fn record(&self, _span: &span::Id, _values: &span::Record<'_>) {}
+
+    fn record_follows_from(&self, _span: &span::Id, _follows: &span::Id) {}
+
+    fn enter(&self, _span: &span::Id) {}
+
+    fn exit(&self, _span: &span::Id) {}
 }
