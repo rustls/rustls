@@ -37,6 +37,7 @@ use rustls::{
     DistinguishedName, MessageHandler, RootCertStore, ServerConfig, ServerConnection, SideData,
     SupportedCipherSuite, VecInput, WantsVerifier,
 };
+use tracing::{Event, Level, Metadata, field, span, subscriber};
 
 macro_rules! embed_files {
     (
@@ -2493,4 +2494,96 @@ pub mod encoding {
 
     const ALERT_LEVEL_WARNING: u8 = 1;
     const ALERT_LEVEL_FATAL: u8 = 2;
+}
+
+/// A tracing subscriber that collects everything which was logged.
+#[derive(Debug)]
+pub struct CountingSubscriber {
+    inner: Arc<CountingInner>,
+    _guard: Option<subscriber::DefaultGuard>,
+}
+
+impl CountingSubscriber {
+    pub fn new() -> Self {
+        let inner = Arc::new(CountingInner::default());
+        Self {
+            _guard: Some(subscriber::set_default(inner.clone())),
+            inner,
+        }
+    }
+
+    pub fn sample(&self) -> CountingData {
+        self.inner.data.lock().unwrap().clone()
+    }
+}
+
+#[derive(Debug, Default)]
+struct CountingInner {
+    data: Mutex<CountingData>,
+}
+
+impl subscriber::Subscriber for CountingInner {
+    fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
+        true
+    }
+
+    fn event(&self, event: &Event<'_>) {
+        let level = *event.metadata().level();
+        let mut message = MessageVisitor::default();
+        event.record(&mut message);
+        println!("logging at {level:?}: {}", message.0);
+
+        self.data
+            .lock()
+            .unwrap()
+            .add(level, message.0);
+    }
+
+    // rustls emits events, never spans, so the span-related items are stubs.
+
+    fn new_span(&self, _span: &span::Attributes<'_>) -> span::Id {
+        span::Id::from_u64(1)
+    }
+
+    fn record(&self, _span: &span::Id, _values: &span::Record<'_>) {}
+
+    fn record_follows_from(&self, _span: &span::Id, _follows: &span::Id) {}
+
+    fn enter(&self, _span: &span::Id) {}
+
+    fn exit(&self, _span: &span::Id) {}
+}
+
+/// Collects the `message` field of an event: the formatted format string.
+#[derive(Default)]
+struct MessageVisitor(String);
+
+impl field::Visit for MessageVisitor {
+    fn record_debug(&mut self, field: &field::Field, value: &dyn fmt::Debug) {
+        if field.name() == "message" {
+            self.0 = format!("{value:?}");
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct CountingData {
+    pub trace: Vec<String>,
+    pub debug: Vec<String>,
+    pub info: Vec<String>,
+    pub warn: Vec<String>,
+    pub error: Vec<String>,
+}
+
+impl CountingData {
+    fn add(&mut self, level: Level, message: String) {
+        match level {
+            Level::TRACE => &mut self.trace,
+            Level::DEBUG => &mut self.debug,
+            Level::INFO => &mut self.info,
+            Level::WARN => &mut self.warn,
+            Level::ERROR => &mut self.error,
+        }
+        .push(message);
+    }
 }

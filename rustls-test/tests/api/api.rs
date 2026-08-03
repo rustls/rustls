@@ -33,16 +33,15 @@ use rustls::{
 #[cfg(feature = "aws-lc-rs")]
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls_test::{
-    Altered, ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType,
-    MockServerVerifier, MultiTest, RawTls, ServerConfigExt, do_handshake, do_handshake_until_error,
-    do_suite_and_kx_test, encoding, make_client_config, make_pair, make_pair_for_arc_configs,
-    make_pair_for_configs, make_server_config, provider_with_one_suite, provider_with_suites,
-    server_name, transfer, transfer_altered, unsafe_plaintext_crypto_provider,
+    Altered, ClientConfigExt, ClientStorage, ClientStorageOp, CountingSubscriber, ErrorFromPeer,
+    KeyType, MockServerVerifier, MultiTest, RawTls, ServerConfigExt, do_handshake,
+    do_handshake_until_error, do_suite_and_kx_test, encoding, make_client_config, make_pair,
+    make_pair_for_arc_configs, make_pair_for_configs, make_server_config, provider_with_one_suite,
+    provider_with_suites, server_name, transfer, transfer_altered,
+    unsafe_plaintext_crypto_provider,
 };
 
-use super::{
-    COUNTS, CountingLogger, provider, provider_is_aws_lc_rs, provider_is_fips, provider_is_ring,
-};
+use super::{provider, provider_is_aws_lc_rs, provider_is_fips, provider_is_ring};
 
 fn alpn_test_error(
     server_protos: Vec<ApplicationProtocol<'static>>,
@@ -1420,8 +1419,7 @@ fn test_client_rejects_illegal_tls13_ccs() {
 
 #[test]
 fn test_no_warning_logging_during_successful_sessions() {
-    CountingLogger::install();
-    CountingLogger::reset();
+    let counts = CountingSubscriber::new();
     for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
         let mut client_output = Vec::new();
         let mut server_output = Vec::new();
@@ -1439,24 +1437,22 @@ fn test_no_warning_logging_during_successful_sessions() {
         );
     }
 
+    let c = counts.sample();
+
     if cfg!(feature = "tracing") {
-        COUNTS.with(|c| {
-            println!("After tests: {:?}", c.borrow());
-            assert!(c.borrow().warn.is_empty());
-            assert!(c.borrow().error.is_empty());
-            assert!(c.borrow().info.is_empty());
-            assert!(!c.borrow().trace.is_empty());
-            assert!(!c.borrow().debug.is_empty());
-        });
+        println!("After tests: {c:?}");
+        assert!(c.warn.is_empty());
+        assert!(c.error.is_empty());
+        assert!(c.info.is_empty());
+        assert!(!c.trace.is_empty());
+        assert!(!c.debug.is_empty());
     } else {
-        COUNTS.with(|c| {
-            println!("After tests: {:?}", c.borrow());
-            assert!(c.borrow().warn.is_empty());
-            assert!(c.borrow().error.is_empty());
-            assert!(c.borrow().info.is_empty());
-            assert!(c.borrow().trace.is_empty());
-            assert!(c.borrow().debug.is_empty());
-        });
+        println!("After tests: {c:?}");
+        assert!(c.warn.is_empty());
+        assert!(c.error.is_empty());
+        assert!(c.info.is_empty());
+        assert!(c.trace.is_empty());
+        assert!(c.debug.is_empty());
     }
 }
 

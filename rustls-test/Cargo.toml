@@ -18,10 +18,9 @@ rustls = { path = "../rustls", default-features = false, features = ["webpki"] }
 rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs", features = ["std"], optional = true }
 rustls-ring = { path = "../rustls-ring", optional = true }
 rustls-util = { path = "../rustls-util", default-features = false }
+tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
-env_logger = { workspace = true }
-log = { workspace = true }
 macro_rules_attribute = { workspace = true }
 num-bigint = { workspace = true }
 pki-types = { workspace = true }
