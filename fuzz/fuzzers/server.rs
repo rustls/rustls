@@ -10,7 +10,6 @@ use rustls::server::{Accepted, ServerHandshake};
 use rustls::{Connection, ServerConfig, ServerConnection, VecInput};
 
 fuzz_target!(|data: &[u8]| {
-    let _ = env_logger::try_init();
     match data.split_first() {
         Some((0x00, rest)) => fuzz_buffered_api(rest),
         Some((0x01, rest)) => fuzz_handshake_api(rest),
