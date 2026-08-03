@@ -13,7 +13,8 @@ use crate::suites::ConnectionTrafficSecrets;
 mod messages;
 pub(crate) use messages::encode_record_header;
 pub use messages::{
-    EncodedMessage, EncryptBuffer, InboundOpaque, MessageError, OutboundPlain, Payload,
+    EncodableVersion, EncodedMessage, EncryptBuffer, InboundOpaque, MessageError, OutboundPlain,
+    Payload,
 };
 
 mod record_layer;
@@ -345,13 +346,13 @@ pub fn make_tls13_aad(payload_len: usize) -> [u8; 5] {
 pub fn make_tls12_aad(
     seq: u64,
     typ: ContentType,
-    vers: ProtocolVersion,
+    vers: EncodableVersion,
     len: usize,
 ) -> [u8; TLS12_AAD_SIZE] {
     let mut out = [0; TLS12_AAD_SIZE];
     put_u64(seq, &mut out[0..]);
     out[8] = typ.into();
-    put_u16(vers.into(), &mut out[9..]);
+    put_u16(vers.encode().into(), &mut out[9..]);
     put_u16(len as u16, &mut out[11..]);
     out
 }

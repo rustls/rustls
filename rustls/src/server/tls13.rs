@@ -77,7 +77,7 @@ mod client_hello {
     use super::*;
     use crate::common_state::{EarlyDataEvent, Protocol};
     use crate::compress::CertCompressor;
-    use crate::crypto::cipher::Payload;
+    use crate::crypto::cipher::{EncodableVersion, Payload};
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
     use crate::enums::ApplicationProtocol;
@@ -552,7 +552,7 @@ mod client_hello {
         });
 
         let sh = Message {
-            version: ProtocolVersion::TLSv1_2,
+            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
@@ -613,7 +613,7 @@ mod client_hello {
 
     fn emit_fake_ccs(output: &mut dyn Output<'_>) {
         let m = Message {
-            version: ProtocolVersion::TLSv1_2,
+            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         };
         output.send_msg(m, false);
@@ -638,7 +638,7 @@ mod client_hello {
         };
 
         let m = Message {
-            version: ProtocolVersion::TLSv1_2,
+            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::HelloRetryRequest(req),
             )),

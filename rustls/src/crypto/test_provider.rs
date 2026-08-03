@@ -5,8 +5,8 @@ use core::time::Duration;
 use std::borrow::Cow;
 
 use crate::crypto::cipher::{
-    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter,
-    MessageEncrypter, OutboundPlain, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
+    AeadKey, EncodableVersion, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape,
+    MessageDecrypter, MessageEncrypter, OutboundPlain, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
     UnsupportedOperationError,
 };
 use crate::crypto::kx::{
@@ -392,7 +392,7 @@ impl MessageEncrypter for Tls13Cipher {
 
         Ok(EncodedMessage {
             typ: ContentType::ApplicationData,
-            version: ProtocolVersion::TLSv1_2,
+            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
             payload: payload.into_written(),
         })
     }

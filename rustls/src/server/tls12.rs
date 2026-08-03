@@ -14,7 +14,7 @@ use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
 use crate::conn::{ConnectionRandoms, Input};
-use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
+use crate::crypto::cipher::{EncodableVersion, MessageDecrypter, MessageEncrypter, Payload};
 use crate::crypto::kx::{ActiveKeyExchange, SupportedKxGroup};
 use crate::crypto::{Identity, TicketProducer};
 use crate::enums::{
@@ -888,7 +888,7 @@ fn emit_ticket(
     let ticket_lifetime = ticketer.lifetime();
 
     let m = Message {
-        version: ProtocolVersion::TLSv1_2,
+        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(
             HandshakePayload::NewSessionTicket(NewSessionTicketPayload::new(
                 ticket_lifetime,
@@ -905,7 +905,7 @@ fn emit_ticket(
 fn emit_ccs(output: &mut dyn Output<'_>) {
     output.send_msg(
         Message {
-            version: ProtocolVersion::TLSv1_2,
+            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         },
         false,
@@ -923,7 +923,7 @@ fn emit_finished(
     let verify_data_payload = Payload::Borrowed(&verify_data);
 
     let f = Message {
-        version: ProtocolVersion::TLSv1_2,
+        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Finished(
             verify_data_payload,
         ))),

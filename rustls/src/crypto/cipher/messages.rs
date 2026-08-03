@@ -14,14 +14,14 @@ pub struct EncodedMessage<P> {
     /// The content type of this message.
     pub typ: ContentType,
     /// The protocol version of this message.
-    pub version: ProtocolVersion,
+    pub version: EncodableVersion,
     /// The payload of this message.
     pub payload: P,
 }
 
 impl<P> EncodedMessage<P> {
     /// Create a new `EncodedMessage` with the given fields.
-    pub fn new(typ: ContentType, version: ProtocolVersion, payload: P) -> Self {
+    pub fn new(typ: ContentType, version: EncodableVersion, payload: P) -> Self {
         Self {
             typ,
             version,
@@ -44,7 +44,7 @@ impl<'a> EncodedMessage<Payload<'a>> {
 
         Ok(Self {
             typ,
-            version,
+            version: EncodableVersion::Literal(version),
             payload: Payload::Borrowed(content),
         })
     }
@@ -100,7 +100,7 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
             return Err(Error::PeerSentOversizedRecord);
         }
 
-        self.version = ProtocolVersion::TLSv1_3;
+        self.version = EncodableVersion::Literal(ProtocolVersion::TLSv1_3);
         Ok(self.into_plain_message())
     }
 
@@ -157,10 +157,10 @@ impl EncodedMessage<OutboundPlain<'_>> {
 /// `typ`, `version` and `len` describe the record's payload.
 pub(crate) fn encode_record_header(
     typ: ContentType,
-    version: ProtocolVersion,
+    version: EncodableVersion,
     len: u16,
 ) -> [u8; HEADER_SIZE] {
-    let [version_hi, version_lo] = version.to_array();
+    let [version_hi, version_lo] = version.encode().to_array();
     let [len_hi, len_lo] = len.to_be_bytes();
     [typ.into(), version_hi, version_lo, len_hi, len_lo]
 }
@@ -524,6 +524,30 @@ impl Deref for InboundOpaque<'_> {
 impl DerefMut for InboundOpaque<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0
+    }
+}
+
+/// A protocol version that can be encoded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum EncodableVersion {
+    /// Literal protocol version, encoded without modification.
+    Literal(ProtocolVersion),
+}
+
+impl EncodableVersion {
+    /// Encode the protocol version.
+    pub fn encode(&self) -> ProtocolVersion {
+        match self {
+            Self::Literal(v) => *v,
+        }
+    }
+
+    /// The actual protocol version in use.
+    pub fn version(&self) -> ProtocolVersion {
+        match self {
+            Self::Literal(v) => *v,
+        }
     }
 }
 

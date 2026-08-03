@@ -2,7 +2,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use crate::crypto::cipher::{
-    EncodedMessage, EncryptionState, MessageEncrypter, OutboundPlain, Payload, PreEncryptAction,
+    EncodableVersion, EncodedMessage, EncryptionState, MessageEncrypter, OutboundPlain, Payload,
+    PreEncryptAction,
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
@@ -105,7 +106,7 @@ impl SendPath {
             .message_fragmenter
             .fragment_payload(
                 ContentType::ApplicationData,
-                ProtocolVersion::TLSv1_2,
+                EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
                 payload,
             )
         {
@@ -175,7 +176,7 @@ impl SendPath {
             self.message_fragmenter
                 .fragment_payload(
                     ContentType::ApplicationData,
-                    ProtocolVersion::TLSv1_2,
+                    EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
                     payload,
                 ),
         );

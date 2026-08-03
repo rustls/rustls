@@ -10,7 +10,7 @@ use super::{
     Tls13ServerSessionValue,
 };
 use crate::conn::{Connection, Input, VecInput};
-use crate::crypto::cipher::FakeAead;
+use crate::crypto::cipher::{EncodableVersion, FakeAead};
 use crate::crypto::kx::ffdhe::{FFDHE2048, FfdheGroup};
 use crate::crypto::kx::{
     ActiveKeyExchange, KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange,
@@ -111,7 +111,7 @@ fn null_compression_required() {
 
 fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
     let m = Message {
-        version: ProtocolVersion::TLSv1_2,
+        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
             hello,
         ))),
@@ -162,7 +162,7 @@ fn select_cipher_suite(
     client_hello: ClientHelloPayload,
 ) -> Result<CipherSuite, Box<dyn error::Error>> {
     let ch = Message {
-        version: ProtocolVersion::TLSv1_3,
+        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
             client_hello,
         ))),
@@ -205,7 +205,7 @@ fn test_server_rejects_no_extended_main_secret_extension_when_require_ems_or_fip
         .extended_main_secret_request
         .take();
     let ch = Message {
-        version: ProtocolVersion::TLSv1_3,
+        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
             ch,
         ))),
@@ -290,7 +290,7 @@ fn server_chooses_ffdhe_group_for_client_hello(
 ) {
     let mut input = VecInput::default();
     let ch = Message {
-        version: ProtocolVersion::TLSv1_3,
+        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
             client_hello,
         ))),
@@ -332,7 +332,7 @@ fn test_server_requiring_rpk_client_rejects_x509_client() {
     let mut ch = minimal_client_hello();
     ch.extensions.client_certificate_types = Some(vec![CertificateType::X509]);
     let ch = Message {
-        version: ProtocolVersion::TLSv1_3,
+        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
             ch,
         ))),
@@ -357,7 +357,7 @@ fn test_rpk_only_server_rejects_x509_only_client() {
     let mut ch = minimal_client_hello();
     ch.extensions.server_certificate_types = Some(vec![CertificateType::X509]);
     let ch = Message {
-        version: ProtocolVersion::TLSv1_3,
+        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
             ch,
         ))),

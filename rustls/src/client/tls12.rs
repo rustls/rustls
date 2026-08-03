@@ -15,7 +15,7 @@ use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
 use crate::conn::{ConnectionRandoms, Input};
-use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
+use crate::crypto::cipher::{EncodableVersion, MessageDecrypter, MessageEncrypter, Payload};
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{Identity, Signer};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
@@ -475,7 +475,7 @@ fn emit_certificate(
     output: &mut dyn Output<'_>,
 ) {
     let cert = Message {
-        version: ProtocolVersion::TLSv1_2,
+        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Certificate(
             cert_chain,
         ))),
@@ -504,7 +504,7 @@ fn emit_client_kx(
     let pubkey = Payload::new(buf);
 
     let ckx = Message {
-        version: ProtocolVersion::TLSv1_2,
+        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(
             HandshakePayload::ClientKeyExchange(pubkey),
         )),
@@ -528,7 +528,7 @@ fn emit_certverify(
     let body = DigitallySignedStruct::new(scheme, sig);
 
     let m = Message {
-        version: ProtocolVersion::TLSv1_2,
+        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(
             HandshakePayload::CertificateVerify(body),
         )),
@@ -542,7 +542,7 @@ fn emit_certverify(
 fn emit_ccs(output: &mut dyn Output<'_>) {
     output.send_msg(
         Message {
-            version: ProtocolVersion::TLSv1_2,
+            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         },
         false,
@@ -560,7 +560,7 @@ fn emit_finished(
     let verify_data_payload = Payload::Borrowed(&verify_data);
 
     let f = Message {
-        version: ProtocolVersion::TLSv1_2,
+        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Finished(
             verify_data_payload,
         ))),
