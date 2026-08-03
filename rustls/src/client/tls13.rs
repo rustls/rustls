@@ -20,7 +20,7 @@ use crate::common_state::{
 };
 use crate::conn::kernel::KernelState;
 use crate::conn::{ConnectionRandoms, Input, TrafficTemperCounters};
-use crate::crypto::cipher::Payload;
+use crate::crypto::cipher::{EncodableVersion, Payload};
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
 use crate::crypto::{Identity, SelectedCredential, SignatureScheme, Signer, VerifiedIdentity};
@@ -486,7 +486,7 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, output: &mut dyn Out
 
     output.send_msg(
         Message {
-            version: ProtocolVersion::TLSv1_2,
+            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         },
         false,
@@ -1269,7 +1269,7 @@ fn emit_finished_tls13(
 
 fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn Output<'_>) {
     let m = Message {
-        version: ProtocolVersion::TLSv1_3,
+        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(
             HandshakePayload::EndOfEarlyData,
         )),

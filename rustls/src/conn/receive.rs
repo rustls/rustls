@@ -12,7 +12,9 @@ use crate::common_state::{
 };
 use crate::conn::private::SideOutput;
 use crate::conn::{ConnectionCommon, StateMachine};
-use crate::crypto::cipher::{Decrypted, DecryptionState, EncodedMessage, Payload};
+use crate::crypto::cipher::{
+    Decrypted, DecryptionState, EncodableVersion, EncodedMessage, Payload,
+};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::msgs::{
@@ -294,7 +296,7 @@ impl ReceivePath {
 
             let message = unborrowed.reborrow(&Delocator::new(buffer));
             self.deframer
-                .input_message(message.version, bounds, buffer);
+                .input_message(message.version.version(), bounds, buffer);
             self.deframer.coalesce(buffer)?;
         }
     }
@@ -700,7 +702,7 @@ impl Input<'_> {
 /// references a range that can later be borrowed.
 struct InboundUnborrowedMessage {
     typ: ContentType,
-    version: ProtocolVersion,
+    version: EncodableVersion,
     bounds: Range<usize>,
 }
 

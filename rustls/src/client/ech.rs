@@ -8,7 +8,7 @@ use subtle::ConstantTimeEq;
 
 use super::config::ClientConfig;
 use super::{Retrieved, Tls13Session, tls13};
-use crate::crypto::cipher::Payload;
+use crate::crypto::cipher::{EncodableVersion, Payload};
 use crate::crypto::hash::Hash;
 use crate::crypto::hpke::{
     EncapsulatedSecret, Hpke, HpkeKem, HpkePublicKey, HpkeSealer, HpkeSuite,
@@ -767,13 +767,13 @@ impl EchState {
                 // <https://datatracker.ietf.org/doc/html/rfc9846#section-5.1>:
                 // "This value MUST be set to 0x0303 for all records generated
                 //  by a TLS 1.3 implementation ..."
-                Some(_) => ProtocolVersion::TLSv1_2,
+                Some(_) => EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
                 // "... other than an initial ClientHello (i.e., one not
                 // generated after a HelloRetryRequest), where it MAY also be
                 // 0x0301 for compatibility purposes"
                 //
                 // (retryreq == None means we're in the "initial ClientHello" case)
-                None => ProtocolVersion::TLSv1_0,
+                None => EncodableVersion::Literal(ProtocolVersion::TLSv1_0),
             },
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::ClientHello(inner_hello),
@@ -802,7 +802,7 @@ impl EchState {
         encoded[SERVER_HELLO_ECH_CONFIRMATION_SPAN].fill(0x00);
 
         Message {
-            version: ProtocolVersion::TLSv1_3,
+            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::Handshake {
                 encoded: Payload::Owned(encoded),
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(
@@ -822,7 +822,7 @@ impl EchState {
         let mut hmp_encoded = Vec::new();
         hmp.payload_encode(&mut hmp_encoded, Encoding::EchConfirmation);
         Message {
-            version: ProtocolVersion::TLSv1_3,
+            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::Handshake {
                 encoded: Payload::new(hmp_encoded),
                 parsed: hmp,
@@ -886,7 +886,7 @@ mod tests {
             extensions: Box::new(ServerExtensions::default()),
         };
         let message = Message {
-            version: ProtocolVersion::TLSv1_3,
+            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::ServerHello(server_hello.clone()),
             )),
@@ -1057,7 +1057,7 @@ mod tests {
 
         // a HelloRetryRequest without `encrypted_client_hello` rejects our ECH offer
         let hrr = Message {
-            version: ProtocolVersion::TLSv1_2,
+            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::HelloRetryRequest(HelloRetryRequest {
                     legacy_version: ProtocolVersion::TLSv1_2,
