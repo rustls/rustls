@@ -118,7 +118,9 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                     .other
                     .send
                     .send_alert(AlertLevel::Fatal, AlertDescription::UnexpectedMessage);
-                return Some(Err(PeerMisbehaved::EmptyFragment.into()));
+                let error = Error::from(PeerMisbehaved::EmptyFragment);
+                *self.state = Err(error.clone());
+                return Some(Err(error));
             }
 
             let hs_aligned = output.recv.deframer.aligned();
