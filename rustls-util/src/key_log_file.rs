@@ -124,15 +124,8 @@ impl Debug for KeyLogFile {
 mod tests {
     use super::*;
 
-    fn init() {
-        let _ = env_logger::builder()
-            .is_test(true)
-            .try_init();
-    }
-
     #[test]
     fn test_env_var_is_not_set() {
-        init();
         let mut inner = KeyLogFileInner::new(None);
         assert!(
             inner
@@ -143,7 +136,6 @@ mod tests {
 
     #[test]
     fn test_env_var_cannot_be_opened() {
-        init();
         let mut inner = KeyLogFileInner::new(Some("/dev/does-not-exist".into()));
         assert!(
             inner
@@ -154,8 +146,6 @@ mod tests {
 
     #[test]
     fn test_env_var_cannot_be_written() {
-        init();
-
         #[cfg(target_os = "linux")]
         const UNWRITABLE_FILE: &str = "/dev/full";
 

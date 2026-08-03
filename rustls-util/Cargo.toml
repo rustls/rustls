@@ -15,8 +15,5 @@ tracing = ["dep:tracing", "rustls/tracing"]
 rustls = { path = "../rustls", version = "0.24.0-dev.1", default-features = false }
 tracing = { workspace = true, optional = true }
 
-[dev-dependencies]
-env_logger = { workspace = true }
-
 [lints]
 workspace = true
