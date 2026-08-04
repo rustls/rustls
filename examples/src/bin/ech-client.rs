@@ -42,7 +42,7 @@ use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_resolver::proto::rr::{RData, RecordType};
 use hickory_resolver::{Resolver, TokioResolver};
 use log::trace;
-use rustls::client::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
+use rustls::client::EchStatus;
 use rustls::crypto::hpke::Hpke;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
@@ -83,17 +83,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .parse_filters("trace")
         .init();
 
-    let ech_mode = match server_ech_configs.is_empty() {
-        false => EchMode::from(
-            server_ech_configs
-                .into_iter()
-                .find_map(|list| EchConfig::new(list, ALL_SUPPORTED_SUITES).ok())
-                .ok_or("no supported ECH configs")?,
-        ),
-        true => {
-            let (public_key, _) = GREASE_HPKE_SUITE.generate_key_pair()?;
-            EchMode::from(EchGreaseConfig::new(GREASE_HPKE_SUITE, public_key))
-        }
+    let ech_hpke_suites: &[&dyn Hpke] = match server_ech_configs.is_empty() {
+        false => ALL_SUPPORTED_SUITES,
+        true => &[GREASE_HPKE_SUITE],
     };
 
     let root_store = match args.cafile {
@@ -113,7 +105,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Construct a rustls client config with a TLS1.3-only provider, and ECH enabled.
     let mut config = ClientConfig::builder(rustls_aws_lc_rs::DEFAULT_TLS13_PROVIDER.into())
-        .with_ech(ech_mode)
+        .with_ech_hpke_suites(ech_hpke_suites)
         .with_root_certificates(root_store)
         .with_no_client_auth()?;
 
@@ -126,9 +118,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     for i in 0..args.num_reqs {
         trace!("\nRequest {} of {}", i + 1, args.num_reqs);
-        let mut conn = config
-            .connect(server_name.clone())
-            .build()?;
+        let mut conn = config.connect(server_name.clone());
+
+        conn = if !server_ech_configs.is_empty() {
+            conn.with_ech(&server_ech_configs)
+                .expect("no compatible ECH configuration found")
+        } else {
+            conn.with_ech_grease()
+                .expect("Hpke suite couldn't generate placeholder public key")
+        };
+
+        let mut conn = conn.build()?;
         // The "outer" server that we're connecting to.
         let sock_addr = (args.outer_hostname.as_str(), args.port)
             .to_socket_addrs()?

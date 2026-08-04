@@ -3,7 +3,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::iter;
 
-use pki_types::{DnsName, EchConfigListBytes, FipsStatus, ServerName};
+use pki_types::{DnsName, EchConfigListBytes, ServerName};
 use subtle::ConstantTimeEq;
 
 use super::config::ClientConfig;
@@ -34,7 +34,7 @@ use crate::tls13::key_schedule::{
 /// Controls how Encrypted Client Hello (ECH) is used in a client handshake.
 #[non_exhaustive]
 #[derive(Clone, Debug)]
-pub enum EchMode {
+pub(crate) enum EchMode {
     /// ECH is enabled and the ClientHello will be encrypted based on the provided
     /// configuration.
     Enable(EchConfig),
@@ -47,12 +47,39 @@ pub enum EchMode {
 }
 
 impl EchMode {
-    /// Returns true if the ECH mode will use a FIPS approved HPKE suite.
-    pub fn fips(&self) -> FipsStatus {
-        match self {
-            Self::Enable(ech_config) => ech_config.suite.fips(),
-            Self::Grease(grease_config) => grease_config.suite.fips(),
+    /// Create a new [`EchMode`] from a list of supported suites and a list of
+    /// ECH configurations to try.
+    ///
+    /// Each suite-configuration pair will be tried, beginning at the first
+    /// ECH configuration, until a valid [`EchConfig`] is constructed
+    ///
+    /// # Errors
+    ///
+    /// If all pairs have been exhausted, an [`EncryptedClientHelloError::NoCompatibleConfig`]
+    /// error will be raised
+    pub(crate) fn from_ech_config_list(
+        ech_config_list_slice: &[EchConfigListBytes<'_>],
+        suites: &[&'static dyn Hpke],
+    ) -> Result<Self, Error> {
+        for ech_config_list in ech_config_list_slice {
+            if let Ok(ech_config) = EchConfig::new(ech_config_list, suites) {
+                return Ok(ech_config.into());
+            };
         }
+
+        // if we have yet to return, no compatible ECH config has been found
+        Err(Error::InvalidEncryptedClientHello(
+            EncryptedClientHelloError::NoCompatibleConfig,
+        ))
+    }
+
+    /// Create a new GREASE [`EchMode`] from a supported suite.
+    ///
+    /// # Errors
+    ///
+    /// This methods will error if the HPKE provider fails to generate a placeholder public key.
+    pub(crate) fn grease_from_suite(suite: &'static dyn Hpke) -> Result<Self, Error> {
+        Ok(Self::Grease(EchGreaseConfig::new(suite)?))
     }
 }
 
@@ -72,7 +99,7 @@ impl From<EchGreaseConfig> for EchMode {
 ///
 /// Note: differs from the protocol-encoded EchConfig (`EchConfigMsg`).
 #[derive(Clone, Debug)]
-pub struct EchConfig {
+pub(crate) struct EchConfig {
     /// The selected EchConfig.
     pub(crate) config: EchConfigPayload,
 
@@ -96,11 +123,11 @@ impl EchConfig {
     /// See the [`ech-client.rs`] example for a complete example of fetching ECH configs from DNS.
     ///
     /// [`ech-client.rs`]: https://github.com/rustls/rustls/blob/main/examples/src/bin/ech-client.rs
-    pub fn new(
-        ech_config_list: EchConfigListBytes<'_>,
+    pub(crate) fn new(
+        ech_config_list: &EchConfigListBytes<'_>,
         hpke_suites: &[&'static dyn Hpke],
     ) -> Result<Self, Error> {
-        let ech_configs = Vec::<EchConfigPayload>::read_bytes(&ech_config_list).map_err(|_| {
+        let ech_configs = Vec::<EchConfigPayload>::read_bytes(ech_config_list).map_err(|_| {
             Error::InvalidEncryptedClientHello(EncryptedClientHelloError::InvalidConfigList)
         })?;
 
@@ -111,7 +138,7 @@ impl EchConfig {
     ///
     /// Returns an error if the server provided no retry configurations in `RejectedEch`, or if
     /// none of the retry configurations are compatible with the supported `hpke_suites`.
-    pub fn for_retry(
+    pub(crate) fn for_retry(
         rejection: RejectedEch,
         hpke_suites: &[&'static dyn Hpke],
     ) -> Result<Self, Error> {
@@ -200,7 +227,7 @@ impl EchConfig {
 
 /// Configuration for GREASE Encrypted Client Hello.
 #[derive(Clone, Debug)]
-pub struct EchGreaseConfig {
+pub(crate) struct EchGreaseConfig {
     pub(crate) suite: &'static dyn Hpke,
     pub(crate) placeholder_key: HpkePublicKey,
 }
@@ -212,14 +239,16 @@ impl EchGreaseConfig {
     /// but doesn't have a real ECH configuration to use for the remote server. In this case
     /// a placeholder or "GREASE"[^0] extension is used.
     ///
-    /// Returns an error if the HPKE provider does not support the given suite.
+    /// # Errors
+    ///
+    /// Returns an error if the HPKE provider fails to generate a placeholder public key.
     ///
     /// [^0]: <https://www.rfc-editor.org/rfc/rfc8701>
-    pub fn new(suite: &'static dyn Hpke, placeholder_key: HpkePublicKey) -> Self {
-        Self {
+    pub(crate) fn new(suite: &'static dyn Hpke) -> Result<Self, Error> {
+        Ok(Self {
             suite,
-            placeholder_key,
-        }
+            placeholder_key: suite.generate_key_pair()?.0,
+        })
     }
 
     /// Build a GREASE ECH extension based on the placeholder configuration.
