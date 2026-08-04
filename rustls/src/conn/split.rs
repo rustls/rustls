@@ -477,9 +477,9 @@ impl<'a> SendAdapter<'a> {
 }
 
 impl SendOutput for SendAdapter<'_> {
-    fn negotiated_version(&mut self, version: ProtocolVersion) {
+    fn set_negotiated_version(&mut self, version: ProtocolVersion) {
         self.as_locked(false)
-            .negotiated_version(version);
+            .set_negotiated_version(version);
     }
 
     fn queue_requested_key_update(&mut self) {
@@ -528,7 +528,7 @@ mod tests {
     fn send_adapter_flag() {
         let mut tls = Vec::new();
         assert!(!send_flag_for(
-            |adapter| adapter.negotiated_version(ProtocolVersion::TLSv1_3)
+            |adapter| adapter.set_negotiated_version(ProtocolVersion::TLSv1_3)
         ));
         assert!(send_flag_for(|adapter| adapter.queue_requested_key_update()));
         assert!(!send_flag_for(|adapter| adapter.note_key_update_response()));
@@ -543,7 +543,7 @@ mod tests {
         )));
         assert!(!send_flag_for(|adapter| adapter.start_traffic()));
         assert!(send_flag_for(|adapter| adapter.send_msg(
-            Message::build_key_update_notify(),
+            Message::build_key_update_notify(ProtocolVersion::TLSv1_3),
             false,
             &mut tls,
         )));
@@ -552,6 +552,7 @@ mod tests {
     fn send_flag_for(f: impl FnOnce(&mut SendAdapter<'_>)) -> bool {
         let mut send = SendPath::default();
         send.set_encrypter(Box::new(Tls13Cipher), 1234);
+        send.set_negotiated_version(ProtocolVersion::TLSv1_3);
 
         let send = Mutex::new(send);
 

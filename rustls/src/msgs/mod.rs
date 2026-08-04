@@ -155,10 +155,14 @@ pub(crate) struct Message<'a> {
     pub payload: MessagePayload<'a>,
 }
 
-impl Message<'_> {
-    pub(crate) fn build_alert(level: AlertLevel, desc: AlertDescription) -> Self {
+impl<'a> Message<'a> {
+    pub(crate) fn build_alert(
+        level: AlertLevel,
+        desc: AlertDescription,
+        version: ProtocolVersion,
+    ) -> Self {
         Self {
-            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+            version: EncodableVersion::Legacy(version),
             payload: MessagePayload::Alert(AlertMessagePayload {
                 level,
                 description: desc,
@@ -166,18 +170,18 @@ impl Message<'_> {
         }
     }
 
-    pub(crate) fn build_key_update_notify() -> Self {
+    pub(crate) fn build_key_update_notify(version: ProtocolVersion) -> Self {
         Self {
-            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+            version: EncodableVersion::Legacy(version),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
             )),
         }
     }
 
-    pub(crate) fn build_key_update_request() -> Self {
+    pub(crate) fn build_key_update_request(version: ProtocolVersion) -> Self {
         Self {
-            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+            version: EncodableVersion::Legacy(version),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateRequested),
             )),
@@ -769,7 +773,11 @@ mod tests {
 
     #[test]
     fn alert_is_not_handshake() {
-        let m = Message::build_alert(AlertLevel::Fatal, AlertDescription::DecodeError);
+        let m = Message::build_alert(
+            AlertLevel::Fatal,
+            AlertDescription::DecodeError,
+            ProtocolVersion::TLSv1_2,
+        );
         assert_ne!(m.handshake_type(), Some(HandshakeType::ClientHello));
     }
 
@@ -817,7 +825,7 @@ mod tests {
     fn into_wire_format() {
         // Message::into_wire_bytes() include both message-level and handshake-level headers
         assert_eq!(
-            Message::build_key_update_request().into_wire_bytes(),
+            Message::build_key_update_request(ProtocolVersion::TLSv1_3).into_wire_bytes(),
             &[0x16, 0x3, 0x3, 0x0, 0x5, 0x18, 0x0, 0x0, 0x1, 0x1]
         );
     }

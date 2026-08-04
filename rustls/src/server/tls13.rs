@@ -107,6 +107,7 @@ mod client_hello {
     impl ServerHandler<Tls13CipherSuite> for Handler {
         fn handle_client_hello(
             &self,
+            version: ProtocolVersion,
             suite: &'static Tls13CipherSuite,
             kx_group: &'static dyn SupportedKxGroup,
             signer: SelectedCredential,
@@ -117,7 +118,7 @@ mod client_hello {
             let randoms = st.randoms(&input)?;
             let mut transcript = st
                 .transcript
-                .start(suite.common.hash_provider)?;
+                .start(suite.common.hash_provider, version)?;
 
             if input
                 .client_hello
@@ -187,6 +188,7 @@ mod client_hello {
 
                 emit_hello_retry_request(
                     &mut transcript,
+                    ProtocolVersion::TLSv1_3,
                     suite,
                     input.client_hello.session_id,
                     output,
@@ -265,6 +267,7 @@ mod client_hello {
                 &mut transcript,
                 &randoms,
                 suite,
+                version,
                 output,
                 &input.client_hello.session_id,
                 chosen_share_and_kxg,
@@ -533,6 +536,7 @@ mod client_hello {
         transcript: &mut HandshakeHash,
         randoms: &ConnectionRandoms,
         suite: Tls13ProtocolSuite,
+        version: ProtocolVersion,
         output: &mut dyn Output<'_>,
         session_id: &SessionId,
         share_and_kxgroup: (&KeyShareEntry, &'static dyn SupportedKxGroup),
@@ -549,12 +553,12 @@ mod client_hello {
         let extensions = Box::new(ServerExtensions {
             key_share: Some(KeyShareEntry::new(ckx.group, ckx.pub_key)),
             preshared_key: resuming.map(|&(idx, _)| idx as u16),
-            selected_version: Some(ProtocolVersion::TLSv1_3),
+            selected_version: Some(version),
             ..Default::default()
         });
 
         let sh = Message {
-            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+            version: EncodableVersion::Legacy(version),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
@@ -623,6 +627,7 @@ mod client_hello {
 
     fn emit_hello_retry_request(
         transcript: &mut HandshakeHash,
+        version: ProtocolVersion,
         suite: &'static Tls13CipherSuite,
         session_id: SessionId,
         output: &mut dyn Output<'_>,
@@ -634,13 +639,13 @@ mod client_hello {
             cipher_suite: suite.common.suite,
             extensions: HelloRetryRequestExtensions {
                 key_share: Some(group),
-                supported_versions: Some(ProtocolVersion::TLSv1_3),
+                supported_versions: Some(version),
                 ..Default::default()
             },
         };
 
         let m = Message {
-            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+            version: EncodableVersion::Legacy(version),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::HelloRetryRequest(req),
             )),

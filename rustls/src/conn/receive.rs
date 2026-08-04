@@ -540,7 +540,9 @@ impl<'a, 'm, Send: SendOutput + 'a> Output<'m> for CaptureAppData<'a, '_, 'm, Se
     fn output(&mut self, ev: OutputEvent<'_>) {
         if let OutputEvent::ProtocolVersion(ver) = ev {
             self.recv.negotiated_version = Some(ver);
-            self.other.send.negotiated_version(ver);
+            self.other
+                .send
+                .set_negotiated_version(ver);
         }
         self.other.outputs.handle(ev);
     }

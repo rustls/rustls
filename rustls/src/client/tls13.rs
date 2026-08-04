@@ -99,6 +99,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
     /// "early_data" extension to the server.
     fn handle_server_hello(
         &self,
+        version: ProtocolVersion,
         suite: &'static Tls13CipherSuite,
         server_hello: &ServerHelloPayload,
         input: &Input<'_>,
@@ -108,7 +109,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         // Start our handshake hash, and input the server-hello.
         let mut transcript = st
             .transcript_buffer
-            .start_hash(suite.common.hash_provider);
+            .start_hash(suite.common.hash_provider, version);
         transcript.add_message(&input.message);
 
         let mut randoms = ConnectionRandoms::new(st.input.random, server_hello.random);
@@ -381,7 +382,11 @@ pub(super) fn fill_in_psk_binder(
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
     let binder_plaintext = hmp.encoding_for_binder_signing();
-    let handshake_hash = transcript.hash_given(key_schedule.hash(), &binder_plaintext);
+    let handshake_hash = transcript.hash_given(
+        key_schedule.hash(),
+        ProtocolVersion::TLSv1_3,
+        &binder_plaintext,
+    );
 
     // Run a fake key_schedule to simulate what the server will do if it chooses
     // to resume.
@@ -462,7 +467,7 @@ pub(super) fn derive_early_traffic_secret(
         emit_fake_ccs(sent_tls13_fake_ccs, output);
     }
 
-    let client_hello_hash = transcript_buffer.hash_given(hash_alg, &[]);
+    let client_hello_hash = transcript_buffer.hash_given(hash_alg, ProtocolVersion::TLSv1_3, &[]);
     early_key_schedule.client_early_traffic_secret(
         &client_hello_hash,
         key_log,
@@ -1267,9 +1272,13 @@ fn emit_finished_tls13(
     )));
 }
 
-fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn Output<'_>) {
+fn emit_end_of_early_data_tls13(
+    version: ProtocolVersion,
+    transcript: &mut HandshakeHash,
+    output: &mut dyn Output<'_>,
+) {
     let m = Message {
-        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        version: EncodableVersion::Legacy(version),
         payload: MessagePayload::handshake(HandshakeMessagePayload(
             HandshakePayload::EndOfEarlyData,
         )),
@@ -1325,7 +1334,11 @@ impl ExpectFinished {
          * but appears in the transcript after the server Finished. */
         if st.in_early_traffic {
             if !st.hs.key_schedule.is_quic() {
-                emit_end_of_early_data_tls13(&mut st.hs.transcript, output);
+                emit_end_of_early_data_tls13(
+                    ProtocolVersion::TLSv1_3,
+                    &mut st.hs.transcript,
+                    output,
+                );
             }
             output.emit(Event::EarlyData(EarlyDataEvent::Finished));
             st.hs
