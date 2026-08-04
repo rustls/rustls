@@ -1,18 +1,24 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
+use crate::common_state::Protocol;
 use crate::crypto::cipher::{
-    EncodedMessage, EncryptionState, MessageEncrypter, OutboundPlain, Payload, PreEncryptAction,
+    EncodableVersion, EncodedMessage, EncodingContext, EncryptionState, MessageEncrypter,
+    OutboundPlain, Payload, PreEncryptAction,
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
 use crate::log::{debug, error};
-use crate::msgs::{AlertLevel, HEADER_SIZE, Message, MessageFragmenter};
+use crate::msgs::{
+    AlertLevel, Codec, EpochAndSequence, HandshakeSequence, HandshakeSequenceNumber, Message,
+    MessageFragmenter, MessagePayload,
+};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
 
 /// The data path from us to the peer.
 pub(crate) struct SendPath {
+    pub(crate) protocol: Protocol,
     pub(crate) encrypt_state: EncryptionState,
     pub(crate) may_send_application_data: bool,
     pub(crate) may_send_half_rtt_data: bool,
@@ -25,9 +31,28 @@ pub(crate) struct SendPath {
     pub(crate) refresh_traffic_keys_pending: bool,
     negotiated_version: Option<ProtocolVersion>,
     pub(crate) tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
+    handshake_sequence: HandshakeSequence,
 }
 
 impl SendPath {
+    pub(crate) fn new(protocol: Protocol) -> Self {
+        Self {
+            protocol,
+            encrypt_state: EncryptionState::new(),
+            may_send_application_data: false,
+            may_send_half_rtt_data: false,
+            has_sent_fatal_alert: false,
+            has_sent_close_notify: false,
+            message_fragmenter: MessageFragmenter::default(),
+            sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
+            queued_key_update_message: None,
+            refresh_traffic_keys_pending: false,
+            negotiated_version: None,
+            tls13_key_schedule: None,
+            handshake_sequence: HandshakeSequence::default(),
+        }
+    }
+
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
         debug_assert!(self.encrypt_state.is_encrypting());
 
@@ -62,9 +87,9 @@ impl SendPath {
 
             // Close connection once we start to run out of sequence space.
             Some(PreEncryptAction::RefreshOrClose) => {
-                match self.negotiated_version {
+                match self.negotiated_version() {
                     // driven by caller, as we don't have the `State` here
-                    Some(ProtocolVersion::TLSv1_3) => {
+                    ProtocolVersion::TLSv1_3 | ProtocolVersion::DTLSv1_3 => {
                         self.refresh_traffic_keys_pending = true;
                         Ok(())
                     }
@@ -101,34 +126,61 @@ impl SendPath {
         let mut written = self.sendable_tls.read(out);
         let mut consumed = 0;
 
-        for m in self
-            .message_fragmenter
-            .fragment_payload(
-                ContentType::ApplicationData,
-                ProtocolVersion::TLSv1_2,
-                payload,
-            )
+        let mut send_msg =
+            |this: &mut Self, m: EncodedMessage<OutboundPlain<'_>>| -> Result<bool, Error> {
+                this.preflight_encrypt(0)?;
+                this.perhaps_write_key_update();
+                written += this
+                    .sendable_tls
+                    .read(&mut out[written..]);
+
+                let fragment_len = m.payload.len();
+                if out.len() - written
+                    < this
+                        .negotiated_version()
+                        .encrypted_header_len()
+                        + this
+                            .encrypt_state
+                            .encrypted_len(fragment_len)
+                {
+                    return Ok(false);
+                }
+
+                written += this
+                    .encrypt_state
+                    .encrypt_outgoing_into(m, &mut out[written..]);
+                consumed += fragment_len;
+
+                Ok(true)
+            };
+
+        if self
+            .negotiated_version()
+            .is_datagram_tls()
         {
-            self.preflight_encrypt(0)?;
-            self.perhaps_write_key_update();
-            written += self
-                .sendable_tls
-                .read(&mut out[written..]);
-
-            let fragment_len = m.payload.len();
-            if out.len() - written
-                < HEADER_SIZE
-                    + self
-                        .encrypt_state
-                        .encrypted_len(fragment_len)
+            // For DTLS, we don't fragment application data, instead expecting clients to chunk up
+            // application layer messages appropriately themselves.
+            send_msg(
+                self,
+                EncodedMessage {
+                    typ: ContentType::ApplicationData,
+                    version: EncodableVersion::Legacy(self.negotiated_version()),
+                    payload,
+                },
+            )?;
+        } else {
+            for m in self
+                .message_fragmenter
+                .fragment_payload(
+                    ContentType::ApplicationData,
+                    EncodableVersion::Legacy(self.negotiated_version()),
+                    payload,
+                )
             {
-                break;
+                if !send_msg(self, m)? {
+                    break;
+                }
             }
-
-            written += self
-                .encrypt_state
-                .encrypt_outgoing_into(m, &mut out[written..]);
-            consumed += fragment_len;
         }
 
         Ok(WrittenInto {
@@ -175,7 +227,7 @@ impl SendPath {
             self.message_fragmenter
                 .fragment_payload(
                     ContentType::ApplicationData,
-                    ProtocolVersion::TLSv1_2,
+                    EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
                     payload,
                 ),
         );
@@ -198,7 +250,10 @@ impl SendPath {
                 true => self
                     .encrypt_state
                     .encrypt_outgoing(m, self.sendable_tls.take_spare()),
-                false => m.to_unencrypted_bytes(),
+                false => m.to_unencrypted_bytes(EncodingContext {
+                    payload_is_encrypted: false,
+                    epoch_and_sequence: self.dtls_epoch_and_sequence(),
+                }),
             };
             self.sendable_tls.append(record);
         }
@@ -217,7 +272,17 @@ impl SendPath {
 
     pub(crate) fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
         self.message_fragmenter
-            .set_max_fragment_size(new)
+            .set_max_fragment_size(new, self.protocol)
+    }
+
+    fn dtls_epoch_and_sequence(&self) -> Option<EpochAndSequence> {
+        if self.protocol.is_dtls() {
+            Some(EpochAndSequence::from_sequence_number(
+                self.encrypt_state.write_seq(),
+            ))
+        } else {
+            None
+        }
     }
 
     /// Trigger a `refresh_traffic_keys` if required.
@@ -234,15 +299,28 @@ impl SendPath {
             return Err(Error::HandshakeNotComplete);
         };
 
-        ks.request_key_update_and_update_encrypter(self);
+        ks.request_key_update_and_update_encrypter(self.negotiated_version(), self);
         self.refresh_traffic_keys_pending = false;
         self.tls13_key_schedule = Some(ks);
         Ok(())
     }
+
+    fn negotiated_version(&self) -> ProtocolVersion {
+        if let Some(version) = self.negotiated_version {
+            version
+        }
+        // If the negotiated version has not been set yet, then we are early in the handshake and
+        // will behave as though doing (D)TLS 1.2 for backward compatibility
+        else if self.protocol.is_dtls() {
+            ProtocolVersion::DTLSv1_2
+        } else {
+            ProtocolVersion::TLSv1_2
+        }
+    }
 }
 
 impl SendOutput for SendPath {
-    fn negotiated_version(&mut self, version: ProtocolVersion) {
+    fn set_negotiated_version(&mut self, version: ProtocolVersion) {
         self.negotiated_version = Some(version);
     }
 
@@ -251,7 +329,10 @@ impl SendOutput for SendPath {
             return;
         }
 
-        let message = EncodedMessage::<Payload<'static>>::from(Message::build_key_update_notify());
+        let message = EncodedMessage::<Payload<'static>>::from(Message::build_key_update_notify(
+            self.negotiated_version(),
+            self.outbound_handshake_seq(),
+        ));
         self.queued_key_update_message = Some(
             self.encrypt_state
                 .encrypt_outgoing(message.borrow_outbound(), Vec::new()),
@@ -280,7 +361,7 @@ impl SendOutput for SendPath {
         };
 
         self.send_msg(
-            Message::build_alert(level, desc),
+            Message::build_alert(level, desc, self.negotiated_version()),
             self.encrypt_state.is_encrypting(),
         );
     }
@@ -292,37 +373,111 @@ impl SendOutput for SendPath {
 
     /// Send a raw TLS message, fragmenting it if needed.
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        let encoded = EncodedMessage::from(m);
-        let fragments = self
-            .message_fragmenter
-            .fragment_message(&encoded);
-        match must_encrypt {
-            true => self.send_messages::<true>(fragments),
-            false => self.send_messages::<false>(fragments),
+        match (self.protocol, &m.payload) {
+            // DTLS handshake messages can be fragmented into multiple records which contain
+            // information necessary for reassembly.
+            (
+                Protocol::Udp,
+                MessagePayload::Handshake {
+                    parsed,
+                    encoded,
+                    seq,
+                },
+            ) => {
+                std::println!("send path handshake seq: {:?}", self.handshake_sequence);
+                let messages: Vec<_> = self
+                    .message_fragmenter
+                    .fragment_dtls_handshake_message(
+                        m.version,
+                        parsed.0.handshake_type(),
+                        *seq,
+                        encoded.bytes(),
+                    )
+                    .map(|m| {
+                        std::println!(
+                            "sedn path post fragment sending {:?} seq {:?}",
+                            m.typ,
+                            m.payload.message_seq
+                        );
+                        EncodedMessage {
+                            typ: m.typ,
+                            version: m.version,
+                            payload: m.payload.get_encoding(),
+                        }
+                    })
+                    .collect();
+                match must_encrypt {
+                    true => self.send_messages::<true>(messages.iter().map(|m| EncodedMessage {
+                        typ: m.typ,
+                        version: m.version,
+                        payload: m.payload.as_slice().into(),
+                    })),
+                    false => self.send_messages::<false>(messages.iter().map(|m| EncodedMessage {
+                        typ: m.typ,
+                        version: m.version,
+                        payload: m.payload.as_slice().into(),
+                    })),
+                };
+            }
+            (Protocol::Udp, MessagePayload::HandshakeFlight(encoded)) => {
+                let epoch_and_sequence = self
+                    .dtls_epoch_and_sequence()
+                    .expect("epoch and sequence should be set for DTLS");
+                let messages: Vec<_> = self
+                    .message_fragmenter
+                    .fragment_dtls_handshake_message_flight(m.version, epoch_and_sequence, encoded)
+                    .into_iter()
+                    .map(|m| EncodedMessage {
+                        typ: m.typ,
+                        version: m.version,
+                        payload: m.payload.get_encoding(),
+                    })
+                    .collect();
+                match must_encrypt {
+                    true => self.send_messages::<true>(messages.iter().map(|m| EncodedMessage {
+                        typ: m.typ,
+                        version: m.version,
+                        payload: m.payload.as_slice().into(),
+                    })),
+                    false => self.send_messages::<false>(messages.iter().map(|m| EncodedMessage {
+                        typ: m.typ,
+                        version: m.version,
+                        payload: m.payload.as_slice().into(),
+                    })),
+                };
+
+                // TODO(timg): update epoch and sequence in this object's encrypt state?
+            }
+            // Other DTLS messages are required to fit into a single record. Application data should
+            // be chunked by the application before being handled off to rustls.
+            (Protocol::Udp, _) => match must_encrypt {
+                true => self
+                    .send_messages::<true>([EncodedMessage::from(m).borrow_outbound()].into_iter()),
+                false => self.send_messages::<false>(
+                    [EncodedMessage::from(m).borrow_outbound()].into_iter(),
+                ),
+            },
+            // TLS messages can be fragmented into multiple TCP or QUIC packets
+            _ => match must_encrypt {
+                true => self.send_messages::<true>(
+                    self.message_fragmenter
+                        .fragment_message(&EncodedMessage::from(m)),
+                ),
+                false => self.send_messages::<false>(
+                    self.message_fragmenter
+                        .fragment_message(&EncodedMessage::from(m)),
+                ),
+            },
         }
     }
-}
 
-impl Default for SendPath {
-    fn default() -> Self {
-        Self {
-            encrypt_state: EncryptionState::new(),
-            may_send_application_data: false,
-            may_send_half_rtt_data: false,
-            has_sent_fatal_alert: false,
-            has_sent_close_notify: false,
-            message_fragmenter: MessageFragmenter::default(),
-            sendable_tls: ChunkVecBuffer::new_recycling(Some(DEFAULT_BUFFER_LIMIT)),
-            queued_key_update_message: None,
-            refresh_traffic_keys_pending: false,
-            negotiated_version: None,
-            tls13_key_schedule: None,
-        }
+    fn outbound_handshake_seq(&mut self) -> HandshakeSequenceNumber {
+        self.handshake_sequence.increment()
     }
 }
 
 pub(crate) trait SendOutput {
-    fn negotiated_version(&mut self, version: ProtocolVersion);
+    fn set_negotiated_version(&mut self, version: ProtocolVersion);
 
     fn ensure_key_update_queued(&mut self);
 
@@ -335,6 +490,8 @@ pub(crate) trait SendOutput {
     fn start_traffic(&mut self);
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool);
+
+    fn outbound_handshake_seq(&mut self) -> HandshakeSequenceNumber;
 }
 
 /// The outcome of encrypting application data into a caller-provided buffer.

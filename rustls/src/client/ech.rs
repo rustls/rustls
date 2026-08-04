@@ -8,7 +8,8 @@ use subtle::ConstantTimeEq;
 
 use super::config::ClientConfig;
 use super::{Retrieved, Tls13Session, tls13};
-use crate::crypto::cipher::Payload;
+use crate::common_state::Protocol;
+use crate::crypto::cipher::{EncodableVersion, Payload};
 use crate::crypto::hash::Hash;
 use crate::crypto::hpke::{
     EncapsulatedSecret, Hpke, HpkeKem, HpkePublicKey, HpkeSealer, HpkeSuite,
@@ -470,7 +471,7 @@ impl EchState {
         // Start the inner transcript hash now that we know the hash algorithm to use.
         let inner_transcript = self
             .inner_hello_transcript
-            .start_hash(hash);
+            .start_hash(hash, ProtocolVersion::TLSv1_3);
 
         // Fork the transcript that we've started with the inner hello to use for a confirmation step.
         // We need to preserve the original inner_transcript to use if this confirmation succeeds.
@@ -528,7 +529,7 @@ impl EchState {
         // 7.2.1
         let confirmation_transcript = self.inner_hello_transcript.clone();
         let mut confirmation_transcript =
-            confirmation_transcript.start_hash(cs.common.hash_provider);
+            confirmation_transcript.start_hash(cs.common.hash_provider, ProtocolVersion::TLSv1_3);
         confirmation_transcript.rollup_for_hrr();
         confirmation_transcript.add_message(&Self::hello_retry_request_conf(hrr));
 
@@ -565,7 +566,7 @@ impl EchState {
         let inner_transcript = self
             .inner_hello_transcript
             .clone()
-            .start_hash(hash);
+            .start_hash(hash, ProtocolVersion::TLSv1_3);
 
         let mut inner_transcript_buffer = inner_transcript.into_hrr_buffer(proof);
         inner_transcript_buffer.add_message(m);
@@ -718,17 +719,18 @@ impl EchState {
                 // <https://datatracker.ietf.org/doc/html/rfc9846#section-5.1>:
                 // "This value MUST be set to 0x0303 for all records generated
                 //  by a TLS 1.3 implementation ..."
-                Some(_) => ProtocolVersion::TLSv1_2,
+                Some(_) => EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
                 // "... other than an initial ClientHello (i.e., one not
                 // generated after a HelloRetryRequest), where it MAY also be
                 // 0x0301 for compatibility purposes"
                 //
                 // (retryreq == None means we're in the "initial ClientHello" case)
-                None => ProtocolVersion::TLSv1_0,
+                None => EncodableVersion::InitialClientHello(Protocol::Tcp),
             },
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::ClientHello(inner_hello),
-            )),
+            payload: MessagePayload::handshake(
+                HandshakeMessagePayload(HandshakePayload::ClientHello(inner_hello)),
+                0.into(),
+            ),
         };
 
         // Update the inner transcript buffer with the inner hello message.
@@ -788,12 +790,13 @@ impl EchState {
         encoded[SERVER_HELLO_ECH_CONFIRMATION_SPAN].fill(0x00);
 
         Message {
-            version: ProtocolVersion::TLSv1_3,
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::Handshake {
                 encoded: Payload::Owned(encoded),
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(
                     server_hello.clone(),
                 )),
+                seq: 0.into(),
             },
         }
     }
@@ -808,10 +811,11 @@ impl EchState {
         let mut hmp_encoded = Vec::new();
         hmp.payload_encode(&mut hmp_encoded, Encoding::EchConfirmation);
         Message {
-            version: ProtocolVersion::TLSv1_3,
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::Handshake {
                 encoded: Payload::new(hmp_encoded),
                 parsed: hmp,
+                seq: 0.into(),
             },
         }
     }
@@ -856,10 +860,11 @@ mod tests {
             extensions: Box::new(ServerExtensions::default()),
         };
         let message = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::ServerHello(server_hello.clone()),
-            )),
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+            payload: MessagePayload::handshake(
+                HandshakeMessagePayload(HandshakePayload::ServerHello(server_hello.clone())),
+                0.into(),
+            ),
         };
         let Message {
             payload:

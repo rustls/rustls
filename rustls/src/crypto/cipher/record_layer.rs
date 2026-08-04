@@ -4,12 +4,12 @@ use alloc::vec::Vec;
 use core::cmp::min;
 
 use crate::crypto::cipher::{
-    EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, OutboundPlain,
-    encode_record_header,
+    EncodedMessage, EncodingContext, InboundOpaque, MessageDecrypter, MessageEncrypter,
+    OutboundPlain, encode_record_header,
 };
 use crate::error::Error;
 use crate::log::trace;
-use crate::msgs::{HEADER_SIZE, HandshakeAlignedProof};
+use crate::msgs::{EpochAndSequence, HandshakeAlignedProof};
 
 /// Record layer that tracks encryption keys.
 pub(crate) struct EncryptionState {
@@ -44,7 +44,11 @@ impl EncryptionState {
         // Contents are fully overwritten below, so zeroing is pure cost.
         // A fresh buffer gets pre-zeroed memory straight from the allocator
         // while a reused one zeroes only what `resize` grows.
-        let needed = HEADER_SIZE + self.encrypted_len(plain.payload.len());
+        let needed = plain
+            .version
+            .version()
+            .encrypted_header_len()
+            + self.encrypted_len(plain.payload.len());
         if record.capacity() == 0 {
             record = vec![0u8; needed];
         } else {
@@ -71,6 +75,14 @@ impl EncryptionState {
         out: &mut [u8],
     ) -> usize {
         assert!(self.pre_encrypt_action(0) != Some(PreEncryptAction::Refuse));
+        let header_size = plain
+            .version
+            .version()
+            .encrypted_header_len();
+        let is_dtls = plain
+            .version
+            .version()
+            .is_datagram_tls();
         let encrypter = self.message_encrypter.as_mut().unwrap();
 
         let seq = self.write_seq;
@@ -79,7 +91,7 @@ impl EncryptionState {
         #[cfg(debug_assertions)]
         let (out_ptr, out_len) = (out.as_ptr(), out.len());
         let encrypted = encrypter
-            .encrypt(plain, seq, &mut out[HEADER_SIZE..])
+            .encrypt(plain, seq, &mut out[header_size..])
             .unwrap();
 
         #[cfg(debug_assertions)]
@@ -90,15 +102,28 @@ impl EncryptionState {
             // the sent stream.
             debug_assert_eq!(
                 encrypted.payload.as_ptr(),
-                out_ptr.wrapping_add(HEADER_SIZE)
+                out_ptr.wrapping_add(header_size)
             );
-            debug_assert!(encrypted.payload.len() <= out_len - HEADER_SIZE);
+            debug_assert!(encrypted.payload.len() <= out_len - header_size);
         }
 
         let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
         debug_assert!(len <= usize::from(u16::MAX));
-        out[..HEADER_SIZE].copy_from_slice(&encode_record_header(typ, version, len as u16));
-        HEADER_SIZE + len
+        encode_record_header(
+            typ,
+            version,
+            len as u16,
+            EncodingContext {
+                payload_is_encrypted: true,
+                epoch_and_sequence: if is_dtls {
+                    Some(EpochAndSequence::from_sequence_number(seq))
+                } else {
+                    None
+                },
+            },
+            &mut out[..header_size],
+        );
+        header_size + len
     }
 
     /// Set and start using the given `MessageEncrypter` for future outgoing
@@ -300,6 +325,7 @@ const SEQ_HARD_LIMIT: u64 = u64::MAX - 1;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crypto::cipher::EncodableVersion;
     use crate::enums::{ContentType, ProtocolVersion};
     use crate::msgs::Deframer;
 
@@ -336,7 +362,7 @@ mod tests {
         record_layer
             .decrypt_incoming(EncodedMessage::new(
                 ContentType::Handshake,
-                ProtocolVersion::TLSv1_2,
+                EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
                 InboundOpaque(&mut [0xC0, 0xFF, 0xEE]),
             ))
             .unwrap();

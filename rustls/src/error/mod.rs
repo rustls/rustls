@@ -128,6 +128,12 @@ pub enum Error {
     /// See [`RejectedEch::can_retry()`] and [`crate::client::EchConfig::for_retry()`].
     RejectedEch(RejectedEch),
 
+    /// The endpoint received a replayed DTLS record ([1], [2]).
+    ///
+    /// [1]: https://datatracker.ietf.org/doc/html/rfc6347#section-4.1.2.6
+    /// [2]: https://datatracker.ietf.org/doc/html/rfc9147#section-4.5.1
+    ReplayedDtlsRecord,
+
     /// Errors of this variant should never be produced by the library.
     ///
     /// Please file a bug if you see one.
@@ -245,6 +251,7 @@ impl fmt::Display for Error {
                 f,
                 "unreachable condition: {err} (please file a bug in rustls)"
             ),
+            Self::ReplayedDtlsRecord => write!(f, "replayed DTLS record"),
             Self::ApiMisuse(why) => write!(f, "API misuse: {why:?}"),
             Self::Other(err) => write!(f, "other error: {err}"),
         }
@@ -1132,6 +1139,10 @@ pub enum InvalidMessage {
     UnknownHelloRetryRequestExtension,
     /// The peer sent a TLS1.3 Certificate with an unknown extension
     UnknownCertificateExtension,
+    /// Invalid unified header in a DTLS 1.3 record
+    InvalidDtls13UnifiedHeader,
+    /// Message is from wrong epoch in DTLS
+    WrongEpoch,
 }
 
 impl From<InvalidMessage> for AlertDescription {
@@ -1306,9 +1317,11 @@ pub enum PeerIncompatible {
     ServerTlsVersionIsDisabledByOurConfig,
     SignatureAlgorithmsExtensionRequired,
     SupportedVersionsExtensionRequired,
+    TcpOrQuicRequiredForTls,
     Tls12NotOffered,
     Tls12NotOfferedOrEnabled,
     Tls13RequiredForQuic,
+    UdpRequiredForDtls,
     UncompressedEcPointsRequired,
     UnknownCertificateType(u8),
     UnsolicitedCertificateTypeExtension,

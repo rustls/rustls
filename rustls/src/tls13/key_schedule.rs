@@ -9,6 +9,7 @@ use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
 use crate::crypto::kx::SharedSecret;
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expand};
 use crate::crypto::{hash, hmac};
+use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{HandshakeAlignedProof, Message};
 use crate::tls13::Tls13ProtocolSuite;
@@ -45,6 +46,10 @@ impl KeyScheduleEarlyClient {
 
     pub(crate) fn is_quic(&self) -> bool {
         self.0.ks.state.is_quic()
+    }
+
+    pub(crate) fn is_dtls(&self) -> bool {
+        self.0.ks.state.is_dtls()
     }
 }
 
@@ -467,6 +472,10 @@ impl KeyScheduleHandshake {
     pub(crate) fn is_quic(&self) -> bool {
         self.ks.state.is_quic()
     }
+
+    pub(crate) fn is_dtls(&self) -> bool {
+        self.ks.state.is_dtls()
+    }
 }
 
 /// Keys derived (but not installed) before client's Finished message.
@@ -528,6 +537,7 @@ impl KeyScheduleBeforeFinished {
             current_client_traffic_secret,
             current_server_traffic_secret,
             current_exporter_secret,
+            ..
         } = self;
 
         let resumption_master_secret =
@@ -690,9 +700,13 @@ impl KeyScheduleTrafficSend {
         self.ks.set_encrypter(&secret, send);
         self.current = secret;
     }
-
-    pub(crate) fn request_key_update_and_update_encrypter(&mut self, send: &mut dyn SendOutput) {
-        send.send_msg(Message::build_key_update_request(), true);
+    pub(crate) fn request_key_update_and_update_encrypter(
+        &mut self,
+        version: ProtocolVersion,
+        send: &mut dyn SendOutput,
+    ) {
+        let seq = send.outbound_handshake_seq();
+        send.send_msg(Message::build_key_update_request(version, seq), true);
         let secret = self.ks.derive_next(&self.current);
         self.ks.set_encrypter(&secret, send);
         self.current = secret;

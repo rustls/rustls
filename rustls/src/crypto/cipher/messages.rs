@@ -2,10 +2,13 @@ use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut, Range};
 use core::{fmt, slice};
 
-use crate::crypto::cipher::EncryptionState;
+use crate::Protocol;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerMisbehaved};
-use crate::msgs::{Codec, HEADER_SIZE, MAX_FRAGMENT_LEN, Reader, hex, read_opaque_message_header};
+use crate::msgs::{
+    Codec, EpochAndSequence, MAX_FRAGMENT_LEN, MessageHeader, Reader, UnifiedHeader, hex,
+    read_opaque_message_header,
+};
 
 /// A TLS message with encoded (but not necessarily encrypted) payload.
 #[expect(clippy::exhaustive_structs)]
@@ -14,14 +17,14 @@ pub struct EncodedMessage<P> {
     /// The content type of this message.
     pub typ: ContentType,
     /// The protocol version of this message.
-    pub version: ProtocolVersion,
+    pub version: EncodableVersion,
     /// The payload of this message.
     pub payload: P,
 }
 
 impl<P> EncodedMessage<P> {
     /// Create a new `EncodedMessage` with the given fields.
-    pub fn new(typ: ContentType, version: ProtocolVersion, payload: P) -> Self {
+    pub fn new(typ: ContentType, version: EncodableVersion, payload: P) -> Self {
         Self {
             typ,
             version,
@@ -36,7 +39,9 @@ impl<'a> EncodedMessage<Payload<'a>> {
     /// `MessageError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
     pub(crate) fn read(r: &mut Reader<'a>) -> Result<Self, MessageError> {
-        let (typ, version, len) = read_opaque_message_header(r)?;
+        let MessageHeader {
+            typ, version, len, ..
+        } = read_opaque_message_header(r)?;
 
         let content = r
             .take(len as usize)
@@ -44,7 +49,7 @@ impl<'a> EncodedMessage<Payload<'a>> {
 
         Ok(Self {
             typ,
-            version,
+            version: EncodableVersion::Legacy(version),
             payload: Payload::Borrowed(content),
         })
     }
@@ -54,7 +59,7 @@ impl<'a> EncodedMessage<Payload<'a>> {
         EncodedMessage {
             typ: self.typ,
             version: self.version,
-            payload: self.payload.bytes().into(),
+            payload: OutboundPlain::Single(self.payload.bytes()),
         }
     }
 
@@ -100,7 +105,15 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
             return Err(Error::PeerSentOversizedRecord);
         }
 
-        self.version = ProtocolVersion::TLSv1_3;
+        // Rewrite the version in the message to reflect (D)TLS 1.3 so that we can later decide how
+        // to parse messages inside the record. e.g., whether a NewSessionTicket handshake message
+        // is in the TLS 1.2 or 1.3 format.
+        let v = match self.version {
+            EncodableVersion::InitialClientHello(Protocol::Udp) => ProtocolVersion::DTLSv1_3,
+            EncodableVersion::Legacy(v) if v.is_datagram_tls() => ProtocolVersion::DTLSv1_3,
+            _ => ProtocolVersion::TLSv1_3,
+        };
+        self.version = EncodableVersion::Legacy(v);
         Ok(self.into_plain_message())
     }
 
@@ -137,18 +150,29 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
 impl EncodedMessage<OutboundPlain<'_>> {
     /// Encode this message into its unencrypted wire representation, including
     /// its record header.
-    pub(crate) fn to_unencrypted_bytes(&self) -> Vec<u8> {
+    pub(crate) fn to_unencrypted_bytes(&self, cx: EncodingContext) -> Vec<u8> {
         let len = self.payload.len();
         debug_assert!(len <= usize::from(u16::MAX));
-        let mut buf = Vec::with_capacity(HEADER_SIZE + len);
-        buf.extend_from_slice(&encode_record_header(self.typ, self.version, len as u16));
+        let header_len = if cx.payload_is_encrypted {
+            self.version
+                .version()
+                .encrypted_header_len()
+        } else {
+            self.version
+                .version()
+                .unencrypted_header_len()
+        };
+        let mut buf = Vec::with_capacity(header_len + len);
+        buf.resize(header_len, 0);
+        encode_record_header(
+            self.typ,
+            self.version,
+            len as u16,
+            cx,
+            &mut buf[..header_len],
+        );
         self.payload.copy_to_vec(&mut buf);
         buf
-    }
-
-    #[expect(dead_code)]
-    pub(crate) fn encoded_len(&self, record_layer: &EncryptionState) -> usize {
-        HEADER_SIZE + record_layer.encrypted_len(self.payload.len())
     }
 }
 
@@ -157,12 +181,36 @@ impl EncodedMessage<OutboundPlain<'_>> {
 /// `typ`, `version` and `len` describe the record's payload.
 pub(crate) fn encode_record_header(
     typ: ContentType,
-    version: ProtocolVersion,
+    version: EncodableVersion,
     len: u16,
-) -> [u8; HEADER_SIZE] {
-    let [version_hi, version_lo] = version.to_array();
-    let [len_hi, len_lo] = len.to_be_bytes();
-    [typ.into(), version_hi, version_lo, len_hi, len_lo]
+    cx: EncodingContext,
+    into: &mut [u8],
+) {
+    assert!(
+        version.version().is_datagram_tls() ^ cx.epoch_and_sequence.is_none(),
+        "epoch and sequence must be provided if version is DTLS, and may not
+            be provided unless version is DTLS",
+    );
+
+    if version.version() == ProtocolVersion::DTLSv1_3 && cx.payload_is_encrypted {
+        UnifiedHeader::new(len, cx).encode(into);
+        return;
+    }
+
+    into[0..1].copy_from_slice(&typ.to_array());
+    into[1..3].copy_from_slice(&version.encode().to_array());
+
+    if let Some(EpochAndSequence {
+        epoch,
+        sequence_number,
+    }) = cx.epoch_and_sequence
+    {
+        into[3..5].copy_from_slice(&(epoch).to_be_bytes());
+        into[5..11].copy_from_slice(&(sequence_number.0).to_be_bytes()[2..]);
+        into[11..13].copy_from_slice(&(len).to_be_bytes());
+    } else {
+        into[3..5].copy_from_slice(&len.to_be_bytes());
+    }
 }
 
 /// A collection of borrowed plaintext slices.
@@ -482,13 +530,14 @@ impl fmt::Debug for Payload<'_> {
 }
 
 /// A borrowed payload buffer.
+#[derive(Debug)]
 #[expect(clippy::exhaustive_structs)]
 pub struct InboundOpaque<'a>(pub &'a mut [u8]);
 
 impl<'a> InboundOpaque<'a> {
     /// Truncate the payload to `len` bytes.
     pub fn truncate(&mut self, len: usize) {
-        if len >= self.len() {
+        if len >= self.0.len() {
             return;
         }
 
@@ -502,12 +551,12 @@ impl<'a> InboundOpaque<'a> {
     }
 
     pub(crate) fn pop(&mut self) -> Option<u8> {
-        if self.is_empty() {
+        if self.0.is_empty() {
             return None;
         }
 
-        let len = self.len();
-        let last = self[len - 1];
+        let len = self.0.len();
+        let last = self.0[len - 1];
         self.truncate(len - 1);
         Some(last)
     }
@@ -524,6 +573,79 @@ impl Deref for InboundOpaque<'_> {
 impl DerefMut for InboundOpaque<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0
+    }
+}
+
+/// A protocol version that can be encoded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum EncodableVersion {
+    /// Encode the version in legacy, backward-compatible form.
+    ///
+    /// > MUST be set to 0x0303 for all records generated by a TLS 1.3
+    /// > implementation...
+    ///
+    /// <https://www.rfc-editor.org/info/rfc9846/#section-5.1>
+    Legacy(ProtocolVersion),
+    /// Encode the version as an initial client hello, not a retry.
+    ///
+    /// > ...other than an initial ClientHello (i.e., one not generated after a HelloRetryRequest),
+    /// > where it MAY also be 0x0301 for compatibility purposes.
+    ///
+    /// <https://www.rfc-editor.org/info/rfc9846/#section-5.1>
+    InitialClientHello(Protocol),
+}
+
+impl EncodableVersion {
+    /// Encode the protocol version.
+    pub fn encode(&self) -> ProtocolVersion {
+        match self {
+            // "... other than an initial ClientHello (i.e., one not
+            // generated after a HelloRetryRequest), where it MAY also be
+            // 0x0301 for compatibility purposes"
+            Self::InitialClientHello(Protocol::Udp) => ProtocolVersion::DTLSv1_0,
+            Self::InitialClientHello(Protocol::Tcp | Protocol::Quic(_)) => ProtocolVersion::TLSv1_0,
+
+            // <https://datatracker.ietf.org/doc/html/rfc9846#section-5.1>:
+            // "This value MUST be set to 0x0303 for all records generated
+            //  by a TLS 1.3 implementation ..."
+            Self::Legacy(v) if v.is_datagram_tls() => ProtocolVersion::DTLSv1_2,
+            Self::Legacy(_) => ProtocolVersion::TLSv1_2,
+        }
+    }
+
+    /// The actual protocol version in use.
+    pub fn version(&self) -> ProtocolVersion {
+        match self {
+            Self::Legacy(v) => *v,
+            Self::InitialClientHello(Protocol::Udp) => ProtocolVersion::DTLSv1_2,
+            Self::InitialClientHello(Protocol::Tcp | Protocol::Quic(_)) => ProtocolVersion::TLSv1_2,
+        }
+    }
+}
+
+/// Context used to encode a record.
+pub struct EncodingContext {
+    /// Whether the payload is encrypted
+    pub(crate) payload_is_encrypted: bool,
+    /// Epoch and sequence numbers, if any.
+    pub(crate) epoch_and_sequence: Option<EpochAndSequence>,
+}
+
+impl EncodingContext {
+    /// Create an `EncodingContext`.
+    pub fn new() -> Self {
+        Self {
+            payload_is_encrypted: false,
+            epoch_and_sequence: None,
+        }
+    }
+
+    /// Set DTLS epoch and sequence.
+    #[cfg(test)]
+    pub(crate) fn with_epoch_and_sequence(mut self, es: EpochAndSequence) -> Self {
+        self.epoch_and_sequence = Some(es);
+        self
     }
 }
 
@@ -562,6 +684,7 @@ mod tests {
     use std::{println, vec};
 
     use super::*;
+    use crate::quic;
 
     #[test]
     fn encrypt_buffer_appends() {
@@ -719,6 +842,72 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn encoded_message_encoding_version() {
+        for (version, expect, epoch_and_sequence) in [
+            (
+                EncodableVersion::InitialClientHello(Protocol::Tcp),
+                ProtocolVersion::TLSv1_0,
+                None,
+            ),
+            (
+                EncodableVersion::InitialClientHello(Protocol::Udp),
+                ProtocolVersion::DTLSv1_0,
+                Some(EpochAndSequence::new(17, 156)),
+            ),
+            (
+                EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+                ProtocolVersion::TLSv1_2,
+                None,
+            ),
+            (
+                EncodableVersion::Legacy(ProtocolVersion::DTLSv1_3),
+                ProtocolVersion::DTLSv1_2,
+                Some(EpochAndSequence::new(17, 156)),
+            ),
+            (
+                EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+                ProtocolVersion::TLSv1_2,
+                None,
+            ),
+            (
+                EncodableVersion::Legacy(ProtocolVersion::DTLSv1_2),
+                ProtocolVersion::DTLSv1_2,
+                Some(EpochAndSequence::new(17, 156)),
+            ),
+            (
+                EncodableVersion::InitialClientHello(Protocol::Quic(quic::Version::V2)),
+                ProtocolVersion::TLSv1_0,
+                None,
+            ),
+            (
+                EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+                ProtocolVersion::TLSv1_2,
+                None,
+            ),
+            (
+                EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+                ProtocolVersion::TLSv1_2,
+                None,
+            ),
+        ] {
+            let encoded_message = EncodedMessage {
+                typ: ContentType::Handshake,
+                version,
+                payload: OutboundPlain::Single(&[0, 1, 2, 3, 4]),
+            };
+            let mut cx = EncodingContext::new();
+            if let Some(es) = epoch_and_sequence {
+                cx = cx.with_epoch_and_sequence(es);
+            }
+            let encoded = encoded_message
+                .clone()
+                .to_unencrypted_bytes(cx);
+            let decoded = EncodedMessage::<Payload<'_>>::read(&mut Reader::new(&encoded)).unwrap();
+            assert_eq!(decoded.version.version(), expect);
         }
     }
 }

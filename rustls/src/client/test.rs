@@ -11,7 +11,10 @@ use pki_types::{CertificateDer, FipsStatus, ServerName, UnixTime};
 
 use super::{Tls12Session, Tls13ClientSessionInput, Tls13Session};
 use crate::client::{ClientConfig, Resumption, Tls12Resumption};
-use crate::crypto::cipher::{EncodedMessage, MessageEncrypter, Payload, encode_record_header};
+use crate::crypto::cipher::{
+    EncodableVersion, EncodedMessage, EncodingContext, MessageEncrypter, Payload,
+    encode_record_header,
+};
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::test_provider::{FakeKeyExchangeGroup, KEY_EXCHANGE_GROUP, TLS_TEST_SUITE};
 use crate::crypto::tls13::OkmBlock;
@@ -193,9 +196,9 @@ fn test_client_rejects_hrr_with_varied_session_id() {
 
     // server replies with HRR, but does not echo `session_id` as required.
     let hrr = Message {
-        version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::handshake(HandshakeMessagePayload(
-            HandshakePayload::HelloRetryRequest(HelloRetryRequest {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::HelloRetryRequest(HelloRetryRequest {
                 cipher_suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
                 legacy_version: ProtocolVersion::TLSv1_2,
                 session_id: SessionId::empty(),
@@ -203,8 +206,9 @@ fn test_client_rejects_hrr_with_varied_session_id() {
                     cookie: Some(SizedPayload::from(vec![1, 2, 3, 4])),
                     ..HelloRetryRequestExtensions::default()
                 },
-            }),
-        )),
+            })),
+            0.into(),
+        ),
     };
 
     let mut input = VecInput::default();
@@ -239,17 +243,18 @@ fn test_client_rejects_no_extended_main_secret_extension_when_require_ems_or_fip
     conn.write_tls(&mut sent).unwrap();
 
     let sh = Message {
-        version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
-            ServerHelloPayload {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::ServerHello(ServerHelloPayload {
                 random: Random::new(config.provider().secure_random).unwrap(),
                 compression_method: Compression::Null,
                 cipher_suite: CipherSuite(0xff12),
                 legacy_version: ProtocolVersion::TLSv1_2,
                 session_id: SessionId::empty(),
                 extensions: Box::new(ServerExtensions::default()),
-            },
-        ))),
+            })),
+            0.into(),
+        ),
     };
     let mut input = VecInput::default();
     input
@@ -308,9 +313,9 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
     conn.write_tls(&mut sent).unwrap();
 
     let sh = Message {
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
-            ServerHelloPayload {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::ServerHello(ServerHelloPayload {
                 random: Random([0u8; 32]),
                 compression_method: Compression::Null,
                 cipher_suite: TLS_TEST_SUITE.suite(),
@@ -320,8 +325,9 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
                     extended_main_secret_ack: Some(()),
                     ..ServerExtensions::default()
                 }),
-            },
-        ))),
+            })),
+            0.into(),
+        ),
     };
     let mut input = VecInput::default();
     input
@@ -331,10 +337,13 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
         .unwrap();
 
     let cert = Message {
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Certificate(
-            CertificateChain(vec![CertificateDer::from(&b"does not matter"[..])]),
-        ))),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::Certificate(CertificateChain(vec![
+                CertificateDer::from(&b"does not matter"[..]),
+            ]))),
+            1.into(),
+        ),
     };
     input
         .read(&mut cert.into_wire_bytes().as_slice())
@@ -343,10 +352,10 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
         .unwrap();
 
     let server_kx = Message {
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::handshake(HandshakeMessagePayload(
-            HandshakePayload::ServerKeyExchange(ServerKeyExchangePayload::Known(
-                ServerKeyExchange {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::ServerKeyExchange(
+                ServerKeyExchangePayload::Known(ServerKeyExchange {
                     dss: DigitallySignedStruct::new(
                         SignatureScheme::ECDSA_SHA1_Legacy,
                         b"also does not matter".to_vec(),
@@ -363,9 +372,10 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
                             .to_vec()
                             .into(),
                     }),
-                },
+                }),
             )),
-        )),
+            2.into(),
+        ),
     };
     input
         .read(&mut server_kx.into_wire_bytes().as_slice())
@@ -374,10 +384,11 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
         .unwrap();
 
     let server_done = Message {
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::handshake(HandshakeMessagePayload(
-            HandshakePayload::ServerHelloDone,
-        )),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::ServerHelloDone),
+            3.into(),
+        ),
     };
     input
         .read(&mut server_done.into_wire_bytes().as_slice())
@@ -518,9 +529,9 @@ fn client_requiring_rpk_receives_server_ee(
     conn.write_tls(&mut sent).unwrap();
 
     let sh = Message {
-        version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
-            ServerHelloPayload {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::ServerHello(ServerHelloPayload {
                 random: Random([0; 32]),
                 compression_method: Compression::Null,
                 cipher_suite: TLS13_TEST_SUITE.suite(),
@@ -538,8 +549,9 @@ fn client_requiring_rpk_receives_server_ee(
                     }),
                     ..ServerExtensions::default()
                 }),
-            },
-        ))),
+            })),
+            0.into(),
+        ),
     };
     let mut input = VecInput::default();
     input
@@ -549,10 +561,13 @@ fn client_requiring_rpk_receives_server_ee(
         .unwrap();
 
     let ee = Message {
-        version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::handshake(HandshakeMessagePayload(
-            HandshakePayload::EncryptedExtensions(Box::new(encrypted_extensions)),
-        )),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::EncryptedExtensions(Box::new(
+                encrypted_extensions,
+            ))),
+            1.into(),
+        ),
     };
 
     let mut encrypter = fake_server_crypto.server_handshake_encrypter();
@@ -565,11 +580,13 @@ fn client_requiring_rpk_receives_server_ee(
 
     let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
     enc_ee.truncate(HEADER_SIZE + len);
-    enc_ee[..HEADER_SIZE].copy_from_slice(&encode_record_header(
+    encode_record_header(
         typ,
         version,
         u16::try_from(len).unwrap(),
-    ));
+        EncodingContext::new(),
+        &mut enc_ee[..HEADER_SIZE],
+    );
 
     input
         .read(&mut enc_ee.as_slice())
@@ -643,11 +660,14 @@ fn client_receives_tls13_server_hello_with_raw_extension(
     drop(extensions);
 
     let sh = Message {
-        version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Unknown((
-            HandshakeType::ServerHello,
-            Payload::new(body),
-        )))),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::Unknown((
+                HandshakeType::ServerHello,
+                Payload::new(body),
+            ))),
+            0.into(),
+        ),
     };
 
     let mut input = VecInput::default();

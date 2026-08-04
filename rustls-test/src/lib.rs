@@ -11,7 +11,7 @@ use rustls::client::{
     ClientSessionKey, ServerVerifierBuilder, Tls13Session, WantsClientCert, WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{
-    EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, Payload,
+    EncodableVersion, EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, Payload,
 };
 use rustls::crypto::kx::{NamedGroup, SupportedKxGroup};
 use rustls::crypto::{
@@ -284,13 +284,13 @@ where
 
             let mut encoded = EncodedMessage {
                 typ,
-                version,
+                version: EncodableVersion::Legacy(version),
                 payload,
             };
 
             let message_enc = match filter(&mut encoded) {
                 Altered::InPlace => {
-                    encoding::message_framing(encoded.typ, encoded.version, encoded.payload.clone())
+                    encoding::message_framing(encoded.typ, version, encoded.payload.clone())
                 }
                 Altered::Raw(data) => data,
             };
@@ -1512,7 +1512,11 @@ impl RawTls {
             .unwrap();
 
         // Encode the TLS record header: 1 byte type, 2 bytes version, 2 bytes length
-        let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
+        let (typ, version, len) = (
+            encrypted.typ,
+            encrypted.version.encode(),
+            encrypted.payload.len(),
+        );
         record.truncate(HEADER_SIZE + len);
         record[0] = typ.into();
         record[1..3].copy_from_slice(&version.to_array());
@@ -1543,7 +1547,7 @@ impl RawTls {
 
         let inbound = EncodedMessage {
             typ,
-            version,
+            version: EncodableVersion::Legacy(version),
             payload: InboundOpaque(left),
         };
 
@@ -1976,7 +1980,7 @@ mod plaintext {
 
             Ok(EncodedMessage {
                 typ: ContentType::ApplicationData,
-                version: ProtocolVersion::TLSv1_2,
+                version: msg.version,
                 payload: payload.into_written(),
             })
         }
