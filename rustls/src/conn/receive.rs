@@ -11,7 +11,7 @@ use crate::common_state::{
     ConnectionOutput, Event, Output, OutputEvent, Side, UnborrowedPayload, maybe_send_fatal_alert,
 };
 use crate::conn::private::SideOutput;
-use crate::conn::{ConnectionCore, StateMachine};
+use crate::conn::{ConnectionCommon, StateMachine};
 use crate::crypto::cipher::{Decrypted, DecryptionState, EncodedMessage, Payload};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
@@ -35,7 +35,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
         quic: Option<&'a mut dyn QuicOutput>,
-        conn: &'a mut ConnectionCore<Side>,
+        conn: &'a mut ConnectionCommon<Side>,
     ) -> Self {
         Self {
             input,

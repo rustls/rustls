@@ -9,7 +9,7 @@ use crate::TlsInputBuffer;
 use crate::client::{ClientConfig, ClientSide};
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
-use crate::conn::{ConnectionCore, KeyingMaterialExporter, MessageIter, SideData, StateMachine};
+use crate::conn::{ConnectionCommon, KeyingMaterialExporter, MessageIter, SideData, StateMachine};
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::enums::ApplicationProtocol;
@@ -58,7 +58,7 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
 
 /// A QUIC client connection.
 pub struct ClientConnection {
-    inner: ConnectionCommon<ClientSide>,
+    inner: QuicCommon<ClientSide>,
 }
 
 impl ClientConnection {
@@ -110,7 +110,7 @@ impl ClientConnection {
         };
 
         let mut tls = Vec::new();
-        let inner = ConnectionCore::for_client(
+        let inner = ConnectionCommon::for_client(
             config,
             name,
             exts,
@@ -122,7 +122,7 @@ impl ClientConnection {
         // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
         debug_assert!(tls.is_empty());
         Ok(Self {
-            inner: ConnectionCommon::new(inner, quic),
+            inner: QuicCommon::new(inner, quic),
         })
     }
 
@@ -137,13 +137,15 @@ impl ClientConnection {
     /// handshake then the server will not process the data.  This
     /// is not an error, but you may wish to resend the data.
     pub fn is_early_data_accepted(&self) -> bool {
-        self.inner.core.is_early_data_accepted()
+        self.inner
+            .common
+            .is_early_data_accepted()
     }
 
     /// Returns the number of TLS1.3 tickets that have been received.
     pub fn tls13_tickets_received(&self) -> u32 {
         self.inner
-            .core
+            .common
             .common
             .recv
             .tls13_tickets_received
@@ -163,7 +165,7 @@ impl ClientConnection {
     ///
     /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.core.exporter()
+        self.inner.common.exporter()
     }
 }
 
@@ -206,7 +208,7 @@ impl fmt::Debug for ClientConnection {
 
 /// A QUIC server connection.
 pub struct ServerConnection {
-    inner: ConnectionCommon<ServerSide>,
+    inner: QuicCommon<ServerSide>,
 }
 
 impl ServerConnection {
@@ -226,8 +228,8 @@ impl ServerConnection {
             }),
         };
 
-        let core = ConnectionCore::for_server(config, exts, Protocol::Quic(version))?;
-        let inner = ConnectionCommon::new(
+        let core = ConnectionCommon::for_server(config, exts, Protocol::Quic(version))?;
+        let inner = QuicCommon::new(
             core,
             Quic {
                 version,
@@ -258,7 +260,7 @@ impl ServerConnection {
     ///
     /// The server name is also used to match sessions during session resumption.
     pub fn server_name(&self) -> Option<&DnsName<'_>> {
-        self.inner.core.side.server_name()
+        self.inner.common.side.server_name()
     }
 
     /// Set the resumption data to embed in future resumption tickets supplied to the client.
@@ -271,7 +273,7 @@ impl ServerConnection {
     /// from the client is desired, encrypt the data separately.
     pub fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
         assert!(resumption_data.len() < 2usize.pow(15));
-        match &mut self.inner.core.state {
+        match &mut self.inner.common.state {
             Ok(st) => st.set_resumption_data(resumption_data),
             Err(e) => Err(e.clone()),
         }
@@ -282,7 +284,7 @@ impl ServerConnection {
     /// Returns `Some` if and only if a valid resumption ticket has been received from the client.
     pub fn received_resumption_data(&self) -> Option<&[u8]> {
         self.inner
-            .core
+            .common
             .side
             .received_resumption_data()
     }
@@ -301,7 +303,7 @@ impl ServerConnection {
     ///
     /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.core.exporter()
+        self.inner.common.exporter()
     }
 }
 
@@ -371,8 +373,8 @@ impl ServerHandshake {
     /// The returned object should be fed data from a single potential client.
     pub fn start(version: Version) -> NeedsInput {
         NeedsInput {
-            inner: ConnectionCommon::new(
-                ConnectionCore::for_acceptor(Protocol::Quic(version)),
+            inner: QuicCommon::new(
+                ConnectionCommon::for_acceptor(Protocol::Quic(version)),
                 Quic {
                     version,
                     ..Quic::default()
@@ -382,25 +384,25 @@ impl ServerHandshake {
     }
 }
 
-impl TryFrom<ConnectionCommon<ServerSide>> for ServerHandshake {
+impl TryFrom<QuicCommon<ServerSide>> for ServerHandshake {
     type Error = Error;
 
-    fn try_from(mut inner: ConnectionCommon<ServerSide>) -> Result<Self, Error> {
+    fn try_from(mut inner: QuicCommon<ServerSide>) -> Result<Self, Error> {
         const MISUSED: Error = Error::Unreachable("forgot to restore state");
 
-        Ok(match mem::replace(&mut inner.core.state, Err(MISUSED))? {
+        Ok(match mem::replace(&mut inner.common.state, Err(MISUSED))? {
             ServerState::ChooseConfig(choose_config) => Self::Accepted(Accepted {
                 inner,
                 choose_config,
             }),
 
             state if state.is_traffic() => {
-                inner.core.state = Ok(state);
+                inner.common.state = Ok(state);
                 Self::Complete(ServerConnection { inner })
             }
 
             state => {
-                inner.core.state = Ok(state);
+                inner.common.state = Ok(state);
                 Self::NeedsInput(NeedsInput { inner })
             }
         })
@@ -411,7 +413,7 @@ impl TryFrom<ConnectionCommon<ServerSide>> for ServerHandshake {
 ///
 /// Provide the data to [`Self::process()`].
 pub struct NeedsInput {
-    inner: ConnectionCommon<ServerSide>,
+    inner: QuicCommon<ServerSide>,
 }
 
 impl NeedsInput {
@@ -459,7 +461,7 @@ impl fmt::Debug for NeedsInput {
 /// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
 pub struct Accepted {
     // invariant: `inner.core.state` is `Err(_)` and requires restoring
-    inner: ConnectionCommon<ServerSide>,
+    inner: QuicCommon<ServerSide>,
     choose_config: Box<ChooseConfig>,
 }
 
@@ -487,7 +489,7 @@ impl Accepted {
         check_server_config(&config)?;
 
         let mut tls = Vec::new();
-        self.inner.core.accepted(
+        self.inner.common.accepted(
             self.choose_config,
             ServerExtensionsInput {
                 transport_parameters: Some(match self.inner.quic.version {
@@ -547,14 +549,14 @@ pub enum QuicEvent {
 }
 
 /// A shared interface for QUIC connections.
-struct ConnectionCommon<Side: SideData> {
-    core: ConnectionCore<Side>,
+struct QuicCommon<Side: SideData> {
+    common: ConnectionCommon<Side>,
     quic: Quic,
 }
 
-impl<Side: SideData> ConnectionCommon<Side> {
-    fn new(core: ConnectionCore<Side>, quic: Quic) -> Self {
-        Self { core, quic }
+impl<Side: SideData> QuicCommon<Side> {
+    fn new(common: ConnectionCommon<Side>, quic: Quic) -> Self {
+        Self { common, quic }
     }
 
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
@@ -566,7 +568,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
 
     fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
         let suite = self
-            .core
+            .common
             .common
             .negotiated_cipher_suite()
             .and_then(|suite| match suite {
@@ -587,21 +589,21 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 
     fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
-        self.core
+        self.common
             .common
             .recv
             .deframer
             .input_quic(input.slice_mut())?;
 
         let mut tls = Vec::new();
-        let mut iter = MessageIter::new(input, &mut tls, Some(&mut self.quic), &mut self.core);
+        let mut iter = MessageIter::new(input, &mut tls, Some(&mut self.quic), &mut self.common);
         let result = match iter.next() {
             Some(Ok(_)) | None => Ok(()),
             Some(Err(e)) => Err(e),
         };
 
         input.discard(
-            self.core
+            self.common
                 .common
                 .recv
                 .deframer
@@ -616,17 +618,17 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 }
 
-impl<Side: SideData> Deref for ConnectionCommon<Side> {
+impl<Side: SideData> Deref for QuicCommon<Side> {
     type Target = CommonState;
 
     fn deref(&self) -> &Self::Target {
-        &self.core.common
+        &self.common.common
     }
 }
 
-impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
+impl<Side: SideData> DerefMut for QuicCommon<Side> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core.common
+        &mut self.common.common
     }
 }
 
