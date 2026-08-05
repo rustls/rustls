@@ -12,8 +12,8 @@ use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event,
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, MessageHandler,
-    SideCommonOutput, SideData,
+    Connection, ConnectionCommon, KeyingMaterialExporter, MessageHandler, SideCommonOutput,
+    SideData,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -76,7 +76,7 @@ impl ClientConnection {
     /// in this case the data is lost but the connection continues.  You
     /// can tell this happened using `is_early_data_accepted`.
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
-        let ConnectionCore { side, common, .. } = &mut self.inner.core;
+        let ConnectionCommon { side, common, .. } = &mut self.inner;
         let early_data = side.early_data.as_mut()?;
         match early_data.state {
             EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted => {
@@ -92,18 +92,17 @@ impl ClientConnection {
     /// handshake then the server will not process the data.  This
     /// is not an error, but you may wish to resend the data.
     pub fn is_early_data_accepted(&self) -> bool {
-        self.inner.core.is_early_data_accepted()
+        self.inner.is_early_data_accepted()
     }
 
     /// Return the connection's Encrypted Client Hello (ECH) status.
     pub fn ech_status(&self) -> EchStatus {
-        self.inner.core.side.ech_status
+        self.inner.side.ech_status
     }
 
     /// Returns the number of TLS1.3 tickets that have been received.
     pub fn tls13_tickets_received(&self) -> u32 {
         self.inner
-            .core
             .common
             .recv
             .tls13_tickets_received
@@ -187,14 +186,14 @@ impl ClientConnectionBuilder {
 
         let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
         Ok(ClientConnection {
-            inner: ConnectionCommon::new(ConnectionCore::for_client(
+            inner: ConnectionCommon::for_client(
                 config,
                 name,
                 ClientExtensionsInput::from_alpn(alpn_protocols),
                 None,
                 Protocol::Tcp,
                 tls,
-            )?),
+            )?,
         })
     }
 }
@@ -261,7 +260,7 @@ impl<'a> WriteEarlyData<'a> {
     }
 }
 
-impl ConnectionCore<ClientSide> {
+impl ConnectionCommon<ClientSide> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,

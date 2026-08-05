@@ -8,7 +8,9 @@ use super::receive::{Discard, JoinOutput};
 use crate::client::ClientSide;
 use crate::common_state::UnborrowedPayload;
 use crate::conn::kernel::KernelConnection;
-use crate::conn::{ConnectionCore, MessageIter, ReceivePath, SendOutput, SendPath, TlsInputBuffer};
+use crate::conn::{
+    ConnectionCommon, MessageIter, ReceivePath, SendOutput, SendPath, TlsInputBuffer,
+};
 use crate::crypto::cipher::{MessageEncrypter, OutboundPlain};
 use crate::enums::ProtocolVersion;
 use crate::error::{AlertDescription, ErrorWithAlert};
@@ -64,7 +66,7 @@ impl<Side: SideData> SplitConnection<Side> {
             state, recv, send, ..
         } = receive;
 
-        ConnectionCore::<Side>::from_parts_into_kernel_connection(
+        ConnectionCommon::<Side>::from_parts_into_kernel_connection(
             &mut send.lock().unwrap(),
             recv,
             outputs,
@@ -73,10 +75,10 @@ impl<Side: SideData> SplitConnection<Side> {
     }
 }
 
-impl<Side: SideData> TryFrom<ConnectionCore<Side>> for SplitConnection<Side> {
+impl<Side: SideData> TryFrom<ConnectionCommon<Side>> for SplitConnection<Side> {
     type Error = Error;
 
-    fn try_from(conn: ConnectionCore<Side>) -> Result<Self, Error> {
+    fn try_from(conn: ConnectionCommon<Side>) -> Result<Self, Error> {
         let send = Arc::new(Mutex::new(conn.common.send));
         let state = conn.state?;
 

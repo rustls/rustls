@@ -128,12 +128,18 @@ pub trait Connection<Side: SideData>: Debug + Deref<Target = ConnectionOutputs> 
 /// This object is generic over the `Side` type parameter, which must implement the marker trait
 /// [`SideData`]. This is used to store side-specific data.
 pub(crate) struct ConnectionCommon<Side: SideData> {
-    pub(crate) core: ConnectionCore<Side>,
+    pub(crate) state: Result<Side::State, Error>,
+    pub(crate) side: Side::Data,
+    pub(crate) common: CommonState,
 }
 
 impl<Side: SideData> ConnectionCommon<Side> {
-    pub(crate) fn new(core: ConnectionCore<Side>) -> Self {
-        Self { core }
+    pub(crate) fn new(state: Side::State, side: Side::Data, common: CommonState) -> Self {
+        Self {
+            state: Ok(state),
+            side,
+            common,
+        }
     }
 
     pub(crate) fn process_new_packets<'a, 'm>(
@@ -141,7 +147,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
     ) -> MessageHandler<'a, 'm, Side> {
-        MessageHandler::new(input, tls, &mut self.core)
+        MessageHandler::new(input, tls, self)
     }
 
     pub(crate) fn write_tls(
@@ -151,14 +157,17 @@ impl<Side: SideData> ConnectionCommon<Side> {
     ) -> Result<(), Error> {
         if plaintext.is_empty() {
             return Ok(());
-        } else if !self.send.may_send_application_data {
+        } else if !self
+            .common
+            .send
+            .may_send_application_data
+        {
             return Err(ApiMisuse::WriteTlsBeforeHandshakeComplete.into());
-        } else if self.send.has_sent_close_notify {
+        } else if self.common.send.has_sent_close_notify {
             return Err(ApiMisuse::WriteTlsAfterSendPathClosed.into());
         }
 
-        self.core
-            .common
+        self.common
             .send
             .send_appdata_encrypt(plaintext, tls);
 
@@ -168,22 +177,14 @@ impl<Side: SideData> ConnectionCommon<Side> {
     pub(crate) fn wants_read(&self) -> bool {
         // We want to read more data all the time, except after the peer has sent us
         // a close notification.
-        !self.recv.has_received_close_notify
-    }
-
-    pub(crate) fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.core.exporter()
-    }
-
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    /// Should be used with care as it exposes secret key material.
-    pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.core.dangerous_extract_secrets()
+        !self
+            .common
+            .recv
+            .has_received_close_notify
     }
 
     pub(crate) fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
-        self.core
-            .common
+        self.common
             .send
             .refresh_traffic_keys(tls)
     }
@@ -194,39 +195,11 @@ impl<Side: SideData> ConnectionCommon<Side> {
             return Err(ApiMisuse::SplitDuringHandshake.into());
         }
 
-        SplitConnection::try_from(self.core)
-    }
-}
-
-impl<Side: SideData> Deref for ConnectionCommon<Side> {
-    type Target = CommonState;
-
-    fn deref(&self) -> &Self::Target {
-        &self.core.common
-    }
-}
-
-impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core.common
-    }
-}
-
-pub(crate) struct ConnectionCore<Side: SideData> {
-    pub(crate) state: Result<Side::State, Error>,
-    pub(crate) side: Side::Data,
-    pub(crate) common: CommonState,
-}
-
-impl<Side: SideData> ConnectionCore<Side> {
-    pub(crate) fn new(state: Side::State, side: Side::Data, common: CommonState) -> Self {
-        Self {
-            state: Ok(state),
-            side,
-            common,
-        }
+        SplitConnection::try_from(self)
     }
 
+    /// Extract secrets, so they can be used when configuring kTLS, for example.
+    /// Should be used with care as it exposes secret key material.
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
         Ok(self
             .dangerous_into_kernel_connection()?
@@ -277,7 +250,7 @@ impl<Side: SideData> ConnectionCore<Side> {
     }
 }
 
-impl ConnectionCore<ServerSide> {
+impl ConnectionCommon<ServerSide> {
     pub(crate) fn accepted(
         &mut self,
         choose: Box<ChooseConfig>,
@@ -303,6 +276,20 @@ impl ConnectionCore<ServerSide> {
     }
 }
 
+impl<Side: SideData> Deref for ConnectionCommon<Side> {
+    type Target = CommonState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.common
+    }
+}
+
+impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.common
+    }
+}
+
 /// Driver for handling messages from the [`TlsInputBuffer`].
 ///
 /// Must be driven to completion to make progress, by calling either [`Self::handle_all()`] or
@@ -320,7 +307,7 @@ impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
     pub(crate) fn new(
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
-        core: &'a mut ConnectionCore<Side>,
+        core: &'a mut ConnectionCommon<Side>,
     ) -> Self {
         Self {
             iter: MessageIter::new(input, tls, None, core),

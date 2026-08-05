@@ -13,8 +13,8 @@ use crate::common_state::{
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, MessageHandler,
-    MessageIter, SideData, StateMachine, TlsInputBuffer,
+    Connection, ConnectionCommon, KeyingMaterialExporter, MessageHandler, MessageIter, SideData,
+    StateMachine, TlsInputBuffer,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -40,11 +40,11 @@ impl ServerConnection {
     /// we behave in the TLS protocol.
     pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
         Ok(Self {
-            inner: ConnectionCommon::new(ConnectionCore::for_server(
+            inner: ConnectionCommon::for_server(
                 config,
                 ServerExtensionsInput::default(),
                 Protocol::Tcp,
-            )?),
+            )?,
         })
     }
 
@@ -82,7 +82,7 @@ impl ServerConnection {
     ///
     /// The server name is also used to match sessions during session resumption.
     pub fn server_name(&self) -> Option<&DnsName<'_>> {
-        self.inner.core.side.server_name()
+        self.inner.side.server_name()
     }
 
     /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -92,7 +92,6 @@ impl ServerConnection {
     /// Returns `Some` if and only if a valid resumption ticket has been received from the client.
     pub fn received_resumption_data(&self) -> Option<&[u8]> {
         self.inner
-            .core
             .side
             .received_resumption_data()
     }
@@ -107,7 +106,7 @@ impl ServerConnection {
     /// from the client is desired, encrypt the data separately.
     pub fn set_resumption_data(&mut self, data: &[u8]) -> Result<(), Error> {
         assert!(data.len() < 2usize.pow(15));
-        match &mut self.inner.core.state {
+        match &mut self.inner.state {
             Ok(st) => st.set_resumption_data(data),
             Err(e) => Err(e.clone()),
         }
@@ -126,7 +125,6 @@ impl ServerConnection {
     pub fn early_data(&mut self) -> Option<ReadEarlyData<'_>> {
         if self
             .inner
-            .core
             .side
             .early_data
             .was_accepted()
@@ -227,15 +225,15 @@ impl ServerHandshake {
     /// The returned object should be fed data from a single potential client.
     pub fn start() -> NeedsInput {
         NeedsInput {
-            inner: ConnectionCore::for_acceptor(Protocol::Tcp),
+            inner: ConnectionCommon::for_acceptor(Protocol::Tcp),
         }
     }
 }
 
-impl TryFrom<ConnectionCore<ServerSide>> for ServerHandshake {
+impl TryFrom<ConnectionCommon<ServerSide>> for ServerHandshake {
     type Error = Error;
 
-    fn try_from(mut inner: ConnectionCore<ServerSide>) -> Result<Self, Error> {
+    fn try_from(mut inner: ConnectionCommon<ServerSide>) -> Result<Self, Error> {
         const MISUSED: Error = Error::Unreachable("forgot to restore state");
 
         Ok(match mem::replace(&mut inner.state, Err(MISUSED))? {
@@ -261,7 +259,7 @@ impl TryFrom<ConnectionCore<ServerSide>> for ServerHandshake {
 ///
 /// Provide the data to [`Self::process()`].
 pub struct NeedsInput {
-    inner: ConnectionCore<ServerSide>,
+    inner: ConnectionCommon<ServerSide>,
 }
 
 impl NeedsInput {
@@ -319,9 +317,7 @@ impl NeedsInput {
 
     /// Temporary escape hatch during migration to new API.
     pub fn into_buffered_connection(self) -> ServerConnection {
-        ServerConnection {
-            inner: ConnectionCommon::new(self.inner),
-        }
+        ServerConnection { inner: self.inner }
     }
 }
 
@@ -338,7 +334,7 @@ impl fmt::Debug for NeedsInput {
 /// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
 pub struct Accepted {
     // invariant: `inner.state` is `Err(_)` and requires restoring
-    inner: ConnectionCore<ServerSide>,
+    inner: ConnectionCommon<ServerSide>,
     choose_config: Box<ChooseConfig>,
 }
 
@@ -424,17 +420,13 @@ impl<'a> ReadEarlyData<'a> {
     /// [RFC 9846 appendix F.5.1]: https://datatracker.ietf.org/doc/html/rfc9846#appendix-F.5.1
     /// [`Connection::exporter()`]: crate::conn::Connection::exporter()
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.common.core.common.early_exporter()
+        self.common.common.early_exporter()
     }
 }
 
 impl io::Read for ReadEarlyData<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.common
-            .core
-            .side
-            .early_data
-            .read(buf)
+        self.common.side.early_data.read(buf)
     }
 }
 
@@ -490,7 +482,7 @@ impl EarlyDataState {
     }
 }
 
-impl ConnectionCore<ServerSide> {
+impl ConnectionCommon<ServerSide> {
     pub(crate) fn for_server(
         config: Arc<ServerConfig>,
         extra_exts: ServerExtensionsInput,
