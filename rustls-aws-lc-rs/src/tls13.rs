@@ -228,8 +228,9 @@ impl MessageEncrypter for AeadMessageEncrypter {
         let total_len = self.encrypted_payload_len(msg.payload.len());
         let mut payload = EncryptBuffer::new(out, total_len)?;
 
+        let typ = ContentType::ApplicationData;
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(total_len));
+        let aad = aead::Aad::from(make_tls13_aad(typ, TLS13_LEGACY_RECORD_VERSION, total_len));
         payload.extend_from_chunks(&msg.payload);
         payload.extend_from_slice(&msg.typ.to_array());
 
@@ -242,10 +243,8 @@ impl MessageEncrypter for AeadMessageEncrypter {
         }
 
         Ok(EncodedMessage {
-            typ: ContentType::ApplicationData,
-            // Note: all TLS 1.3 application data records use TLSv1_2 (0x0303) as the legacy record
-            // protocol version, see https://www.rfc-editor.org/rfc/rfc9846#section-5.1
-            version: ProtocolVersion::TLSv1_2,
+            typ,
+            version: TLS13_LEGACY_RECORD_VERSION,
             payload: payload.into_written(),
         })
     }
@@ -267,7 +266,7 @@ impl MessageDecrypter for AeadMessageDecrypter {
         }
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(payload.len()));
+        let aad = aead::Aad::from(make_tls13_aad(msg.typ, msg.version, payload.len()));
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, payload)
@@ -294,8 +293,9 @@ impl MessageEncrypter for GcmMessageEncrypter {
         let total_len = self.encrypted_payload_len(msg.payload.len());
         let mut payload = EncryptBuffer::new(out, total_len)?;
 
+        let typ = ContentType::ApplicationData;
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(total_len));
+        let aad = aead::Aad::from(make_tls13_aad(typ, TLS13_LEGACY_RECORD_VERSION, total_len));
         payload.extend_from_chunks(&msg.payload);
         payload.extend_from_slice(&msg.typ.to_array());
 
@@ -308,8 +308,8 @@ impl MessageEncrypter for GcmMessageEncrypter {
         }
 
         Ok(EncodedMessage {
-            typ: ContentType::ApplicationData,
-            version: ProtocolVersion::TLSv1_2,
+            typ,
+            version: TLS13_LEGACY_RECORD_VERSION,
             payload: payload.into_written(),
         })
     }
@@ -318,6 +318,10 @@ impl MessageEncrypter for GcmMessageEncrypter {
         payload_len + 1 + self.enc_key.algorithm().tag_len()
     }
 }
+
+// Note: all TLS 1.3 application data records use TLSv1_2 (0x0303) as the legacy record
+// protocol version, see https://www.rfc-editor.org/rfc/rfc9846#section-5.1
+const TLS13_LEGACY_RECORD_VERSION: ProtocolVersion = ProtocolVersion::TLSv1_2;
 
 struct GcmMessageDecrypter {
     dec_key: aead::TlsRecordOpeningKey,
@@ -336,7 +340,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
         }
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(payload.len()));
+        let aad = aead::Aad::from(make_tls13_aad(msg.typ, msg.version, payload.len()));
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, payload)
