@@ -11,9 +11,10 @@ use rustls::{
     ServerConfig, ServerConnection, SupportedCipherSuite, VecInput,
 };
 use rustls_test::{
-    ClientConfigExt, KeyType, ServerConfigExt, aes_128_gcm_with_1024_confidentiality_limit,
-    do_handshake, make_client_config, make_pair, make_pair_for_arc_configs, make_pair_for_configs,
-    make_server_config, provider_with_one_suite, transfer,
+    ClientConfigExt, KeyType, MultiTest, ServerConfigExt,
+    aes_128_gcm_with_1024_confidentiality_limit, do_handshake, make_client_config, make_pair,
+    make_pair_for_arc_configs, make_pair_for_configs, make_server_config, provider_with_one_suite,
+    transfer,
 };
 
 use super::provider;
@@ -682,6 +683,57 @@ fn test_keys_match_for_all_signing_key_types() {
             .unwrap();
         let _ = Credentials::new(kt.client_identity(), key).expect("keys match");
         println!("{kt:?} ok");
+    }
+}
+
+#[test]
+fn test_wire_version_passed_to_aad() {
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        println!("{expect:?}");
+
+        // corrupt type and low-byte of version
+        for byte in [0, 2] {
+            let mut client_output = Vec::new();
+            let mut server_output = Vec::new();
+            let (mut client, mut server) =
+                make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+            let mut client_input = VecInput::default();
+            let mut server_input = VecInput::default();
+            do_handshake(
+                &mut client_input,
+                &mut client_output,
+                &mut client,
+                &mut server_input,
+                &mut server_output,
+                &mut server,
+            );
+
+            // base case
+            client
+                .write_tls(b"hello".into(), &mut client_output)
+                .unwrap();
+            transfer(&mut client_output, &mut server_input);
+            let mut server_received = Vec::new();
+            server
+                .process_new_packets(&mut server_input, &mut server_output)
+                .handle_all(&mut server_received)
+                .unwrap();
+            assert_eq!(server_received, b"hello");
+
+            // fail case
+            client
+                .write_tls(b"world".into(), &mut client_output)
+                .unwrap();
+            client_output[byte] ^= 0x01;
+            transfer(&mut client_output, &mut server_input);
+            assert_eq!(
+                server
+                    .process_new_packets(&mut server_input, &mut server_output)
+                    .handle_all(&mut server_received)
+                    .unwrap_err(),
+                Error::DecryptError
+            );
+        }
     }
 }
 
