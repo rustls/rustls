@@ -256,7 +256,6 @@
     "TLS-TLS12-CHACHA20_POLY1305_SHA256-server": ":INCOMPATIBLE:",
     "TLS13-HRR-InvalidCompressionMethod": ":UNSUPPORTED_COMPRESSION:",
     "TLS13-InvalidCompressionMethod": ":UNSUPPORTED_COMPRESSION_ALGORITHM:",
-    "TLS13-WrongOuterRecord-TLS": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
     "TooManyChangeCipherSpec-Client-TLS13": ":ILLEGAL_MIDDLEBOX_CHANGE_CIPHER_SPEC:",
     "TooManyChangeCipherSpec-Server-TLS13": ":ILLEGAL_MIDDLEBOX_CHANGE_CIPHER_SPEC:",
     "TrailingKeyShareData-TLS13": ":BAD_HANDSHAKE_MSG:",
