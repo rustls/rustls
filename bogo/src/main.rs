@@ -2188,6 +2188,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(
             PeerMisbehaved::IllegalAlertLevel(_, _) | PeerMisbehaved::IllegalWarningAlert(_),
         ) => quit(":BAD_ALERT:"),
+        Error::PeerMisbehaved(PeerMisbehaved::IllegalTls13ContentType) => {
+            quit(":INVALID_OUTER_RECORD_TYPE:")
+        }
         Error::PeerMisbehaved(_) => panic!("!!! please add error mapping for {err:?}"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
         Error::AlertReceived(AlertDescription::DecompressionFailure) => {

@@ -87,6 +87,10 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
     pub fn into_tls13_unpadded_message(mut self) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let payload = &mut self.payload;
 
+        if self.typ != ContentType::ApplicationData {
+            return Err(PeerMisbehaved::IllegalTls13ContentType.into());
+        }
+
         if payload.len() > MAX_FRAGMENT_LEN + 1 {
             return Err(Error::PeerSentOversizedRecord);
         }

@@ -1243,6 +1243,7 @@ pub enum PeerMisbehaved {
     UnsolicitedServerHelloExtension,
     WrongGroupForKeyShare,
     UnsolicitedEchExtension,
+    IllegalTls13ContentType,
 }
 
 impl From<PeerMisbehaved> for AlertDescription {
@@ -1257,7 +1258,8 @@ impl From<PeerMisbehaved> for AlertDescription {
 
             PeerMisbehaved::IllegalMiddleboxChangeCipherSpec
             | PeerMisbehaved::KeyEpochWithPendingFragment
-            | PeerMisbehaved::KeyUpdateReceivedInQuicConnection => Self::UnexpectedMessage,
+            | PeerMisbehaved::KeyUpdateReceivedInQuicConnection
+            | PeerMisbehaved::IllegalTls13ContentType => Self::UnexpectedMessage,
 
             PeerMisbehaved::IllegalWarningAlert(_) => Self::DecodeError,
 
