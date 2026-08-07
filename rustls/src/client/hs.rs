@@ -15,7 +15,7 @@ use super::{
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{EarlyDataEvent, Event, Output, OutputEvent, Protocol};
 use crate::conn::{Input, StateMachine};
-use crate::crypto::cipher::Payload;
+use crate::crypto::cipher::{EncodableVersion, Payload};
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
 use crate::enums::{
@@ -848,13 +848,13 @@ fn emit_client_hello_for_retry(
             // <https://datatracker.ietf.org/doc/html/rfc9846#section-5.1>:
             // "This value MUST be set to 0x0303 for all records generated
             //  by a TLS 1.3 implementation ..."
-            Some(_) => ProtocolVersion::TLSv1_2,
+            Some(_) => EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             // "... other than an initial ClientHello (i.e., one not
             // generated after a HelloRetryRequest), where it MAY also be
             // 0x0301 for compatibility purposes"
             //
             // (retryreq == None means we're in the "initial ClientHello" case)
-            None => ProtocolVersion::TLSv1_0,
+            None => EncodableVersion::InitialClientHello(input.protocol),
         },
         payload: MessagePayload::handshake(chp),
     };

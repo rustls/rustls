@@ -2,7 +2,7 @@ use core::mem;
 use core::ops::Range;
 use std::collections::VecDeque;
 
-use crate::crypto::cipher::{EncodedMessage, InboundOpaque, MessageError};
+use crate::crypto::cipher::{EncodableVersion, EncodedMessage, InboundOpaque, MessageError};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader, U24};
@@ -78,7 +78,7 @@ impl Deframer {
         Some(Ok(Deframed {
             message: EncodedMessage {
                 typ,
-                version,
+                version: EncodableVersion::Legacy(version),
                 payload: InboundOpaque(&mut head[bounds.start + HEADER_SIZE..]),
             },
             bounds,
@@ -249,7 +249,7 @@ impl Deframer {
             // finally, attempt to re-dissect `first`
             let msg = EncodedMessage {
                 typ: ContentType::Handshake,
-                version: first.version,
+                version: EncodableVersion::Legacy(first.version),
                 payload: delocator.slice_from_range(&first.bounds),
             };
 
@@ -288,7 +288,7 @@ impl Deframer {
 
         EncodedMessage {
             typ: ContentType::Handshake,
-            version: next_span.version,
+            version: EncodableVersion::Legacy(next_span.version),
             payload: Delocator::new(containing_buffer).slice_from_range(&next_span.bounds),
         }
     }
@@ -487,7 +487,7 @@ mod tests {
         let msg = deframer.message(span, &input);
         std::println!("msg {msg:?}");
         assert_eq!(msg.typ, ContentType::Handshake);
-        assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
+        assert_eq!(msg.version.version(), ProtocolVersion::TLSv1_3);
         assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x01, 0xff]);
 
         input.drain(..deframer.take_discard());
@@ -509,7 +509,7 @@ mod tests {
 
         let msg = std::dbg!(deframer.message(span, &input));
         assert_eq!(msg.typ, ContentType::Handshake);
-        assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
+        assert_eq!(msg.version.version(), ProtocolVersion::TLSv1_3);
         assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x05, 1, 2, 3, 4, 5]);
 
         input.drain(..deframer.take_discard());
@@ -548,7 +548,7 @@ mod tests {
         assert!(deframer.complete_span().is_none());
 
         assert_eq!(msg.typ, ContentType::Handshake);
-        assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
+        assert_eq!(msg.version.version(), ProtocolVersion::TLSv1_3);
         assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x01, 0xab]);
         // second span is incomplete, so no discard yet
         assert_eq!(deframer.discard, 0);
@@ -566,7 +566,7 @@ mod tests {
             std::println!("message {plain:?}");
 
             deframer.input_message(
-                plain.version,
+                plain.version.version(),
                 bounds.start + HEADER_SIZE..bounds.end,
                 &input,
             );

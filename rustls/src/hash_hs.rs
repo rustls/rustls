@@ -181,7 +181,7 @@ impl Clone for HandshakeHash {
 #[cfg(all(test, any(target_arch = "aarch64", target_arch = "x86_64")))]
 mod tests {
     use super::*;
-    use crate::crypto::cipher::Payload;
+    use crate::crypto::cipher::{EncodableVersion, Payload};
     use crate::crypto::test_provider::SHA256;
     use crate::enums::ProtocolVersion;
     use crate::msgs::{HandshakeMessagePayload, HandshakePayload};
@@ -206,19 +206,19 @@ mod tests {
     fn hashes_message_types() {
         // handshake protocol encoding of 0x0e 00 00 00
         let server_hello_done_message = Message {
-            version: ProtocolVersion::TLSv1_2,
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::ServerHelloDone,
             )),
         };
 
         let app_data_ignored = Message {
-            version: ProtocolVersion::TLSv1_3,
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::ApplicationData(Payload::Borrowed(b"hello")),
         };
 
         let end_of_early_data_flight = Message {
-            version: ProtocolVersion::TLSv1_3,
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::HandshakeFlight(Payload::Borrowed(b"\x05\x00\x00\x00")),
         };
 

@@ -7,7 +7,7 @@ use pki_types::{DnsName, FipsStatus};
 
 use crate::client::EchStatus;
 use crate::conn::{Exporter, KeyingMaterialExporter, ReceivePath, SendOutput, SendPath};
-use crate::crypto::cipher::Payload;
+use crate::crypto::cipher::{EncodableVersion, Payload};
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ApplicationProtocol, ProtocolVersion};
 use crate::error::{AlertDescription, ApiMisuse, Error};
@@ -384,8 +384,10 @@ pub enum Side {
     Server,
 }
 
+/// Transport protocol in use for a connection.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub(crate) enum Protocol {
+#[non_exhaustive]
+pub enum Protocol {
     /// TCP-TLS, standardized in RFC 5246 and RFC 9846
     Tcp,
     /// QUIC, standardized in RFC 9001
@@ -427,10 +429,10 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
 
     pub(crate) fn finish(self, output: &mut dyn Output<'_>) {
         let m = Message {
-            version: match TLS13 {
+            version: EncodableVersion::Legacy(match TLS13 {
                 true => ProtocolVersion::TLSv1_3,
                 false => ProtocolVersion::TLSv1_2,
-            },
+            }),
             payload: MessagePayload::HandshakeFlight(Payload::new(self.body)),
         };
 

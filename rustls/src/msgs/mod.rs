@@ -34,7 +34,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use crate::crypto::cipher::{EncodedMessage, MessageError, Payload};
+use crate::crypto::cipher::{EncodableVersion, EncodedMessage, MessageError, Payload};
 use crate::enums::{ContentType, ContentTypeName, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, InvalidMessage};
 use crate::verify::DigitallySignedStruct;
@@ -135,11 +135,15 @@ pub mod fuzzing {
         };
 
         //println!("msg = {:#?}", m);
+        let expected_version = msg.version.encode();
         let enc = EncodedMessage::<Payload<'_>>::from(msg)
             .borrow_outbound()
             .to_unencrypted_bytes();
         //println!("data = {:?}", &data[..rdr.used()]);
-        assert_eq!(enc, data[..data.len() - rdr.left()]);
+        assert_eq!(enc[0], data[0]);
+        // The version bytes will have been rewritten by `EncodableVersion`
+        assert_eq!([enc[1], enc[2]], expected_version.to_array());
+        assert_eq!(&enc[3..], &data[3..data.len() - rdr.left()]);
     }
 
     pub fn fuzz_server_session_value(data: &[u8]) {
@@ -151,14 +155,14 @@ pub mod fuzzing {
 /// A message with decoded payload
 #[derive(Debug)]
 pub(crate) struct Message<'a> {
-    pub version: ProtocolVersion,
+    pub version: EncodableVersion,
     pub payload: MessagePayload<'a>,
 }
 
 impl Message<'_> {
     pub(crate) fn build_alert(level: AlertLevel, desc: AlertDescription) -> Self {
         Self {
-            version: ProtocolVersion::TLSv1_2,
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::Alert(AlertMessagePayload {
                 level,
                 description: desc,
@@ -168,7 +172,7 @@ impl Message<'_> {
 
     pub(crate) fn build_key_update_notify() -> Self {
         Self {
-            version: ProtocolVersion::TLSv1_3,
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
             )),
@@ -177,7 +181,7 @@ impl Message<'_> {
 
     pub(crate) fn build_key_update_request() -> Self {
         Self {
-            version: ProtocolVersion::TLSv1_3,
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateRequested),
             )),
@@ -213,7 +217,7 @@ impl<'a> TryFrom<EncodedMessage<&'a [u8]>> for Message<'a> {
     fn try_from(plain: EncodedMessage<&'a [u8]>) -> Result<Self, Self::Error> {
         Ok(Self {
             version: plain.version,
-            payload: MessagePayload::new(plain.typ, plain.version, plain.payload)?,
+            payload: MessagePayload::new(plain.typ, plain.version.version(), plain.payload)?,
         })
     }
 }
@@ -224,7 +228,11 @@ impl<'a> TryFrom<&'a EncodedMessage<Payload<'a>>> for Message<'a> {
     fn try_from(plain: &'a EncodedMessage<Payload<'a>>) -> Result<Self, Self::Error> {
         Ok(Self {
             version: plain.version,
-            payload: MessagePayload::new(plain.typ, plain.version, plain.payload.bytes())?,
+            payload: MessagePayload::new(
+                plain.typ,
+                plain.version.version(),
+                plain.payload.bytes(),
+            )?,
         })
     }
 }
@@ -731,8 +739,11 @@ mod tests {
             let enc = EncodedMessage::<Payload<'_>>::from(msg)
                 .borrow_outbound()
                 .to_unencrypted_bytes();
-            assert_eq!(bytes.to_vec(), enc);
-            assert_eq!(bytes[..bytes.len() - rd.left()].to_vec(), enc);
+            // Check that round-tripped message matches the input, ignoring the protocol version
+            // bytes, which will have been forced to a compatible TLS version.
+            assert_eq!(bytes[0], enc[0]);
+            assert_eq!(&bytes[3..], &enc[3..]);
+            assert_eq!(rd.left(), 0);
         }
     }
 
@@ -811,7 +822,7 @@ mod tests {
         // Message::into_wire_bytes() include both message-level and handshake-level headers
         assert_eq!(
             Message::build_key_update_request().into_wire_bytes(),
-            &[0x16, 0x3, 0x4, 0x0, 0x5, 0x18, 0x0, 0x0, 0x1, 0x1]
+            &[0x16, 0x3, 0x3, 0x0, 0x5, 0x18, 0x0, 0x0, 0x1, 0x1]
         );
     }
 
