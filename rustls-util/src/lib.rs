@@ -1,6 +1,6 @@
 use std::io;
 
-use rustls::{Connection, SideData, VecInput};
+use rustls::{Connection, VecInput};
 
 mod key_log_file;
 pub use key_log_file::KeyLogFile;
@@ -42,7 +42,7 @@ pub fn complete_io(
     input: &mut VecInput,
     received_plaintext: &mut Vec<u8>,
     output: &mut Vec<u8>,
-    conn: &mut dyn Connection<impl SideData>,
+    conn: &mut impl Connection,
 ) -> Result<(usize, usize), io::Error> {
     let mut eof = false;
     let mut wrlen = 0;
