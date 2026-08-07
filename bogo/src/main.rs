@@ -46,8 +46,8 @@ use rustls::server::{
     ServerSessionKey, Tls13Tickets, WebPkiClientVerifier,
 };
 use rustls::{
-    Connection, DistinguishedName, HandshakeKind, IoState, RootCertStore, SideData, TlsInputBuffer,
-    VecInput, compress,
+    Connection, DistinguishedName, HandshakeKind, IoState, RootCertStore, TlsInputBuffer, VecInput,
+    compress,
 };
 use rustls_aws_lc_rs::hpke;
 use tracing_subscriber::layer::SubscriberExt;
@@ -147,9 +147,9 @@ pub fn main() {
     }
 }
 
-fn exec<S: SideData>(
+fn exec(
     opts: &Options,
-    mut sess: impl Connection<S> + 'static,
+    mut sess: impl Connection + 'static,
     mut output: Vec<u8>,
     key_log: &KeyLogMemo,
     count: usize,
@@ -440,8 +440,8 @@ fn server(conn: &mut dyn Any) -> &mut ServerConnection {
 /// is still in progress.
 ///
 /// Queued plaintext is sent by `after_read()` once the handshake completes.
-fn write_or_queue<S: SideData>(
-    sess: &mut impl Connection<S>,
+fn write_or_queue(
+    sess: &mut impl Connection,
     plaintext: &[u8],
     pending: &mut Vec<u8>,
     output: &mut Vec<u8>,
@@ -459,13 +459,13 @@ fn write_or_queue<S: SideData>(
     }
 }
 
-fn read_n_bytes<S: SideData>(
+fn read_n_bytes(
     buf: &mut Vec<u8>,
     opts: &Options,
     input: &mut VecInput,
     output: &mut Vec<u8>,
     pending: &mut Vec<u8>,
-    sess: &mut impl Connection<S>,
+    sess: &mut impl Connection,
     conn: &mut net::TcpStream,
     n: usize,
 ) -> Option<IoState> {
@@ -484,13 +484,13 @@ fn read_n_bytes<S: SideData>(
     after_read(buf, opts, input, output, pending, sess, conn)
 }
 
-fn read_all_bytes<S: SideData>(
+fn read_all_bytes(
     buf: &mut Vec<u8>,
     opts: &Options,
     input: &mut VecInput,
     output: &mut Vec<u8>,
     pending: &mut Vec<u8>,
-    sess: &mut impl Connection<S>,
+    sess: &mut impl Connection,
     conn: &mut net::TcpStream,
 ) -> Option<IoState> {
     match input.read(conn) {
@@ -502,13 +502,13 @@ fn read_all_bytes<S: SideData>(
     after_read(buf, opts, input, output, pending, sess, conn)
 }
 
-fn after_read<S: SideData>(
+fn after_read(
     buf: &mut Vec<u8>,
     opts: &Options,
     input: &mut VecInput,
     output: &mut Vec<u8>,
     pending: &mut Vec<u8>,
-    sess: &mut impl Connection<S>,
+    sess: &mut impl Connection,
     conn: &mut net::TcpStream,
 ) -> Option<IoState> {
     let state = match sess

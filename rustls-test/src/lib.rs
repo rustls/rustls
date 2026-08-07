@@ -1,5 +1,4 @@
 use core::hash::Hasher;
-use core::marker::PhantomData;
 use core::{fmt, mem};
 use std::borrow::Cow;
 use std::io;
@@ -7,8 +6,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerIdentity, ServerVerifier};
 use rustls::client::{
-    ClientSessionKey, ClientSide, ServerVerifierBuilder, Tls13Session, WantsClientCert,
-    WebPkiServerVerifier,
+    ClientSessionKey, ServerVerifierBuilder, Tls13Session, WantsClientCert, WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{
     EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, Payload,
@@ -28,7 +26,7 @@ use rustls::pki_types::{
 };
 use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
 use rustls::server::{
-    ClientHello, ClientVerifierBuilder, ServerCredentialResolver, ServerSide, WebPkiClientVerifier,
+    ClientHello, ClientVerifierBuilder, ServerCredentialResolver, WebPkiClientVerifier,
 };
 use rustls::{
     ClientConfig, ClientConnection, ConfigBuilder, Connection, ConnectionTrafficSecrets,
@@ -892,10 +890,10 @@ pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, S
 pub fn do_handshake(
     client_input: &mut VecInput,
     client_output: &mut Vec<u8>,
-    client: &mut impl Connection<ClientSide>,
+    client: &mut impl Connection,
     server_input: &mut VecInput,
     server_output: &mut Vec<u8>,
-    server: &mut impl Connection<ServerSide>,
+    server: &mut impl Connection,
 ) -> (usize, usize) {
     do_handshake_collecting(
         client_input,
@@ -913,11 +911,11 @@ pub fn do_handshake(
 pub fn do_handshake_collecting(
     client_input: &mut VecInput,
     client_output: &mut Vec<u8>,
-    client: &mut impl Connection<ClientSide>,
+    client: &mut impl Connection,
     client_received: &mut Vec<u8>,
     server_input: &mut VecInput,
     server_output: &mut Vec<u8>,
-    server: &mut impl Connection<ServerSide>,
+    server: &mut impl Connection,
     server_received: &mut Vec<u8>,
 ) -> (usize, usize) {
     let (mut to_client, mut to_server) = (0, 0);
@@ -1766,7 +1764,7 @@ impl ServerCredentialResolver for ServerCheckCertResolve {
     }
 }
 
-pub struct OtherSession<'a, S: SideData, C: Connection<S>> {
+pub struct OtherSession<'a, C: Connection> {
     sess: &'a mut C,
     input: &'a mut VecInput,
     output: &'a mut Vec<u8>,
@@ -1779,10 +1777,9 @@ pub struct OtherSession<'a, S: SideData, C: Connection<S>> {
     pub buffered: bool,
     buffer: Vec<Vec<u8>>,
     pub received: Vec<u8>,
-    side: PhantomData<S>,
 }
 
-impl<'a, S: SideData, C: Connection<S>> OtherSession<'a, S, C> {
+impl<'a, C: Connection> OtherSession<'a, C> {
     pub fn new(input: &'a mut VecInput, output: &'a mut Vec<u8>, sess: &'a mut C) -> Self {
         OtherSession {
             sess,
@@ -1796,7 +1793,6 @@ impl<'a, S: SideData, C: Connection<S>> OtherSession<'a, S, C> {
             buffered: false,
             buffer: vec![],
             received: vec![],
-            side: PhantomData,
         }
     }
 
@@ -1889,7 +1885,7 @@ impl<'a, S: SideData, C: Connection<S>> OtherSession<'a, S, C> {
     }
 }
 
-impl<S: SideData, C: Connection<S>> io::Read for OtherSession<'_, S, C> {
+impl<C: Connection> io::Read for OtherSession<'_, C> {
     fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
         self.reads += 1;
         let n = Ord::min(b.len(), self.output.len());
@@ -1899,7 +1895,7 @@ impl<S: SideData, C: Connection<S>> io::Read for OtherSession<'_, S, C> {
     }
 }
 
-impl<S: SideData, C: Connection<S>> io::Write for OtherSession<'_, S, C> {
+impl<C: Connection> io::Write for OtherSession<'_, C> {
     fn write(&mut self, b: &[u8]) -> io::Result<usize> {
         self.write_vectored(&[io::IoSlice::new(b)])
     }

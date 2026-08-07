@@ -18,7 +18,7 @@ use rustls::enums::ProtocolVersion;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     ClientConfig, ClientConnection, Connection, HandshakeKind, RootCertStore, ServerConfig,
-    ServerConnection, SideData, VecInput,
+    ServerConnection, VecInput,
 };
 use rustls_test::KeyType;
 
@@ -1037,11 +1037,11 @@ where
     r
 }
 
-fn transfer<S: SideData>(
+fn transfer(
     left_buffers: &mut TempBuffers,
     right_input: &mut VecInput,
     right_buffers: &mut TempBuffers,
-    right: &mut impl Connection<S>,
+    right: &mut impl Connection,
     expect_data: Option<usize>,
 ) -> f64 {
     let mut read_time = 0f64;

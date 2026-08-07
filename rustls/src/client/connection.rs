@@ -109,7 +109,9 @@ impl ClientConnection {
     }
 }
 
-impl Connection<ClientSide> for ClientConnection {
+impl Connection for ClientConnection {
+    type Side = ClientSide;
+
     fn write_tls(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error> {
         self.inner.write_tls(plaintext, tls)
     }
