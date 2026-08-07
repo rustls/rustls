@@ -19,8 +19,8 @@ pub(crate) struct SendPath {
     /// If we signaled end of stream.
     pub(crate) has_sent_close_notify: bool,
     message_fragmenter: MessageFragmenter,
-    queued_key_update_message: Option<Vec<u8>>,
-    pub(crate) refresh_traffic_keys_pending: bool,
+    key_update_local: KeyUpdateLocal,
+    key_update_remote: KeyUpdateRemote,
     negotiated_version: Option<ProtocolVersion>,
     pub(crate) tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
 }
@@ -47,7 +47,7 @@ impl SendPath {
                 match self.negotiated_version {
                     // driven by caller, as we don't have the `State` here
                     Some(ProtocolVersion::TLSv1_3) => {
-                        self.refresh_traffic_keys_pending = true;
+                        self.key_update_local = KeyUpdateLocal::Requested;
                         Ok(())
                     }
                     _ => {
@@ -129,9 +129,11 @@ impl SendPath {
     }
 
     fn perhaps_write_key_update(&mut self, tls: &mut Vec<u8>) {
-        if let Some(mut message) = self.queued_key_update_message.take() {
-            tls.append(&mut message)
-        }
+        let KeyUpdateRemote::Queued(message) = &mut self.key_update_remote else {
+            return;
+        };
+        tls.append(message);
+        self.key_update_remote = KeyUpdateRemote::Idle;
     }
 
     pub(crate) fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
@@ -139,14 +141,21 @@ impl SendPath {
             .set_max_fragment_size(new)
     }
 
-    /// Trigger a `refresh_traffic_keys` if required.
+    /// Trigger a `refresh_traffic_keys` if requested.
     fn maybe_refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) {
-        if self.refresh_traffic_keys_pending {
-            let _ = self.refresh_traffic_keys(tls);
+        if let KeyUpdateLocal::Requested = self.key_update_local {
+            let _ = self.send_key_update_request(tls);
         }
     }
 
     pub(crate) fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
+        if let KeyUpdateLocal::Outstanding = self.key_update_local {
+            return Ok(());
+        }
+        self.send_key_update_request(tls)
+    }
+
+    fn send_key_update_request(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
         let ks = self.tls13_key_schedule.take();
 
         let Some(mut ks) = ks else {
@@ -155,7 +164,7 @@ impl SendPath {
 
         self.send_msg(Message::build_key_update_request(), true, tls);
         ks.update_encrypter(self);
-        self.refresh_traffic_keys_pending = false;
+        self.key_update_local = KeyUpdateLocal::Outstanding;
         self.tls13_key_schedule = Some(ks);
         Ok(())
     }
@@ -166,20 +175,26 @@ impl SendOutput for SendPath {
         self.negotiated_version = Some(version);
     }
 
-    fn ensure_key_update_queued(&mut self) {
-        if self.queued_key_update_message.is_some() {
+    fn queue_key_update(&mut self) {
+        if let KeyUpdateRemote::Queued(_) = &self.key_update_remote {
             return;
         }
 
         let message = EncodedMessage::<Payload<'static>>::from(Message::build_key_update_notify());
-        let mut tls = Vec::new();
+        let mut queued = Vec::new();
         self.encrypt_state
-            .encrypt_outgoing(message.borrow_outbound(), &mut tls);
-        self.queued_key_update_message = Some(tls);
+            .encrypt_outgoing(message.borrow_outbound(), &mut queued);
+        self.key_update_remote = KeyUpdateRemote::Queued(queued);
 
         if let Some(mut ks) = self.tls13_key_schedule.take() {
             ks.update_encrypter_for_key_update(self);
             self.tls13_key_schedule = Some(ks);
+        }
+    }
+
+    fn note_key_update_response(&mut self) {
+        if let KeyUpdateLocal::Outstanding = self.key_update_local {
+            self.key_update_local = KeyUpdateLocal::Idle;
         }
     }
 
@@ -234,18 +249,45 @@ impl Default for SendPath {
             has_sent_fatal_alert: false,
             has_sent_close_notify: false,
             message_fragmenter: MessageFragmenter::default(),
-            queued_key_update_message: None,
-            refresh_traffic_keys_pending: false,
+            key_update_local: KeyUpdateLocal::Idle,
+            key_update_remote: KeyUpdateRemote::Idle,
             negotiated_version: None,
             tls13_key_schedule: None,
         }
     }
 }
 
+/// State machine for TLS1.3 key updates triggered by us.
+///
+/// This sits at [`Self::Idle`] for TLS1.2 connections.
+enum KeyUpdateLocal {
+    /// Nothing is happening.
+    Idle,
+
+    /// A key update request should be sent at the next sending opportunity.
+    Requested,
+
+    /// A key update request is outstanding; we await a response.
+    Outstanding,
+}
+
+/// State machine for TLS1.3 key updates triggered by peer.
+///
+/// This sits at [`Self::Idle`] for TLS1.2 connections.
+enum KeyUpdateRemote {
+    /// Nothing is happening.
+    Idle,
+
+    /// A key update response is awaiting sending.
+    Queued(Vec<u8>),
+}
+
 pub(crate) trait SendOutput {
     fn negotiated_version(&mut self, version: ProtocolVersion);
 
-    fn ensure_key_update_queued(&mut self);
+    fn queue_key_update(&mut self);
+
+    fn note_key_update_response(&mut self);
 
     fn set_encrypter(&mut self, cipher: Box<dyn MessageEncrypter>, max_messages: u64);
 

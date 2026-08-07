@@ -73,6 +73,14 @@ pub trait Connection<Side: SideData>: Debug + Deref<Target = ConnectionOutputs> 
 
     /// Sends a TLS1.3 `key_update` message into `tls` to refresh a connection's keys.
     ///
+    /// The main reason to call this manually is to roll keys when it is known
+    /// a connection will be idle for a long period.
+    ///
+    /// rustls implicitly and automatically refreshes traffic keys when needed
+    /// according to the selected cipher suite's cryptographic constraints.  There
+    /// is therefore no need to call this manually to avoid cryptographic keys
+    /// "wearing out".
+    ///
     /// This call refreshes our encryption keys. Once the peer receives the message,
     /// it refreshes _its_ encryption and decryption keys and sends a response.
     /// Once we receive that response, we refresh our decryption keys to match.
@@ -86,13 +94,8 @@ pub trait Connection<Side: SideData>: Debug + Deref<Target = ConnectionOutputs> 
     /// the number of `key_update` messages allowed on a given connection to prevent
     /// denial of service.  Therefore, this should be called sparingly.
     ///
-    /// rustls implicitly and automatically refreshes traffic keys when needed
-    /// according to the selected cipher suite's cryptographic constraints.  There
-    /// is therefore no need to call this manually to avoid cryptographic keys
-    /// "wearing out".
-    ///
-    /// The main reason to call this manually is to roll keys when it is known
-    /// a connection will be idle for a long period.
+    /// rustls only allows one outstanding request at a time; this function succeeds
+    /// but sends nothing if a request is already in-flight.
     fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error>;
 
     /// Writes a `close_notify` warning alert into `tls`.

@@ -1519,8 +1519,8 @@ impl ExpectTraffic {
         let proof = input.check_aligned_handshake()?;
 
         match *key_update_request {
-            KeyUpdateRequest::UpdateNotRequested => {}
-            KeyUpdateRequest::UpdateRequested => output.send().ensure_key_update_queued(),
+            KeyUpdateRequest::UpdateNotRequested => output.send().note_key_update_response(),
+            KeyUpdateRequest::UpdateRequested => output.send().queue_key_update(),
             _ => return Err(InvalidMessage::InvalidKeyUpdate.into()),
         }
 
