@@ -1,9 +1,8 @@
 #![allow(clippy::std_instead_of_core)] // awaits core::io::IoSlice in stable (1.98)
 use std::io::{BufRead, Error, ErrorKind, IoSlice, Read, Result, Write};
-use std::marker::PhantomData;
 
 use rustls::crypto::cipher::OutboundPlain;
-use rustls::{Connection, SideData, TlsInputBuffer, VecInput};
+use rustls::{Connection, TlsInputBuffer, VecInput};
 
 use crate::complete_io;
 
@@ -17,7 +16,7 @@ use crate::complete_io;
 /// [`complete_io()`]: crate::complete_io()
 #[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
-pub struct Stream<'a, C: 'a + ?Sized, S, T: 'a + Read + Write + ?Sized> {
+pub struct Stream<'a, C: 'a + ?Sized, T: 'a + Read + Write + ?Sized> {
     /// Our TLS connection
     pub conn: &'a mut C,
 
@@ -43,15 +42,11 @@ pub struct Stream<'a, C: 'a + ?Sized, S, T: 'a + Read + Write + ?Sized> {
     ///
     /// Defaults to 64KB.
     pub limit: usize,
-
-    /// Marker for the side of the connection (client or server)
-    pub side: PhantomData<S>,
 }
 
-impl<'a, C, S, T> Stream<'a, C, S, T>
+impl<'a, C, T> Stream<'a, C, T>
 where
-    C: 'a + Connection<S>,
-    S: SideData,
+    C: 'a + Connection,
     T: 'a + Read + Write,
 {
     /// Make a new Stream using the Connection `conn` and socket-like object
@@ -70,7 +65,6 @@ where
             received_plaintext,
             output,
             limit: DEFAULT_BUFFER_LIMIT,
-            side: PhantomData,
         }
     }
 
@@ -136,10 +130,9 @@ where
     }
 }
 
-impl<'a, C, S, T> Read for Stream<'a, C, S, T>
+impl<'a, C, T> Read for Stream<'a, C, T>
 where
-    C: 'a + Connection<S>,
-    S: SideData,
+    C: 'a + Connection,
     T: 'a + Read + Write,
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
@@ -162,11 +155,10 @@ where
     }
 }
 
-impl<'a, C, S, T> BufRead for Stream<'a, C, S, T>
+impl<'a, C, T> BufRead for Stream<'a, C, T>
 where
-    C: 'a + Connection<S>,
+    C: 'a + Connection,
     T: 'a + Read + Write,
-    S: SideData,
 {
     fn fill_buf(&mut self) -> Result<&[u8]> {
         self.prepare_read()?;
@@ -178,10 +170,9 @@ where
     }
 }
 
-impl<'a, C, S, T> Write for Stream<'a, C, S, T>
+impl<'a, C, T> Write for Stream<'a, C, T>
 where
-    C: 'a + Connection<S>,
-    S: SideData,
+    C: 'a + Connection,
     T: 'a + Read + Write,
 {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
@@ -272,7 +263,7 @@ where
 /// [`complete_io()`]: crate::complete_io()
 #[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
-pub struct StreamOwned<C: Sized, S, T: Read + Write + Sized> {
+pub struct StreamOwned<C: Sized, T: Read + Write + Sized> {
     /// Our connection
     pub conn: C,
 
@@ -298,15 +289,11 @@ pub struct StreamOwned<C: Sized, S, T: Read + Write + Sized> {
     ///
     /// Defaults to 64KB.
     pub limit: usize,
-
-    /// Marker for the side of the connection (client or server)
-    pub side: PhantomData<S>,
 }
 
-impl<C, S, T> StreamOwned<C, S, T>
+impl<C, T> StreamOwned<C, T>
 where
-    C: Connection<S>,
-    S: SideData,
+    C: Connection,
     T: Read + Write,
 {
     /// Make a new StreamOwned taking the Connection `conn` and socket-like
@@ -325,7 +312,6 @@ where
             received_plaintext: Vec::new(),
             output,
             limit: DEFAULT_BUFFER_LIMIT,
-            side: PhantomData,
         }
     }
 
@@ -345,13 +331,12 @@ where
     }
 }
 
-impl<'a, C, S, T> StreamOwned<C, S, T>
+impl<'a, C, T> StreamOwned<C, T>
 where
-    C: Connection<S>,
-    S: SideData,
+    C: Connection,
     T: Read + Write,
 {
-    fn as_stream(&'a mut self) -> Stream<'a, C, S, T> {
+    fn as_stream(&'a mut self) -> Stream<'a, C, T> {
         Stream {
             conn: &mut self.conn,
             sock: &mut self.sock,
@@ -359,15 +344,13 @@ where
             received_plaintext: &mut self.received_plaintext,
             output: &mut self.output,
             limit: self.limit,
-            side: PhantomData,
         }
     }
 }
 
-impl<C, S, T> Read for StreamOwned<C, S, T>
+impl<C, T> Read for StreamOwned<C, T>
 where
-    C: Connection<S>,
-    S: SideData,
+    C: Connection,
     T: Read + Write,
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
@@ -375,10 +358,9 @@ where
     }
 }
 
-impl<C, S, T> BufRead for StreamOwned<C, S, T>
+impl<C, T> BufRead for StreamOwned<C, T>
 where
-    C: Connection<S>,
-    S: SideData,
+    C: Connection,
     T: Read + Write,
 {
     fn fill_buf(&mut self) -> Result<&[u8]> {
@@ -391,10 +373,9 @@ where
     }
 }
 
-impl<C, S, T> Write for StreamOwned<C, S, T>
+impl<C, T> Write for StreamOwned<C, T>
 where
-    C: Connection<S>,
-    S: SideData,
+    C: Connection,
     T: Read + Write,
 {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
@@ -413,24 +394,22 @@ const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
 mod tests {
     use std::net::TcpStream;
 
-    use rustls::client::ClientSide;
-    use rustls::server::ServerSide;
     use rustls::{ClientConnection, ServerConnection};
 
     use super::{Stream, StreamOwned};
 
     #[test]
     fn stream_can_be_created_for_connection_and_tcpstream() {
-        type _Test<'a> = Stream<'a, ClientConnection, ClientSide, TcpStream>;
+        type _Test<'a> = Stream<'a, ClientConnection, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_client_and_tcpstream() {
-        type _Test = StreamOwned<ClientConnection, ClientSide, TcpStream>;
+        type _Test = StreamOwned<ClientConnection, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_server_and_tcpstream() {
-        type _Test = StreamOwned<ServerConnection, ServerSide, TcpStream>;
+        type _Test = StreamOwned<ServerConnection, TcpStream>;
     }
 }

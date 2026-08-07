@@ -33,7 +33,10 @@ pub(crate) mod split;
 use split::SplitConnection;
 
 /// A trait generalizing over buffered client or server connections.
-pub trait Connection<Side: SideData>: Debug + Deref<Target = ConnectionOutputs> {
+pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
+    /// The side (client or server) that this type implements.
+    type Side: SideData;
+
     /// Writes the application data from `plaintext` into TLS records and appends them to `tls`.
     ///
     /// This will fail if either the handshake is not complete yet (because we don't yet have the
@@ -49,7 +52,7 @@ pub trait Connection<Side: SideData>: Debug + Deref<Target = ConnectionOutputs> 
         &'a mut self,
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
-    ) -> MessageHandler<'a, 'm, Side>;
+    ) -> MessageHandler<'a, 'm, Self::Side>;
 
     /// Returns an object that can derive key material from the agreed connection secrets.
     ///
