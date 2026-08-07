@@ -9,7 +9,8 @@ use rustls::client::Resumption;
 use rustls::crypto::{CipherSuite, CryptoProvider};
 use rustls::enums::ProtocolVersion;
 use rustls::error::{
-    AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
+    AlertDescription, ApiMisuse, CertificateError, Error, InvalidMessage, PeerIncompatible,
+    PeerMisbehaved,
 };
 use rustls::quic::{self, Connection, QuicEvent, ServerHandshake, Side};
 use rustls::server::Tls13Tickets;
@@ -213,8 +214,7 @@ fn test_quic_handshake() {
 
 #[test]
 fn test_quic_acceptor() {
-    for (client_config, server_config, _expect) in MultiTest::new(provider::DEFAULT_TLS13_PROVIDER)
-    {
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_TLS13_PROVIDER) {
         let mut client_config = Arc::unwrap_or_clone(client_config);
         client_config.alpn_protocols = vec![b"h3".into()];
         let client_config = Arc::new(client_config);
@@ -282,14 +282,34 @@ fn test_quic_acceptor() {
         quic_insert(server_flight, &mut client).unwrap();
 
         let mut server_flight = vec![];
-        let ServerHandshake::Complete(mut server) = server
-            .process(
-                &mut SliceInput::new(&mut flatten_events(&mut client)),
-                &mut server_flight,
-            )
-            .unwrap()
-        else {
-            panic!("unexpected state");
+        let mut data = flatten_events(&mut client);
+        let mut server_input = SliceInput::new(&mut data);
+        let server = server
+            .process(&mut server_input, &mut server_flight)
+            .unwrap();
+
+        let mut server = match server {
+            ServerHandshake::Complete(server) => {
+                assert!(!expect.client_auth);
+                server
+            }
+
+            ServerHandshake::VerifyClientIdentity(verify) => {
+                assert!(expect.client_auth);
+                let ServerHandshake::NeedsInput(server) = verify.use_verifier_trait().unwrap()
+                else {
+                    panic!("unexpected state");
+                };
+                let ServerHandshake::Complete(server) = server
+                    .process(&mut server_input, &mut server_flight)
+                    .unwrap()
+                else {
+                    panic!("unexpected state");
+                };
+                server
+            }
+
+            _ => panic!("unexpected state"),
         };
 
         assert_eq!(server.fips(), server_fips);
@@ -301,6 +321,59 @@ fn test_quic_acceptor() {
         assert!(!client.is_handshaking());
         assert!(!server.is_handshaking());
         assert_eq!(client.quic_transport_parameters(), Some(server_params));
+    }
+}
+
+#[test]
+fn test_quic_acceptor_external_verifier_rejects_client_cert() {
+    for (client_config, server_config, _) in
+        MultiTest::new(provider::DEFAULT_TLS13_PROVIDER).require_client_auth()
+    {
+        let mut client = quic::ClientConnection::new(
+            client_config,
+            quic::Version::V1,
+            server_name("localhost"),
+            b"client params".into(),
+        )
+        .unwrap();
+
+        let needs_input = ServerHandshake::start(quic::Version::V1);
+
+        let mut client_initial = flatten_events(&mut client);
+
+        let ServerHandshake::Accepted(accepted) = needs_input
+            .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
+            .unwrap()
+        else {
+            panic!("unexpected state after full hello");
+        };
+
+        let mut server_flight = vec![];
+        let Ok(ServerHandshake::NeedsInput(server)) =
+            accepted.choose_config(server_config, b"server params".into(), &mut server_flight)
+        else {
+            panic!("unexpected state");
+        };
+        quic_insert(server_flight, &mut client).unwrap();
+
+        let mut server_flight = vec![];
+        let mut data = flatten_events(&mut client);
+        let mut server_input = SliceInput::new(&mut data);
+        let ServerHandshake::VerifyClientIdentity(verify_client) = server
+            .process(&mut server_input, &mut server_flight)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+
+        let err = verify_client
+            .into_continue(Err(CertificateError::UnknownIssuer.into()))
+            .unwrap_err();
+        assert_eq!(err, CertificateError::UnknownIssuer.into());
+        assert_eq!(
+            AlertDescription::try_from(&err),
+            Ok(AlertDescription::UnknownCa)
+        );
     }
 }
 
