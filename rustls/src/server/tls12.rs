@@ -28,6 +28,7 @@ use crate::msgs::{
     HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload, Message, MessagePayload,
     NewSessionTicketPayload, NewSessionTicketPayloadTls13, Reader, SessionId,
 };
+use crate::server::hs::{VerifyClientIdentity, VerifyClientIdentityInternal};
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
@@ -551,42 +552,86 @@ impl ExpectCertificate {
 
         trace!("certs {cert_chain:?}");
 
-        let peer_identity = match Identity::from_peer(cert_chain.0, CertificateType::X509)? {
-            None if mandatory => {
-                return Err(PeerMisbehaved::NoCertificatesPresented.into());
-            }
+        match Identity::from_peer(cert_chain.0, CertificateType::X509)? {
+            None if mandatory => Err(PeerMisbehaved::NoCertificatesPresented.into()),
             None => {
                 debug!("client auth requested but no certificate supplied");
                 self.hs.transcript.abandon_client_auth();
-                None
-            }
-            Some(identity) => {
-                let identity = self
-                    .hs
-                    .config
-                    .verifier
-                    .verify_identity(&ClientIdentity {
-                        identity: &identity,
-                        now: self.hs.config.current_time()?,
-                    })?;
-                Some(identity.into_owned())
-            }
-        };
 
-        Ok(Box::new(ExpectClientKx {
-            hs: self.hs,
-            randoms: self.randoms,
-            suite: self.suite,
-            server_kx: self.server_kx,
-            peer_identity,
-        })
-        .into())
+                Ok(Box::new(ExpectClientKx {
+                    hs: self.hs,
+                    randoms: self.randoms,
+                    suite: self.suite,
+                    server_kx: self.server_kx,
+                    peer_identity: None,
+                })
+                .into())
+            }
+            Some(identity) => Ok(Box::new(AwaitClientIdentityVerification {
+                hs: self.hs,
+                randoms: self.randoms,
+                suite: self.suite,
+                server_kx: self.server_kx,
+                peer_identity: identity.into_owned(),
+            })
+            .into()),
+        }
     }
 }
 
 impl From<Box<ExpectCertificate>> for ServerState {
     fn from(value: Box<ExpectCertificate>) -> Self {
         Self::Tls12(Tls12State::Certificate(value))
+    }
+}
+
+// --- Verify the client's identity
+struct AwaitClientIdentityVerification {
+    hs: HandshakeState,
+    randoms: ConnectionRandoms,
+    suite: &'static Tls12CipherSuite,
+    server_kx: GroupAndKeyExchange,
+    peer_identity: Identity<'static>,
+}
+
+impl VerifyClientIdentityInternal for AwaitClientIdentityVerification {
+    fn asserted_identity(&self) -> Result<ClientIdentity<'static, '_>, Error> {
+        Ok(ClientIdentity {
+            identity: &self.peer_identity,
+            now: self.hs.config.current_time()?,
+        })
+    }
+
+    fn with_config(self: Box<Self>) -> Result<ServerState, Error> {
+        let peer_identity = self
+            .hs
+            .config
+            .verifier
+            .verify_identity(&self.asserted_identity()?)?;
+
+        self.into_continue(peer_identity)
+    }
+
+    fn into_continue(
+        self: Box<Self>,
+        peer_identity: VerifiedIdentity<'static>,
+    ) -> Result<ServerState, Error> {
+        Ok(Box::new(ExpectClientKx {
+            hs: self.hs,
+            randoms: self.randoms,
+            suite: self.suite,
+            server_kx: self.server_kx,
+            peer_identity: Some(peer_identity),
+        })
+        .into())
+    }
+}
+
+impl From<Box<AwaitClientIdentityVerification>> for ServerState {
+    fn from(value: Box<AwaitClientIdentityVerification>) -> Self {
+        Self::VerifyClientIdentity(VerifyClientIdentity::from(
+            value as Box<dyn VerifyClientIdentityInternal>,
+        ))
     }
 }
 

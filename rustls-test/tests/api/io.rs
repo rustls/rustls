@@ -1963,60 +1963,81 @@ fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
 
 #[test]
 fn test_full_server_handshake() {
-    let provider = provider::DEFAULT_PROVIDER;
-    let client_config = Arc::new(make_client_config(KeyType::default(), &provider));
-    let mut buf = Vec::new();
-    let mut client = client_config
-        .connect(server_name("localhost"))
-        .build(&mut buf)
-        .unwrap();
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        println!("expect: {expect:?}");
+        let mut buf = Vec::new();
+        let mut client = client_config
+            .connect(server_name("localhost"))
+            .build(&mut buf)
+            .unwrap();
 
-    // client first flight
-    let receive = ServerHandshake::start();
-    let mut acceptor_input = VecInput::default();
-    acceptor_input
-        .read(&mut buf.as_slice())
-        .unwrap();
+        // client first flight
+        let receive = ServerHandshake::start();
+        let mut acceptor_input = VecInput::default();
+        acceptor_input
+            .read(&mut buf.as_slice())
+            .unwrap();
 
-    // server first flight and config choice
-    let mut server_output = vec![];
-    let ServerHandshake::Accepted(accepted) = receive
-        .process(&mut acceptor_input, &mut server_output)
-        .unwrap()
-    else {
-        panic!("unexpected state");
-    };
-    let mut server = accepted
-        .choose_config(
-            Arc::new(make_server_config(KeyType::default(), &provider)),
-            &mut server_output,
-        )
-        .unwrap();
-    assert!(!server_output.is_empty());
-
-    // client receives server flight, producing its second flight
-    let mut client_output = vec![];
-    client
-        .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
-        .handle_all(&mut Vec::new())
-        .unwrap();
-
-    // client second flight
-    let mut server_output = vec![];
-    server = if let ServerHandshake::NeedsInput(receive) = server {
-        receive
-            .process(&mut SliceInput::new(&mut client_output), &mut server_output)
+        // server first flight and config choice
+        let mut server_output = vec![];
+        let ServerHandshake::Accepted(accepted) = receive
+            .process(&mut acceptor_input, &mut server_output)
             .unwrap()
-    } else {
-        panic!("unexpected state");
-    };
-    client
-        .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
-        .handle_all(&mut Vec::new())
-        .unwrap();
+        else {
+            panic!("unexpected state");
+        };
+        let mut server = accepted
+            .choose_config(server_config, &mut server_output)
+            .unwrap();
+        assert!(!server_output.is_empty());
 
-    assert!(matches!(server, ServerHandshake::Complete(_)));
-    assert!(!client.is_handshaking());
+        // client receives server flight, producing its second flight
+        let mut client_output = vec![];
+        client
+            .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
+            .handle_all(&mut Vec::new())
+            .unwrap();
+
+        // client second flight
+        let mut server_output = vec![];
+        let mut client_input = SliceInput::new(&mut client_output);
+        server = if let ServerHandshake::NeedsInput(receive) = server {
+            receive
+                .process(&mut client_input, &mut server_output)
+                .unwrap()
+        } else {
+            panic!("unexpected state");
+        };
+
+        // client certificate verification, if client auth was in use
+        server = match server {
+            ServerHandshake::VerifyClientIdentity(vci) => {
+                assert!(expect.client_auth);
+                println!("client identity {:?}", vci.asserted_identity());
+                let ServerHandshake::NeedsInput(receive) = vci
+                    .use_verifier_trait(&mut server_output)
+                    .unwrap()
+                else {
+                    panic!("unexpected state");
+                };
+                receive
+                    .process(&mut client_input, &mut server_output)
+                    .unwrap()
+            }
+            server => {
+                assert!(!expect.client_auth);
+                server
+            }
+        };
+
+        client
+            .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
+            .handle_all(&mut Vec::new())
+            .unwrap();
+
+        assert!(matches!(server, ServerHandshake::Complete(_)));
+        assert!(!client.is_handshaking());
+    }
 }
 
 #[test]

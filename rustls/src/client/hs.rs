@@ -62,6 +62,10 @@ impl StateMachine for ClientState {
         true
     }
 
+    fn handle_without_input(self) -> Result<Self, Error> {
+        Ok(self)
+    }
+
     fn is_traffic(&self) -> bool {
         matches!(
             self,

@@ -28,7 +28,7 @@ use crate::msgs::{
     HandshakePayload, KeyUpdateRequest, Message, MessagePayload, NewSessionTicketPayloadTls13,
     PresharedKeyIdentity, Reader, ServerTicketRequestHint, SizedPayload,
 };
-use crate::server::hs::ExpectClientHello;
+use crate::server::hs::{ExpectClientHello, VerifyClientIdentity, VerifyClientIdentityInternal};
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::{
@@ -1071,16 +1071,7 @@ impl ExpectCertificate {
             return Err(PeerMisbehaved::NoCertificatesPresented.into());
         };
 
-        let peer_identity = self
-            .hs
-            .config
-            .verifier
-            .verify_identity(&ClientIdentity {
-                identity: &peer_identity,
-                now: self.hs.config.current_time()?,
-            })?;
-
-        Ok(Box::new(ExpectCertificateVerify {
+        Ok(Box::new(AwaitClientIdentityVerification {
             hs: self.hs,
             key_schedule: self.key_schedule,
             peer_identity: peer_identity.into_owned(),
@@ -1102,6 +1093,52 @@ impl ExpectCertificate {
 impl From<Box<ExpectCertificate>> for ServerState {
     fn from(value: Box<ExpectCertificate>) -> Self {
         Self::Tls13(Tls13State::Certificate(value))
+    }
+}
+
+// --- Verify the client's identity
+struct AwaitClientIdentityVerification {
+    hs: HandshakeState,
+    key_schedule: KeyScheduleTrafficWithClientFinishedPending,
+    peer_identity: Identity<'static>,
+}
+
+impl VerifyClientIdentityInternal for AwaitClientIdentityVerification {
+    fn asserted_identity(&self) -> Result<ClientIdentity<'static, '_>, Error> {
+        Ok(ClientIdentity {
+            identity: &self.peer_identity,
+            now: self.hs.config.current_time()?,
+        })
+    }
+
+    fn with_config(self: Box<Self>) -> Result<ServerState, Error> {
+        let peer_identity = self
+            .hs
+            .config
+            .verifier
+            .verify_identity(&self.asserted_identity()?)?;
+
+        self.into_continue(peer_identity)
+    }
+
+    fn into_continue(
+        self: Box<Self>,
+        peer_identity: VerifiedIdentity<'static>,
+    ) -> Result<ServerState, Error> {
+        Ok(Box::new(ExpectCertificateVerify {
+            hs: self.hs,
+            key_schedule: self.key_schedule,
+            peer_identity,
+        })
+        .into())
+    }
+}
+
+impl From<Box<AwaitClientIdentityVerification>> for ServerState {
+    fn from(value: Box<AwaitClientIdentityVerification>) -> Self {
+        Self::VerifyClientIdentity(VerifyClientIdentity::from(
+            value as Box<dyn VerifyClientIdentityInternal>,
+        ))
     }
 }
 

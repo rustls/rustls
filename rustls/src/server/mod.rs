@@ -23,6 +23,7 @@ pub use config::{
 mod connection;
 pub use connection::{
     Accepted, NeedsInput, ReadEarlyData, ServerConnection, ServerHandshake, ServerSide,
+    VerifyClientIdentity,
 };
 
 pub(crate) mod handy;
@@ -31,7 +32,9 @@ pub use handy::ServerNameResolver;
 pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
 
 mod hs;
-pub(crate) use hs::{ChooseConfig, ServerHandler, ServerState};
+pub(crate) use hs::{
+    ChooseConfig, ServerHandler, ServerState, VerifyClientIdentity as HandshakeVerifyClientIdentity,
+};
 
 mod tls12;
 pub(crate) use tls12::TLS12_HANDLER;

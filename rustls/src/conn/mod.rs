@@ -310,7 +310,7 @@ impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
         core: &'a mut ConnectionCommon<Side>,
     ) -> Self {
         Self {
-            iter: MessageIter::new(input, tls, None, core),
+            iter: MessageIter::new(input, tls, None, core, true),
             done: false,
         }
     }
@@ -567,8 +567,17 @@ pub(crate) mod private {
 use private::SideOutput;
 
 pub(crate) trait StateMachine: Sized {
+    /// Advance the state machine using `input` and emitting data to `output`.
     fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output<'m>) -> Result<Self, Error>;
+
+    /// Return true if the current state requires input to be provided via `handle()`.
     fn wants_input(&self) -> bool;
+
+    /// Advance the state machine using no input if possible.
+    ///
+    /// This should return `Ok(self)` otherwise.
+    fn handle_without_input(self) -> Result<Self, Error>;
+
     fn is_traffic(&self) -> bool;
     fn handle_decrypt_error(&mut self);
     fn into_external_state(

@@ -205,7 +205,8 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             side: &mut Discard,
         };
 
-        let mut iter = MessageIter::<Side, _>::receive(input, tls, &mut state, &mut recv, output);
+        let mut iter =
+            MessageIter::<Side, _>::receive(input, tls, &mut state, &mut recv, output, true);
         let received_plain = match iter.next() {
             Some(Ok(payload)) => Some(payload),
             Some(Err(error)) => {

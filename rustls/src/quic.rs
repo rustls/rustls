@@ -10,6 +10,7 @@ use crate::client::{ClientConfig, ClientSide};
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
 use crate::conn::{ConnectionCommon, KeyingMaterialExporter, MessageIter, SideData, StateMachine};
+use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::enums::ApplicationProtocol;
@@ -17,13 +18,16 @@ use crate::error::{ApiMisuse, Error};
 use crate::msgs::{
     ClientExtensionsInput, Message, MessagePayload, ServerExtensionsInput, TransportParameters,
 };
-use crate::server::{ChooseConfig, ClientHello, ServerConfig, ServerSide, ServerState};
+use crate::server::{
+    ChooseConfig, ClientHello, HandshakeVerifyClientIdentity, ServerConfig, ServerSide, ServerState,
+};
 use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
 };
+use crate::verify::ClientIdentity;
 
 /// A QUIC client or server connection.
 pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
@@ -179,7 +183,7 @@ impl Connection for ClientConnection {
     }
 
     fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
-        self.inner.read_hs(input)
+        self.inner.read_hs(input, true)
     }
 
     fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
@@ -317,7 +321,7 @@ impl Connection for ServerConnection {
     }
 
     fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
-        self.inner.read_hs(input)
+        self.inner.read_hs(input, true)
     }
 
     fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
@@ -356,6 +360,25 @@ pub enum ServerHandshake {
     /// The handshake can be progressed by choosing a [`ServerConfig`] based on
     /// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
     Accepted(Accepted),
+
+    /// The client's presented identity must be verified.
+    ///
+    /// The caller has three choices:
+    ///
+    /// - Call [`VerifyClientIdentity::use_verifier_trait()`].  This calls [`ClientVerifier::verify_identity()`]
+    ///   synchronously.
+    ///
+    /// - Call [`VerifyClientIdentity::asserted_identity()`] to obtain the peer's presented identity,
+    ///   verify that outside the library (perhaps asynchronously), and then continue the handshake with
+    ///   [`VerifyClientIdentity::into_continue()`].
+    ///
+    ///   If the verification fails, the error can be passed into [`VerifyClientIdentity::into_continue()`] to follow
+    ///   a uniform error handling path.
+    ///
+    /// - Abandon the handshake by discarding this object.
+    ///
+    /// [`ClientVerifier::verify_identity()`]: crate::verify::ClientVerifier::verify_identity
+    VerifyClientIdentity(VerifyClientIdentity),
 
     /// The handshake is complete.
     Complete(ServerConnection),
@@ -396,6 +419,10 @@ impl TryFrom<QuicCommon<ServerSide>> for ServerHandshake {
                 choose_config,
             }),
 
+            ServerState::VerifyClientIdentity(verify) => {
+                Self::VerifyClientIdentity(VerifyClientIdentity { inner, verify })
+            }
+
             state if state.is_traffic() => {
                 inner.common.state = Ok(state);
                 Self::Complete(ServerConnection { inner })
@@ -409,7 +436,7 @@ impl TryFrom<QuicCommon<ServerSide>> for ServerHandshake {
     }
 }
 
-/// More data needs to be received to make progress.
+/// More data needs to be processed to make progress.
 ///
 /// Provide the data to [`Self::process()`].
 pub struct NeedsInput {
@@ -442,7 +469,7 @@ impl NeedsInput {
         input: &mut dyn TlsInputBuffer,
         output: &mut Vec<QuicEvent>,
     ) -> Result<ServerHandshake, Error> {
-        self.inner.read_hs(input)?;
+        self.inner.read_hs(input, false)?;
         output.extend(self.inner.events());
         ServerHandshake::try_from(self.inner)
     }
@@ -536,6 +563,72 @@ fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
     Ok(())
 }
 
+/// The client's presented identity must be verified.
+///
+/// The caller has three choices:
+///
+/// - Call [`Self::use_verifier_trait()`].  This calls [`ClientVerifier::verify_identity()`][]
+///   synchronously.
+///
+/// - Call [`Self::asserted_identity()`] to obtain the peer's presented identity,
+///   verify that outside the library (perhaps asynchronously), and then continue the handshake with
+///   [`Self::into_continue()`].
+///
+///   If the verification fails, the error can be passed into [`Self::into_continue()`] to follow
+///   a uniform error handling path.
+///
+/// - Abandon the handshake by discarding this object.
+///
+/// The returned object is a further [`ServerHandshake`].  Commonly this will be a
+/// [`ServerHandshake::NeedsInput`] which will accept and process further data.
+///
+/// [`ClientVerifier::verify_identity()`]: crate::verify::ClientVerifier::verify_identity
+pub struct VerifyClientIdentity {
+    // invariant: `inner.state` is `Err(_)` and requires restoring
+    inner: QuicCommon<ServerSide>,
+    verify: HandshakeVerifyClientIdentity,
+}
+
+impl VerifyClientIdentity {
+    /// Progress the handshake by calling the pre-configured certificate verification trait.
+    pub fn use_verifier_trait(self) -> Result<ServerHandshake, Error> {
+        Self::next(self.inner, self.verify.use_verifier_trait())
+    }
+
+    /// Progress the handshake by incorporating the result of an external verification.
+    ///
+    /// If `verification_result` is an error, this error is returned and the handshake terminates.
+    pub fn into_continue(
+        self,
+        verification_result: Result<VerifiedIdentity<'static>, Error>,
+    ) -> Result<ServerHandshake, Error> {
+        Self::next(
+            self.inner,
+            verification_result.and_then(|verified| self.verify.into_continue(verified)),
+        )
+    }
+
+    /// Inspect the identity that the client has provided.
+    pub fn asserted_identity(&self) -> Result<ClientIdentity<'static, '_>, Error> {
+        self.verify.asserted_identity()
+    }
+
+    fn next(
+        mut inner: QuicCommon<ServerSide>,
+        result: Result<ServerState, Error>,
+    ) -> Result<ServerHandshake, Error> {
+        inner.common.state = result;
+        ServerHandshake::try_from(inner)
+    }
+}
+
+impl fmt::Debug for VerifyClientIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VerifyClientIdentity")
+            .finish_non_exhaustive()
+    }
+}
+
 /// QUIC events that should be handled by the caller.
 #[expect(clippy::large_enum_variant)]
 #[derive(Debug)]
@@ -588,7 +681,7 @@ impl<Side: SideData> QuicCommon<Side> {
         ))
     }
 
-    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
+    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer, advance: bool) -> Result<(), Error> {
         self.common
             .common
             .recv
@@ -596,7 +689,13 @@ impl<Side: SideData> QuicCommon<Side> {
             .input_quic(input.slice_mut())?;
 
         let mut tls = Vec::new();
-        let mut iter = MessageIter::new(input, &mut tls, Some(&mut self.quic), &mut self.common);
+        let mut iter = MessageIter::new(
+            input,
+            &mut tls,
+            Some(&mut self.quic),
+            &mut self.common,
+            advance,
+        );
         let result = match iter.next() {
             Some(Ok(_)) | None => Ok(()),
             Some(Err(e)) => Err(e),

@@ -9,14 +9,15 @@ use rustls::client::Resumption;
 use rustls::crypto::{CipherSuite, CryptoProvider};
 use rustls::enums::ProtocolVersion;
 use rustls::error::{
-    AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
+    AlertDescription, ApiMisuse, CertificateError, Error, InvalidMessage, PeerIncompatible,
+    PeerMisbehaved,
 };
 use rustls::quic::{self, Connection, QuicEvent, ServerHandshake, Side};
 use rustls::server::Tls13Tickets;
 use rustls::{CipherSuiteCommon, HandshakeKind, SliceInput, Tls13CipherSuite, VecInput};
 use rustls_test::{
-    ClientStorage, KeyType, do_handshake, encoding, make_client_config, make_pair_for_arc_configs,
-    make_server_config, server_name,
+    ClientStorage, KeyType, MultiTest, do_handshake, encoding, make_client_config,
+    make_pair_for_arc_configs, make_server_config, server_name,
 };
 
 use super::provider;
@@ -213,92 +214,167 @@ fn test_quic_handshake() {
 
 #[test]
 fn test_quic_acceptor() {
-    let kt = KeyType::default();
-    let provider = provider::DEFAULT_TLS13_PROVIDER;
-    let mut client_config = make_client_config(kt, &provider);
-    client_config.alpn_protocols = vec![b"h3".into()];
-    let client_config = Arc::new(client_config);
-    let mut server_config = make_server_config(kt, &provider);
-    server_config.alpn_protocols = vec![b"h3".into()];
-    let server_config = Arc::new(server_config);
-    let client_fips = client_config.fips();
-    let server_fips = server_config.fips();
-    let client_params = &b"client params"[..];
-    let server_params = &b"server params"[..];
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_TLS13_PROVIDER) {
+        let mut client_config = Arc::unwrap_or_clone(client_config);
+        client_config.alpn_protocols = vec![b"h3".into()];
+        let client_config = Arc::new(client_config);
 
-    let mut client = quic::ClientConnection::new(
-        client_config,
-        quic::Version::V1,
-        server_name("localhost"),
-        client_params.into(),
-    )
-    .unwrap();
-    assert_eq!(client.fips(), client_fips);
+        let mut server_config = Arc::unwrap_or_clone(server_config);
+        server_config.alpn_protocols = vec![b"h3".into()];
+        let server_config = Arc::new(server_config);
 
-    let needs_input = ServerHandshake::start(quic::Version::V1);
+        let client_fips = client_config.fips();
+        let server_fips = server_config.fips();
+        let client_params = &b"client params"[..];
+        let server_params = &b"server params"[..];
 
-    let mut client_initial = flatten_events(&mut client);
-    assert!(client_initial.len() > 8);
-    println!("client_initial: {client_initial:x?}");
-
-    let ServerHandshake::NeedsInput(needs_input) = needs_input
-        .process(&mut SliceInput::new(&mut client_initial[..8]), &mut vec![])
-        .unwrap()
-    else {
-        panic!("unexpected state after partial hello");
-    };
-
-    let ServerHandshake::Accepted(accepted) = needs_input
-        .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
-        .unwrap()
-    else {
-        panic!("unexpected state after full hello");
-    };
-
-    let client_hello = accepted.client_hello();
-    assert_eq!(
-        client_hello
-            .server_name()
-            .unwrap()
-            .as_ref(),
-        "localhost"
-    );
-    assert_eq!(
-        client_hello
-            .alpn()
-            .unwrap()
-            .collect::<Vec<_>>(),
-        vec![b"h3".as_slice()]
-    );
-
-    let mut server_flight = vec![];
-    let Ok(ServerHandshake::NeedsInput(server)) =
-        accepted.choose_config(server_config, server_params.into(), &mut server_flight)
-    else {
-        panic!("unexpected state");
-    };
-    quic_insert(server_flight, &mut client).unwrap();
-
-    let mut server_flight = vec![];
-    let ServerHandshake::Complete(mut server) = server
-        .process(
-            &mut SliceInput::new(&mut flatten_events(&mut client)),
-            &mut server_flight,
+        let mut client = quic::ClientConnection::new(
+            client_config,
+            quic::Version::V1,
+            server_name("localhost"),
+            client_params.into(),
         )
-        .unwrap()
-    else {
-        panic!("unexpected state");
-    };
+        .unwrap();
+        assert_eq!(client.fips(), client_fips);
 
-    assert_eq!(server.fips(), server_fips);
-    assert_eq!(server.quic_transport_parameters(), Some(client_params));
+        let needs_input = ServerHandshake::start(quic::Version::V1);
 
-    quic_transfer(&mut server, &mut client).unwrap();
-    quic_transfer(&mut client, &mut server).unwrap();
+        let mut client_initial = flatten_events(&mut client);
+        assert!(client_initial.len() > 8);
+        println!("client_initial: {client_initial:x?}");
 
-    assert!(!client.is_handshaking());
-    assert!(!server.is_handshaking());
-    assert_eq!(client.quic_transport_parameters(), Some(server_params));
+        let ServerHandshake::NeedsInput(needs_input) = needs_input
+            .process(&mut SliceInput::new(&mut client_initial[..8]), &mut vec![])
+            .unwrap()
+        else {
+            panic!("unexpected state after partial hello");
+        };
+
+        let ServerHandshake::Accepted(accepted) = needs_input
+            .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
+            .unwrap()
+        else {
+            panic!("unexpected state after full hello");
+        };
+
+        let client_hello = accepted.client_hello();
+        assert_eq!(
+            client_hello
+                .server_name()
+                .unwrap()
+                .as_ref(),
+            "localhost"
+        );
+        assert_eq!(
+            client_hello
+                .alpn()
+                .unwrap()
+                .collect::<Vec<_>>(),
+            vec![b"h3".as_slice()]
+        );
+
+        let mut server_flight = vec![];
+        let Ok(ServerHandshake::NeedsInput(server)) =
+            accepted.choose_config(server_config, server_params.into(), &mut server_flight)
+        else {
+            panic!("unexpected state");
+        };
+        quic_insert(server_flight, &mut client).unwrap();
+
+        let mut server_flight = vec![];
+        let mut data = flatten_events(&mut client);
+        let mut server_input = SliceInput::new(&mut data);
+        let server = server
+            .process(&mut server_input, &mut server_flight)
+            .unwrap();
+
+        let mut server = match server {
+            ServerHandshake::Complete(server) => {
+                assert!(!expect.client_auth);
+                server
+            }
+
+            ServerHandshake::VerifyClientIdentity(verify) => {
+                assert!(expect.client_auth);
+                let ServerHandshake::NeedsInput(server) = verify.use_verifier_trait().unwrap()
+                else {
+                    panic!("unexpected state");
+                };
+                let ServerHandshake::Complete(server) = server
+                    .process(&mut server_input, &mut server_flight)
+                    .unwrap()
+                else {
+                    panic!("unexpected state");
+                };
+                server
+            }
+
+            _ => panic!("unexpected state"),
+        };
+
+        assert_eq!(server.fips(), server_fips);
+        assert_eq!(server.quic_transport_parameters(), Some(client_params));
+
+        quic_transfer(&mut server, &mut client).unwrap();
+        quic_transfer(&mut client, &mut server).unwrap();
+
+        assert!(!client.is_handshaking());
+        assert!(!server.is_handshaking());
+        assert_eq!(client.quic_transport_parameters(), Some(server_params));
+    }
+}
+
+#[test]
+fn test_quic_acceptor_external_verifier_rejects_client_cert() {
+    for (client_config, server_config, _) in
+        MultiTest::new(provider::DEFAULT_TLS13_PROVIDER).require_client_auth()
+    {
+        let mut client = quic::ClientConnection::new(
+            client_config,
+            quic::Version::V1,
+            server_name("localhost"),
+            b"client params".into(),
+        )
+        .unwrap();
+
+        let needs_input = ServerHandshake::start(quic::Version::V1);
+
+        let mut client_initial = flatten_events(&mut client);
+
+        let ServerHandshake::Accepted(accepted) = needs_input
+            .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
+            .unwrap()
+        else {
+            panic!("unexpected state after full hello");
+        };
+
+        let mut server_flight = vec![];
+        let Ok(ServerHandshake::NeedsInput(server)) =
+            accepted.choose_config(server_config, b"server params".into(), &mut server_flight)
+        else {
+            panic!("unexpected state");
+        };
+        quic_insert(server_flight, &mut client).unwrap();
+
+        let mut server_flight = vec![];
+        let mut data = flatten_events(&mut client);
+        let mut server_input = SliceInput::new(&mut data);
+        let ServerHandshake::VerifyClientIdentity(verify_client) = server
+            .process(&mut server_input, &mut server_flight)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+
+        let err = verify_client
+            .into_continue(Err(CertificateError::UnknownIssuer.into()))
+            .unwrap_err();
+        assert_eq!(err, CertificateError::UnknownIssuer.into());
+        assert_eq!(
+            AlertDescription::try_from(&err),
+            Ok(AlertDescription::UnknownCa)
+        );
+    }
 }
 
 #[test]
