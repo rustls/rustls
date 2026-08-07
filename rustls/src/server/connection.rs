@@ -196,6 +196,38 @@ impl fmt::Debug for ServerConnection {
     }
 }
 
+impl ConnectionCommon<ServerSide> {
+    pub(crate) fn for_server(
+        config: Arc<ServerConfig>,
+        extra_exts: ServerExtensionsInput,
+        protocol: Protocol,
+    ) -> Result<Self, Error> {
+        let mut common = CommonState::new(Side::Server, config.fips());
+        common
+            .send
+            .set_max_fragment_size(config.max_fragment_size)?;
+        Ok(Self::new(
+            Box::new(ExpectClientHello::new(
+                config,
+                extra_exts,
+                Vec::new(),
+                protocol,
+            ))
+            .into(),
+            ServerConnectionData::default(),
+            common,
+        ))
+    }
+
+    pub(crate) fn for_acceptor(protocol: Protocol) -> Self {
+        Self::new(
+            ReadClientHello::new(protocol).into(),
+            ServerConnectionData::default(),
+            CommonState::new(Side::Server, FipsStatus::Unvalidated),
+        )
+    }
+}
+
 /// An in-progress TLS server handshake.
 #[non_exhaustive]
 #[derive(Debug)]
@@ -388,6 +420,50 @@ impl fmt::Debug for Accepted {
     }
 }
 
+/// State associated with a server connection.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Debug)]
+pub struct ServerSide;
+
+impl SideData for ServerSide {}
+
+impl crate::conn::private::Side for ServerSide {
+    type Data = ServerConnectionData;
+    type State = ServerState;
+}
+
+/// State associated with a server connection.
+#[derive(Default)]
+pub(crate) struct ServerConnectionData {
+    sni: Option<DnsName<'static>>,
+    received_resumption_data: Option<Vec<u8>>,
+    early_data: EarlyDataState,
+}
+
+impl ServerConnectionData {
+    pub(crate) fn received_resumption_data(&self) -> Option<&[u8]> {
+        self.received_resumption_data.as_deref()
+    }
+
+    pub(crate) fn server_name(&self) -> Option<&DnsName<'static>> {
+        self.sni.as_ref()
+    }
+}
+
+impl SideOutput for ServerConnectionData {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev {
+            Event::EarlyApplicationData(data) => self
+                .early_data
+                .take_received_plaintext(data),
+            Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accept(),
+            Event::ReceivedServerName(sni) => self.sni = sni,
+            Event::ResumptionData(data) => self.received_resumption_data = Some(data),
+            _ => unreachable!(),
+        }
+    }
+}
+
 /// Allows reading of early data in resumed TLS1.3 connections.
 ///
 /// "Early data" is also known as "0-RTT data".
@@ -482,82 +558,6 @@ impl EarlyDataState {
 
         received.append(bytes.into_vec());
     }
-}
-
-impl ConnectionCommon<ServerSide> {
-    pub(crate) fn for_server(
-        config: Arc<ServerConfig>,
-        extra_exts: ServerExtensionsInput,
-        protocol: Protocol,
-    ) -> Result<Self, Error> {
-        let mut common = CommonState::new(Side::Server, config.fips());
-        common
-            .send
-            .set_max_fragment_size(config.max_fragment_size)?;
-        Ok(Self::new(
-            Box::new(ExpectClientHello::new(
-                config,
-                extra_exts,
-                Vec::new(),
-                protocol,
-            ))
-            .into(),
-            ServerConnectionData::default(),
-            common,
-        ))
-    }
-
-    pub(crate) fn for_acceptor(protocol: Protocol) -> Self {
-        Self::new(
-            ReadClientHello::new(protocol).into(),
-            ServerConnectionData::default(),
-            CommonState::new(Side::Server, FipsStatus::Unvalidated),
-        )
-    }
-}
-
-/// State associated with a server connection.
-#[derive(Default)]
-pub(crate) struct ServerConnectionData {
-    sni: Option<DnsName<'static>>,
-    received_resumption_data: Option<Vec<u8>>,
-    early_data: EarlyDataState,
-}
-
-impl ServerConnectionData {
-    pub(crate) fn received_resumption_data(&self) -> Option<&[u8]> {
-        self.received_resumption_data.as_deref()
-    }
-
-    pub(crate) fn server_name(&self) -> Option<&DnsName<'static>> {
-        self.sni.as_ref()
-    }
-}
-
-impl SideOutput for ServerConnectionData {
-    fn emit(&mut self, ev: Event<'_>) {
-        match ev {
-            Event::EarlyApplicationData(data) => self
-                .early_data
-                .take_received_plaintext(data),
-            Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accept(),
-            Event::ReceivedServerName(sni) => self.sni = sni,
-            Event::ResumptionData(data) => self.received_resumption_data = Some(data),
-            _ => unreachable!(),
-        }
-    }
-}
-
-/// State associated with a server connection.
-#[expect(clippy::exhaustive_structs)]
-#[derive(Debug)]
-pub struct ServerSide;
-
-impl SideData for ServerSide {}
-
-impl crate::conn::private::Side for ServerSide {
-    type Data = ServerConnectionData;
-    type State = ServerState;
 }
 
 #[cfg(test)]
