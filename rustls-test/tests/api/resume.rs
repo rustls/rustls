@@ -4,7 +4,6 @@
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 use std::fmt;
-use std::io::Read;
 use std::sync::Arc;
 
 use rustls::client::{Resumption, TicketRequest};
@@ -13,11 +12,14 @@ use rustls::crypto::{CertificateIdentity, Identity};
 use rustls::enums::ProtocolVersion;
 use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
 use rustls::server::{ServerSessionKey, Tls13Tickets};
-use rustls::{ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection, VecInput};
+use rustls::{
+    ClientConfig, ClientConnection, Connection, HandshakeKind, ServerConfig, ServerConnection,
+    VecInput,
+};
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, MultiTest,
-    ServerConfigExt, do_handshake, do_handshake_until_error, make_client_config,
-    make_client_config_with_auth, make_client_config_with_kx_groups, make_pair,
+    ServerConfigExt, do_handshake, do_handshake_collecting_early_data, do_handshake_until_error,
+    make_client_config, make_client_config_with_auth, make_client_config_with_kx_groups, make_pair,
     make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
     make_server_config_with_kx_groups, transfer, webpki_server_verifier_builder,
 };
@@ -639,6 +641,54 @@ fn early_data_configs() -> (Arc<ClientConfig>, Arc<ServerConfig>) {
     (Arc::new(client_config), Arc::new(server_config))
 }
 
+/// Completes a full handshake so a session is cached, then returns a fresh pair that will resume it.
+fn resumable_pair(
+    client_config: &Arc<ClientConfig>,
+    server_config: &Arc<ServerConfig>,
+    client_output: &mut Vec<u8>,
+) -> (ClientConnection, ServerConnection) {
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let mut warmup_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_arc_configs(client_config, server_config, &mut warmup_output);
+    do_handshake(
+        &mut client_input,
+        &mut warmup_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+
+    make_pair_for_arc_configs(client_config, server_config, client_output)
+}
+
+/// Processes all input on `server`, returning the received early data and traffic data separately.
+fn server_read(
+    server: &mut ServerConnection,
+    input: &mut VecInput,
+    output: &mut Vec<u8>,
+) -> (Vec<u8>, Vec<u8>) {
+    let mut handler = server.read_tls(input, output);
+    let mut early = Vec::new();
+    while let Some(result) = handler.next_early_data() {
+        early.extend_from_slice(result.unwrap().bytes());
+    }
+
+    let mut traffic = Vec::new();
+    handler
+        .handle_all(&mut traffic)
+        .unwrap();
+    (early, traffic)
+}
+
+/// Length of the first TLS record in `tls`, including its header.
+fn first_record_len(tls: &[u8]) -> usize {
+    5 + usize::from(u16::from_be_bytes([tls[3], tls[4]]))
+}
+
 #[test]
 fn early_data_is_available_on_resumption() {
     let (client_config, server_config) = early_data_configs();
@@ -697,24 +747,17 @@ fn early_data_is_available_on_resumption() {
             .err(),
         Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
     );
-    do_handshake(
+    let mut received_early_data = Vec::new();
+    do_handshake_collecting_early_data(
         &mut client_input,
         &mut client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
         &mut server,
+        &mut received_early_data,
     );
 
-    let mut received_early_data = [0u8; 5];
-    assert_eq!(
-        server
-            .early_data()
-            .expect("early_data didn't happen")
-            .read(&mut received_early_data)
-            .expect("early_data failed unexpectedly"),
-        5
-    );
     assert_eq!(&received_early_data[..], b"hello");
     let server_early_exporter = server
         .early_data()
@@ -789,24 +832,17 @@ fn early_data_is_limited_on_client() {
             .write((&[0xaa; 1234 + 1]).into(), &mut client_output),
         1234
     );
-    do_handshake(
+    let mut received_early_data = Vec::new();
+    do_handshake_collecting_early_data(
         &mut client_input,
         &mut client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
         &mut server,
+        &mut received_early_data,
     );
 
-    let mut received_early_data = [0u8; 1234];
-    assert_eq!(
-        server
-            .early_data()
-            .expect("early_data didn't happen")
-            .read(&mut received_early_data)
-            .expect("early_data failed unexpectedly"),
-        1234
-    );
     assert_eq!(&received_early_data[..], [0xaa; 1234]);
 }
 
@@ -905,20 +941,15 @@ fn server_detects_excess_streamed_early_data() {
         1024
     );
     transfer(&mut client_output, &mut server_input);
-    server
-        .read_tls(&mut server_input, &mut server_output)
+    let mut handler = server.read_tls(&mut server_input, &mut server_output);
+    let mut received_early_data = Vec::new();
+    while let Some(result) = handler.next_early_data() {
+        received_early_data.extend_from_slice(result.unwrap().bytes());
+    }
+    handler
         .handle_all(&mut Vec::new())
         .unwrap();
 
-    let mut received_early_data = [0u8; 1024];
-    assert_eq!(
-        server
-            .early_data()
-            .expect("early_data didn't happen")
-            .read(&mut received_early_data)
-            .expect("early_data failed unexpectedly"),
-        1024
-    );
     assert_eq!(&received_early_data[..], [0xaa; 1024]);
 
     assert_eq!(
@@ -932,6 +963,330 @@ fn server_detects_excess_streamed_early_data() {
     assert_eq!(
         server
             .read_tls(&mut server_input, &mut server_output)
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        Error::PeerMisbehaved(PeerMisbehaved::TooMuchEarlyDataReceived)
+    );
+}
+
+#[test]
+fn early_data_and_traffic_are_kept_separate() {
+    let (client_config, server_config) = early_data_configs();
+    let mut client_output = Vec::new();
+    let (mut client, mut server) =
+        resumable_pair(&client_config, &server_config, &mut client_output);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let mut server_output = Vec::new();
+
+    // Two writes produce two early data records.
+    let mut early = client.early_data().unwrap();
+    assert_eq!(early.write(b"hello ".into(), &mut client_output), 6);
+    assert_eq!(early.write(b"early".into(), &mut client_output), 5);
+
+    // Deliver only the ClientHello for now, holding the early data records back.
+    let mut held_back = client_output.split_off(first_record_len(&client_output));
+    transfer(&mut client_output, &mut server_input);
+    assert_eq!(
+        server_read(&mut server, &mut server_input, &mut server_output),
+        (Vec::new(), Vec::new())
+    );
+    assert!(server.is_handshaking());
+    assert!(server.early_data().is_some());
+
+    // The client finishes its handshake and immediately sends traffic data.
+    transfer(&mut server_output, &mut client_input);
+    client
+        .read_tls(&mut client_input, &mut client_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    assert!(!client.is_handshaking());
+    assert!(client.is_early_data_accepted());
+    client
+        .write(b"normal".into(), &mut client_output)
+        .unwrap();
+
+    // The server now receives early data, EndOfEarlyData, Finished and traffic data in one go.
+    held_back.append(&mut client_output);
+    transfer(&mut held_back, &mut server_input);
+    let mut handler = server.read_tls(&mut server_input, &mut server_output);
+    assert_eq!(
+        handler
+            .next_early_data()
+            .unwrap()
+            .unwrap()
+            .bytes(),
+        b"hello "
+    );
+    assert_eq!(
+        handler
+            .next_early_data()
+            .unwrap()
+            .unwrap()
+            .bytes(),
+        b"early"
+    );
+    // Traffic data must not be yielded as early data, and asking again is harmless.
+    assert!(handler.next_early_data().is_none());
+    assert!(handler.next_early_data().is_none());
+    let mut traffic = Vec::new();
+    handler
+        .handle_all(&mut traffic)
+        .unwrap();
+    assert_eq!(traffic, b"normal");
+    assert!(!server.is_handshaking());
+
+    // After the handshake, early data is never yielded but traffic still flows.
+    client
+        .write(b"more".into(), &mut client_output)
+        .unwrap();
+    transfer(&mut client_output, &mut server_input);
+    assert_eq!(
+        server_read(&mut server, &mut server_input, &mut server_output),
+        (Vec::new(), b"more".to_vec())
+    );
+
+    // The early exporter remains available after the early data phase.
+    server
+        .early_data()
+        .unwrap()
+        .exporter()
+        .unwrap();
+}
+
+#[test]
+fn unread_early_data_is_dropped() {
+    let (client_config, server_config) = early_data_configs();
+    let mut client_output = Vec::new();
+    let (mut client, mut server) =
+        resumable_pair(&client_config, &server_config, &mut client_output);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let mut server_output = Vec::new();
+
+    let mut early = client.early_data().unwrap();
+    assert_eq!(early.write(b"hello ".into(), &mut client_output), 6);
+    assert_eq!(early.write(b"early".into(), &mut client_output), 5);
+
+    // Skipping `next_early_data()` drops the early data without error.
+    transfer(&mut client_output, &mut server_input);
+    let mut traffic = Vec::new();
+    server
+        .read_tls(&mut server_input, &mut server_output)
+        .handle_all(&mut traffic)
+        .unwrap();
+    assert!(traffic.is_empty());
+    assert!(server.early_data().is_some());
+
+    transfer(&mut server_output, &mut client_input);
+    client
+        .read_tls(&mut client_input, &mut client_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    assert!(client.is_early_data_accepted());
+    client
+        .write(b"normal".into(), &mut client_output)
+        .unwrap();
+
+    // The dropped early data is gone for good; only traffic data is yielded.
+    transfer(&mut client_output, &mut server_input);
+    let mut handler = server.read_tls(&mut server_input, &mut server_output);
+    assert!(handler.next_early_data().is_none());
+    assert_eq!(
+        handler
+            .next_payload()
+            .unwrap()
+            .unwrap()
+            .bytes(),
+        b"normal"
+    );
+    let mut rest = Vec::new();
+    handler.handle_all(&mut rest).unwrap();
+    assert!(rest.is_empty());
+    assert!(!server.is_handshaking());
+}
+
+#[test]
+fn early_data_is_dropped_by_next_payload() {
+    let (client_config, server_config) = early_data_configs();
+    let mut client_output = Vec::new();
+    let (mut client, mut server) =
+        resumable_pair(&client_config, &server_config, &mut client_output);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let mut server_output = Vec::new();
+
+    let mut early = client.early_data().unwrap();
+    assert_eq!(early.write(b"hello ".into(), &mut client_output), 6);
+    assert_eq!(early.write(b"early".into(), &mut client_output), 5);
+
+    // Deliver only the ClientHello, then complete the client's side of the handshake.
+    let mut held_back = client_output.split_off(first_record_len(&client_output));
+    transfer(&mut client_output, &mut server_input);
+    server
+        .read_tls(&mut server_input, &mut server_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    transfer(&mut server_output, &mut client_input);
+    client
+        .read_tls(&mut client_input, &mut client_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    client
+        .write(b"normal".into(), &mut client_output)
+        .unwrap();
+
+    // Early data records, EndOfEarlyData, Finished and traffic data arrive together;
+    // `next_payload()` skips the early data and yields only the traffic data.
+    held_back.append(&mut client_output);
+    transfer(&mut held_back, &mut server_input);
+    let mut handler = server.read_tls(&mut server_input, &mut server_output);
+    assert_eq!(
+        handler
+            .next_payload()
+            .unwrap()
+            .unwrap()
+            .bytes(),
+        b"normal"
+    );
+    assert!(handler.next_early_data().is_none());
+    let mut rest = Vec::new();
+    handler.handle_all(&mut rest).unwrap();
+    assert!(rest.is_empty());
+    assert!(!server.is_handshaking());
+}
+
+#[test]
+fn next_early_data_yields_nothing_without_early_data() {
+    let (client_config, server_config) = early_data_configs();
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+
+    // A full (non-resumed) handshake never carries early data.
+    let (mut client, mut server) =
+        make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+    assert!(client.early_data().is_none());
+    transfer(&mut client_output, &mut server_input);
+    assert_eq!(
+        server_read(&mut server, &mut server_input, &mut server_output),
+        (Vec::new(), Vec::new())
+    );
+    assert!(server.early_data().is_none());
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+    assert!(server.early_data().is_none());
+
+    client
+        .write(b"normal".into(), &mut client_output)
+        .unwrap();
+    transfer(&mut client_output, &mut server_input);
+    assert_eq!(
+        server_read(&mut server, &mut server_input, &mut server_output),
+        (Vec::new(), b"normal".to_vec())
+    );
+}
+
+#[test]
+fn rejected_early_data_is_skipped() {
+    let (client_config, server_config) = early_data_configs();
+    let mut client_output = Vec::new();
+
+    // Resume against a server that shares the session cache but no longer allows early data.
+    let mut rejecting_config = (*server_config).clone();
+    rejecting_config.max_early_data_size = 0;
+    let (mut client, _) = resumable_pair(&client_config, &server_config, &mut client_output);
+    let mut server = ServerConnection::new(Arc::new(rejecting_config)).unwrap();
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let mut server_output = Vec::new();
+
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
+            .write(b"early".into(), &mut client_output),
+        5
+    );
+    transfer(&mut client_output, &mut server_input);
+    assert_eq!(
+        server_read(&mut server, &mut server_input, &mut server_output),
+        (Vec::new(), Vec::new())
+    );
+    assert!(server.early_data().is_none());
+
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
+    assert!(!client.is_early_data_accepted());
+    assert!(client.early_data().is_none());
+    assert!(server.early_data().is_none());
+
+    client
+        .write(b"normal".into(), &mut client_output)
+        .unwrap();
+    transfer(&mut client_output, &mut server_input);
+    assert_eq!(
+        server_read(&mut server, &mut server_input, &mut server_output),
+        (Vec::new(), b"normal".to_vec())
+    );
+}
+
+#[test]
+fn next_early_data_reports_excess_early_data() {
+    let (client_config, server_config) = early_data_configs_allowing_client_to_send_excess_data();
+    let mut server_input = VecInput::default();
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
+            .write((&[0xaa; 1024]).into(), &mut client_output),
+        1024
+    );
+    transfer(&mut client_output, &mut server_input);
+    assert_eq!(
+        server_read(&mut server, &mut server_input, &mut server_output),
+        ([0xaa; 1024].to_vec(), Vec::new())
+    );
+
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
+            .write((&[0xbb; 1000]).into(), &mut client_output),
+        1000
+    );
+    transfer(&mut client_output, &mut server_input);
+    let mut handler = server.read_tls(&mut server_input, &mut server_output);
+    assert_eq!(
+        handler
+            .next_early_data()
+            .unwrap()
+            .unwrap_err(),
+        Error::PeerMisbehaved(PeerMisbehaved::TooMuchEarlyDataReceived)
+    );
+    // The same error is reported when driving the handler to completion.
+    assert_eq!(
+        handler
             .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::PeerMisbehaved(PeerMisbehaved::TooMuchEarlyDataReceived)

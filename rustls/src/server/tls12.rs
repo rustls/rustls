@@ -14,7 +14,7 @@ use crate::ConnectionTrafficSecrets;
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
-use crate::conn::{ConnectionRandoms, Input, VerifySidePeerIdentity};
+use crate::conn::{ConnectionRandoms, DataKind, Input, VerifySidePeerIdentity};
 use crate::crypto::cipher::{EncodableVersion, Payload, RecordDecrypter, RecordEncrypter};
 use crate::crypto::kx::{ActiveKeyExchange, SupportedKxGroup};
 use crate::crypto::{Identity, TicketProducer};
@@ -1128,7 +1128,9 @@ impl ExpectTraffic {
         output: &mut dyn Output<'m>,
     ) -> Result<ServerState, Error> {
         match message.payload {
-            MessagePayload::ApplicationData(payload) => output.received_plaintext(payload),
+            MessagePayload::ApplicationData(payload) => {
+                output.received_plaintext(DataKind::Traffic(payload))
+            }
             payload => {
                 return Err(inappropriate_message(
                     &payload,
