@@ -12,6 +12,29 @@ use rustls::crypto::kx::{
 };
 use rustls::error::{Error, PeerMisbehaved};
 
+/// A list of the default key exchange groups supported by this provider.
+///
+/// This does not contain MLKEM768; by default MLKEM768 is only offered
+/// in hybrid with X25519.
+pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
+    X25519MLKEM768,
+    #[cfg(not(feature = "fips"))]
+    X25519,
+    SECP256R1,
+    SECP384R1,
+];
+
+/// A list of all the key exchange groups supported by this provider.
+pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
+    X25519MLKEM768,
+    SECP256R1MLKEM768,
+    X25519,
+    SECP256R1,
+    SECP384R1,
+    MLKEM768,
+    MLKEM1024,
+];
+
 /// This is the [X25519MLKEM768] key exchange.
 ///
 /// [X25519MLKEM768]: <https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/>

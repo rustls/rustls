@@ -1,5 +1,67 @@
 use pki_types::{AlgorithmIdentifier, InvalidSignature, SignatureVerificationAlgorithm, alg_id};
 use ring::signature;
+use rustls::crypto::{SignatureScheme, WebPkiSupportedAlgorithms};
+
+/// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
+/// compiled against *ring*.
+pub(crate) static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms =
+    match WebPkiSupportedAlgorithms::new(
+        &[
+            ECDSA_P256_SHA256,
+            ECDSA_P256_SHA384,
+            ECDSA_P384_SHA256,
+            ECDSA_P384_SHA384,
+            ED25519,
+            RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+            RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+            RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+            RSA_PKCS1_2048_8192_SHA256,
+            RSA_PKCS1_2048_8192_SHA384,
+            RSA_PKCS1_2048_8192_SHA512,
+            RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS,
+            RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS,
+            RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS,
+        ],
+        &[
+            // Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
+            (
+                SignatureScheme::ECDSA_NISTP384_SHA384,
+                &[ECDSA_P384_SHA384, ECDSA_P256_SHA384],
+            ),
+            (
+                SignatureScheme::ECDSA_NISTP256_SHA256,
+                &[ECDSA_P256_SHA256, ECDSA_P384_SHA256],
+            ),
+            (SignatureScheme::ED25519, &[ED25519]),
+            (
+                SignatureScheme::RSA_PSS_SHA512,
+                &[RSA_PSS_2048_8192_SHA512_LEGACY_KEY],
+            ),
+            (
+                SignatureScheme::RSA_PSS_SHA384,
+                &[RSA_PSS_2048_8192_SHA384_LEGACY_KEY],
+            ),
+            (
+                SignatureScheme::RSA_PSS_SHA256,
+                &[RSA_PSS_2048_8192_SHA256_LEGACY_KEY],
+            ),
+            (
+                SignatureScheme::RSA_PKCS1_SHA512,
+                &[RSA_PKCS1_2048_8192_SHA512],
+            ),
+            (
+                SignatureScheme::RSA_PKCS1_SHA384,
+                &[RSA_PKCS1_2048_8192_SHA384],
+            ),
+            (
+                SignatureScheme::RSA_PKCS1_SHA256,
+                &[RSA_PKCS1_2048_8192_SHA256],
+            ),
+        ],
+    ) {
+        Ok(algs) => algs,
+        Err(_) => panic!("bad WebPkiSupportedAlgorithms"),
+    };
 
 /// An array of all the verification algorithms exported by this crate.
 ///
