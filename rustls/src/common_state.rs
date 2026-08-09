@@ -6,7 +6,7 @@ use core::ops::{Deref, DerefMut, Range};
 use pki_types::{DnsName, FipsStatus};
 
 use crate::client::EchStatus;
-use crate::conn::{Exporter, KeyingMaterialExporter, ReceivePath, SendOutput, SendPath};
+use crate::conn::{DataKind, Exporter, KeyingMaterialExporter, ReceivePath, SendOutput, SendPath};
 use crate::crypto::cipher::{EncodableVersion, Payload};
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ApplicationProtocol, ProtocolVersion};
@@ -276,7 +276,7 @@ pub enum HandshakeKind {
 
 /// The route for handshake state machine to surface determinations about the connection.
 pub(crate) trait Output<'m> {
-    fn emit(&mut self, ev: Event<'_>);
+    fn emit(&mut self, ev: Event);
 
     fn output(&mut self, ev: OutputEvent<'_>);
 
@@ -286,7 +286,7 @@ pub(crate) trait Output<'m> {
         None
     }
 
-    fn received_plaintext(&mut self, _payload: Payload<'m>) {}
+    fn received_plaintext(&mut self, _payload: DataKind<Payload<'m>>) {}
 
     fn start_traffic(&mut self);
 
@@ -300,8 +300,7 @@ pub(crate) trait ConnectionOutput {
 }
 
 /// The set of events output by the low-level handshake state machine.
-pub(crate) enum Event<'a> {
-    EarlyApplicationData(Payload<'a>),
+pub(crate) enum Event {
     EarlyData(EarlyDataEvent),
     EchStatus(EchStatus),
     ReceivedServerName(Option<DnsName<'static>>),

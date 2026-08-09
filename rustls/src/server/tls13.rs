@@ -14,7 +14,9 @@ use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{Event, HandshakeFlightTls13, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
-use crate::conn::{ConnectionRandoms, Input, TrafficTemperCounters, VerifySidePeerIdentity};
+use crate::conn::{
+    ConnectionRandoms, DataKind, Input, TrafficTemperCounters, VerifySidePeerIdentity,
+};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{Identity, rand};
@@ -1218,10 +1220,10 @@ struct ExpectEarlyData {
 }
 
 impl ExpectEarlyData {
-    fn handle(
+    fn handle<'m>(
         mut self: Box<Self>,
-        input: Input<'_>,
-        output: &mut dyn Output<'_>,
+        input: Input<'m>,
+        output: &mut dyn Output<'m>,
     ) -> Result<ServerState, Error> {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
@@ -1233,7 +1235,7 @@ impl ExpectEarlyData {
                     None => return Err(PeerMisbehaved::TooMuchEarlyDataReceived.into()),
                 };
 
-                output.emit(Event::EarlyApplicationData(payload));
+                output.received_plaintext(DataKind::Early(payload));
                 Ok(self.into())
             }
             MessagePayload::Handshake {
@@ -1603,7 +1605,7 @@ impl ExpectTraffic {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
                 self.counters.received_app_data();
-                output.received_plaintext(payload);
+                output.received_plaintext(DataKind::Traffic(payload));
             }
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),

@@ -19,7 +19,9 @@ use crate::common_state::{
     EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Output, OutputEvent, Protocol, Side,
 };
 use crate::conn::kernel::KernelState;
-use crate::conn::{ConnectionRandoms, Input, TrafficTemperCounters, VerifySidePeerIdentity};
+use crate::conn::{
+    ConnectionRandoms, DataKind, Input, TrafficTemperCounters, VerifySidePeerIdentity,
+};
 use crate::crypto::cipher::{EncodableVersion, Payload};
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
@@ -1594,7 +1596,7 @@ impl ExpectTraffic {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
                 self.counters.received_app_data();
-                output.received_plaintext(payload);
+                output.received_plaintext(DataKind::Traffic(payload));
             }
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),

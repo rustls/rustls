@@ -76,7 +76,7 @@ impl<'a, 'm, 's, Side: SideData> MessageIter<'a, 'm, Side, SendAdapter<'s>> {
 }
 
 impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Send> {
-    pub(crate) fn next(&mut self) -> Option<Result<UnborrowedPayload, Error>> {
+    pub(crate) fn next(&mut self, early_only: bool) -> Option<Result<UnborrowedPayload, Error>> {
         let mut st = match mem::replace(self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
             Err(e) => {
@@ -187,12 +187,20 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
                 break;
             }
 
-            if let Some(payload) = plaintext.take() {
-                *self.state = Ok(st);
-                return Some(Ok(payload));
+            match plaintext.take() {
+                Some(DataKind::Traffic(payload)) if !early_only => {
+                    *self.state = Ok(st);
+                    return Some(Ok(payload));
+                }
+                Some(DataKind::Early(payload)) if early_only => {
+                    *self.state = Ok(st);
+                    return Some(Ok(payload));
+                }
+                _ => {}
             }
 
-            if matches!(self.mode, MessageIterMode::Handshake) && st.is_traffic() {
+            // Stop before consuming traffic data if the caller only wants early data.
+            if (early_only || matches!(self.mode, MessageIterMode::Handshake)) && st.is_traffic() {
                 break;
             }
         }
@@ -537,12 +545,12 @@ struct CaptureAppData<'a, 'j, 'm, Send: SendOutput + 'a> {
     ///
     /// Plaintext data may be reborrowed using a [`Delocator`] which was
     /// initialized from the same slice as `plaintext_locator`.
-    received_plaintext: &'a mut Option<UnborrowedPayload>,
+    received_plaintext: &'a mut Option<DataKind<UnborrowedPayload>>,
     _message_lifetime: PhantomData<&'m ()>,
 }
 
 impl<'a, 'm, Send: SendOutput + 'a> Output<'m> for CaptureAppData<'a, '_, 'm, Send> {
-    fn emit(&mut self, ev: Event<'_>) {
+    fn emit(&mut self, ev: Event) {
         self.other.side.emit(ev)
     }
 
@@ -571,7 +579,7 @@ impl<'a, 'm, Send: SendOutput + 'a> Output<'m> for CaptureAppData<'a, '_, 'm, Se
         }
     }
 
-    fn received_plaintext(&mut self, payload: Payload<'m>) {
+    fn received_plaintext(&mut self, payload: DataKind<Payload<'m>>) {
         // Receive plaintext data [`Payload<'_>`].
         //
         // Since [`Context`] does not hold a lifetime to the receive buffer the
@@ -580,7 +588,14 @@ impl<'a, 'm, Send: SendOutput + 'a> Output<'m> for CaptureAppData<'a, '_, 'm, Se
         // data to be later reborrowed after it has been decrypted in-place.
         let previous = self
             .received_plaintext
-            .replace(UnborrowedPayload::unborrow(self.plaintext_locator, payload));
+            .replace(match payload {
+                DataKind::Early(p) => {
+                    DataKind::Early(UnborrowedPayload::unborrow(self.plaintext_locator, p))
+                }
+                DataKind::Traffic(p) => {
+                    DataKind::Traffic(UnborrowedPayload::unborrow(self.plaintext_locator, p))
+                }
+            });
         debug_assert!(previous.is_none(), "overwrote plaintext data");
     }
 
@@ -598,6 +613,11 @@ impl<'a, 'm, Send: SendOutput + 'a> Output<'m> for CaptureAppData<'a, '_, 'm, Se
     }
 }
 
+pub(crate) enum DataKind<T> {
+    Early(T),
+    Traffic(T),
+}
+
 pub(super) struct JoinOutput<'a, Send: SendOutput + 'a> {
     pub(super) outputs: &'a mut dyn ConnectionOutput,
     pub(super) quic: Option<&'a mut dyn QuicOutput>,
@@ -612,7 +632,7 @@ impl ConnectionOutput for Discard {
 }
 
 impl SideOutput for Discard {
-    fn emit(&mut self, _ev: Event<'_>) {}
+    fn emit(&mut self, _ev: Event) {}
 }
 
 /// Tracking technically-allowed protocol actions

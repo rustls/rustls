@@ -25,7 +25,9 @@ use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 pub mod kernel;
 
 mod receive;
-pub(crate) use receive::{Input, MessageIter, MessageIterMode, ReceivePath, TrafficTemperCounters};
+pub(crate) use receive::{
+    DataKind, Input, MessageIter, MessageIterMode, ReceivePath, TrafficTemperCounters,
+};
 pub use receive::{SliceInput, TlsInputBuffer, VecInput};
 
 mod send;
@@ -168,8 +170,9 @@ impl<Side: SideData> NeedsInput<Side> {
             &mut self.inner,
             MessageIterMode::Handshake,
         );
+
         let result = loop {
-            match iter.next() {
+            match iter.next(false) {
                 Some(Ok(_)) => {}
                 Some(Err(e)) => break Err(e),
                 None => break Ok(()),
@@ -524,12 +527,17 @@ impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
     ///
     /// Should be called repeatedly until it returns `None`, at which point the input buffer no
     /// longer contains any complete messages and should be refilled by the application.
+    ///
+    /// Early ("0-RTT") data received by a server while the handshake is still in progress
+    /// is not yielded here; it is only available from
+    /// [`next_early_data()`][MessageHandler::next_early_data] and is dropped if
+    /// encountered by this method.
     pub fn next_payload(&mut self) -> Option<Result<Payload<'_>, Error>> {
         if self.done {
             return None;
         }
 
-        let Some(result) = self.iter.next() else {
+        let Some(result) = self.iter.next(false) else {
             self.done = true;
             return None;
         };
@@ -550,6 +558,53 @@ impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
     /// The I/O state of the connection after processing the last message.
     pub fn state(self) -> IoState {
         IoState::new(self.iter.recv)
+    }
+}
+
+impl<'a, 'm> MessageHandler<'a, 'm, ServerSide> {
+    /// Yields the next payload application data received from the client.
+    ///
+    /// Early data is only received during the handshake, from clients resuming an earlier
+    /// session, and only if the connection was configured with a non-zero
+    /// [`ServerConfig::max_early_data_size`][crate::ServerConfig::max_early_data_size].
+    ///
+    /// **Beware** that early data is subject to replay by an attacker; see [RFC 8446
+    /// appendix E.5][] for more detail.
+    ///
+    /// Call this until it returns `None` before processing regular application data with
+    /// [`next_payload()`][MessageHandler::next_payload] or
+    /// [`handle_all()`][MessageHandler::handle_all]: early data encountered by those
+    /// methods is dropped.
+    ///
+    /// `None` means no early data is currently available: the early data phase may have
+    /// ended, or processing may require further input.
+    ///
+    /// If this yields an error, stop calling it: the same error will also be reported by
+    /// [`next_payload()`][MessageHandler::next_payload] and
+    /// [`handle_all()`][MessageHandler::handle_all], so it can be ignored here.
+    ///
+    /// [RFC 8446 appendix E.5]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5
+    pub fn next_early_data(&mut self) -> Option<Result<Payload<'_>, Error>> {
+        if self.done {
+            return None;
+        }
+
+        if let Ok(state) = &self.iter.state {
+            if state.is_traffic() {
+                return None; // early data phase has ended
+            }
+        }
+
+        // Not marking the handler as done: traffic data may still follow in the input buffer.
+        let result = self.iter.next(true)?;
+        let payload = match result {
+            Ok(payload) => payload,
+            Err(err) => return Some(Err(err)),
+        };
+
+        Some(Ok(
+            payload.reborrow(&Delocator::new(self.iter.input.slice_mut()))
+        ))
     }
 }
 
@@ -680,7 +735,7 @@ pub(crate) struct SideCommonOutput<'a, 'q> {
 }
 
 impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
-    fn emit(&mut self, ev: Event<'_>) {
+    fn emit(&mut self, ev: Event) {
         self.side.emit(ev);
     }
 
@@ -752,7 +807,7 @@ pub(crate) mod private {
     }
 
     pub(crate) trait SideOutput {
-        fn emit(&mut self, ev: Event<'_>);
+        fn emit(&mut self, ev: Event);
     }
 }
 

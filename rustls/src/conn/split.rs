@@ -263,7 +263,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             output,
             MessageIterMode::All,
         );
-        let received_plain = match iter.next() {
+        let received_plain = match iter.next(false) {
             Some(Ok(payload)) => Some(payload),
             Some(Err(error)) => return Err(error),
             None => None,

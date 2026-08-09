@@ -668,7 +668,8 @@ impl<Side: SideData> QuicCommon<Side> {
             &mut self.common,
             mode,
         );
-        let result = match iter.next() {
+
+        let result = match iter.next(false) {
             Some(Ok(_)) | None => Ok(()),
             Some(Err(e)) => Err(e),
         };

@@ -240,36 +240,32 @@ impl OpenConnection {
             Ok(_) => {}
         };
 
-        // Process newly-received TLS messages, collecting any plaintext
-        // application data.  The `MessageHandler` API hands the plaintext
-        // back to us through `handle_all`, so there is no separate
-        // "read plaintext" step anymore.
+        // Read and process all available plaintext.
         let mut received_plaintext = Vec::new();
-        if let Err(err) = self
+        let mut iter = self
             .tls_conn
-            .read_tls(&mut self.input, &mut self.output)
-            .handle_all(&mut received_plaintext)
-        {
-            error!("cannot process packet: {err:?}");
+            .read_tls(&mut self.input, &mut self.output);
 
-            // last gasp write to send any alerts
-            self.do_tls_write_and_handle_error();
-
-            self.closing = true;
-            return;
+        let mut early_data = Vec::new();
+        while let Some(result) = iter.next_early_data() {
+            match result {
+                Ok(payload) => early_data.extend_from_slice(payload.bytes()),
+                Err(_) => break,
+            }
         }
 
-        // Handle any 0-RTT early data.
-        if let Some(mut early_data) = self.tls_conn.early_data() {
-            let mut buf = Vec::new();
-            early_data
-                .read_to_end(&mut buf)
-                .unwrap();
-
-            if !buf.is_empty() {
-                debug!("early data read {:?}", buf.len());
-                self.incoming_plaintext(&buf);
+        match iter.handle_all(&mut received_plaintext) {
+            Ok(_) => {}
+            Err(error) => {
+                error!("cannot read plaintext: {error:?}");
+                self.closing = true;
+                return;
             }
+        }
+
+        if !early_data.is_empty() {
+            debug!("early data read {:?}", early_data.len());
+            self.incoming_plaintext(&early_data);
         }
 
         if !received_plaintext.is_empty() {
