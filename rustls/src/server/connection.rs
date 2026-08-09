@@ -2,7 +2,6 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ops::Deref;
 use core::{fmt, mem};
-use std::io;
 
 use pki_types::{DnsName, FipsStatus};
 
@@ -18,14 +17,13 @@ use crate::conn::{
 };
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::cipher::{OutboundPlain, Payload};
+use crate::crypto::cipher::OutboundPlain;
 use crate::error::Error;
 use crate::msgs::ServerExtensionsInput;
 use crate::server::hs::{ChooseConfig, ExpectClientHello, ReadClientHello, ServerState};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::tracing::trace;
-use crate::vecbuf::ChunkVecBuffer;
 
 /// This represents a single TLS server connection.
 ///
@@ -112,8 +110,11 @@ impl ServerConnection {
         }
     }
 
-    /// Returns an `io::Read` implementer you can read bytes from that are
-    /// received from a client as TLS1.3 0RTT/"early" data, during the handshake.
+    /// Returns a handle to TLS1.3 0RTT/"early" data facilities if the client's early
+    /// data offer was accepted.
+    ///
+    /// The early data itself is read via [`MessageHandler::next_early_data()`] while
+    /// processing input; this handle gives access to the "early" keying material exporter.
     ///
     /// This returns `None` in many circumstances, such as :
     ///
@@ -319,7 +320,7 @@ impl NeedsInput {
     ) -> Result<ServerHandshake, Error> {
         let mut iter = MessageIter::new(input, tls, None, &mut self.inner);
         let r = loop {
-            match iter.next() {
+            match iter.next(false) {
                 Some(Ok(_)) => {}
                 Some(Err(e)) => break Err(e),
                 None => break Ok(()),
@@ -451,11 +452,8 @@ impl ServerConnectionData {
 }
 
 impl SideOutput for ServerConnectionData {
-    fn emit(&mut self, ev: Event<'_>) {
+    fn emit(&mut self, ev: Event) {
         match ev {
-            Event::EarlyApplicationData(data) => self
-                .early_data
-                .take_received_plaintext(data),
             Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accept(),
             Event::ReceivedServerName(sni) => self.sni = sni,
             Event::ResumptionData(data) => self.received_resumption_data = Some(data),
@@ -464,11 +462,12 @@ impl SideOutput for ServerConnectionData {
     }
 }
 
-/// Allows reading of early data in resumed TLS1.3 connections.
+/// Access to early data facilities in resumed TLS1.3 connections.
 ///
 /// "Early data" is also known as "0-RTT data".
 ///
-/// This type implements [`io::Read`].
+/// The early data itself is read via [`MessageHandler::next_early_data()`]; this
+/// type provides the matching "early" keying material exporter.
 pub struct ReadEarlyData<'a> {
     common: &'a mut ConnectionCommon<ServerSide>,
 }
@@ -502,76 +501,19 @@ impl<'a> ReadEarlyData<'a> {
     }
 }
 
-impl io::Read for ReadEarlyData<'_> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.common.side.early_data.read(buf)
-    }
-}
-
 #[derive(Default)]
 pub(super) enum EarlyDataState {
     #[default]
     New,
-    Accepted {
-        received: ChunkVecBuffer,
-    },
+    Accepted,
 }
 
 impl EarlyDataState {
     fn accept(&mut self) {
-        *self = Self::Accepted {
-            received: ChunkVecBuffer::new(),
-        };
+        *self = Self::Accepted;
     }
 
     fn was_accepted(&self) -> bool {
-        matches!(self, Self::Accepted { .. })
-    }
-
-    #[expect(dead_code)]
-    fn peek(&self) -> Option<&[u8]> {
-        match self {
-            Self::Accepted { received, .. } => received.peek(),
-            _ => None,
-        }
-    }
-
-    #[expect(dead_code)]
-    fn pop(&mut self) -> Option<Vec<u8>> {
-        match self {
-            Self::Accepted { received, .. } => received.pop(),
-            _ => None,
-        }
-    }
-
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Self::Accepted { received, .. } => Ok(received.read(buf)),
-            _ => Err(io::Error::from(io::ErrorKind::BrokenPipe)),
-        }
-    }
-
-    fn take_received_plaintext(&mut self, bytes: Payload<'_>) {
-        let Self::Accepted { received } = self else {
-            return;
-        };
-
-        received.append(bytes.into_vec());
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::format;
-
-    use super::*;
-
-    // these branches not reachable externally, unless something else goes wrong.
-    #[test]
-    fn test_read_in_new_state() {
-        assert_eq!(
-            format!("{:?}", EarlyDataState::default().read(&mut [0u8; 5])),
-            "Err(Kind(BrokenPipe))"
-        );
+        matches!(self, Self::Accepted)
     }
 }

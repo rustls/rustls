@@ -1163,10 +1163,10 @@ struct ExpectEarlyData {
 }
 
 impl ExpectEarlyData {
-    fn handle(
+    fn handle<'m>(
         mut self: Box<Self>,
-        input: Input<'_>,
-        output: &mut dyn Output<'_>,
+        input: Input<'m>,
+        output: &mut dyn Output<'m>,
     ) -> Result<ServerState, Error> {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
@@ -1178,7 +1178,7 @@ impl ExpectEarlyData {
                     None => return Err(PeerMisbehaved::TooMuchEarlyDataReceived.into()),
                 };
 
-                output.emit(Event::EarlyApplicationData(payload));
+                output.received_plaintext(payload);
                 Ok(self.into())
             }
             MessagePayload::Handshake {

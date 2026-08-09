@@ -240,23 +240,6 @@ fn exec(
             }
         }
 
-        if opts.side == Side::Server
-            && opts.enable_early_data
-            && let Some(ed) = &mut server(&mut sess).early_data()
-        {
-            let mut data = Vec::new();
-            let data_len = ed
-                .read_to_end(&mut data)
-                .expect("cannot read early_data");
-
-            for b in data.iter_mut() {
-                *b ^= 0xff;
-            }
-
-            write_or_queue(&mut sess, &data[..data_len], &mut pending, &mut output)
-                .expect("cannot echo early_data in 1rtt data");
-        }
-
         if !sess.is_handshaking() && opts.export_keying_material > 0 && !sent_exporter {
             let mut export = vec![0; opts.export_keying_material];
             sess.exporter()
@@ -465,7 +448,7 @@ fn read_n_bytes(
     input: &mut VecInput,
     output: &mut Vec<u8>,
     pending: &mut Vec<u8>,
-    sess: &mut impl Connection,
+    sess: &mut (impl Connection + 'static),
     conn: &mut net::TcpStream,
     n: usize,
 ) -> Option<IoState> {
@@ -490,7 +473,7 @@ fn read_all_bytes(
     input: &mut VecInput,
     output: &mut Vec<u8>,
     pending: &mut Vec<u8>,
-    sess: &mut impl Connection,
+    sess: &mut (impl Connection + 'static),
     conn: &mut net::TcpStream,
 ) -> Option<IoState> {
     match input.read(conn) {
@@ -508,13 +491,26 @@ fn after_read(
     input: &mut VecInput,
     output: &mut Vec<u8>,
     pending: &mut Vec<u8>,
-    sess: &mut impl Connection,
+    sess: &mut (impl Connection + 'static),
     conn: &mut net::TcpStream,
 ) -> Option<IoState> {
-    let state = match sess
-        .process_new_packets(input, output)
-        .handle_all(buf)
-    {
+    let mut early_data = Vec::new();
+    let result = if opts.side == Side::Server && opts.enable_early_data {
+        let mut handler = server(sess).process_new_packets(input, output);
+        while let Some(result) = handler.next_early_data() {
+            match result {
+                Ok(payload) => early_data.extend_from_slice(payload.bytes()),
+                // the error is also yielded from `handle_all()` below
+                Err(_) => break,
+            }
+        }
+        handler.handle_all(buf)
+    } else {
+        sess.process_new_packets(input, output)
+            .handle_all(buf)
+    };
+
+    let state = match result {
         Ok(state) => state,
         Err(error) => {
             flush(output, conn); /* send any alerts before exiting */
@@ -522,6 +518,12 @@ fn after_read(
             handle_err(opts, error);
         }
     };
+
+    for b in early_data.iter_mut() {
+        *b ^= 0xff;
+    }
+    write_or_queue(sess, &early_data, pending, output)
+        .expect("cannot echo early_data in 1rtt data");
 
     if !pending.is_empty() {
         match sess.write_tls(pending.as_slice().into(), output) {

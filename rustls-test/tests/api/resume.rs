@@ -4,7 +4,6 @@
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 use std::fmt;
-use std::io::Read;
 use std::sync::Arc;
 
 use rustls::client::{Resumption, TicketRequest};
@@ -16,8 +15,8 @@ use rustls::server::{ServerSessionKey, Tls13Tickets};
 use rustls::{ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection, VecInput};
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, MultiTest,
-    ServerConfigExt, do_handshake, do_handshake_until_error, make_client_config,
-    make_client_config_with_auth, make_client_config_with_kx_groups, make_pair,
+    ServerConfigExt, do_handshake, do_handshake_collecting_early_data, do_handshake_until_error,
+    make_client_config, make_client_config_with_auth, make_client_config_with_kx_groups, make_pair,
     make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
     make_server_config_with_kx_groups, transfer, webpki_server_verifier_builder,
 };
@@ -697,24 +696,17 @@ fn early_data_is_available_on_resumption() {
             .err(),
         Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
     );
-    do_handshake(
+    let mut received_early_data = Vec::new();
+    do_handshake_collecting_early_data(
         &mut client_input,
         &mut client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
         &mut server,
+        &mut received_early_data,
     );
 
-    let mut received_early_data = [0u8; 5];
-    assert_eq!(
-        server
-            .early_data()
-            .expect("early_data didn't happen")
-            .read(&mut received_early_data)
-            .expect("early_data failed unexpectedly"),
-        5
-    );
     assert_eq!(&received_early_data[..], b"hello");
     let server_early_exporter = server
         .early_data()
@@ -789,24 +781,17 @@ fn early_data_is_limited_on_client() {
             .write_tls((&[0xaa; 1234 + 1]).into(), &mut client_output),
         1234
     );
-    do_handshake(
+    let mut received_early_data = Vec::new();
+    do_handshake_collecting_early_data(
         &mut client_input,
         &mut client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
         &mut server,
+        &mut received_early_data,
     );
 
-    let mut received_early_data = [0u8; 1234];
-    assert_eq!(
-        server
-            .early_data()
-            .expect("early_data didn't happen")
-            .read(&mut received_early_data)
-            .expect("early_data failed unexpectedly"),
-        1234
-    );
     assert_eq!(&received_early_data[..], [0xaa; 1234]);
 }
 
@@ -905,20 +890,15 @@ fn server_detects_excess_streamed_early_data() {
         1024
     );
     transfer(&mut client_output, &mut server_input);
-    server
-        .process_new_packets(&mut server_input, &mut server_output)
+    let mut handler = server.process_new_packets(&mut server_input, &mut server_output);
+    let mut received_early_data = Vec::new();
+    while let Some(result) = handler.next_early_data() {
+        received_early_data.extend_from_slice(result.unwrap().bytes());
+    }
+    handler
         .handle_all(&mut Vec::new())
         .unwrap();
 
-    let mut received_early_data = [0u8; 1024];
-    assert_eq!(
-        server
-            .early_data()
-            .expect("early_data didn't happen")
-            .read(&mut received_early_data)
-            .expect("early_data failed unexpectedly"),
-        1024
-    );
     assert_eq!(&received_early_data[..], [0xaa; 1024]);
 
     assert_eq!(

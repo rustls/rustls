@@ -41,12 +41,24 @@ fn test_early_exporter() {
             let mut input = VecInput::default();
             let mut output = Vec::new();
 
-            // read clienthello and then inspect early_data status
-            input.read(&mut tcp_stream).unwrap();
-            server
-                .process_new_packets(&mut input, &mut output)
-                .handle_all(&mut Vec::new())
-                .unwrap();
+            // drive the handshake, collecting early data as it arrives
+            let mut early_data = Vec::new();
+            while server.is_handshaking() {
+                if !output.is_empty() {
+                    tcp_stream.write_all(&output).unwrap();
+                    tcp_stream.flush().unwrap();
+                    output.clear();
+                }
+
+                input.read(&mut tcp_stream).unwrap();
+                let mut handler = server.process_new_packets(&mut input, &mut output);
+                while let Some(result) = handler.next_early_data() {
+                    early_data.extend_from_slice(result.unwrap().bytes());
+                }
+                handler
+                    .handle_all(&mut Vec::new())
+                    .unwrap();
+            }
 
             let message = if let Some(mut early) = server.early_data() {
                 let secret = early
@@ -56,7 +68,7 @@ fn test_early_exporter() {
                     .unwrap();
 
                 let mut buf = b"early data: ".to_vec();
-                early.read_to_end(&mut buf).unwrap();
+                buf.extend_from_slice(&early_data);
                 buf.push(b'\n');
 
                 buf.extend_from_slice(b"exported: ");
@@ -66,15 +78,6 @@ fn test_early_exporter() {
             } else {
                 b"no early data\n".to_vec()
             };
-
-            complete_io(
-                &mut tcp_stream,
-                &mut input,
-                &mut received_plaintext,
-                &mut output,
-                &mut server,
-            )
-            .unwrap();
 
             server
                 .write_tls((&message).into(), &mut output)

@@ -73,7 +73,10 @@ impl<'a, 'm, 's, Side: SideData> MessageIter<'a, 'm, Side, SendAdapter<'s>> {
 }
 
 impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Send> {
-    pub(crate) fn next(&mut self) -> Option<Result<UnborrowedPayload, Error>> {
+    pub(crate) fn next(
+        &mut self,
+        allow_early_data: bool,
+    ) -> Option<Result<UnborrowedPayload, Error>> {
         let mut st = match mem::replace(self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
             Err(e) => {
@@ -173,9 +176,11 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
                 break;
             }
 
-            if let Some(payload) = plaintext.take() {
-                *self.state = Ok(st);
-                return Some(Ok(payload));
+            if st.is_traffic() || allow_early_data {
+                if let Some(payload) = plaintext.take() {
+                    *self.state = Ok(st);
+                    return Some(Ok(payload));
+                }
             }
         }
 
@@ -517,7 +522,7 @@ struct CaptureAppData<'a, 'j, 'm, Send: SendOutput + 'a> {
 }
 
 impl<'a, 'm, Send: SendOutput + 'a> Output<'m> for CaptureAppData<'a, '_, 'm, Send> {
-    fn emit(&mut self, ev: Event<'_>) {
+    fn emit(&mut self, ev: Event) {
         self.other.side.emit(ev)
     }
 
@@ -587,7 +592,7 @@ impl ConnectionOutput for Discard {
 }
 
 impl SideOutput for Discard {
-    fn emit(&mut self, _ev: Event<'_>) {}
+    fn emit(&mut self, _ev: Event) {}
 }
 
 /// Tracking technically-allowed protocol actions
