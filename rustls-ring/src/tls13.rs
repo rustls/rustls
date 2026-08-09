@@ -14,6 +14,19 @@ use rustls::error::Error;
 use rustls::version::TLS13_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite, crypto};
 
+/// The TLS1.3 cipher suite configuration that an application should use by default.
+///
+/// This will be [`ALL_TLS13_CIPHER_SUITES`] sans any supported cipher suites that
+/// shouldn't be enabled by most applications.
+pub static DEFAULT_TLS13_CIPHER_SUITES: &[&Tls13CipherSuite] = ALL_TLS13_CIPHER_SUITES;
+
+/// A list of all the TLS1.3 cipher suites supported by the rustls *ring* provider.
+pub static ALL_TLS13_CIPHER_SUITES: &[&Tls13CipherSuite] = &[
+    TLS13_AES_128_GCM_SHA256,
+    TLS13_AES_256_GCM_SHA384,
+    TLS13_CHACHA20_POLY1305_SHA256,
+];
+
 /// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
 pub static TLS13_CHACHA20_POLY1305_SHA256: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {

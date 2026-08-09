@@ -10,6 +10,12 @@ use rustls::crypto::kx::{
 };
 use rustls::error::{Error, PeerMisbehaved};
 
+/// A list of the default key exchange groups supported by this provider.
+pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = ALL_KX_GROUPS;
+
+/// A list of all the key exchange groups supported by this provider.
+pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[X25519, SECP256R1, SECP384R1];
+
 /// A key-exchange group supported by *ring*.
 struct KxGroup {
     /// The IANA "TLS Supported Groups" name of the group
