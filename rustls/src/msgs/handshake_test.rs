@@ -509,6 +509,21 @@ fn can_round_trip_cert_status_req_for_ocsp() {
 }
 
 #[test]
+fn refuses_ocsp_status_request_with_empty_responder_id() {
+    // RFC 6066 defines `opaque ResponderID<1..2^16-1>;`, so a zero-length
+    // ResponderID is not a legal encoding. The `status_request` extension body:
+    //   0x01        CertificateStatusType::OCSP
+    //   0x00 0x02   responder_id_list length (2 bytes follow)
+    //   0x00 0x00   one ResponderID, length 0
+    //   0x00 0x00   request_extensions length (0)
+    let bytes = [0x01u8, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00];
+    assert_eq!(
+        CertificateStatusRequest::read(&mut Reader::new(&bytes)).unwrap_err(),
+        InvalidMessage::IllegalEmptyList("SizedPayload")
+    );
+}
+
+#[test]
 fn can_round_trip_cert_status_req_for_other() {
     let bytes = [
         0, 5, 2, // !OCSP
