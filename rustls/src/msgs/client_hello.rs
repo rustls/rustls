@@ -708,7 +708,10 @@ impl Codec<'_> for OcspCertificateStatusRequest {
     }
 }
 
-wrapped_payload!(pub(crate) struct ResponderId, SizedPayload<u16, MaybeEmpty>,);
+wrapped_payload!(
+    /// RFC 6066: `opaque ResponderID<1..2^16-1>;`
+    pub(crate) struct ResponderId, SizedPayload<u16, NonEmpty>,
+);
 
 /// RFC 6066: `ResponderID responder_id_list<0..2^16-1>;`
 impl TlsListElement for ResponderId {
