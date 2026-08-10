@@ -57,6 +57,7 @@ jobs:
 
       - name: Check links
         uses: lycheeverse/lychee-action@v2
+        if: github.event_name != 'pull_request'
         with:
           args: >
             --accept 200..=204,403,429,500
