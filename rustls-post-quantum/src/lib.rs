@@ -13,9 +13,9 @@
 use core::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
 
-use aws_lc_rs::signature::KeyPair;
-use aws_lc_rs::unstable::signature::{
-    ML_DSA_44_SIGNING, ML_DSA_65_SIGNING, ML_DSA_87_SIGNING, PqdsaKeyPair, PqdsaSigningAlgorithm,
+use aws_lc_rs::signature::{
+    KeyPair, ML_DSA_44_SIGNING, ML_DSA_65_SIGNING, ML_DSA_87_SIGNING, PqdsaKeyPair,
+    PqdsaSigningAlgorithm,
 };
 use rustls::Error;
 use rustls::crypto::{
@@ -263,7 +263,7 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = match WebPkiSupportedAlgo
 pub static ML_DSA_44: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
     public_key_alg_id: alg_id::ML_DSA_44,
     signature_alg_id: alg_id::ML_DSA_44,
-    verification_alg: &aws_lc_rs::unstable::signature::ML_DSA_44,
+    verification_alg: &aws_lc_rs::signature::ML_DSA_44,
     // Not included in AWS-LC-FIPS 3.0 FIPS scope
     in_fips_submission: false,
 };
@@ -272,7 +272,7 @@ pub static ML_DSA_44: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerification
 pub static ML_DSA_65: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
     public_key_alg_id: alg_id::ML_DSA_65,
     signature_alg_id: alg_id::ML_DSA_65,
-    verification_alg: &aws_lc_rs::unstable::signature::ML_DSA_65,
+    verification_alg: &aws_lc_rs::signature::ML_DSA_65,
     // Not included in AWS-LC-FIPS 3.0 FIPS scope
     in_fips_submission: false,
 };
@@ -281,7 +281,7 @@ pub static ML_DSA_65: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerification
 pub static ML_DSA_87: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
     public_key_alg_id: alg_id::ML_DSA_87,
     signature_alg_id: alg_id::ML_DSA_87,
-    verification_alg: &aws_lc_rs::unstable::signature::ML_DSA_87,
+    verification_alg: &aws_lc_rs::signature::ML_DSA_87,
     // Not included in AWS-LC-FIPS 3.0 FIPS scope
     in_fips_submission: false,
 };
