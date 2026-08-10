@@ -254,6 +254,17 @@ impl<'a> OutboundPlain<'a> {
         }
     }
 
+    /// The payload's single contiguous chunk, or `None` if it is fragmented.
+    ///
+    /// An empty payload is treated as a single empty chunk, and a [`Self::Multiple`]
+    /// payload yields `None` even when its chunks happen to form a contiguous whole.
+    pub fn single_chunk(&self) -> Option<&'a [u8]> {
+        match *self {
+            Self::Single(chunk) => Some(chunk),
+            Self::Multiple { .. } => None,
+        }
+    }
+
     /// Split self in two, around an index
     /// Works similarly to `split_at` in the core library, except it doesn't panic if out of bound
     pub(crate) fn split_at(&self, mid: usize) -> (Self, Self) {

@@ -14,6 +14,8 @@ use rustls::error::Error;
 use rustls::version::TLS13_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite};
 
+use crate::record_region;
+
 /// The TLS1.3 cipher suite configuration that an application should use by default.
 ///
 /// This will be [`ALL_TLS13_CIPHER_SUITES`] sans any supported cipher suites that
@@ -244,26 +246,52 @@ impl MessageEncrypter for AeadMessageEncrypter {
         out: &'a mut [u8],
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
-        let mut payload = EncryptBuffer::new(out, total_len)?;
 
         let typ = ContentType::ApplicationData;
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
         let aad = aead::Aad::from(make_tls13_aad(typ, TLS13_LEGACY_RECORD_VERSION, total_len));
-        payload.extend_from_chunks(&msg.payload);
-        payload.extend_from_slice(&msg.typ.to_array());
 
-        match self
-            .enc_key
-            .seal_in_place_separate_tag(nonce, aad, payload.as_mut())
-        {
-            Ok(tag) => payload.extend_from_slice(tag.as_ref()),
-            Err(_) => return Err(Error::EncryptError),
-        }
+        let payload = match msg.payload.single_chunk() {
+            // Contiguous plaintext is sealed out-of-place, straight from the borrowed
+            // input and the inner content type byte is specified as `extra_in`.
+            Some(plain) => {
+                let record = record_region(out, total_len)?;
+                let (ciphertext, typ_and_tag) = record.split_at_mut(plain.len());
+                self.enc_key
+                    .seal_out_of_place_scatter(
+                        nonce,
+                        aad,
+                        plain,
+                        ciphertext,
+                        &msg.typ.to_array(),
+                        typ_and_tag,
+                    )
+                    .map_err(|_| Error::EncryptError)?;
+                &*record
+            }
+            // Fragmented plaintext is gathered into `out` and then sealed in place.
+            // We can't use the out-of-place seal as it requires contiguous input.
+            None => {
+                let mut payload = EncryptBuffer::new(out, total_len)?;
+                payload.extend_from_chunks(&msg.payload);
+                payload.extend_from_slice(&msg.typ.to_array());
+
+                match self
+                    .enc_key
+                    .seal_in_place_separate_tag(nonce, aad, payload.as_mut())
+                {
+                    Ok(tag) => payload.extend_from_slice(tag.as_ref()),
+                    Err(_) => return Err(Error::EncryptError),
+                }
+
+                payload.into_written()
+            }
+        };
 
         Ok(EncodedMessage {
             typ,
             version: TLS13_LEGACY_RECORD_VERSION,
-            payload: payload.into_written(),
+            payload,
         })
     }
 
@@ -309,26 +337,52 @@ impl MessageEncrypter for GcmMessageEncrypter {
         out: &'a mut [u8],
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
-        let mut payload = EncryptBuffer::new(out, total_len)?;
 
         let typ = ContentType::ApplicationData;
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
         let aad = aead::Aad::from(make_tls13_aad(typ, TLS13_LEGACY_RECORD_VERSION, total_len));
-        payload.extend_from_chunks(&msg.payload);
-        payload.extend_from_slice(&msg.typ.to_array());
 
-        match self
-            .enc_key
-            .seal_in_place_separate_tag(nonce, aad, payload.as_mut())
-        {
-            Ok(tag) => payload.extend_from_slice(tag.as_ref()),
-            Err(_) => return Err(Error::EncryptError),
-        }
+        let payload = match msg.payload.single_chunk() {
+            // Contiguous plaintext is sealed out-of-place, straight from the borrowed
+            // input and the inner content type byte is specified as `extra_in`.
+            Some(plain) => {
+                let record = record_region(out, total_len)?;
+                let (ciphertext, typ_and_tag) = record.split_at_mut(plain.len());
+                self.enc_key
+                    .seal_out_of_place_scatter(
+                        nonce,
+                        aad,
+                        plain,
+                        ciphertext,
+                        &msg.typ.to_array(),
+                        typ_and_tag,
+                    )
+                    .map_err(|_| Error::EncryptError)?;
+                &*record
+            }
+            // Fragmented plaintext is gathered into `out` and then sealed in place.
+            // We can't use the out-of-place seal as it requires contiguous input.
+            None => {
+                let mut payload = EncryptBuffer::new(out, total_len)?;
+                payload.extend_from_chunks(&msg.payload);
+                payload.extend_from_slice(&msg.typ.to_array());
+
+                match self
+                    .enc_key
+                    .seal_in_place_separate_tag(nonce, aad, payload.as_mut())
+                {
+                    Ok(tag) => payload.extend_from_slice(tag.as_ref()),
+                    Err(_) => return Err(Error::EncryptError),
+                }
+
+                payload.into_written()
+            }
+        };
 
         Ok(EncodedMessage {
             typ,
             version: TLS13_LEGACY_RECORD_VERSION,
-            payload: payload.into_written(),
+            payload,
         })
     }
 
@@ -447,4 +501,78 @@ impl KeyType for Len {
     fn len(&self) -> usize {
         self.0
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::vec;
+    use std::vec::Vec;
+
+    use rustls::crypto::cipher::InboundOpaque;
+
+    use super::*;
+
+    /// Test that contiguous plaintext and fragmented plaintext are handled identically.
+    #[test]
+    fn out_of_place_sealing_matches_in_place() {
+        let plain = b"the quick brown fox jumps over the lazy dog";
+        let chunks = [&plain[..3], &plain[3..27], &plain[27..]];
+
+        for suite in ALL_TLS13_CIPHER_SUITES {
+            // Different `fill` values prove both paths write every output byte.
+            let contiguous = seal(suite, OutboundPlain::from(plain), 0x00);
+            let fragmented = seal(suite, OutboundPlain::new(&chunks), 0xff);
+            assert_eq!(contiguous, fragmented, "{:?}", suite.common.suite);
+        }
+    }
+
+    /// Sealed records must open through the corresponding decrypter.
+    #[test]
+    fn sealed_records_open() {
+        for suite in ALL_TLS13_CIPHER_SUITES {
+            for plain in [&b""[..], b"hello"] {
+                let mut sealed = seal(suite, OutboundPlain::from(plain), 0x00);
+                let msg = EncodedMessage::new(
+                    ContentType::ApplicationData,
+                    TLS13_LEGACY_RECORD_VERSION,
+                    InboundOpaque(&mut sealed),
+                );
+                let mut decrypter = suite
+                    .aead_alg
+                    .decrypter(test_key(suite.aead_alg.key_len()), Iv::from(TEST_IV));
+                let opened = decrypter
+                    .decrypt(msg, TEST_SEQ)
+                    .unwrap();
+                assert_eq!(opened.typ, ContentType::ApplicationData);
+                assert_eq!(opened.payload, plain, "{:?}", suite.common.suite);
+            }
+        }
+    }
+
+    fn seal(suite: &Tls13CipherSuite, payload: OutboundPlain<'_>, fill: u8) -> Vec<u8> {
+        let mut encrypter = suite
+            .aead_alg
+            .encrypter(test_key(suite.aead_alg.key_len()), Iv::from(TEST_IV));
+        let msg = EncodedMessage::new(
+            ContentType::ApplicationData,
+            ProtocolVersion::TLSv1_3,
+            payload,
+        );
+        let mut out = vec![fill; encrypter.encrypted_payload_len(msg.payload.len())];
+        encrypter
+            .encrypt(msg, TEST_SEQ, &mut out)
+            .unwrap()
+            .payload
+            .to_vec()
+    }
+
+    fn test_key(len: usize) -> AeadKey {
+        match len {
+            16 => AeadKey::from([0x22; 16]),
+            _ => AeadKey::from([0x22; 32]),
+        }
+    }
+
+    const TEST_IV: [u8; 12] = [0x55; 12];
+    const TEST_SEQ: u64 = 7;
 }
