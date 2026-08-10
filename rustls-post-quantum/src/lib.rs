@@ -1,9 +1,5 @@
-//! This crate provide a [`CryptoProvider`] built on the default aws-lc-rs default provider.
-//!
-//! Features:
-//!
-//! - `aws-lc-rs-unstable`: adds support for three variants of the experimental ML-DSA signature
-//!   algorithm.
+//! This crate provides a [`CryptoProvider`] built on the default aws-lc-rs provider,
+//! with added support for three variants of the ML-DSA signature algorithm.
 //!
 //! Before rustls 0.23.22, this crate additionally provided support for the ML-KEM key exchange
 //! (both "pure" and hybrid variants), but these have been moved to the rustls crate itself.
