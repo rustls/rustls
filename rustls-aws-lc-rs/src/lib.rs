@@ -45,7 +45,7 @@ use rustls::crypto::{
     CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom, SigningKey, TicketProducer,
     TicketerFactory,
 };
-use rustls::error::{Error, OtherError};
+use rustls::error::{ApiMisuse, Error, OtherError};
 #[cfg(feature = "std")]
 use rustls::ticketer::TicketRotator;
 
@@ -248,6 +248,21 @@ mod ring_shim {
         agreement::agree_ephemeral(priv_key, peer_key, (), |secret| {
             Ok(SharedSecret::from(secret))
         })
+    }
+}
+
+/// The region of `out` that a `len`-byte sealed record payload will occupy.
+///
+/// If `out` is shorter than `len` bytes, this returns [`ApiMisuse::EncryptBufferTooSmall`].
+fn record_region(out: &mut [u8], len: usize) -> Result<&mut [u8], Error> {
+    let provided = out.len();
+    match out.get_mut(..len) {
+        Some(record) => Ok(record),
+        None => Err(ApiMisuse::EncryptBufferTooSmall {
+            required: len,
+            provided,
+        }
+        .into()),
     }
 }
 
