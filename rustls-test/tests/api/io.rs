@@ -1806,16 +1806,13 @@ fn client_handshake_flights() {
 
 #[test]
 fn test_client_mtu_reduction() {
-    let provider = provider::DEFAULT_PROVIDER;
-    for kt in KeyType::all_for_provider(&provider) {
-        let mut client_config = make_client_config(*kt, &provider);
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let mut client_config = Arc::unwrap_or_clone(client_config);
         client_config.max_fragment_size = Some(64);
+
         let mut client_output = Vec::new();
-        let (_client, _server) = make_pair_for_configs(
-            client_config,
-            make_server_config(KeyType::default(), &provider),
-            &mut client_output,
-        );
+        let (_client, _server) =
+            make_pair_for_arc_configs(&Arc::new(client_config), &server_config, &mut client_output);
 
         for length in message_lengths(&client_output) {
             assert!(length <= 64);
