@@ -22,8 +22,8 @@ use crate::msgs::{
     ClientExtensions, ClientHelloPayload, Codec, EchConfigContents, EchConfigPayload, Encoding,
     EncryptedClientHello, EncryptedClientHelloOuter, ExtensionType, HandshakeAlignedProof,
     HandshakeMessagePayload, HandshakePayload, HelloRetryRequest, HpkeKeyConfig, Message,
-    MessagePayload, PresharedKeyBinder, PresharedKeyOffer, Random, ServerHelloPayload,
-    ServerNamePayload, SizedPayload,
+    MessagePayload, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, Random,
+    ServerHelloPayload, ServerNamePayload, SizedPayload,
 };
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
@@ -340,6 +340,9 @@ pub(crate) struct EchState {
     enable_sni: bool,
     // The extensions sent in the inner hello.
     sent_extensions: Vec<ExtensionType>,
+    // The GREASE PSK identities offered in the first outer hello, if any. A retry hello
+    // re-offers the same identities.
+    grease_psk_identities: Option<Vec<PresharedKeyIdentity>>,
 }
 
 impl EchState {
@@ -384,6 +387,7 @@ impl EchState {
             enc,
             enable_sni,
             sent_extensions: Vec::new(),
+            grease_psk_identities: None,
         })
     }
 
@@ -573,21 +577,31 @@ impl EchState {
     }
 
     // See https://datatracker.ietf.org/doc/html/rfc9849#name-grease-psk
-    pub(super) fn grease_psk(&self, psk_offer: &mut PresharedKeyOffer) -> Result<(), Error> {
-        for ident in psk_offer.identities.iter_mut() {
-            // "For each PSK identity advertised in the ClientHelloInner, the
-            // client generates a random PSK identity with the same length."
-            let Some(identity) = ident.identity.as_mut() else {
-                unreachable!();
-            };
-            self.secure_random.fill(identity)?;
+    pub(super) fn grease_psk(&mut self, psk_offer: &mut PresharedKeyOffer) -> Result<(), Error> {
+        match &self.grease_psk_identities {
+            // This is a retry hello: re-offer the identities and ages from the first hello,
+            // as a genuine PSK offer would. Only the binders are regenerated below; a fresh
+            // GREASE PSK here would "stick out" to an attacker triggering a retry.
+            Some(identities) => psk_offer.identities = identities.clone(),
+            None => {
+                for ident in psk_offer.identities.iter_mut() {
+                    // "For each PSK identity advertised in the ClientHelloInner, the
+                    // client generates a random PSK identity with the same length."
+                    let Some(identity) = ident.identity.as_mut() else {
+                        unreachable!();
+                    };
+                    self.secure_random.fill(identity)?;
 
-            // "It also generates a random, 32-bit, unsigned integer to use as
-            // the obfuscated_ticket_age."
-            let mut ticket_age = [0_u8; 4];
-            self.secure_random
-                .fill(&mut ticket_age)?;
-            ident.obfuscated_ticket_age = u32::from_be_bytes(ticket_age);
+                    // "It also generates a random, 32-bit, unsigned integer to use as
+                    // the obfuscated_ticket_age."
+                    let mut ticket_age = [0_u8; 4];
+                    self.secure_random
+                        .fill(&mut ticket_age)?;
+                    ident.obfuscated_ticket_age = u32::from_be_bytes(ticket_age);
+                }
+
+                self.grease_psk_identities = Some(psk_offer.identities.clone());
+            }
         }
 
         // "Likewise, for each inner PSK binder, the client generates a random string
@@ -838,12 +852,28 @@ pub(crate) struct EchAccepted {
 
 #[cfg(test)]
 mod tests {
+    use core::sync::atomic::{AtomicU8, Ordering};
+    use core::time::Duration;
     use std::string::String;
 
+    use pki_types::{CertificateDer, SubjectPublicKeyInfoDer, UnixTime};
+
     use super::*;
+    use crate::client::{
+        ClientSessionKey, ClientSessionMemoryCache, ClientSessionStore, Resumption,
+        Tls13ClientSessionInput, VerifiedIdentity,
+    };
+    use crate::conn::Connection;
+    use crate::crypto::cipher::EncodedMessage;
     use crate::crypto::hpke::{HpkeAead, HpkeKdf};
-    use crate::crypto::{CipherSuite, TEST_PROVIDER};
-    use crate::msgs::{Compression, Random, ServerExtensions, SessionId};
+    use crate::crypto::{CipherSuite, GetRandomFailed, Identity, TEST_PROVIDER, tls13_only};
+    use crate::msgs::{
+        Compression, HelloRetryRequestExtensions, NewSessionTicketPayloadTls13, Random, Reader,
+        ServerExtensions, SessionId,
+    };
+    use crate::sync::Arc;
+    use crate::tls13::Tls13ProtocolSuite;
+    use crate::{RootCertStore, VecInput};
 
     #[test]
     fn server_hello_conf_alters_server_hello_random() {
@@ -946,6 +976,160 @@ mod tests {
                 base_inner_len,
                 "all inner hello lengths must be invariant wrt inner name length"
             );
+        }
+    }
+
+    #[test]
+    fn ech_rejected_by_hello_retry_request_conceals_inner_psk() {
+        let mut roots = RootCertStore::empty();
+        roots
+            .add(CertificateDer::from_slice(include_bytes!(
+                "../../../test-ca/rsa-2048/ca.der"
+            )))
+            .unwrap();
+
+        // `TEST_PROVIDER`'s fixed-fill `SecureRandom` would mask a regression here: a
+        // fresh GREASE PSK generated for the retry would repeat the first hello's
+        // identity by happenstance. A counter makes consecutive fills distinct.
+        let mut provider = tls13_only(TEST_PROVIDER.clone());
+        provider.secure_random = &CountingRandom;
+
+        let config = ClientConfig::builder(Arc::new(provider))
+            .with_ech(EchMode::Enable(EchConfig {
+                config: EchConfigPayload::V18(EchConfigContents {
+                    key_config: HpkeKeyConfig {
+                        config_id: 0,
+                        kem_id: MockHpke::SUITE.kem,
+                        public_key: vec![0; 32].into(),
+                        symmetric_cipher_suites: vec![MockHpke::SUITE.sym],
+                    },
+                    maximum_name_length: 255,
+                    public_name: DnsName::try_from("public.example.com").unwrap(),
+                    extensions: vec![],
+                }),
+                suite: &MockHpke,
+            }))
+            .with_root_certificates(roots)
+            .with_no_client_auth()
+            .unwrap();
+        let store = Arc::new(ClientSessionMemoryCache::new(256));
+        let config = Arc::new(ClientConfig {
+            resumption: Resumption::store(store.clone()),
+            ..config
+        });
+
+        // cache a ticket for the concealed inner name
+        let server_name = ServerName::try_from("inner.example.com").unwrap();
+        store.insert_tls13_ticket(
+            ClientSessionKey {
+                config_hash: config.config_hash(),
+                server_name: server_name.clone(),
+            },
+            Tls13Session::new(
+                &NewSessionTicketPayloadTls13::new(
+                    Duration::from_secs(1800),
+                    0x1234_5678,
+                    [0u8; 32],
+                    TICKET.to_vec(),
+                ),
+                Tls13ClientSessionInput {
+                    suite: Tls13ProtocolSuite::Tcp(TEST_PROVIDER.tls13_cipher_suites[0]),
+                    peer_identity: VerifiedIdentity::assertion(Identity::RawPublicKey(
+                        SubjectPublicKeyInfoDer::from(&b"spki"[..]),
+                    )),
+                    quic_params: None,
+                },
+                &[0x55; 32],
+                UnixTime::now(),
+            ),
+        );
+
+        let mut first_flight = Vec::new();
+        let mut conn = config
+            .connect(server_name)
+            .build(&mut first_flight)
+            .unwrap();
+
+        // the ticket belongs to the concealed inner name, so the outer hello offers
+        // a GREASE PSK in its place
+        let first = client_hello_in(&first_flight);
+        assert_ne!(psk_identity(&first), TICKET);
+
+        // a HelloRetryRequest without `encrypted_client_hello` rejects our ECH offer
+        let hrr = Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::HelloRetryRequest(HelloRetryRequest {
+                    legacy_version: ProtocolVersion::TLSv1_2,
+                    session_id: first.session_id,
+                    cipher_suite: first.cipher_suites[0],
+                    extensions: HelloRetryRequestExtensions {
+                        cookie: Some(SizedPayload::from(vec![1, 2, 3, 4])),
+                        supported_versions: Some(ProtocolVersion::TLSv1_3),
+                        ..HelloRetryRequestExtensions::default()
+                    },
+                }),
+            )),
+        };
+        let mut input = VecInput::default();
+        input
+            .read(&mut hrr.into_wire_bytes().as_slice())
+            .unwrap();
+        let mut retry_flight = Vec::new();
+        conn.process_new_packets(&mut input, &mut retry_flight)
+            .handle_all(&mut Vec::new())
+            .unwrap();
+
+        // we continue with a second outer hello: it must conceal the ticket too, and
+        // must re-offer the first hello's GREASE identity as a genuine PSK offer would
+        let second = client_hello_in(&retry_flight);
+        assert_ne!(psk_identity(&second), TICKET);
+        assert_eq!(psk_identity(&second), psk_identity(&first));
+
+        fn client_hello_in(bytes: &[u8]) -> ClientHelloPayload {
+            let mut reader = Reader::new(bytes);
+            while reader.any_left() {
+                let encoded = EncodedMessage::<Payload<'_>>::read(&mut reader)
+                    .unwrap()
+                    .into_owned();
+                if let Ok(Message {
+                    payload:
+                        MessagePayload::Handshake {
+                            parsed: HandshakeMessagePayload(HandshakePayload::ClientHello(ch)),
+                            ..
+                        },
+                    ..
+                }) = Message::try_from(&encoded)
+                {
+                    return ch;
+                }
+            }
+            panic!("no ClientHello written");
+        }
+
+        fn psk_identity(hello: &ClientHelloPayload) -> &[u8] {
+            hello
+                .preshared_key_offer
+                .as_ref()
+                .unwrap()
+                .identities[0]
+                .identity
+                .bytes()
+        }
+
+        const TICKET: &[u8] = b"inner name resumption ticket";
+
+        #[derive(Debug)]
+        struct CountingRandom;
+
+        impl SecureRandom for CountingRandom {
+            fn fill(&self, bytes: &mut [u8]) -> Result<(), GetRandomFailed> {
+                static COUNTER: AtomicU8 = AtomicU8::new(0);
+                for byte in bytes.iter_mut() {
+                    *byte = COUNTER.fetch_add(1, Ordering::Relaxed);
+                }
+                Ok(())
+            }
         }
     }
 
@@ -1080,9 +1264,9 @@ mod tests {
     struct MockHpkeSealer;
 
     impl HpkeSealer for MockHpkeSealer {
-        #[cfg_attr(coverage_nightly, coverage(off))]
-        fn seal(&mut self, _aad: &[u8], _plaintext: &[u8]) -> Result<Vec<u8>, Error> {
-            todo!()
+        fn seal(&mut self, _aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, Error> {
+            // ciphertext length as if sealed with the AEAD named in `MockHpke::SUITE`
+            Ok(vec![0xff; plaintext.len() + 16])
         }
     }
 }
