@@ -572,6 +572,41 @@ impl EchState {
         self.inner_hello_transcript = inner_transcript_buffer;
     }
 
+    // See https://datatracker.ietf.org/doc/html/rfc9849#name-grease-psk
+    pub(super) fn grease_psk(&self, psk_offer: &mut PresharedKeyOffer) -> Result<(), Error> {
+        for ident in psk_offer.identities.iter_mut() {
+            // "For each PSK identity advertised in the ClientHelloInner, the
+            // client generates a random PSK identity with the same length."
+            let Some(identity) = ident.identity.as_mut() else {
+                unreachable!();
+            };
+            self.secure_random.fill(identity)?;
+
+            // "It also generates a random, 32-bit, unsigned integer to use as
+            // the obfuscated_ticket_age."
+            let mut ticket_age = [0_u8; 4];
+            self.secure_random
+                .fill(&mut ticket_age)?;
+            ident.obfuscated_ticket_age = u32::from_be_bytes(ticket_age);
+        }
+
+        // "Likewise, for each inner PSK binder, the client generates a random string
+        // of the same length."
+        psk_offer.binders = psk_offer
+            .binders
+            .iter()
+            .map(|old_binder| {
+                // We can't access the wrapped binder PresharedKeyBinder's PayloadU8 mutably,
+                // so we construct new PresharedKeyBinder's from scratch with the same length.
+                let mut new_binder = vec![0; old_binder.as_ref().len()];
+                self.secure_random
+                    .fill(&mut new_binder)?;
+                Ok::<PresharedKeyBinder, Error>(PresharedKeyBinder::from(new_binder))
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(())
+    }
+
     // 5.1 "Encoding the ClientHelloInner"
     fn encode_inner_hello(
         &mut self,
@@ -736,41 +771,6 @@ impl EchState {
             .add_message(&inner_hello_msg);
 
         Ok(encoded_hello)
-    }
-
-    // See https://datatracker.ietf.org/doc/html/rfc9849#name-grease-psk
-    fn grease_psk(&self, psk_offer: &mut PresharedKeyOffer) -> Result<(), Error> {
-        for ident in psk_offer.identities.iter_mut() {
-            // "For each PSK identity advertised in the ClientHelloInner, the
-            // client generates a random PSK identity with the same length."
-            let Some(identity) = ident.identity.as_mut() else {
-                unreachable!();
-            };
-            self.secure_random.fill(identity)?;
-
-            // "It also generates a random, 32-bit, unsigned integer to use as
-            // the obfuscated_ticket_age."
-            let mut ticket_age = [0_u8; 4];
-            self.secure_random
-                .fill(&mut ticket_age)?;
-            ident.obfuscated_ticket_age = u32::from_be_bytes(ticket_age);
-        }
-
-        // "Likewise, for each inner PSK binder, the client generates a random string
-        // of the same length."
-        psk_offer.binders = psk_offer
-            .binders
-            .iter()
-            .map(|old_binder| {
-                // We can't access the wrapped binder PresharedKeyBinder's PayloadU8 mutably,
-                // so we construct new PresharedKeyBinder's from scratch with the same length.
-                let mut new_binder = vec![0; old_binder.as_ref().len()];
-                self.secure_random
-                    .fill(&mut new_binder)?;
-                Ok::<PresharedKeyBinder, Error>(PresharedKeyBinder::from(new_binder))
-            })
-            .collect::<Result<_, _>>()?;
-        Ok(())
     }
 
     fn server_hello_conf(
