@@ -73,12 +73,11 @@ impl SendPath {
     ) -> usize {
         let len = payload.len();
         self.send_messages::<true>(
-            self.message_fragmenter
-                .fragment_payload(
-                    ContentType::ApplicationData,
-                    ProtocolVersion::TLSv1_2,
-                    payload,
-                ),
+            self.message_fragmenter.fragment(
+                ContentType::ApplicationData,
+                ProtocolVersion::TLSv1_2,
+                payload,
+            ),
             tls,
         );
         self.maybe_refresh_traffic_keys(tls);
@@ -229,9 +228,11 @@ impl SendOutput for SendPath {
     /// Send a raw TLS message, fragmenting it if needed.
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, tls: &mut Vec<u8>) {
         let encoded = EncodedMessage::from(m);
-        let fragments = self
-            .message_fragmenter
-            .fragment_message(&encoded);
+        let fragments = self.message_fragmenter.fragment(
+            encoded.typ,
+            encoded.version,
+            encoded.payload.bytes().into(),
+        );
 
         match must_encrypt {
             true => self.send_messages::<true>(fragments, tls),
