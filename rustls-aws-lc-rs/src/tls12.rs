@@ -385,7 +385,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
 
 /// The RFC 7905/RFC 7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
-/// TLS1.3 uses `AeadMessageEncrypter`.
+/// TLS1.3 uses `Tls13MessageEncrypter`.
 struct ChaCha20Poly1305MessageEncrypter {
     enc_key: aead::LessSafeKey,
     enc_offset: Iv,
@@ -393,7 +393,7 @@ struct ChaCha20Poly1305MessageEncrypter {
 
 /// The RFC 7905/RFC 7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
-/// TLS1.3 uses `AeadMessageDecrypter`.
+/// TLS1.3 uses `Tls13MessageDecrypter`.
 struct ChaCha20Poly1305MessageDecrypter {
     dec_key: aead::LessSafeKey,
     dec_offset: Iv,

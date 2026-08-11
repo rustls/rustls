@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 
+use aws_lc_rs::error::Unspecified;
 use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
 use pki_types::FipsStatus;
@@ -100,16 +101,20 @@ struct Chacha20Poly1305Aead(AeadAlgorithm);
 impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
     fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
         // safety: the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
-        Box::new(AeadMessageEncrypter {
-            enc_key: aead::LessSafeKey::new(aead::UnboundKey::new(self.0.0, key.as_ref()).unwrap()),
+        Box::new(Tls13MessageEncrypter {
+            enc_key: SealKey::LessSafe(aead::LessSafeKey::new(
+                aead::UnboundKey::new(self.0.0, key.as_ref()).unwrap(),
+            )),
             iv,
         })
     }
 
     fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
         // safety: the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
-        Box::new(AeadMessageDecrypter {
-            dec_key: aead::LessSafeKey::new(aead::UnboundKey::new(self.0.0, key.as_ref()).unwrap()),
+        Box::new(Tls13MessageDecrypter {
+            dec_key: OpenKey::LessSafe(aead::LessSafeKey::new(
+                aead::UnboundKey::new(self.0.0, key.as_ref()).unwrap(),
+            )),
             iv,
         })
     }
@@ -196,13 +201,11 @@ impl AeadAlgorithm {
         // safety:
         // - the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
         // - this function should only be used for `Algorithm::AES_128_GCM` or `Algorithm::AES_256_GCM`
-        Box::new(GcmMessageEncrypter {
-            enc_key: aead::TlsRecordSealingKey::new(
-                self.0,
-                aead::TlsProtocolId::TLS13,
-                key.as_ref(),
-            )
-            .unwrap(),
+        Box::new(Tls13MessageEncrypter {
+            enc_key: SealKey::TlsRecord(
+                aead::TlsRecordSealingKey::new(self.0, aead::TlsProtocolId::TLS13, key.as_ref())
+                    .unwrap(),
+            ),
             iv,
         })
     }
@@ -212,13 +215,11 @@ impl AeadAlgorithm {
         // safety:
         // - the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
         // - this function should only be used for `Algorithm::AES_128_GCM` or `Algorithm::AES_256_GCM`
-        Box::new(GcmMessageDecrypter {
-            dec_key: aead::TlsRecordOpeningKey::new(
-                self.0,
-                aead::TlsProtocolId::TLS13,
-                key.as_ref(),
-            )
-            .unwrap(),
+        Box::new(Tls13MessageDecrypter {
+            dec_key: OpenKey::TlsRecord(
+                aead::TlsRecordOpeningKey::new(self.0, aead::TlsProtocolId::TLS13, key.as_ref())
+                    .unwrap(),
+            ),
             iv,
         })
     }
@@ -228,12 +229,13 @@ impl AeadAlgorithm {
     }
 }
 
-struct AeadMessageEncrypter {
-    enc_key: aead::LessSafeKey,
+/// A `MessageEncrypter` for all of this provider's TLS1.3 AEAD ciphersuites.
+struct Tls13MessageEncrypter {
+    enc_key: SealKey,
     iv: Iv,
 }
 
-impl MessageEncrypter for AeadMessageEncrypter {
+impl MessageEncrypter for Tls13MessageEncrypter {
     fn encrypt<'a>(
         &mut self,
         msg: EncodedMessage<OutboundPlain<'_>>,
@@ -295,12 +297,13 @@ impl MessageEncrypter for AeadMessageEncrypter {
     }
 }
 
-struct AeadMessageDecrypter {
-    dec_key: aead::LessSafeKey,
+/// A `MessageDecrypter` for all of this provider's TLS1.3 AEAD ciphersuites.
+struct Tls13MessageDecrypter {
+    dec_key: OpenKey,
     iv: Iv,
 }
 
-impl MessageDecrypter for AeadMessageDecrypter {
+impl MessageDecrypter for Tls13MessageDecrypter {
     fn decrypt<'a>(
         &mut self,
         mut msg: EncodedMessage<InboundOpaque<'a>>,
@@ -324,99 +327,86 @@ impl MessageDecrypter for AeadMessageDecrypter {
     }
 }
 
-struct GcmMessageEncrypter {
-    enc_key: aead::TlsRecordSealingKey,
-    iv: Iv,
+/// A TLS1.3 sealing key, dispatching to whichever aws-lc-rs key type backs it.
+enum SealKey {
+    LessSafe(aead::LessSafeKey),
+    TlsRecord(aead::TlsRecordSealingKey),
 }
 
-impl MessageEncrypter for GcmMessageEncrypter {
-    fn encrypt<'a>(
+impl SealKey {
+    fn seal_out_of_place_scatter<A: AsRef<[u8]>>(
         &mut self,
-        msg: EncodedMessage<OutboundPlain<'_>>,
-        seq: u64,
-        out: &'a mut [u8],
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let total_len = self.encrypted_payload_len(msg.payload.len());
-
-        let typ = ContentType::ApplicationData;
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(typ, TLS13_LEGACY_RECORD_VERSION, total_len));
-
-        let payload = match msg.payload.single_chunk() {
-            // Contiguous plaintext is sealed out-of-place, straight from the borrowed
-            // input and the inner content type byte is specified as `extra_in`.
-            Some(plain) => {
-                let record = record_region(out, total_len)?;
-                let (ciphertext, typ_and_tag) = record.split_at_mut(plain.len());
-                self.enc_key
-                    .seal_out_of_place_scatter(
-                        nonce,
-                        aad,
-                        plain,
-                        ciphertext,
-                        &msg.typ.to_array(),
-                        typ_and_tag,
-                    )
-                    .map_err(|_| Error::EncryptError)?;
-                &*record
-            }
-            // Fragmented plaintext is gathered into `out` and then sealed in place.
-            // We can't use the out-of-place seal as it requires contiguous input.
-            None => {
-                let mut payload = EncryptBuffer::new(out, total_len)?;
-                payload.extend_from_chunks(&msg.payload);
-                payload.extend_from_slice(&msg.typ.to_array());
-
-                match self
-                    .enc_key
-                    .seal_in_place_separate_tag(nonce, aad, payload.as_mut())
-                {
-                    Ok(tag) => payload.extend_from_slice(tag.as_ref()),
-                    Err(_) => return Err(Error::EncryptError),
-                }
-
-                payload.into_written()
-            }
-        };
-
-        Ok(EncodedMessage {
-            typ,
-            version: TLS13_LEGACY_RECORD_VERSION,
-            payload,
-        })
-    }
-
-    fn encrypted_payload_len(&self, payload_len: usize) -> usize {
-        payload_len + 1 + self.enc_key.algorithm().tag_len()
-    }
-}
-
-struct GcmMessageDecrypter {
-    dec_key: aead::TlsRecordOpeningKey,
-    iv: Iv,
-}
-
-impl MessageDecrypter for GcmMessageDecrypter {
-    fn decrypt<'a>(
-        &mut self,
-        mut msg: EncodedMessage<InboundOpaque<'a>>,
-        seq: u64,
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let payload = &mut msg.payload;
-        if payload.len() < self.dec_key.algorithm().tag_len() {
-            return Err(Error::DecryptError);
+        nonce: aead::Nonce,
+        aad: aead::Aad<A>,
+        in_plaintext: &[u8],
+        out_ciphertext: &mut [u8],
+        extra_in: &[u8],
+        extra_out_and_tag: &mut [u8],
+    ) -> Result<(), Unspecified> {
+        match self {
+            Self::LessSafe(key) => key.seal_out_of_place_scatter(
+                nonce,
+                aad,
+                in_plaintext,
+                out_ciphertext,
+                extra_in,
+                extra_out_and_tag,
+            ),
+            Self::TlsRecord(key) => key.seal_out_of_place_scatter(
+                nonce,
+                aad,
+                in_plaintext,
+                out_ciphertext,
+                extra_in,
+                extra_out_and_tag,
+            ),
         }
+    }
 
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(msg.typ, msg.version, payload.len()));
-        let plain_len = self
-            .dec_key
-            .open_in_place(nonce, aad, payload)
-            .map_err(|_| Error::DecryptError)?
-            .len();
+    fn seal_in_place_separate_tag<A: AsRef<[u8]>>(
+        &mut self,
+        nonce: aead::Nonce,
+        aad: aead::Aad<A>,
+        in_out: &mut [u8],
+    ) -> Result<aead::Tag, Unspecified> {
+        match self {
+            Self::LessSafe(key) => key.seal_in_place_separate_tag(nonce, aad, in_out),
+            Self::TlsRecord(key) => key.seal_in_place_separate_tag(nonce, aad, in_out),
+        }
+    }
 
-        payload.truncate(plain_len);
-        msg.into_tls13_unpadded_message()
+    fn algorithm(&self) -> &'static aead::Algorithm {
+        match self {
+            Self::LessSafe(key) => key.algorithm(),
+            Self::TlsRecord(key) => key.algorithm(),
+        }
+    }
+}
+
+/// A TLS1.3 opening key, dispatching to whichever aws-lc-rs key type backs it.
+enum OpenKey {
+    LessSafe(aead::LessSafeKey),
+    TlsRecord(aead::TlsRecordOpeningKey),
+}
+
+impl OpenKey {
+    fn open_in_place<'io, A: AsRef<[u8]>>(
+        &self,
+        nonce: aead::Nonce,
+        aad: aead::Aad<A>,
+        in_out: &'io mut [u8],
+    ) -> Result<&'io mut [u8], Unspecified> {
+        match self {
+            Self::LessSafe(key) => key.open_in_place(nonce, aad, in_out),
+            Self::TlsRecord(key) => key.open_in_place(nonce, aad, in_out),
+        }
+    }
+
+    fn algorithm(&self) -> &'static aead::Algorithm {
+        match self {
+            Self::LessSafe(key) => key.algorithm(),
+            Self::TlsRecord(key) => key.algorithm(),
+        }
     }
 }
 
