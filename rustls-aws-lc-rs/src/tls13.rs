@@ -233,11 +233,6 @@ struct AeadMessageEncrypter {
     iv: Iv,
 }
 
-struct AeadMessageDecrypter {
-    dec_key: aead::LessSafeKey,
-    iv: Iv,
-}
-
 impl MessageEncrypter for AeadMessageEncrypter {
     fn encrypt<'a>(
         &mut self,
@@ -298,6 +293,11 @@ impl MessageEncrypter for AeadMessageEncrypter {
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
         payload_len + 1 + self.enc_key.algorithm().tag_len()
     }
+}
+
+struct AeadMessageDecrypter {
+    dec_key: aead::LessSafeKey,
+    iv: Iv,
 }
 
 impl MessageDecrypter for AeadMessageDecrypter {
