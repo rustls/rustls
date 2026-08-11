@@ -107,14 +107,10 @@ pub mod fuzzing {
             return;
         };
 
-        let Ok(msg) = Message::try_from(&msg) else {
-            return;
-        };
-
         let mut frg = MessageFragmenter::default();
         frg.set_max_fragment_size(Some(32))
             .unwrap();
-        for msg in frg.fragment_message(&EncodedMessage::<Payload<'_>>::from(msg)) {
+        for msg in frg.fragment(msg.typ, msg.version, msg.payload.bytes().into()) {
             Message::try_from(&EncodedMessage {
                 typ: msg.typ,
                 version: msg.version,

@@ -1,5 +1,5 @@
 use crate::Error;
-use crate::crypto::cipher::{EncodedMessage, OutboundPlain, Payload};
+use crate::crypto::cipher::{EncodedMessage, OutboundPlain};
 use crate::enums::{ContentType, ProtocolVersion};
 
 pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
@@ -19,20 +19,6 @@ impl Default for MessageFragmenter {
 }
 
 impl MessageFragmenter {
-    /// Take `msg` and fragment it into new messages with the same type and version.
-    ///
-    /// Each returned message size is no more than `max_frag`.
-    ///
-    /// Return an iterator across those messages.
-    ///
-    /// Payloads are borrowed from `msg`.
-    pub(crate) fn fragment_message<'a>(
-        &self,
-        msg: &'a EncodedMessage<Payload<'_>>,
-    ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> + 'a + use<'a> {
-        self.fragment_payload(msg.typ, msg.version, msg.payload.bytes().into())
-    }
-
     /// Take `payload` and fragment it into new messages with given type and version.
     ///
     /// Each returned message size is no more than `max_frag`.
@@ -40,7 +26,7 @@ impl MessageFragmenter {
     /// Return an iterator across those messages.
     ///
     /// Payloads are borrowed from `payload`.
-    pub(crate) fn fragment_payload<'a>(
+    pub(crate) fn fragment<'a>(
         &self,
         typ: ContentType,
         version: ProtocolVersion,
@@ -146,7 +132,7 @@ mod tests {
         frag.set_max_fragment_size(Some(32))
             .unwrap();
         let q = frag
-            .fragment_message(&m)
+            .fragment(m.typ, m.version, m.payload.bytes().into())
             .collect::<Vec<_>>();
         assert_eq!(q.len(), 3);
         msg_eq(
@@ -190,7 +176,7 @@ mod tests {
         frag.set_max_fragment_size(Some(32))
             .unwrap();
         let q = frag
-            .fragment_message(&m)
+            .fragment(m.typ, m.version, m.payload.bytes().into())
             .collect::<Vec<_>>();
         assert_eq!(q.len(), 1);
         msg_eq(
@@ -213,7 +199,7 @@ mod tests {
             .unwrap();
 
         let fragments = frag
-            .fragment_payload(typ, version, borrowed_payload)
+            .fragment(typ, version, borrowed_payload)
             .collect::<Vec<_>>();
         assert_eq!(fragments.len(), 3);
         msg_eq(
