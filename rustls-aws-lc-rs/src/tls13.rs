@@ -391,10 +391,6 @@ impl MessageEncrypter for GcmMessageEncrypter {
     }
 }
 
-// Note: all TLS 1.3 application data records use TLSv1_2 (0x0303) as the legacy record
-// protocol version, see https://www.rfc-editor.org/rfc/rfc9846#section-5.1
-const TLS13_LEGACY_RECORD_VERSION: ProtocolVersion = ProtocolVersion::TLSv1_2;
-
 struct GcmMessageDecrypter {
     dec_key: aead::TlsRecordOpeningKey,
     iv: Iv,
@@ -502,6 +498,10 @@ impl KeyType for Len {
         self.0
     }
 }
+
+// Note: all TLS 1.3 application data records use TLSv1_2 (0x0303) as the legacy record
+// protocol version, see https://www.rfc-editor.org/rfc/rfc9846#section-5.1
+const TLS13_LEGACY_RECORD_VERSION: ProtocolVersion = ProtocolVersion::TLSv1_2;
 
 #[cfg(test)]
 mod tests {
