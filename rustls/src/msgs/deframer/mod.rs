@@ -29,6 +29,9 @@ pub(crate) struct Deframer {
     /// Spans covering individual handshake payloads, in order of receipt.
     spans: VecDeque<FragmentSpan>,
 
+    /// Whether any span declared a size exceeding `MAX_HANDSHAKE_SIZE`.
+    too_large: bool,
+
     /// Prefix of the buffer that has been processed so far.
     ///
     /// `processed` may exceed `discard`, that means we have parsed
@@ -151,6 +154,7 @@ impl Deframer {
         };
 
         for span in iter {
+            self.too_large |= span.size.unwrap_or_default() > MAX_HANDSHAKE_SIZE;
             self.spans.push_back(span);
         }
     }
@@ -213,6 +217,12 @@ impl Deframer {
         // for a pair where the first is not complete.  move
         // the second down towards the first, then reparse the contents.
         loop {
+            // this covers spans that never require coalescing, eg. a single
+            // complete QUIC handshake message with an excessive declared size
+            if self.too_large {
+                return Err(InvalidMessage::HandshakePayloadTooLarge);
+            }
+
             let limit = self.spans.len().saturating_sub(1);
             let iter = self.spans.iter();
             let Some(index) = iter
@@ -259,16 +269,9 @@ impl Deframer {
                 bounds: first.bounds.start..first.bounds.end,
             };
 
-            let mut too_large = false;
             for (i, span) in iter.enumerate() {
-                if span.size.unwrap_or_default() > MAX_HANDSHAKE_SIZE {
-                    too_large = true;
-                }
+                self.too_large |= span.size.unwrap_or_default() > MAX_HANDSHAKE_SIZE;
                 self.spans.insert(index + i, span);
-            }
-
-            if too_large {
-                return Err(InvalidMessage::HandshakePayloadTooLarge);
             }
         }
     }
@@ -350,6 +353,7 @@ impl Default for Deframer {
             // capacity: a typical upper limit on handshake messages in
             // a single flight
             spans: VecDeque::with_capacity(16),
+            too_large: false,
             processed: 0,
             discard: 0,
         }
@@ -527,6 +531,22 @@ mod tests {
         // this check in `coalesce()`
         add_bytes(&mut deframer, 0..3, &input);
         add_bytes(&mut deframer, 4..6, &input);
+
+        assert_eq!(
+            deframer.coalesce(&mut input),
+            Err(InvalidMessage::HandshakePayloadTooLarge)
+        );
+    }
+
+    #[test]
+    fn coalesce_rejects_excess_size_message_needing_no_coalescing() {
+        const X: u8 = 0xff;
+        // a 0x010000-byte body (one over `MAX_HANDSHAKE_SIZE`) in a single
+        // fragment, so `coalesce()` performs no merging (the QUIC CRYPTO shape)
+        let mut input = vec![0x21, 0x01, 0x00, 0x00, X, X];
+        let mut deframer = Deframer::default();
+
+        add_bytes(&mut deframer, 0..6, &input);
 
         assert_eq!(
             deframer.coalesce(&mut input),
