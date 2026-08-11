@@ -1822,57 +1822,61 @@ fn test_client_mtu_reduction() {
 
 #[test]
 fn test_server_mtu_reduction() {
-    let provider = provider::DEFAULT_PROVIDER;
-    let mut server_config = make_server_config(KeyType::default(), &provider);
-    server_config.max_fragment_size = Some(64);
-    server_config.send_half_rtt_data = true;
-    let mut client_output = Vec::new();
-    let mut server_output = Vec::new();
-    let (mut client, mut server) = make_pair_for_configs(
-        make_client_config(KeyType::default(), &provider),
-        server_config,
-        &mut client_output,
-    );
-    let mut client_input = VecInput::default();
-    let mut server_input = VecInput::default();
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let mut server_config = Arc::unwrap_or_clone(server_config);
+        server_config.max_fragment_size = Some(64);
+        server_config.send_half_rtt_data = true;
 
-    let big_data = [0u8; 2048];
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&client_config, &Arc::new(server_config), &mut client_output);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
 
-    transfer(&mut client_output, &mut server_input);
-    server
-        .process_new_packets(&mut server_input, &mut server_output)
-        .handle_all(&mut Vec::new())
-        .unwrap();
-    // The 0.5-RTT application data is delivered across the handshake flights (fragmented by
-    // the reduced MTU), so accumulate everything the client decrypts.
-    let mut received = Vec::new();
-    server
-        .write_tls((&big_data).into(), &mut server_output)
-        .unwrap();
-    for length in message_lengths(&server_output) {
-        assert!(length <= 64);
+        let big_data = [0u8; 2048];
+
+        transfer(&mut client_output, &mut server_input);
+        server
+            .process_new_packets(&mut server_input, &mut server_output)
+            .handle_all(&mut Vec::new())
+            .unwrap();
+
+        let mut received = Vec::new();
+        if expect.version == ProtocolVersion::TLSv1_3 && !expect.client_auth {
+            // The 0.5-RTT application data is delivered across the handshake flights (fragmented by
+            // the reduced MTU), so accumulate everything the client decrypts.
+            server
+                .write_tls((&big_data).into(), &mut server_output)
+                .unwrap();
+            for length in message_lengths(&server_output) {
+                assert!(length <= 64);
+            }
+            transfer(&mut server_output, &mut client_input);
+        }
+
+        client
+            .process_new_packets(&mut client_input, &mut client_output)
+            .handle_all(&mut received)
+            .unwrap();
+        transfer(&mut client_output, &mut server_input);
+        server
+            .process_new_packets(&mut server_input, &mut server_output)
+            .handle_all(&mut Vec::new())
+            .unwrap();
+        for length in message_lengths(&server_output) {
+            assert!(length <= 64);
+        }
+        transfer(&mut server_output, &mut client_input);
+
+        if expect.version == ProtocolVersion::TLSv1_3 && !expect.client_auth {
+            client
+                .process_new_packets(&mut client_input, &mut client_output)
+                .handle_all(&mut received)
+                .unwrap();
+            assert_eq!(received, big_data);
+        }
     }
-    transfer(&mut server_output, &mut client_input);
-
-    client
-        .process_new_packets(&mut client_input, &mut client_output)
-        .handle_all(&mut received)
-        .unwrap();
-    transfer(&mut client_output, &mut server_input);
-    server
-        .process_new_packets(&mut server_input, &mut server_output)
-        .handle_all(&mut Vec::new())
-        .unwrap();
-    for length in message_lengths(&server_output) {
-        assert!(length <= 64);
-    }
-    transfer(&mut server_output, &mut client_input);
-
-    client
-        .process_new_packets(&mut client_input, &mut client_output)
-        .handle_all(&mut received)
-        .unwrap();
-    assert_eq!(received, big_data);
 }
 
 fn check_client_max_fragment_size(size: usize) -> Option<Error> {
