@@ -15,7 +15,7 @@ use rustls::error::Error;
 use rustls::version::TLS13_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite};
 
-use crate::record_region;
+use crate::{SealKey, record_region};
 
 /// The TLS1.3 cipher suite configuration that an application should use by default.
 ///
@@ -324,62 +324,6 @@ impl MessageDecrypter for Tls13MessageDecrypter {
 
         payload.truncate(plain_len);
         msg.into_tls13_unpadded_message()
-    }
-}
-
-/// A TLS1.3 sealing key, dispatching to whichever aws-lc-rs key type backs it.
-enum SealKey {
-    LessSafe(aead::LessSafeKey),
-    TlsRecord(aead::TlsRecordSealingKey),
-}
-
-impl SealKey {
-    fn seal_out_of_place_scatter<A: AsRef<[u8]>>(
-        &mut self,
-        nonce: aead::Nonce,
-        aad: aead::Aad<A>,
-        in_plaintext: &[u8],
-        out_ciphertext: &mut [u8],
-        extra_in: &[u8],
-        extra_out_and_tag: &mut [u8],
-    ) -> Result<(), Unspecified> {
-        match self {
-            Self::LessSafe(key) => key.seal_out_of_place_scatter(
-                nonce,
-                aad,
-                in_plaintext,
-                out_ciphertext,
-                extra_in,
-                extra_out_and_tag,
-            ),
-            Self::TlsRecord(key) => key.seal_out_of_place_scatter(
-                nonce,
-                aad,
-                in_plaintext,
-                out_ciphertext,
-                extra_in,
-                extra_out_and_tag,
-            ),
-        }
-    }
-
-    fn seal_in_place_separate_tag<A: AsRef<[u8]>>(
-        &mut self,
-        nonce: aead::Nonce,
-        aad: aead::Aad<A>,
-        in_out: &mut [u8],
-    ) -> Result<aead::Tag, Unspecified> {
-        match self {
-            Self::LessSafe(key) => key.seal_in_place_separate_tag(nonce, aad, in_out),
-            Self::TlsRecord(key) => key.seal_in_place_separate_tag(nonce, aad, in_out),
-        }
-    }
-
-    fn algorithm(&self) -> &'static aead::Algorithm {
-        match self {
-            Self::LessSafe(key) => key.algorithm(),
-            Self::TlsRecord(key) => key.algorithm(),
-        }
     }
 }
 

@@ -40,6 +40,8 @@ use alloc::sync::Arc;
 #[cfg(feature = "std")]
 use core::time::Duration;
 
+use aws_lc_rs::aead;
+use aws_lc_rs::error::Unspecified;
 use pki_types::{FipsStatus, PrivateKeyDer};
 use rustls::crypto::{
     CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom, SigningKey, TicketProducer,
@@ -266,6 +268,62 @@ fn record_region(out: &mut [u8], len: usize) -> Result<&mut [u8], Error> {
     }
 }
 
+/// A TLS1.3 sealing key, dispatching to whichever aws-lc-rs key type backs it.
+enum SealKey {
+    LessSafe(aead::LessSafeKey),
+    TlsRecord(aead::TlsRecordSealingKey),
+}
+
+impl SealKey {
+    fn seal_out_of_place_scatter<A: AsRef<[u8]>>(
+        &mut self,
+        nonce: aead::Nonce,
+        aad: aead::Aad<A>,
+        in_plaintext: &[u8],
+        out_ciphertext: &mut [u8],
+        extra_in: &[u8],
+        extra_out_and_tag: &mut [u8],
+    ) -> Result<(), Unspecified> {
+        match self {
+            Self::LessSafe(key) => key.seal_out_of_place_scatter(
+                nonce,
+                aad,
+                in_plaintext,
+                out_ciphertext,
+                extra_in,
+                extra_out_and_tag,
+            ),
+            Self::TlsRecord(key) => key.seal_out_of_place_scatter(
+                nonce,
+                aad,
+                in_plaintext,
+                out_ciphertext,
+                extra_in,
+                extra_out_and_tag,
+            ),
+        }
+    }
+
+    fn seal_in_place_separate_tag<A: AsRef<[u8]>>(
+        &mut self,
+        nonce: aead::Nonce,
+        aad: aead::Aad<A>,
+        in_out: &mut [u8],
+    ) -> Result<aead::Tag, Unspecified> {
+        match self {
+            Self::LessSafe(key) => key.seal_in_place_separate_tag(nonce, aad, in_out),
+            Self::TlsRecord(key) => key.seal_in_place_separate_tag(nonce, aad, in_out),
+        }
+    }
+
+    fn algorithm(&self) -> &'static aead::Algorithm {
+        match self {
+            Self::LessSafe(key) => key.algorithm(),
+            Self::TlsRecord(key) => key.algorithm(),
+        }
+    }
+}
+
 /// Are we in FIPS mode?
 fn fips() -> FipsStatus {
     match aws_lc_rs::try_fips_mode().is_ok() {
@@ -276,7 +334,7 @@ fn fips() -> FipsStatus {
     }
 }
 
-fn unspecified_err(e: aws_lc_rs::error::Unspecified) -> Error {
+fn unspecified_err(e: Unspecified) -> Error {
     Error::Other(OtherError::new(e))
 }
 
