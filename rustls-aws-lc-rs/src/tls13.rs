@@ -5,8 +5,8 @@ use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
 use pki_types::FipsStatus;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
-    Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, EncodedMessage, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, Nonce,
+    OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::crypto::{self, CipherSuite};
@@ -15,7 +15,7 @@ use rustls::error::Error;
 use rustls::version::TLS13_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite};
 
-use crate::{SealKey, record_region};
+use crate::{Framing, SealKey, seal_record};
 
 /// The TLS1.3 cipher suite configuration that an application should use by default.
 ///
@@ -248,42 +248,15 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
         let aad = aead::Aad::from(make_tls13_aad(typ, TLS13_LEGACY_RECORD_VERSION, total_len));
 
-        let payload = match msg.payload.single_chunk() {
-            // Contiguous plaintext is sealed out-of-place, straight from the borrowed
-            // input and the inner content type byte is specified as `extra_in`.
-            Some(plain) => {
-                let record = record_region(out, total_len)?;
-                let (ciphertext, typ_and_tag) = record.split_at_mut(plain.len());
-                self.enc_key
-                    .seal_out_of_place_scatter(
-                        nonce,
-                        aad,
-                        plain,
-                        ciphertext,
-                        &msg.typ.to_array(),
-                        typ_and_tag,
-                    )
-                    .map_err(|_| Error::EncryptError)?;
-                &*record
-            }
-            // Fragmented plaintext is gathered into `out` and then sealed in place.
-            // We can't use the out-of-place seal as it requires contiguous input.
-            None => {
-                let mut payload = EncryptBuffer::new(out, total_len)?;
-                payload.extend_from_chunks(&msg.payload);
-                payload.extend_from_slice(&msg.typ.to_array());
-
-                match self
-                    .enc_key
-                    .seal_in_place_separate_tag(nonce, aad, payload.as_mut())
-                {
-                    Ok(tag) => payload.extend_from_slice(tag.as_ref()),
-                    Err(_) => return Err(Error::EncryptError),
-                }
-
-                payload.into_written()
-            }
-        };
+        let payload = seal_record(
+            &mut self.enc_key,
+            nonce,
+            aad,
+            &msg.payload,
+            Framing::EncryptedTail(&msg.typ.to_array()),
+            total_len,
+            out,
+        )?;
 
         Ok(EncodedMessage {
             typ,

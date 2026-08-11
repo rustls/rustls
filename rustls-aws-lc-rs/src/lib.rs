@@ -43,6 +43,7 @@ use core::time::Duration;
 use aws_lc_rs::aead;
 use aws_lc_rs::error::Unspecified;
 use pki_types::{FipsStatus, PrivateKeyDer};
+use rustls::crypto::cipher::{EncryptBuffer, OutboundPlain};
 use rustls::crypto::{
     CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom, SigningKey, TicketProducer,
     TicketerFactory,
@@ -253,6 +254,84 @@ mod ring_shim {
     }
 }
 
+/// Seal one record's payload into `out`, returning the written region.
+///
+/// `framing` describes the sealed payload's layout around the ciphertext.
+/// `total_len` is the caller's [`MessageEncrypter::encrypted_payload_len()`]
+/// for the payload, and total encrypted payload with framing must add up to
+/// this value as an invariant of correct usage.
+///
+/// Contiguous plaintext is sealed out-of-place, straight from the borrowed
+/// input. Fragmented plaintext is gathered into `out` and then sealed in
+/// place.
+///
+/// [`MessageEncrypter::encrypted_payload_len()`]: rustls::crypto::cipher::MessageEncrypter::encrypted_payload_len()
+fn seal_record<'a, A: AsRef<[u8]>>(
+    key: &mut SealKey,
+    nonce: aead::Nonce,
+    aad: aead::Aad<A>,
+    payload: &OutboundPlain<'_>,
+    framing: Framing<'_>,
+    total_len: usize,
+    out: &'a mut [u8],
+) -> Result<&'a [u8], Error> {
+    let (prefix, extra_in) = match framing {
+        Framing::None => (&[][..], &[][..]),
+        Framing::UnencryptedPrefix(prefix) => (prefix, &[][..]),
+        Framing::EncryptedTail(extra_in) => (&[][..], extra_in),
+    };
+    debug_assert_eq!(
+        total_len,
+        prefix.len() + payload.len() + extra_in.len() + key.algorithm().tag_len()
+    );
+
+    match payload.single_chunk() {
+        Some(plain) => {
+            let record = record_region(out, total_len)?;
+            let (header, sealed) = record.split_at_mut(prefix.len());
+            header.copy_from_slice(prefix);
+            let (ciphertext, extra_out_and_tag) = sealed.split_at_mut(plain.len());
+            key.seal_out_of_place_scatter(
+                nonce,
+                aad,
+                plain,
+                ciphertext,
+                extra_in,
+                extra_out_and_tag,
+            )
+            .map_err(|_| Error::EncryptError)?;
+            Ok(&*record)
+        }
+        None => {
+            let mut buf = EncryptBuffer::new(out, total_len)?;
+            buf.extend_from_slice(prefix);
+            buf.extend_from_chunks(payload);
+            buf.extend_from_slice(extra_in);
+
+            match key.seal_in_place_separate_tag(nonce, aad, &mut buf.as_mut()[prefix.len()..]) {
+                Ok(tag) => buf.extend_from_slice(tag.as_ref()),
+                Err(_) => return Err(Error::EncryptError),
+            }
+
+            Ok(buf.into_written())
+        }
+    }
+}
+
+/// A sealed record payload's framing around the ciphertext.
+enum Framing<'a> {
+    /// Ciphertext and tag only, no additional framing.
+    None,
+    /// These bytes prefix the ciphertext on the wire, unencrypted.
+    ///
+    /// This is used by TLS1.2 GCM's explicit nonce.
+    UnencryptedPrefix(&'a [u8]),
+    /// These bytes follow the ciphertext on the wire, encrypted.
+    ///
+    /// This is used by TLS1.3's inner content type byte.
+    EncryptedTail(&'a [u8]),
+}
+
 /// The region of `out` that a `len`-byte sealed record payload will occupy.
 ///
 /// If `out` is shorter than `len` bytes, this returns [`ApiMisuse::EncryptBufferTooSmall`].
@@ -268,7 +347,7 @@ fn record_region(out: &mut [u8], len: usize) -> Result<&mut [u8], Error> {
     }
 }
 
-/// A TLS1.3 sealing key, dispatching to whichever aws-lc-rs key type backs it.
+/// A sealing key, dispatching to whichever aws-lc-rs key type backs it.
 enum SealKey {
     LessSafe(aead::LessSafeKey),
     TlsRecord(aead::TlsRecordSealingKey),
