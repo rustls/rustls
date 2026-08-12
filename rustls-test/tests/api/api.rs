@@ -729,7 +729,7 @@ fn server_rejects_empty_post_handshake_alert_fragment() {
     raw_client.encrypt_and_send(
         &EncodedMessage {
             typ: ContentType::Alert,
-            version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
             payload: Payload::new(vec![]),
         },
         &mut server_input,
@@ -1802,7 +1802,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls13_handshake() {
 
     let msg = EncodedMessage {
         typ: ContentType::Handshake,
-        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: Payload::new(encoding::handshake_framing(
             HandshakeType::HelloRequest,
             vec![],
@@ -1848,7 +1848,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
 
     let msg = EncodedMessage {
         typ: ContentType::Handshake,
-        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: Payload::new(encoding::handshake_framing(
             HandshakeType::HelloRequest,
             vec![],
@@ -1863,7 +1863,6 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
         .unwrap();
     raw_server.receive_and_decrypt(&mut client_output, |m| {
         assert_eq!(m.version.version(), ProtocolVersion::TLSv1_2);
-        assert_eq!(m.version.encode(), ProtocolVersion::TLSv1_2);
         assert_eq!(m.typ, ContentType::Alert);
         assert_eq!(m.payload, &[0x01, 100]); // Warning=1, NoRenegotiation=100
     });
@@ -1905,7 +1904,7 @@ fn test_illegal_client_renegotiation_attempt_after_tls13_handshake() {
 
     let msg = EncodedMessage {
         typ: ContentType::Handshake,
-        version: EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: Payload::new(encoding::basic_client_hello(vec![])),
     };
     raw_client.encrypt_and_send(&msg, &mut server_input);

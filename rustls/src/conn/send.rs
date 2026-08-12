@@ -76,7 +76,7 @@ impl SendPath {
         self.send_messages::<true>(
             self.message_fragmenter.fragment(
                 ContentType::ApplicationData,
-                EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+                EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
                 payload,
                 self.encrypt_state
                     .encrypted_record_overhead(),

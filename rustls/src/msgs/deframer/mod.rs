@@ -78,7 +78,7 @@ impl Deframer {
         Some(Ok(Deframed {
             message: EncodedMessage {
                 typ,
-                version: EncodableVersion::Literal(version),
+                version: EncodableVersion::Legacy(version),
                 payload: InboundOpaque(&mut head[bounds.start + HEADER_SIZE..]),
             },
             bounds,
@@ -249,7 +249,7 @@ impl Deframer {
             // finally, attempt to re-dissect `first`
             let msg = EncodedMessage {
                 typ: ContentType::Handshake,
-                version: EncodableVersion::Literal(first.version),
+                version: EncodableVersion::Legacy(first.version),
                 payload: delocator.slice_from_range(&first.bounds),
             };
 
@@ -288,7 +288,7 @@ impl Deframer {
 
         EncodedMessage {
             typ: ContentType::Handshake,
-            version: EncodableVersion::Literal(next_span.version),
+            version: EncodableVersion::Legacy(next_span.version),
             payload: Delocator::new(containing_buffer).slice_from_range(&next_span.bounds),
         }
     }

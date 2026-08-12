@@ -4,13 +4,12 @@ use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
 use pki_types::FipsStatus;
 use rustls::crypto::cipher::{
-    AeadKey, EncodableVersion, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter,
-    MessageEncrypter, Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError,
-    make_tls13_aad,
+    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
+    Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::crypto::{self, CipherSuite};
-use rustls::enums::{ContentType, ProtocolVersion};
+use rustls::enums::ContentType;
 use rustls::error::Error;
 use rustls::version::TLS13_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite};
@@ -250,7 +249,7 @@ impl MessageEncrypter for AeadMessageEncrypter {
 
         let typ = ContentType::ApplicationData;
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(typ, TLS13_LEGACY_RECORD_VERSION, total_len));
+        let aad = aead::Aad::from(make_tls13_aad(typ, msg.version.encode(), total_len));
 
         let payload = match msg.payload.single_chunk() {
             // Contiguous plaintext is sealed out-of-place, straight from the borrowed
@@ -291,7 +290,7 @@ impl MessageEncrypter for AeadMessageEncrypter {
 
         Ok(EncodedMessage {
             typ,
-            version: EncodableVersion::Literal(TLS13_LEGACY_RECORD_VERSION),
+            version: msg.version,
             payload,
         })
     }
@@ -345,7 +344,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
 
         let typ = ContentType::ApplicationData;
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(typ, TLS13_LEGACY_RECORD_VERSION, total_len));
+        let aad = aead::Aad::from(make_tls13_aad(typ, msg.version.encode(), total_len));
 
         let payload = match msg.payload.single_chunk() {
             // Contiguous plaintext is sealed out-of-place, straight from the borrowed
@@ -386,7 +385,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
 
         Ok(EncodedMessage {
             typ,
-            version: EncodableVersion::Literal(TLS13_LEGACY_RECORD_VERSION),
+            version: msg.version,
             payload,
         })
     }
@@ -395,10 +394,6 @@ impl MessageEncrypter for GcmMessageEncrypter {
         payload_len + 1 + self.enc_key.algorithm().tag_len()
     }
 }
-
-// Note: all TLS 1.3 application data records use TLSv1_2 (0x0303) as the legacy record
-// protocol version, see https://www.rfc-editor.org/rfc/rfc9846#section-5.1
-const TLS13_LEGACY_RECORD_VERSION: ProtocolVersion = ProtocolVersion::TLSv1_2;
 
 struct GcmMessageDecrypter {
     dec_key: aead::TlsRecordOpeningKey,
@@ -517,7 +512,8 @@ mod tests {
     use std::vec;
     use std::vec::Vec;
 
-    use rustls::crypto::cipher::InboundOpaque;
+    use rustls::crypto::cipher::{EncodableVersion, InboundOpaque};
+    use rustls::enums::ProtocolVersion;
 
     use super::*;
 
@@ -543,7 +539,7 @@ mod tests {
                 let mut sealed = seal(suite, OutboundPlain::from(plain), 0x00);
                 let msg = EncodedMessage::new(
                     ContentType::ApplicationData,
-                    EncodableVersion::Literal(TLS13_LEGACY_RECORD_VERSION),
+                    EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
                     InboundOpaque(&mut sealed),
                 );
                 let mut decrypter = suite
@@ -564,7 +560,7 @@ mod tests {
             .encrypter(test_key(suite.aead_alg.key_len()), Iv::from(TEST_IV));
         let msg = EncodedMessage::new(
             ContentType::ApplicationData,
-            EncodableVersion::Literal(ProtocolVersion::TLSv1_3),
+            EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
             payload,
         );
         let mut out = vec![fill; encrypter.encrypted_payload_len(msg.payload.len())];
