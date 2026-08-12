@@ -4,6 +4,8 @@ use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::sync::Mutex;
 
 use rustls::KeyLog;
@@ -25,12 +27,15 @@ impl KeyLogFileInner {
             };
         };
 
+        let mut options = OpenOptions::new();
+        options.append(true).create(true);
+        // Key material is extremely sensitive. On Unix, create with owner-only
+        // access so a default umask does not leave the file world-readable.
+        #[cfg(unix)]
+        options.mode(0o600);
+
         #[cfg_attr(not(feature = "tracing"), expect(clippy::manual_ok_err))]
-        let file = match OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(path)
-        {
+        let file = match options.open(path) {
             Ok(f) => Some(f),
             #[cfg_attr(not(feature = "tracing"), expect(unused_variables))]
             Err(e) => {
@@ -157,6 +162,36 @@ mod tests {
             inner
                 .try_write("label", b"random", b"secret")
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn test_created_file_has_owner_only_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = std::env::temp_dir().join(format!(
+            "rustls-keylog-perm-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        let inner = KeyLogFileInner::new(Some(path.clone().into()));
+        assert!(inner.file.is_some(), "key log file should open");
+
+        let mode = std::fs::metadata(&path)
+            .expect("metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(
+            mode, 0o600,
+            "SSLKEYLOGFILE must be created with mode 0o600, got {mode:#o}"
         );
     }
 }
