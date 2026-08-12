@@ -1056,22 +1056,22 @@ pub trait PacketKey: Send + Sync {
     /// Tag length for the underlying AEAD algorithm
     fn tag_len(&self) -> usize;
 
-    /// Number of QUIC messages that can be safely encrypted with a single key of this type.
+    /// Number of QUIC packets that can be safely encrypted with a single key of this type.
     ///
-    /// Once a `MessageEncrypter` produced for this suite has encrypted more than
-    /// `confidentiality_limit` messages, an attacker gains an advantage in distinguishing it
+    /// Once a `PacketKey` produced for this suite has encrypted more than
+    /// `confidentiality_limit` packets, an attacker gains an advantage in distinguishing it
     /// from an ideal pseudorandom permutation (PRP).
     ///
-    /// This is to be set on the assumption that messages are maximally sized --
+    /// This is to be set on the assumption that packets are maximally sized --
     /// 2 ** 16. For non-QUIC TCP connections see [`CipherSuiteCommon::confidentiality_limit`][csc-limit].
     ///
     /// [csc-limit]: crate::crypto::CipherSuiteCommon::confidentiality_limit
     fn confidentiality_limit(&self) -> u64;
 
-    /// Number of QUIC messages that can be safely decrypted with a single key of this type
+    /// Number of QUIC packets that can be safely decrypted with a single key of this type
     ///
-    /// Once a `MessageDecrypter` produced for this suite has failed to decrypt `integrity_limit`
-    /// messages, an attacker gains an advantage in forging messages.
+    /// Once a `PacketKey` produced for this suite has failed to decrypt `integrity_limit`
+    /// packets, an attacker gains an advantage in forging packets.
     ///
     /// This is not relevant for TLS over TCP (which is also implemented in this crate)
     /// because a single failed decryption is fatal to the connection.
