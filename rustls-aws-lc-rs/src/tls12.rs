@@ -622,7 +622,7 @@ mod tests {
                 let mut sealed = seal(suite, OutboundPlain::from(plain), 0x00);
                 let msg = EncodedMessage::new(
                     ContentType::ApplicationData,
-                    EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+                    EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
                     InboundOpaque(&mut sealed),
                 );
                 let shape = suite.aead_alg.key_block_shape();
@@ -646,7 +646,7 @@ mod tests {
         );
         let msg = EncodedMessage::new(
             ContentType::ApplicationData,
-            EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+            EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             payload,
         );
         let mut out = vec![fill; encrypter.encrypted_payload_len(msg.payload.len())];

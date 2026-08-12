@@ -260,7 +260,7 @@ where
 
         let mut encoded = EncodedMessage {
             typ,
-            version: EncodableVersion::Literal(version),
+            version: EncodableVersion::Legacy(version),
             payload,
         };
 
@@ -1587,7 +1587,7 @@ impl RawTls {
 
         let inbound = EncodedMessage {
             typ,
-            version: EncodableVersion::Literal(version),
+            version: EncodableVersion::Legacy(version),
             payload: InboundOpaque(left),
         };
 
@@ -2029,7 +2029,7 @@ mod plaintext {
 
             Ok(EncodedMessage {
                 typ: ContentType::ApplicationData,
-                version: EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+                version: msg.version,
                 payload: payload.into_written(),
             })
         }

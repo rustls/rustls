@@ -338,7 +338,7 @@ mod tests {
         record_layer
             .decrypt_incoming(EncodedMessage::new(
                 ContentType::Handshake,
-                EncodableVersion::Literal(ProtocolVersion::TLSv1_2),
+                EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
                 InboundOpaque(&mut [0xC0, 0xFF, 0xEE]),
             ))
             .unwrap();
