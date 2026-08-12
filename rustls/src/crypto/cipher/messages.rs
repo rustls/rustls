@@ -91,7 +91,7 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
             return Err(PeerMisbehaved::IllegalTls13ContentType.into());
         }
 
-        if payload.len() > MAX_FRAGMENT_LEN + 1 {
+        if payload.len() > MAX_FRAGMENT_LEN.get() + 1 {
             return Err(Error::PeerSentOversizedRecord);
         }
 
@@ -100,7 +100,7 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
             return Err(PeerMisbehaved::IllegalTlsInnerPlaintext.into());
         }
 
-        if payload.len() > MAX_FRAGMENT_LEN {
+        if payload.len() > MAX_FRAGMENT_LEN.get() {
             return Err(Error::PeerSentOversizedRecord);
         }
 

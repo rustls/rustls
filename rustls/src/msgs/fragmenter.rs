@@ -1,13 +1,15 @@
+use core::num::NonZeroUsize;
+
 use crate::Error;
 use crate::crypto::cipher::{EncodedMessage, OutboundPlain};
 use crate::enums::{ContentType, ProtocolVersion};
 
-pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
+pub(crate) const MAX_FRAGMENT_LEN: NonZeroUsize = NonZeroUsize::new(16384).unwrap();
 pub(crate) const PACKET_OVERHEAD: usize = 1 + 2 + 2;
-pub(crate) const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + PACKET_OVERHEAD;
+pub(crate) const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN.get() + PACKET_OVERHEAD;
 
 pub(crate) struct Fragmenter {
-    max_frag: usize,
+    max_frag: NonZeroUsize,
 }
 
 impl Fragmenter {
@@ -44,7 +46,7 @@ impl Fragmenter {
         max_fragment_size: Option<usize>,
     ) -> Result<(), Error> {
         self.max_frag = match max_fragment_size {
-            Some(sz @ 32..=MAX_FRAGMENT_SIZE) => sz - PACKET_OVERHEAD,
+            Some(sz @ 32..=MAX_FRAGMENT_SIZE) => NonZeroUsize::new(sz - PACKET_OVERHEAD).unwrap(),
             None => MAX_FRAGMENT_LEN,
             _ => return Err(Error::BadMaxFragmentSize),
         };
@@ -63,11 +65,11 @@ impl Default for Fragmenter {
 /// An iterator over borrowed fragments of a payload
 struct Chunker<'a> {
     payload: OutboundPlain<'a>,
-    limit: usize,
+    limit: NonZeroUsize,
 }
 
 impl<'a> Chunker<'a> {
-    fn new(payload: OutboundPlain<'a>, limit: usize) -> Self {
+    fn new(payload: OutboundPlain<'a>, limit: NonZeroUsize) -> Self {
         Self { payload, limit }
     }
 }
@@ -80,7 +82,7 @@ impl<'a> Iterator for Chunker<'a> {
             return None;
         }
 
-        let (before, after) = self.payload.split_at(self.limit);
+        let (before, after) = self.payload.split_at(self.limit.get());
         self.payload = after;
         Some(before)
     }
@@ -88,7 +90,9 @@ impl<'a> Iterator for Chunker<'a> {
 
 impl ExactSizeIterator for Chunker<'_> {
     fn len(&self) -> usize {
-        self.payload.len().div_ceil(self.limit)
+        self.payload
+            .len()
+            .div_ceil(self.limit.get())
     }
 }
 
