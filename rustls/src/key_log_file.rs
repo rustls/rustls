@@ -5,6 +5,8 @@ use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::sync::Mutex;
 
 use crate::KeyLog;
@@ -25,12 +27,15 @@ impl KeyLogFileInner {
             };
         };
 
+        let mut options = OpenOptions::new();
+        options.append(true).create(true);
+        // Key material is extremely sensitive. On Unix, create with owner-only
+        // access so a default umask does not leave the file world-readable.
+        #[cfg(unix)]
+        options.mode(0o600);
+
         #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
-        let file = match OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(path)
-        {
+        let file = match options.open(path) {
             Ok(f) => Some(f),
             Err(e) => {
                 warn!("unable to create key log file {path:?}: {e}");
@@ -119,6 +124,10 @@ impl Debug for KeyLogFile {
 
 #[cfg(all(test, unix))]
 mod tests {
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::{env, format, fs, process};
+
     use super::*;
 
     fn init() {
@@ -158,6 +167,34 @@ mod tests {
             inner
                 .try_write("label", b"random", b"secret")
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn test_created_file_has_owner_only_permissions() {
+        let path = env::temp_dir().join(format!(
+            "rustls-keylog-perm-{}-{}",
+            process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_file(&path);
+
+        let inner = KeyLogFileInner::new(Some(path.clone().into()));
+        assert!(inner.file.is_some(), "key log file should open");
+
+        let mode = fs::metadata(&path)
+            .expect("metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(
+            mode, 0o600,
+            "SSLKEYLOGFILE must be created with mode 0o600, got {mode:#o}"
         );
     }
 }
