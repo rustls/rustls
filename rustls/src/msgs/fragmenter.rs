@@ -6,19 +6,11 @@ pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
 pub(crate) const PACKET_OVERHEAD: usize = 1 + 2 + 2;
 pub(crate) const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + PACKET_OVERHEAD;
 
-pub(crate) struct MessageFragmenter {
+pub(crate) struct Fragmenter {
     max_frag: usize,
 }
 
-impl Default for MessageFragmenter {
-    fn default() -> Self {
-        Self {
-            max_frag: MAX_FRAGMENT_LEN,
-        }
-    }
-}
-
-impl MessageFragmenter {
+impl Fragmenter {
     /// Take `payload` and fragment it into new messages with given type and version.
     ///
     /// Each returned message size is no more than `max_frag`.
@@ -60,6 +52,14 @@ impl MessageFragmenter {
     }
 }
 
+impl Default for Fragmenter {
+    fn default() -> Self {
+        Self {
+            max_frag: MAX_FRAGMENT_LEN,
+        }
+    }
+}
+
 /// An iterator over borrowed fragments of a payload
 struct Chunker<'a> {
     payload: OutboundPlain<'a>,
@@ -97,7 +97,7 @@ mod tests {
     use alloc::vec::Vec;
     use std::vec;
 
-    use super::{MessageFragmenter, PACKET_OVERHEAD};
+    use super::{Fragmenter, PACKET_OVERHEAD};
     use crate::crypto::cipher::{EncodedMessage, OutboundPlain, Payload};
     use crate::enums::{ContentType, ProtocolVersion};
 
@@ -128,7 +128,7 @@ mod tests {
             payload: Payload::new(data),
         };
 
-        let mut frag = MessageFragmenter::default();
+        let mut frag = Fragmenter::default();
         frag.set_max_fragment_size(Some(32))
             .unwrap();
         let q = frag
@@ -172,7 +172,7 @@ mod tests {
             payload: Payload::new(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
         };
 
-        let mut frag = MessageFragmenter::default();
+        let mut frag = Fragmenter::default();
         frag.set_max_fragment_size(Some(32))
             .unwrap();
         let q = frag
@@ -194,7 +194,7 @@ mod tests {
         let version = ProtocolVersion::TLSv1_2;
         let payload_owner: Vec<&[u8]> = vec![&[b'a'; 8], &[b'b'; 12], &[b'c'; 32], &[b'd'; 20]];
         let borrowed_payload = OutboundPlain::new(&payload_owner);
-        let mut frag = MessageFragmenter::default();
+        let mut frag = Fragmenter::default();
         frag.set_max_fragment_size(Some(37)) // 32 + packet overhead
             .unwrap();
 

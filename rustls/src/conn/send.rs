@@ -6,7 +6,7 @@ use crate::crypto::cipher::{
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
-use crate::msgs::{AlertLevel, HEADER_SIZE, Message, MessageFragmenter};
+use crate::msgs::{AlertLevel, Fragmenter, HEADER_SIZE, Message};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::tracing::{debug, error};
 
@@ -18,7 +18,7 @@ pub(crate) struct SendPath {
     has_sent_fatal_alert: bool,
     /// If we signaled end of stream.
     pub(crate) has_sent_close_notify: bool,
-    message_fragmenter: MessageFragmenter,
+    message_fragmenter: Fragmenter,
     key_update_local: KeyUpdateLocal,
     key_update_remote: KeyUpdateRemote,
     negotiated_version: Option<ProtocolVersion>,
@@ -249,7 +249,7 @@ impl Default for SendPath {
             may_send_half_rtt_data: false,
             has_sent_fatal_alert: false,
             has_sent_close_notify: false,
-            message_fragmenter: MessageFragmenter::default(),
+            message_fragmenter: Fragmenter::default(),
             key_update_local: KeyUpdateLocal::Idle,
             key_update_remote: KeyUpdateRemote::Idle,
             negotiated_version: None,
