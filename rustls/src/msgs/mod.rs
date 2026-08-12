@@ -69,7 +69,7 @@ pub(crate) use enums::{
 };
 
 mod fragmenter;
-pub(crate) use fragmenter::{MAX_FRAGMENT_LEN, MessageFragmenter};
+pub(crate) use fragmenter::{Fragmenter, MAX_FRAGMENT_LEN};
 
 #[macro_use]
 mod handshake;
@@ -98,7 +98,7 @@ mod handshake_test;
 
 pub mod fuzzing {
     pub use super::deframer::fuzz_deframer;
-    use super::{Codec, EncodedMessage, Message, MessageFragmenter, Payload, Reader};
+    use super::{Codec, EncodedMessage, Fragmenter, Message, Payload, Reader};
     use crate::server::ServerSessionValue;
 
     pub fn fuzz_fragmenter(data: &[u8]) {
@@ -107,7 +107,7 @@ pub mod fuzzing {
             return;
         };
 
-        let mut frg = MessageFragmenter::default();
+        let mut frg = Fragmenter::default();
         frg.set_max_fragment_size(Some(32))
             .unwrap();
         for msg in frg.fragment(msg.typ, msg.version, msg.payload.bytes().into()) {
