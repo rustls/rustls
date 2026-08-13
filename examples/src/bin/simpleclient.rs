@@ -13,20 +13,24 @@ use std::net::TcpStream;
 use std::sync::Arc;
 
 use rustls::{ClientConfig, RootCertStore, VecInput};
-use rustls_util::{KeyLogFile, Stream};
+use rustls_util::Stream;
 
 fn main() {
     let root_store = RootCertStore {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     };
 
+    #[cfg_attr(not(debug_assertions), expect(unused_mut))]
     let mut config = ClientConfig::builder(rustls_aws_lc_rs::DEFAULT_PROVIDER.into())
         .with_root_certificates(root_store)
         .with_no_client_auth()
         .unwrap();
 
-    // Allow using SSLKEYLOGFILE.
-    config.key_log = Arc::new(KeyLogFile::new());
+    // Allow using SSLKEYLOGFILE in debug builds.
+    #[cfg(debug_assertions)]
+    {
+        config.key_log = Arc::new(rustls_util::KeyLogFile::new());
+    }
 
     let server_name = "www.rust-lang.org".try_into().unwrap();
     let mut output = Vec::new();

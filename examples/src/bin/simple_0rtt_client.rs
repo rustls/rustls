@@ -23,7 +23,7 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::{ClientConfig, RootCertStore, VecInput};
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
-use rustls_util::{KeyLogFile, Stream};
+use rustls_util::Stream;
 
 fn start_connection(config: &Arc<ClientConfig>, domain_name: &str, port: u16) {
     let server_name = ServerName::try_from(domain_name)
@@ -117,8 +117,11 @@ fn main() {
         .with_no_client_auth()
         .unwrap();
 
-    // Allow using SSLKEYLOGFILE.
-    config.key_log = Arc::new(KeyLogFile::new());
+    // Allow using SSLKEYLOGFILE in debug builds.
+    #[cfg(debug_assertions)]
+    {
+        config.key_log = Arc::new(rustls_util::KeyLogFile::new());
+    }
 
     // Enable early data.
     config.enable_early_data = true;

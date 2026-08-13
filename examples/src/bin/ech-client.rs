@@ -47,7 +47,7 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
 use rustls::{ClientConfig, Connection, RootCertStore, VecInput};
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
-use rustls_util::{KeyLogFile, Stream};
+use rustls_util::Stream;
 use tracing::{Level, trace};
 
 #[tokio::main]
@@ -114,13 +114,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // Construct a rustls client config with a TLS1.3-only provider, and ECH enabled.
+    #[cfg_attr(not(debug_assertions), expect(unused_mut))]
     let mut config = ClientConfig::builder(rustls_aws_lc_rs::DEFAULT_TLS13_PROVIDER.into())
         .with_ech(ech_mode)
         .with_root_certificates(root_store)
         .with_no_client_auth()?;
 
-    // Allow using SSLKEYLOGFILE.
-    config.key_log = Arc::new(KeyLogFile::new());
+    // Allow using SSLKEYLOGFILE in debug builds.
+    #[cfg(debug_assertions)]
+    {
+        config.key_log = Arc::new(rustls_util::KeyLogFile::new());
+    }
     let config = Arc::new(config);
 
     // The "inner" SNI that we're really trying to reach.

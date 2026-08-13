@@ -35,7 +35,6 @@ use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKey
 use rustls::server::{NoServerSessionStorage, WebPkiClientVerifier};
 use rustls::{Connection, RootCertStore, ServerConfig, ServerConnection, VecInput};
 use rustls_aws_lc_rs as provider;
-use rustls_util::KeyLogFile;
 use tracing::{Level, debug, error};
 
 // Token for our listening socket.
@@ -675,7 +674,11 @@ fn make_config(args: &Args) -> Arc<ServerConfig> {
         )
         .expect("bad certificates/private key");
 
-    config.key_log = Arc::new(KeyLogFile::new());
+    // Allow using SSLKEYLOGFILE in debug builds.
+    #[cfg(debug_assertions)]
+    {
+        config.key_log = Arc::new(rustls_util::KeyLogFile::new());
+    }
 
     if args.no_resumption {
         config.session_storage = Arc::new(NoServerSessionStorage {});
