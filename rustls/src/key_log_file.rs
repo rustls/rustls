@@ -117,7 +117,7 @@ impl Debug for KeyLogFile {
     }
 }
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 
@@ -149,6 +149,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_env_var_cannot_be_written() {
         init();
