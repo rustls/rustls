@@ -36,7 +36,6 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use rustls::{ClientConfig, ClientConnection, Connection, RootCertStore, VecInput};
 use rustls_aws_lc_rs as provider;
-use rustls_util::KeyLogFile;
 use tracing::Level;
 
 const CLIENT: mio::Token = mio::Token(0);
@@ -516,7 +515,11 @@ fn make_config(args: &Args) -> Arc<ClientConfig> {
         }
     };
 
-    config.key_log = Arc::new(KeyLogFile::new());
+    // Allow using SSLKEYLOGFILE in debug builds.
+    #[cfg(debug_assertions)]
+    {
+        config.key_log = Arc::new(rustls_util::KeyLogFile::new());
+    }
 
     if args.no_tickets {
         config.resumption = config

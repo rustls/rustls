@@ -19,7 +19,6 @@ use rustls::pki_types::{CertificateRevocationListDer, PrivatePkcs8KeyDer};
 use rustls::server::{ClientHello, ServerConfig, ServerHandshake, WebPkiClientVerifier};
 use rustls::{RootCertStore, VecInput};
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
-use rustls_util::KeyLogFile;
 use tracing::Level;
 
 fn main() {
@@ -218,6 +217,7 @@ impl TestPki {
         // Build a server config using the fresh verifier. If necessary, this could be customized
         // based on the ClientHello (e.g. selecting a different certificate, or customizing
         // supported algorithms/protocol versions).
+        #[cfg_attr(not(debug_assertions), expect(unused_mut))]
         let mut server_config = ServerConfig::builder(self.provider.clone())
             .with_client_cert_verifier(verifier)
             .with_single_cert(
@@ -233,8 +233,11 @@ impl TestPki {
             )
             .unwrap();
 
-        // Allow using SSLKEYLOGFILE.
-        server_config.key_log = Arc::new(KeyLogFile::new());
+        // Allow using SSLKEYLOGFILE in debug builds.
+        #[cfg(debug_assertions)]
+        {
+            server_config.key_log = Arc::new(rustls_util::KeyLogFile::new());
+        }
 
         Arc::new(server_config)
     }
