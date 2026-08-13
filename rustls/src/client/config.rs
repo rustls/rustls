@@ -112,8 +112,11 @@ pub struct ClientConfig {
     /// The default is true.
     pub enable_sni: bool,
 
-    /// How to output key material for debugging.  The default
-    /// does nothing.
+    /// How to output key material for debugging.
+    ///
+    /// The default does nothing.
+    ///
+    /// See [RFC 9850](https://datatracker.ietf.org/doc/html/rfc9850) for background.
     pub key_log: Arc<dyn KeyLog>,
 
     /// Allows traffic secrets to be extracted after the handshake,
