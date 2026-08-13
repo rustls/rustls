@@ -127,6 +127,10 @@ impl Debug for KeyLogFile {
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod tests {
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::{env, fs, process};
+
     use super::*;
 
     #[test]
@@ -167,27 +171,25 @@ mod tests {
 
     #[test]
     fn test_created_file_has_owner_only_permissions() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let path = std::env::temp_dir().join(format!(
+        let path = env::temp_dir().join(format!(
             "rustls-keylog-perm-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
         ));
-        let _ = std::fs::remove_file(&path);
+        let _ = fs::remove_file(&path);
 
         let inner = KeyLogFileInner::new(Some(path.clone().into()));
         assert!(inner.file.is_some(), "key log file should open");
 
-        let mode = std::fs::metadata(&path)
+        let mode = fs::metadata(&path)
             .expect("metadata")
             .permissions()
             .mode()
             & 0o777;
-        let _ = std::fs::remove_file(&path);
+        let _ = fs::remove_file(&path);
 
         assert_eq!(
             mode, 0o600,
