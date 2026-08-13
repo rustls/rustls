@@ -1,3 +1,4 @@
+#[allow(clippy::double_must_use)] // https://github.com/rust-lang/rust-clippy/issues/17529
 pub(crate) mod async_io {
     //! Async IO building blocks required for sharing code between the instruction count and
     //! wall-time benchmarks
