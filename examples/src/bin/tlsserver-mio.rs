@@ -261,9 +261,18 @@ impl OpenConnection {
     fn try_plain_read(&mut self) {
         // Read and process all available plaintext.
         let mut received_plaintext = Vec::new();
-        let iter = self
+        let mut iter = self
             .tls_conn
             .process_new_packets(&mut self.input, &mut self.output);
+
+        let mut early_data = Vec::new();
+        while let Some(result) = iter.next_early_data() {
+            match result {
+                Ok(payload) => early_data.extend_from_slice(payload.bytes()),
+                Err(_) => break,
+            }
+        }
+
         match iter.handle_all(&mut received_plaintext) {
             Ok(_) => {}
             Err(error) => {
@@ -273,16 +282,9 @@ impl OpenConnection {
             }
         }
 
-        if let Some(mut early_data) = self.tls_conn.early_data() {
-            let mut buf = Vec::new();
-            early_data
-                .read_to_end(&mut buf)
-                .unwrap();
-
-            if !buf.is_empty() {
-                debug!("early data read {:?}", buf.len());
-                self.incoming_plaintext(&buf);
-            }
+        if !early_data.is_empty() {
+            debug!("early data read {:?}", early_data.len());
+            self.incoming_plaintext(&early_data);
         }
 
         if !received_plaintext.is_empty() {

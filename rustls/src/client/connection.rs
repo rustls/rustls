@@ -314,7 +314,7 @@ impl crate::conn::private::Side for ClientSide {
 }
 
 impl SideOutput for ClientConnectionData {
-    fn emit(&mut self, ev: Event<'_>) {
+    fn emit(&mut self, ev: Event) {
         match ev {
             Event::EchStatus(ech) => self.ech_status = ech,
             Event::EarlyData(event) => match (event, &mut self.early_data) {

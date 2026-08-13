@@ -13,7 +13,7 @@
 //! that is sensible outside of example code.
 
 use core::error::Error as StdError;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::net::TcpListener;
 use std::sync::Arc;
 use std::{env, io};
@@ -81,29 +81,29 @@ fn main() -> Result<(), Box<dyn StdError>> {
                 };
             }
 
-            if let Err(e) = conn
-                .process_new_packets(&mut input, &mut output)
-                .handle_all(&mut Vec::new())
-            {
+            let mut handler = conn.process_new_packets(&mut input, &mut output);
+            let mut early_data = Vec::new();
+            while let Some(result) = handler.next_early_data() {
+                match result {
+                    Ok(payload) => early_data.extend_from_slice(payload.bytes()),
+                    Err(_) => break,
+                }
+            }
+
+            if let Err(e) = handler.handle_all(&mut Vec::new()) {
                 let _ignored = stream.write_all(&output);
                 stream.flush()?;
 
                 return Err(io::Error::new(io::ErrorKind::InvalidData, e).into());
             };
 
-            if let Some(mut early_data) = conn.early_data() {
+            if !early_data.is_empty() {
                 if !did_early_data {
                     println!("Receiving early data from client");
                     did_early_data = true;
                 }
 
-                let bytes_read = early_data
-                    .read_to_end(&mut buf)
-                    .unwrap();
-
-                if bytes_read != 0 {
-                    println!("Early data from client: {buf:?}");
-                }
+                println!("Early data from client: {early_data:?}");
             }
         }
 

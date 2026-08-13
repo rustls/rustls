@@ -597,7 +597,7 @@ impl<Side: SideData> QuicCommon<Side> {
 
         let mut tls = Vec::new();
         let mut iter = MessageIter::new(input, &mut tls, Some(&mut self.quic), &mut self.common);
-        let result = match iter.next() {
+        let result = match iter.next(false) {
             Some(Ok(_)) | None => Ok(()),
             Some(Err(e)) => Err(e),
         };

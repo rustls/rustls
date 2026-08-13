@@ -934,6 +934,33 @@ pub fn do_handshake_collecting(
     (to_server, to_client)
 }
 
+/// Like [`do_handshake()`], but collects early data received by the server into `server_early_data`.
+pub fn do_handshake_collecting_early_data(
+    client_input: &mut VecInput,
+    client_output: &mut Vec<u8>,
+    client: &mut impl Connection,
+    server_input: &mut VecInput,
+    server_output: &mut Vec<u8>,
+    server: &mut ServerConnection,
+    server_early_data: &mut Vec<u8>,
+) {
+    while server.is_handshaking() || client.is_handshaking() {
+        transfer(client_output, server_input);
+        let mut handler = server.process_new_packets(server_input, server_output);
+        while let Some(result) = handler.next_early_data() {
+            server_early_data.extend_from_slice(result.unwrap().bytes());
+        }
+        handler
+            .handle_all(&mut Vec::new())
+            .unwrap();
+        transfer(server_output, client_input);
+        client
+            .process_new_packets(client_input, client_output)
+            .handle_all(&mut Vec::new())
+            .unwrap();
+    }
+}
+
 #[derive(PartialEq, Debug)]
 pub enum ErrorFromPeer {
     Client(Error),
