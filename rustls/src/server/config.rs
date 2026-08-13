@@ -122,8 +122,11 @@ pub struct ServerConfig {
     /// How to verify client certificates.
     pub(super) verifier: Arc<dyn ClientVerifier>,
 
-    /// How to output key material for debugging.  The default
-    /// does nothing.
+    /// How to output key material for debugging.
+    ///
+    /// The default does nothing.
+    ///
+    /// See [RFC 9850](https://datatracker.ietf.org/doc/html/rfc9850) for background.
     pub key_log: Arc<dyn KeyLog>,
 
     /// Allows traffic secrets to be extracted after the handshake,

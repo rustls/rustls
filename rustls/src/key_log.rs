@@ -12,6 +12,9 @@ use core::fmt::Debug;
 ///
 /// For the standard `SSLKEYLOGFILE` environment variable behavior,
 /// see the `KeyLogFile` implementation provided in the rustls-util crate.
+///
+/// See <https://datatracker.ietf.org/doc/html/rfc9850> for more background
+/// information.
 pub trait KeyLog: Debug + Send + Sync {
     /// Log the given `secret`.  `client_random` is provided for
     /// session identification.  `label` describes precisely what
@@ -31,8 +34,8 @@ pub trait KeyLog: Debug + Send + Sync {
     /// - `EXPORTER_SECRET`: `secret` is the post-handshake exporter secret
     ///   in a TLSv1.3 session.
     ///
-    /// These strings are selected to match the NSS key log format:
-    /// <https://nss-crypto.org/reference/security/nss/legacy/key_log_format/index.html>
+    /// These strings are standardised by IANA:
+    /// <https://www.iana.org/assignments/tls-parameters#tls-sslkeylogfile-labels>
     fn log(&self, label: &str, client_random: &[u8], secret: &[u8]);
 
     /// Indicates whether the secret with label `label` will be logged.
