@@ -87,6 +87,23 @@ impl Debug for KeyLogFileInner {
 ///
 /// If such a file cannot be opened, or cannot be written then
 /// this does nothing but logs errors at warning-level.
+///
+/// # Security
+///
+/// Key material is extremely sensitive. Prefer not enabling `KeyLog`
+/// outside of local debugging. On Unix, files created by this type use
+/// owner-only permissions (`0o600`).
+///
+/// This type reads `SSLKEYLOGFILE` from the process environment with a
+/// normal environment lookup. In a setuid/setgid (or otherwise elevated)
+/// process, that variable may have been inherited from an untrusted parent
+/// and could point at an attacker-chosen path. Applications that raise
+/// privileges should clear sensitive environment variables, avoid compiling
+/// key-log support into production builds, or supply their own [`KeyLog`]
+/// implementation.
+///
+/// This util is intentionally small. It does not attempt a full
+/// `secure_getenv`-style environment filter.
 pub struct KeyLogFile(Mutex<KeyLogFileInner>);
 
 impl KeyLogFile {
