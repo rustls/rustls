@@ -9,6 +9,7 @@ use std::io::{self, BufRead, IoSlice, Read, Write};
 use std::sync::Arc;
 
 use pki_types::DnsName;
+use rustls::client::ClientHandshake;
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
@@ -1958,6 +1959,48 @@ fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
             let iter = server.read_tls(&mut server_input, &mut server_output);
             check_iter(iter, &pattern);
         }
+    }
+}
+
+#[test]
+fn test_client_handshake() {
+    for (client_config, server_config, _expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let mut client_output = Vec::new();
+        let mut client = client_config
+            .connect(server_name("localhost"))
+            .start_handshake(&mut client_output)
+            .unwrap();
+
+        let mut server = ServerConnection::new(server_config).unwrap();
+        let mut server_output = Vec::new();
+
+        let client = 'finished: loop {
+            server
+                .read_tls(&mut SliceInput::new(&mut client_output), &mut server_output)
+                .handle_all(&mut Vec::new())
+                .unwrap();
+            client_output.clear();
+
+            let next = client
+                .process(&mut SliceInput::new(&mut server_output), &mut client_output)
+                .unwrap();
+            server_output.clear();
+
+            server
+                .read_tls(&mut SliceInput::new(&mut client_output), &mut server_output)
+                .handle_all(&mut Vec::new())
+                .unwrap();
+            client_output.clear();
+
+            client = match next {
+                ClientHandshake::NeedsInput(client) => client,
+                ClientHandshake::Complete(complete) => break 'finished complete,
+                _ => panic!("unexpected state"),
+            };
+        };
+
+        println!("ok {:?}", client.outputs.handshake_kind());
+        assert!(!server.is_handshaking());
     }
 }
 
