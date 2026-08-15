@@ -9,7 +9,7 @@ use rustls::client::{
     ClientSessionKey, ServerVerifierBuilder, Tls13Session, WantsClientCert, WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{
-    EncodableVersion, EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, Payload,
+    EncodableVersion, InboundOpaque, MessageDecrypter, MessageEncrypter, Payload, Record,
 };
 use rustls::crypto::kx::{NamedGroup, SupportedKxGroup};
 use rustls::crypto::{
@@ -231,7 +231,7 @@ pub fn transfer_altered<F>(
     right_input: &mut VecInput,
 ) -> usize
 where
-    F: Fn(&mut EncodedMessage<Vec<u8>>) -> Altered,
+    F: Fn(&mut Record<Vec<u8>>) -> Altered,
 {
     let sz = left_output.len();
 
@@ -258,15 +258,15 @@ where
         let payload = left_output[offset + 5..offset + 5 + payload_len].to_vec();
         offset += 5 + payload_len;
 
-        let mut encoded = EncodedMessage {
+        let mut record = Record {
             typ,
             version: EncodableVersion::Legacy(version),
             payload,
         };
 
-        let message_enc = match filter(&mut encoded) {
+        let message_enc = match filter(&mut record) {
             Altered::InPlace => {
-                encoding::message_framing(encoded.typ, version, encoded.payload.clone())
+                encoding::message_framing(record.typ, version, record.payload.clone())
             }
             Altered::Raw(data) => data,
         };
@@ -1532,11 +1532,7 @@ impl RawTls {
         }
     }
 
-    pub fn encrypt_and_send(
-        &mut self,
-        msg: &EncodedMessage<Payload<'_>>,
-        peer_input: &mut VecInput,
-    ) {
+    pub fn encrypt_and_send(&mut self, msg: &Record<Payload<'_>>, peer_input: &mut VecInput) {
         /// The length of a TLS record header: 1 byte type, 2 bytes version, 2 bytes length.
         const HEADER_SIZE: usize = 5;
 
@@ -1570,11 +1566,7 @@ impl RawTls {
             .unwrap();
     }
 
-    pub fn receive_and_decrypt(
-        &mut self,
-        peer_output: &mut Vec<u8>,
-        f: impl Fn(EncodedMessage<&[u8]>),
-    ) {
+    pub fn receive_and_decrypt(&mut self, peer_output: &mut Vec<u8>, f: impl Fn(Record<&[u8]>)) {
         let mut data = mem::take(peer_output);
 
         // Parse TLS record header: 1 byte type, 2 bytes version, 2 bytes length
@@ -1585,21 +1577,21 @@ impl RawTls {
         let left = &mut data[5..];
         assert_eq!(len, left.len());
 
-        let inbound = EncodedMessage {
+        let inbound = Record {
             typ,
             version: EncodableVersion::Legacy(version),
             payload: InboundOpaque(left),
         };
 
-        let msg = self
+        let record = self
             .decrypter
             .decrypt(inbound, self.dec_seq)
             .unwrap();
         self.dec_seq += 1;
 
-        println!("receive_and_decrypt: {msg:?}");
+        println!("receive_and_decrypt: {record:?}");
 
-        f(msg);
+        f(record);
     }
 }
 
@@ -2020,16 +2012,16 @@ mod plaintext {
     impl MessageEncrypter for Encrypter {
         fn encrypt<'a>(
             &mut self,
-            msg: EncodedMessage<OutboundPlain<'_>>,
+            record: Record<OutboundPlain<'_>>,
             _seq: u64,
             out: &'a mut [u8],
-        ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-            let mut payload = EncryptBuffer::new(out, msg.payload.len())?;
-            payload.extend_from_chunks(&msg.payload);
+        ) -> Result<Record<&'a [u8]>, Error> {
+            let mut payload = EncryptBuffer::new(out, record.payload.len())?;
+            payload.extend_from_chunks(&record.payload);
 
-            Ok(EncodedMessage {
+            Ok(Record {
                 typ: ContentType::ApplicationData,
-                version: msg.version,
+                version: record.version,
                 payload: payload.into_written(),
             })
         }
@@ -2044,10 +2036,10 @@ mod plaintext {
     impl MessageDecrypter for Decrypter {
         fn decrypt<'a>(
             &mut self,
-            msg: EncodedMessage<InboundOpaque<'a>>,
+            record: Record<InboundOpaque<'a>>,
             _seq: u64,
-        ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-            Ok(msg.into_plain_message())
+        ) -> Result<Record<&'a [u8]>, Error> {
+            Ok(record.into_plain_record())
         }
     }
 }

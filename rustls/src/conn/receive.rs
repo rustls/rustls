@@ -12,9 +12,7 @@ use crate::common_state::{
 };
 use crate::conn::private::SideOutput;
 use crate::conn::{ConnectionCommon, StateMachine};
-use crate::crypto::cipher::{
-    Decrypted, DecryptionState, EncodableVersion, EncodedMessage, Payload,
-};
+use crate::crypto::cipher::{Decrypted, DecryptionState, EncodableVersion, Payload, Record};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::msgs::{
@@ -102,8 +100,8 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
                 _message_lifetime: PhantomData,
             };
 
-            let opt_msg = match res {
-                Ok(opt_msg) => opt_msg,
+            let opt_record = match res {
+                Ok(opt_record) => opt_record,
                 Err(e) => {
                     maybe_send_fatal_alert(output.other.send, &e, output.tls);
                     if let Error::DecryptError = e {
@@ -114,14 +112,14 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
                 }
             };
 
-            let Some(msg) = opt_msg else {
+            let Some(record) = opt_record else {
                 break;
             };
 
             let Decrypted {
-                plaintext: msg,
+                plaintext: record,
                 want_close_before_decrypt,
-            } = msg;
+            } = record;
 
             if want_close_before_decrypt {
                 output.other.send.send_alert(
@@ -129,8 +127,8 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
                     AlertDescription::CloseNotify,
                     output.tls,
                 );
-            } else if msg.payload.is_empty()
-                && matches!(msg.typ, ContentType::Handshake | ContentType::Alert)
+            } else if record.payload.is_empty()
+                && matches!(record.typ, ContentType::Handshake | ContentType::Alert)
             {
                 // <https://datatracker.ietf.org/doc/html/rfc9846#section-5.4>
                 output.other.send.send_alert(
@@ -147,7 +145,7 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
             let result =
                 match output
                     .recv
-                    .receive_message(msg, hs_aligned, output.tls, output.other.send)
+                    .receive_message(record, hs_aligned, output.tls, output.other.send)
                 {
                     Ok(Some(input)) => st.handle(input, &mut output),
                     Ok(None) => Ok(st),
@@ -256,7 +254,7 @@ impl ReceivePath {
                 }));
             }
 
-            let (message, bounds) = loop {
+            let (record, bounds) = loop {
                 match self.deframe_decrypted(buffer, &locator)? {
                     DeframeResult::Decrypted(decrypted, bounds) => break (decrypted, bounds),
                     DeframeResult::DecryptionFailed => continue,
@@ -264,13 +262,13 @@ impl ReceivePath {
                 }
             };
 
-            want_close_before_decrypt = message.want_close_before_decrypt;
+            want_close_before_decrypt = record.want_close_before_decrypt;
             let Decrypted {
-                plaintext: message,
+                plaintext: record,
                 want_close_before_decrypt: _,
-            } = message;
+            } = record;
 
-            if self.deframer.aligned().is_none() && message.typ != ContentType::Handshake {
+            if self.deframer.aligned().is_none() && record.typ != ContentType::Handshake {
                 // "Handshake messages MUST NOT be interleaved with other record
                 // types.  That is, if a handshake message is split over two or more
                 // records, there MUST NOT be any other records between them."
@@ -278,7 +276,7 @@ impl ReceivePath {
                 return Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
             }
 
-            match message.payload.len() {
+            match record.payload.len() {
                 0 => {
                     if self.seen_consecutive_empty_fragments
                         == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
@@ -292,27 +290,27 @@ impl ReceivePath {
                 }
             };
 
-            // do an end-run around the borrow checker, converting `message` (containing
+            // do an end-run around the borrow checker, converting `record` (containing
             // a borrowed slice) to an unborrowed one (containing a `Range` into the
             // same buffer).  the reborrow happens inside the branch that returns the
             // message.
             //
             // is fixed by -Zpolonius
             // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md#problem-case-3-conditional-control-flow-across-functions
-            let unborrowed = InboundUnborrowedMessage::unborrow(&locator, message);
+            let unborrowed = InboundUnborrowedRecord::unborrow(&locator, record);
 
             if unborrowed.typ != ContentType::Handshake {
-                let message = unborrowed.reborrow(&Delocator::new(buffer));
+                let record = unborrowed.reborrow(&Delocator::new(buffer));
                 self.deframer.discard_processed();
                 return Ok(Some(Decrypted {
-                    plaintext: message,
+                    plaintext: record,
                     want_close_before_decrypt,
                 }));
             }
 
-            let message = unborrowed.reborrow(&Delocator::new(buffer));
+            let record = unborrowed.reborrow(&Delocator::new(buffer));
             self.deframer
-                .input_message(message.version.version(), bounds, buffer);
+                .input_message(record.version.version(), bounds, buffer);
             self.deframer.coalesce(buffer)?;
         }
     }
@@ -322,13 +320,13 @@ impl ReceivePath {
         buffer: &'b mut [u8],
         locator: &Locator,
     ) -> Result<DeframeResult<'b>, Error> {
-        let (message, bounds) = match self.deframer.deframe(buffer) {
-            Some(Ok(Deframed { message, bounds })) => (message, bounds),
+        let (record, bounds) = match self.deframer.deframe(buffer) {
+            Some(Ok(Deframed { record, bounds })) => (record, bounds),
             Some(Err(err)) => return Err(err),
             None => return Ok(DeframeResult::None),
         };
 
-        let allowed_plaintext = match message.typ {
+        let allowed_plaintext = match record.typ {
             // CCS messages are always plaintext.
             ContentType::ChangeCipherSpec => true,
             // Alerts are allowed to be plaintext if-and-only-if:
@@ -340,7 +338,7 @@ impl ReceivePath {
             ContentType::Alert
                 if matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
                     && !self.decrypt_state.has_decrypted()
-                    && message.payload.len() <= 2 =>
+                    && record.payload.len() <= 2 =>
             {
                 true
             }
@@ -351,7 +349,7 @@ impl ReceivePath {
         if allowed_plaintext && !self.deframer.is_active() {
             return Ok(DeframeResult::Decrypted(
                 Decrypted {
-                    plaintext: message.into_plain_message(),
+                    plaintext: record.into_plain_record(),
                     want_close_before_decrypt: false,
                 },
                 bounds,
@@ -360,7 +358,7 @@ impl ReceivePath {
 
         match self
             .decrypt_state
-            .decrypt_incoming(message)?
+            .decrypt_incoming(record)?
         {
             Some(decrypted) => {
                 // After decryption, the payload is shorter
@@ -379,7 +377,7 @@ impl ReceivePath {
         }
     }
 
-    /// Take a TLS message `msg` and map it into an `Input`
+    /// Take a TLS message `record` and map it into an `Input`
     ///
     /// `Input` is the input to our state machine.
     ///
@@ -390,19 +388,19 @@ impl ReceivePath {
     /// progress the connection.
     pub(crate) fn receive_message<'a>(
         &mut self,
-        msg: EncodedMessage<&'a [u8]>,
+        record: Record<&'a [u8]>,
         aligned_handshake: Option<HandshakeAlignedProof>,
         tls: &mut Vec<u8>,
         send: &mut dyn SendOutput,
     ) -> Result<Option<Input<'a>>, Error> {
         // Drop CCS messages during handshake in TLS1.3
-        if msg.typ == ContentType::ChangeCipherSpec && self.drop_tls13_ccs(&msg)? {
+        if record.typ == ContentType::ChangeCipherSpec && self.drop_tls13_ccs(&record)? {
             trace!("Dropping CCS");
             return Ok(None);
         }
 
         // Now we can fully parse the message payload.
-        let message = Message::try_from(msg)?;
+        let message = Message::try_from(record)?;
 
         // For alerts, we have separate logic.
         if let MessagePayload::Alert(alert) = &message.payload {
@@ -422,14 +420,14 @@ impl ReceivePath {
         }))
     }
 
-    fn drop_tls13_ccs(&mut self, msg: &EncodedMessage<&'_ [u8]>) -> Result<bool, Error> {
+    fn drop_tls13_ccs(&mut self, record: &Record<&'_ [u8]>) -> Result<bool, Error> {
         if self.may_receive_application_data
             || !matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
         {
             return Ok(false);
         }
 
-        if !msg.is_valid_ccs() {
+        if !record.is_valid_ccs() {
             // "An implementation which receives any other change_cipher_spec value or
             //  which receives a protected change_cipher_spec record MUST abort the
             //  handshake with an "unexpected_message" alert."
@@ -714,25 +712,25 @@ impl Input<'_> {
     }
 }
 
-/// An [`EncodedMessage<Payload<'_>>`] which does not borrow its payload, but
+/// An [`Record<Payload<'_>>`] which does not borrow its payload, but
 /// references a range that can later be borrowed.
-struct InboundUnborrowedMessage {
+struct InboundUnborrowedRecord {
     typ: ContentType,
     version: EncodableVersion,
     bounds: Range<usize>,
 }
 
-impl InboundUnborrowedMessage {
-    fn unborrow(locator: &Locator, msg: EncodedMessage<&'_ [u8]>) -> Self {
+impl InboundUnborrowedRecord {
+    fn unborrow(locator: &Locator, record: Record<&'_ [u8]>) -> Self {
         Self {
-            typ: msg.typ,
-            version: msg.version,
-            bounds: locator.locate(msg.payload),
+            typ: record.typ,
+            version: record.version,
+            bounds: locator.locate(record.payload),
         }
     }
 
-    fn reborrow<'b>(self, delocator: &Delocator<'b>) -> EncodedMessage<&'b [u8]> {
-        EncodedMessage {
+    fn reborrow<'b>(self, delocator: &Delocator<'b>) -> Record<&'b [u8]> {
+        Record {
             typ: self.typ,
             version: self.version,
             payload: delocator.slice_from_range(&self.bounds),

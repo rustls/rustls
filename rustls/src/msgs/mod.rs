@@ -34,7 +34,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use crate::crypto::cipher::{EncodableVersion, EncodedMessage, MessageError, Payload};
+use crate::crypto::cipher::{EncodableVersion, Payload, Record, RecordError};
 use crate::enums::{ContentType, ContentTypeName, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, InvalidMessage};
 use crate::verify::DigitallySignedStruct;
@@ -98,23 +98,23 @@ mod handshake_test;
 
 pub mod fuzzing {
     pub use super::deframer::fuzz_deframer;
-    use super::{Codec, EncodedMessage, Fragmenter, Message, Payload, Reader};
+    use super::{Codec, Fragmenter, Message, Payload, Reader, Record};
     use crate::server::ServerSessionValue;
 
     pub fn fuzz_fragmenter(data: &[u8]) {
         let mut rdr = Reader::new(data);
-        let Ok(msg) = EncodedMessage::<Payload<'_>>::read(&mut rdr) else {
+        let Ok(record) = Record::<Payload<'_>>::read(&mut rdr) else {
             return;
         };
 
         let mut frg = Fragmenter::default();
         frg.set_max_fragment_size(Some(32))
             .unwrap();
-        for msg in frg.fragment(msg.typ, msg.version, msg.payload.bytes().into(), 0) {
-            Message::try_from(&EncodedMessage {
-                typ: msg.typ,
-                version: msg.version,
-                payload: Payload::Owned(msg.payload.to_vec()),
+        for record in frg.fragment(record.typ, record.version, record.payload.bytes().into(), 0) {
+            Message::try_from(&Record {
+                typ: record.typ,
+                version: record.version,
+                payload: Payload::Owned(record.payload.to_vec()),
             })
             .ok();
         }
@@ -122,17 +122,17 @@ pub mod fuzzing {
 
     pub fn fuzz_message(data: &[u8]) {
         let mut rdr = Reader::new(data);
-        let Ok(m) = EncodedMessage::<Payload<'_>>::read(&mut rdr) else {
+        let Ok(record) = Record::<Payload<'_>>::read(&mut rdr) else {
             return;
         };
 
-        let Ok(msg) = Message::try_from(&m) else {
+        let Ok(msg) = Message::try_from(&record) else {
             return;
         };
 
         //println!("msg = {:#?}", m);
         let expected_version = msg.version.encode();
-        let enc = EncodedMessage::<Payload<'_>>::from(msg)
+        let enc = Record::<Payload<'_>>::from(msg)
             .borrow_outbound()
             .to_unencrypted_bytes();
         //println!("data = {:?}", &data[..rdr.used()]);
@@ -194,7 +194,7 @@ impl Message<'_> {
 
     #[cfg(test)]
     pub(crate) fn into_wire_bytes(self) -> Vec<u8> {
-        EncodedMessage::<Payload<'_>>::from(self)
+        Record::<Payload<'_>>::from(self)
             .borrow_outbound()
             .to_unencrypted_bytes()
     }
@@ -207,10 +207,10 @@ impl Message<'_> {
     }
 }
 
-impl<'a> TryFrom<EncodedMessage<&'a [u8]>> for Message<'a> {
+impl<'a> TryFrom<Record<&'a [u8]>> for Message<'a> {
     type Error = InvalidMessage;
 
-    fn try_from(plain: EncodedMessage<&'a [u8]>) -> Result<Self, Self::Error> {
+    fn try_from(plain: Record<&'a [u8]>) -> Result<Self, Self::Error> {
         Ok(Self {
             version: plain.version,
             payload: MessagePayload::new(plain.typ, plain.version.version(), plain.payload)?,
@@ -218,10 +218,10 @@ impl<'a> TryFrom<EncodedMessage<&'a [u8]>> for Message<'a> {
     }
 }
 
-impl<'a> TryFrom<&'a EncodedMessage<Payload<'a>>> for Message<'a> {
+impl<'a> TryFrom<&'a Record<Payload<'a>>> for Message<'a> {
     type Error = InvalidMessage;
 
-    fn try_from(plain: &'a EncodedMessage<Payload<'a>>) -> Result<Self, Self::Error> {
+    fn try_from(plain: &'a Record<Payload<'a>>) -> Result<Self, Self::Error> {
         Ok(Self {
             version: plain.version,
             payload: MessagePayload::new(
@@ -235,31 +235,31 @@ impl<'a> TryFrom<&'a EncodedMessage<Payload<'a>>> for Message<'a> {
 
 pub(crate) fn read_opaque_message_header(
     r: &mut Reader<'_>,
-) -> Result<(ContentType, ProtocolVersion, u16), MessageError> {
-    let typ = ContentType::read(r).map_err(|_| MessageError::TooShortForHeader)?;
+) -> Result<(ContentType, ProtocolVersion, u16), RecordError> {
+    let typ = ContentType::read(r).map_err(|_| RecordError::TooShortForHeader)?;
     // Don't accept any new content-types.
     if ContentTypeName::try_from(typ).is_err() {
-        return Err(MessageError::InvalidContentType);
+        return Err(RecordError::InvalidContentType);
     }
 
-    let version = ProtocolVersion::read(r).map_err(|_| MessageError::TooShortForHeader)?;
+    let version = ProtocolVersion::read(r).map_err(|_| RecordError::TooShortForHeader)?;
     // Accept only versions 0x03XX for any XX.
     if version.0 & 0xff00 != 0x0300 {
-        return Err(MessageError::UnknownProtocolVersion);
+        return Err(RecordError::UnknownProtocolVersion);
     }
 
-    let len = u16::read(r).map_err(|_| MessageError::TooShortForHeader)?;
+    let len = u16::read(r).map_err(|_| RecordError::TooShortForHeader)?;
 
     // Reject undersize messages
     //  implemented per section 5.1 of RFC 9846 (TLSv1.3)
     //              per section 6.2.1 of RFC 5246 (TLSv1.2)
     if typ != ContentType::ApplicationData && len == 0 {
-        return Err(MessageError::InvalidEmptyPayload);
+        return Err(RecordError::InvalidEmptyPayload);
     }
 
     // Reject oversize messages
     if len >= MAX_PAYLOAD {
-        return Err(MessageError::MessageTooLarge);
+        return Err(RecordError::MessageTooLarge);
     }
 
     Ok((typ, version, len))
@@ -344,7 +344,7 @@ impl<'a> MessagePayload<'a> {
     }
 }
 
-impl From<Message<'_>> for EncodedMessage<Payload<'_>> {
+impl From<Message<'_>> for Record<Payload<'_>> {
     fn from(msg: Message<'_>) -> Self {
         let typ = msg.payload.content_type();
         let payload = match msg.payload {
@@ -725,14 +725,14 @@ mod tests {
             f.read_to_end(&mut bytes).unwrap();
 
             let mut rd = Reader::new(&bytes);
-            let msg = EncodedMessage::<Payload<'_>>::read(&mut rd).unwrap();
-            println!("{msg:?}");
+            let record = Record::<Payload<'_>>::read(&mut rd).unwrap();
+            println!("{record:?}");
 
-            let Ok(msg) = Message::try_from(&msg) else {
+            let Ok(msg) = Message::try_from(&record) else {
                 continue;
             };
 
-            let enc = EncodedMessage::<Payload<'_>>::from(msg)
+            let enc = Record::<Payload<'_>>::from(msg)
                 .borrow_outbound()
                 .to_unencrypted_bytes();
             // Check that round-tripped message matches the input, ignoring the protocol version
@@ -762,9 +762,9 @@ mod tests {
         \x79\x2f\x33\x08\x68\x74\x74\x70\x2f\x31\x2e\x31\x00\x0b\x00\x02\
         \x01\x00\x00\x0a\x00\x0a\x00\x08\x00\x1d\x00\x17\x00\x18\x00\x19";
         let mut rd = Reader::new(bytes);
-        let m = EncodedMessage::<Payload<'_>>::read(&mut rd).unwrap();
-        println!("m = {m:?}");
-        Message::try_from(&m).unwrap();
+        let record = Record::<Payload<'_>>::read(&mut rd).unwrap();
+        println!("record = {record:?}");
+        Message::try_from(&record).unwrap();
     }
 
     #[test]
@@ -783,9 +783,9 @@ mod tests {
             &b"\x18\x03\x04\x00\x04\x11\x22\x33\x44"[..],
         ];
         for &bytes in samples.iter() {
-            let m = EncodedMessage::<Payload<'_>>::read(&mut Reader::new(bytes)).unwrap();
-            println!("m = {m:?}");
-            let m = Message::try_from(&m);
+            let record = Record::<Payload<'_>>::read(&mut Reader::new(bytes)).unwrap();
+            println!("record = {record:?}");
+            let m = Message::try_from(&record);
             println!("m' = {m:?}");
         }
     }
@@ -828,14 +828,14 @@ mod tests {
         let mut r = Reader::new(bytes);
 
         while r.any_left() {
-            let m = EncodedMessage::<Payload<'_>>::read(&mut r).unwrap();
+            let record = Record::<Payload<'_>>::read(&mut r).unwrap();
 
-            let out = m
+            let out = record
                 .borrow_outbound()
                 .to_unencrypted_bytes();
             assert!(!out.is_empty());
 
-            Message::try_from(&m).unwrap();
+            Message::try_from(&record).unwrap();
         }
     }
 }

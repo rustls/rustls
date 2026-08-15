@@ -12,7 +12,7 @@ use pki_types::{CertificateDer, FipsStatus, ServerName, UnixTime};
 use super::{Tls12Session, Tls13ClientSessionInput, Tls13Session};
 use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
 use crate::crypto::cipher::{
-    EncodableVersion, EncodedMessage, MessageEncrypter, Payload, encode_record_header,
+    EncodableVersion, MessageEncrypter, Payload, Record, encode_record_header,
 };
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::test_provider::{FakeKeyExchangeGroup, KEY_EXCHANGE_GROUP, TLS_TEST_SUITE};
@@ -552,7 +552,7 @@ fn client_requiring_rpk_receives_server_ee(
     };
 
     let mut encrypter = fake_server_crypto.server_handshake_encrypter();
-    let ee = EncodedMessage::<Payload<'_>>::from(ee);
+    let ee = Record::<Payload<'_>>::from(ee);
     let ee = ee.borrow_outbound();
     let mut enc_ee = vec![0u8; HEADER_SIZE + encrypter.encrypted_payload_len(ee.payload.len())];
     let encrypted = encrypter
@@ -850,10 +850,10 @@ fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPaylo
         .connect(ServerName::try_from("localhost").unwrap())
         .build(&mut bytes)?;
 
-    let message = EncodedMessage::<Payload<'_>>::read(&mut Reader::new(&bytes))
+    let record = Record::<Payload<'_>>::read(&mut Reader::new(&bytes))
         .unwrap()
         .into_owned();
-    match Message::try_from(&message).unwrap() {
+    match Message::try_from(&record).unwrap() {
         Message {
             payload:
                 MessagePayload::Handshake {

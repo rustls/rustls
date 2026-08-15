@@ -5,9 +5,8 @@ use std::sync::Arc;
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::ServerVerifier;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter,
-    MessageEncrypter, OutboundPlain, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
-    UnsupportedOperationError,
+    AeadKey, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
+    OutboundPlain, Record, Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError,
 };
 use rustls::crypto::kx::{
     KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup,
@@ -320,15 +319,15 @@ struct Tls13Cipher;
 impl MessageEncrypter for Tls13Cipher {
     fn encrypt<'a>(
         &mut self,
-        m: EncodedMessage<OutboundPlain<'_>>,
+        record: Record<OutboundPlain<'_>>,
         seq: u64,
         out: &'a mut [u8],
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let total_len = self.encrypted_payload_len(m.payload.len());
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let total_len = self.encrypted_payload_len(record.payload.len());
         let mut payload = EncryptBuffer::new(out, total_len)?;
 
-        payload.extend_from_chunks(&m.payload);
-        payload.extend_from_slice(&m.typ.to_array());
+        payload.extend_from_chunks(&record.payload);
+        payload.extend_from_slice(&record.typ.to_array());
 
         for (p, mask) in payload
             .as_mut()
@@ -341,9 +340,9 @@ impl MessageEncrypter for Tls13Cipher {
         payload.extend_from_slice(&seq.to_be_bytes());
         payload.extend_from_slice(AEAD_TAG);
 
-        Ok(EncodedMessage {
+        Ok(Record {
             typ: ContentType::ApplicationData,
-            version: m.version,
+            version: record.version,
             payload: payload.into_written(),
         })
     }
@@ -356,10 +355,10 @@ impl MessageEncrypter for Tls13Cipher {
 impl MessageDecrypter for Tls13Cipher {
     fn decrypt<'a>(
         &mut self,
-        mut m: EncodedMessage<InboundOpaque<'a>>,
+        mut record: Record<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let payload = &mut m.payload;
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let payload = &mut record.payload;
 
         let mut expected_tag = vec![];
         expected_tag.extend_from_slice(&seq.to_be_bytes());
@@ -381,7 +380,7 @@ impl MessageDecrypter for Tls13Cipher {
             *p ^= *mask;
         }
 
-        m.into_tls13_unpadded_message()
+        record.into_tls13_unpadded_record()
     }
 }
 
@@ -390,13 +389,13 @@ struct Tls12Cipher;
 impl MessageEncrypter for Tls12Cipher {
     fn encrypt<'a>(
         &mut self,
-        m: EncodedMessage<OutboundPlain<'_>>,
+        record: Record<OutboundPlain<'_>>,
         seq: u64,
         out: &'a mut [u8],
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let total_len = self.encrypted_payload_len(m.payload.len());
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let total_len = self.encrypted_payload_len(record.payload.len());
         let mut payload = EncryptBuffer::new(out, total_len)?;
-        payload.extend_from_chunks(&m.payload);
+        payload.extend_from_chunks(&record.payload);
 
         for (p, mask) in payload
             .as_mut()
@@ -409,9 +408,9 @@ impl MessageEncrypter for Tls12Cipher {
         payload.extend_from_slice(&seq.to_be_bytes());
         payload.extend_from_slice(AEAD_TAG);
 
-        Ok(EncodedMessage {
-            typ: m.typ,
-            version: m.version,
+        Ok(Record {
+            typ: record.typ,
+            version: record.version,
             payload: payload.into_written(),
         })
     }
@@ -424,10 +423,10 @@ impl MessageEncrypter for Tls12Cipher {
 impl MessageDecrypter for Tls12Cipher {
     fn decrypt<'a>(
         &mut self,
-        mut m: EncodedMessage<InboundOpaque<'a>>,
+        mut record: Record<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let payload = &mut m.payload;
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let payload = &mut record.payload;
 
         let mut expected_tag = vec![];
         expected_tag.extend_from_slice(&seq.to_be_bytes());
@@ -449,7 +448,7 @@ impl MessageDecrypter for Tls12Cipher {
             *p ^= *mask;
         }
 
-        Ok(m.into_plain_message())
+        Ok(record.into_plain_record())
     }
 }
 

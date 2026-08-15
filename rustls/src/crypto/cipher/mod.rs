@@ -13,8 +13,7 @@ use crate::suites::ConnectionTrafficSecrets;
 mod messages;
 pub(crate) use messages::encode_record_header;
 pub use messages::{
-    EncodableVersion, EncodedMessage, EncryptBuffer, InboundOpaque, MessageError, OutboundPlain,
-    Payload,
+    EncodableVersion, EncryptBuffer, InboundOpaque, OutboundPlain, Payload, Record, RecordError,
 };
 
 mod record_layer;
@@ -148,18 +147,18 @@ pub struct KeyBlockShape {
 
 /// Objects with this trait can decrypt TLS messages.
 pub trait MessageDecrypter: Send + Sync {
-    /// Decrypt the given TLS message `msg`, using the sequence number
+    /// Decrypt the given TLS message `record`, using the sequence number
     /// `seq` which can be used to derive a unique [`Nonce`].
     fn decrypt<'a>(
         &mut self,
-        msg: EncodedMessage<InboundOpaque<'a>>,
+        record: Record<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<&'a [u8]>, Error>;
+    ) -> Result<Record<&'a [u8]>, Error>;
 }
 
 /// Objects with this trait can encrypt TLS messages.
 pub trait MessageEncrypter: Send + Sync {
-    /// Encrypt the given TLS message `msg` into `out`, using the sequence number
+    /// Encrypt the given TLS message `record` into `out`, using the sequence number
     /// `seq` which can be used to derive a unique [`Nonce`].
     ///
     /// The encrypted payload including all framing the ciphersuite requires, such
@@ -174,10 +173,10 @@ pub trait MessageEncrypter: Send + Sync {
     /// write it to `out` themselves.
     fn encrypt<'a>(
         &mut self,
-        msg: EncodedMessage<OutboundPlain<'_>>,
+        record: Record<OutboundPlain<'_>>,
         seq: u64,
         out: &'a mut [u8],
-    ) -> Result<EncodedMessage<&'a [u8]>, Error>;
+    ) -> Result<Record<&'a [u8]>, Error>;
 
     /// Return the length of the ciphertext that results from encrypting plaintext of length `payload_len`.
     ///
