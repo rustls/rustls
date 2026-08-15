@@ -1,7 +1,7 @@
 use core::num::NonZeroUsize;
 
 use crate::Error;
-use crate::crypto::cipher::{EncodableVersion, EncodedMessage, OutboundPlain};
+use crate::crypto::cipher::{EncodableVersion, OutboundPlain, Record};
 use crate::enums::ContentType;
 
 pub(crate) const MAX_FRAGMENT_LEN: NonZeroUsize = NonZeroUsize::new(16384).unwrap();
@@ -28,14 +28,14 @@ impl Fragmenter {
         version: EncodableVersion,
         payload: OutboundPlain<'a>,
         encryption_overhead: usize,
-    ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> + use<'a> {
+    ) -> impl ExactSizeIterator<Item = Record<OutboundPlain<'a>>> + use<'a> {
         let max_plaintext = NonZeroUsize::new(
             self.max_frag
                 .get()
                 .saturating_sub(encryption_overhead),
         )
         .unwrap_or(NonZeroUsize::MIN);
-        Chunker::new(payload, max_plaintext).map(move |payload| EncodedMessage {
+        Chunker::new(payload, max_plaintext).map(move |payload| Record {
             typ,
             version,
             payload,
@@ -112,21 +112,21 @@ mod tests {
     use std::vec;
 
     use super::{Fragmenter, PACKET_OVERHEAD};
-    use crate::crypto::cipher::{EncodableVersion, EncodedMessage, OutboundPlain, Payload};
+    use crate::crypto::cipher::{EncodableVersion, OutboundPlain, Payload, Record};
     use crate::enums::{ContentType, ProtocolVersion};
 
     fn msg_eq(
-        m: &EncodedMessage<OutboundPlain<'_>>,
+        record: &Record<OutboundPlain<'_>>,
         total_len: usize,
         typ: &ContentType,
         version: &EncodableVersion,
         bytes: &[u8],
     ) {
-        assert_eq!(&m.typ, typ);
-        assert_eq!(&m.version, version);
-        assert_eq!(m.payload.to_vec(), bytes);
+        assert_eq!(&record.typ, typ);
+        assert_eq!(&record.version, version);
+        assert_eq!(record.payload.to_vec(), bytes);
 
-        let buf = m.to_unencrypted_bytes();
+        let buf = record.to_unencrypted_bytes();
 
         assert_eq!(total_len, buf.len());
     }
@@ -136,7 +136,7 @@ mod tests {
         let typ = ContentType::Handshake;
         let version = EncodableVersion::Legacy(ProtocolVersion::TLSv1_2);
         let data: Vec<u8> = (1..70u8).collect();
-        let m = EncodedMessage {
+        let record = Record {
             typ,
             version,
             payload: Payload::new(data),
@@ -146,7 +146,7 @@ mod tests {
         frag.set_max_fragment_size(Some(32))
             .unwrap();
         let q = frag
-            .fragment(m.typ, m.version, m.payload.bytes().into(), 0)
+            .fragment(record.typ, record.version, record.payload.bytes().into(), 0)
             .collect::<Vec<_>>();
         assert_eq!(q.len(), 3);
         msg_eq(
@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn non_fragment() {
-        let m = EncodedMessage {
+        let record = Record {
             typ: ContentType::Handshake,
             version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             payload: Payload::new(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
@@ -190,7 +190,7 @@ mod tests {
         frag.set_max_fragment_size(Some(32))
             .unwrap();
         let q = frag
-            .fragment(m.typ, m.version, m.payload.bytes().into(), 0)
+            .fragment(record.typ, record.version, record.payload.bytes().into(), 0)
             .collect::<Vec<_>>();
         assert_eq!(q.len(), 1);
         msg_eq(
@@ -256,7 +256,7 @@ mod tests {
 
         assert_eq!(
             q.iter()
-                .map(|m| m.payload.len())
+                .map(|record| record.payload.len())
                 .collect::<Vec<usize>>(),
             expect
         );

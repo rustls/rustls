@@ -11,7 +11,7 @@ use crate::msgs::{Codec, HEADER_SIZE, MAX_FRAGMENT_LEN, Reader, hex, read_opaque
 /// A TLS message with encoded (but not necessarily encrypted) payload.
 #[expect(clippy::exhaustive_structs)]
 #[derive(Clone, Debug)]
-pub struct EncodedMessage<P> {
+pub struct Record<P> {
     /// The content type of this message.
     pub typ: ContentType,
     /// The protocol version of this message.
@@ -20,8 +20,8 @@ pub struct EncodedMessage<P> {
     pub payload: P,
 }
 
-impl<P> EncodedMessage<P> {
-    /// Create a new `EncodedMessage` with the given fields.
+impl<P> Record<P> {
+    /// Create a new `Record` with the given fields.
     pub fn new(typ: ContentType, version: EncodableVersion, payload: P) -> Self {
         Self {
             typ,
@@ -31,17 +31,17 @@ impl<P> EncodedMessage<P> {
     }
 }
 
-impl<'a> EncodedMessage<Payload<'a>> {
+impl<'a> Record<Payload<'a>> {
     /// Construct by decoding from a [`Reader`].
     ///
-    /// `MessageError` allows callers to distinguish between valid prefixes (might
+    /// `RecordError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
-    pub(crate) fn read(r: &mut Reader<'a>) -> Result<Self, MessageError> {
+    pub(crate) fn read(r: &mut Reader<'a>) -> Result<Self, RecordError> {
         let (typ, version, len) = read_opaque_message_header(r)?;
 
         let content = r
             .take(len as usize)
-            .ok_or(MessageError::TooShortForLength)?;
+            .ok_or(RecordError::TooShortForLength)?;
 
         Ok(Self {
             typ,
@@ -50,16 +50,16 @@ impl<'a> EncodedMessage<Payload<'a>> {
         })
     }
 
-    /// Borrow as an [`EncodedMessage<OutboundPlain<'a>>`].
-    pub fn borrow_outbound(&'a self) -> EncodedMessage<OutboundPlain<'a>> {
-        EncodedMessage {
+    /// Borrow as an [`Record<OutboundPlain<'a>>`].
+    pub fn borrow_outbound(&'a self) -> Record<OutboundPlain<'a>> {
+        Record {
             typ: self.typ,
             version: self.version,
             payload: self.payload.bytes().into(),
         }
     }
 
-    /// Convert into an owned `EncodedMessage<Plain<'static>>`.
+    /// Convert into an owned `Record<Plain<'static>>`.
     pub fn into_owned(self) -> Self {
         Self {
             typ: self.typ,
@@ -69,7 +69,7 @@ impl<'a> EncodedMessage<Payload<'a>> {
     }
 }
 
-impl EncodedMessage<&'_ [u8]> {
+impl Record<&'_ [u8]> {
     /// Returns true if the payload is a CCS message.
     ///
     /// We passthrough ChangeCipherSpec messages in the deframer without decrypting them.
@@ -80,12 +80,12 @@ impl EncodedMessage<&'_ [u8]> {
     }
 }
 
-impl<'a> EncodedMessage<InboundOpaque<'a>> {
+impl<'a> Record<InboundOpaque<'a>> {
     /// For TLS1.3 (only), checks the length msg.payload is valid and removes the padding.
     ///
     /// Returns an error if the message (pre-unpadding) is too long, or the padding is invalid,
     /// or the message (post-unpadding) is too long.
-    pub fn into_tls13_unpadded_message(mut self) -> Result<EncodedMessage<&'a [u8]>, Error> {
+    pub fn into_tls13_unpadded_record(mut self) -> Result<Record<&'a [u8]>, Error> {
         let payload = &mut self.payload;
 
         if self.typ != ContentType::ApplicationData {
@@ -106,7 +106,7 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
         }
 
         self.version = EncodableVersion::Legacy(ProtocolVersion::TLSv1_3);
-        Ok(self.into_plain_message())
+        Ok(self.into_plain_record())
     }
 
     /// Force conversion into a plaintext message.
@@ -115,10 +115,10 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
     /// the underlying message payload.
     ///
     /// This should only be used for messages that are known to be in plaintext. Otherwise, the
-    /// [`EncodedMessage<InboundOpaque<'_>>`] should be decrypted into an
-    /// `EncodedMessage<&'_ [u8]>` using a `MessageDecrypter`.
-    pub fn into_plain_message_range(self, range: Range<usize>) -> EncodedMessage<&'a [u8]> {
-        EncodedMessage {
+    /// [`Record<InboundOpaque<'_>>`] should be decrypted into an
+    /// `Record<&'_ [u8]>` using a `MessageDecrypter`.
+    pub fn into_plain_record_range(self, range: Range<usize>) -> Record<&'a [u8]> {
+        Record {
             typ: self.typ,
             version: self.version,
             payload: &self.payload.into_inner()[range],
@@ -128,10 +128,10 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
     /// Force conversion into a plaintext message.
     ///
     /// This should only be used for messages that are known to be in plaintext. Otherwise, the
-    /// [`EncodedMessage<InboundOpaque<'a>>`] should be decrypted into a
-    /// `EncodedMessage<&'a [u8]>` using a `MessageDecrypter`.
-    pub fn into_plain_message(self) -> EncodedMessage<&'a [u8]> {
-        EncodedMessage {
+    /// [`Record<InboundOpaque<'a>>`] should be decrypted into a
+    /// `Record<&'a [u8]>` using a `MessageDecrypter`.
+    pub fn into_plain_record(self) -> Record<&'a [u8]> {
+        Record {
             typ: self.typ,
             version: self.version,
             payload: self.payload.into_inner(),
@@ -139,7 +139,7 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
     }
 }
 
-impl EncodedMessage<OutboundPlain<'_>> {
+impl Record<OutboundPlain<'_>> {
     /// Encode this message into its unencrypted wire representation, including
     /// its record header.
     pub(crate) fn to_unencrypted_bytes(&self) -> Vec<u8> {
@@ -454,7 +454,7 @@ impl AsMut<[u8]> for EncryptBuffer<'_> {
 
 /// An externally length'd payload
 ///
-/// When encountered in an [`EncodedMessage`], it represents a plaintext payload. It can be
+/// When encountered in an [`Record`], it represents a plaintext payload. It can be
 /// decrypted from an [`InboundOpaque`] or encrypted by a
 /// [`MessageEncrypter`](crate::crypto::cipher::MessageEncrypter), and it is also used for
 /// joining and fragmenting.
@@ -620,7 +620,7 @@ fn unpad_tls13_payload(p: &mut InboundOpaque<'_>) -> ContentType {
 #[expect(missing_docs)]
 #[non_exhaustive]
 #[derive(Debug)]
-pub enum MessageError {
+pub enum RecordError {
     TooShortForHeader,
     TooShortForLength,
     InvalidEmptyPayload,
@@ -815,13 +815,13 @@ mod tests {
                 ProtocolVersion::TLSv1_2,
             ),
         ] {
-            let encoded_message = EncodedMessage {
+            let record = Record {
                 typ: ContentType::Handshake,
                 version,
                 payload: OutboundPlain::Single(&[0, 1, 2, 3, 4]),
             };
-            let encoded = encoded_message.to_unencrypted_bytes();
-            let decoded = EncodedMessage::<Payload<'_>>::read(&mut Reader::new(&encoded)).unwrap();
+            let encoded = record.to_unencrypted_bytes();
+            let decoded = Record::<Payload<'_>>::read(&mut Reader::new(&encoded)).unwrap();
             assert_eq!(decoded.version.version(), expect);
         }
     }

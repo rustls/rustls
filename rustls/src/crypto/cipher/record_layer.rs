@@ -3,8 +3,7 @@ use alloc::vec::Vec;
 use core::cmp::min;
 
 use crate::crypto::cipher::{
-    EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, OutboundPlain,
-    encode_record_header,
+    InboundOpaque, MessageDecrypter, MessageEncrypter, OutboundPlain, Record, encode_record_header,
 };
 use crate::error::Error;
 use crate::msgs::{HEADER_SIZE, HandshakeAlignedProof};
@@ -35,7 +34,7 @@ impl EncryptionState {
     /// The result including framing is appended to `output`.
     pub(crate) fn encrypt_outgoing(
         &mut self,
-        plain: EncodedMessage<OutboundPlain<'_>>,
+        plain: Record<OutboundPlain<'_>>,
         output: &mut Vec<u8>,
     ) {
         // Contents are fully overwritten below, so zeroing is pure cost.
@@ -63,7 +62,7 @@ impl EncryptionState {
     /// established yet.
     pub(crate) fn encrypt_outgoing_into(
         &mut self,
-        plain: EncodedMessage<OutboundPlain<'_>>,
+        plain: Record<OutboundPlain<'_>>,
         out: &mut [u8],
     ) -> usize {
         assert!(self.pre_encrypt_action(0) != Some(PreEncryptAction::Refuse));
@@ -174,12 +173,12 @@ impl DecryptionState {
     /// an error is returned.
     pub(crate) fn decrypt_incoming<'a>(
         &mut self,
-        encr: EncodedMessage<InboundOpaque<'a>>,
+        encr: Record<InboundOpaque<'a>>,
     ) -> Result<Option<Decrypted<'a>>, Error> {
         let Some(decrypter) = &mut self.message_decrypter else {
             return Ok(Some(Decrypted {
                 want_close_before_decrypt: false,
-                plaintext: encr.into_plain_message(),
+                plaintext: encr.into_plain_record(),
             }));
         };
 
@@ -273,7 +272,7 @@ pub(crate) struct Decrypted<'a> {
     /// Whether the peer appears to be getting close to encrypting too many messages with this key.
     pub(crate) want_close_before_decrypt: bool,
     /// The decrypted message.
-    pub(crate) plaintext: EncodedMessage<&'a [u8]>,
+    pub(crate) plaintext: Record<&'a [u8]>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -311,10 +310,10 @@ mod tests {
         impl MessageDecrypter for PassThroughDecrypter {
             fn decrypt<'a>(
                 &mut self,
-                m: EncodedMessage<InboundOpaque<'a>>,
+                record: Record<InboundOpaque<'a>>,
                 _: u64,
-            ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-                Ok(m.into_plain_message())
+            ) -> Result<Record<&'a [u8]>, Error> {
+                Ok(record.into_plain_record())
             }
         }
 
@@ -336,7 +335,7 @@ mod tests {
         // Decrypting a message should update the read_seq and track that we have now performed
         // a decryption.
         record_layer
-            .decrypt_incoming(EncodedMessage::new(
+            .decrypt_incoming(Record::new(
                 ContentType::Handshake,
                 EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
                 InboundOpaque(&mut [0xC0, 0xFF, 0xEE]),

@@ -2,7 +2,7 @@ use core::mem;
 use core::ops::Range;
 use std::collections::VecDeque;
 
-use crate::crypto::cipher::{EncodableVersion, EncodedMessage, InboundOpaque, MessageError};
+use crate::crypto::cipher::{EncodableVersion, InboundOpaque, Record, RecordError};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader, U24};
@@ -59,13 +59,13 @@ impl Deframer {
             Ok(header) => header,
             Err(err) => {
                 let err = match err {
-                    MessageError::TooShortForHeader | MessageError::TooShortForLength => {
+                    RecordError::TooShortForHeader | RecordError::TooShortForLength => {
                         return None;
                     }
-                    MessageError::InvalidEmptyPayload => InvalidMessage::InvalidEmptyPayload,
-                    MessageError::MessageTooLarge => InvalidMessage::MessageTooLarge,
-                    MessageError::InvalidContentType => InvalidMessage::InvalidContentType,
-                    MessageError::UnknownProtocolVersion => InvalidMessage::UnknownProtocolVersion,
+                    RecordError::InvalidEmptyPayload => InvalidMessage::InvalidEmptyPayload,
+                    RecordError::MessageTooLarge => InvalidMessage::MessageTooLarge,
+                    RecordError::InvalidContentType => InvalidMessage::InvalidContentType,
+                    RecordError::UnknownProtocolVersion => InvalidMessage::UnknownProtocolVersion,
                 };
                 return Some(Err(err.into()));
             }
@@ -79,7 +79,7 @@ impl Deframer {
         self.processed = end;
 
         Some(Ok(Deframed {
-            message: EncodedMessage {
+            record: Record {
                 typ,
                 version: EncodableVersion::Legacy(version),
                 payload: InboundOpaque(&mut head[bounds.start + HEADER_SIZE..]),
@@ -257,7 +257,7 @@ impl Deframer {
             first.bounds.end += len;
 
             // finally, attempt to re-dissect `first`
-            let msg = EncodedMessage {
+            let record = Record {
                 typ: ContentType::Handshake,
                 version: EncodableVersion::Legacy(first.version),
                 payload: delocator.slice_from_range(&first.bounds),
@@ -265,7 +265,7 @@ impl Deframer {
 
             let iter = DissectHandshakeIter {
                 version: first.version,
-                payload: msg.payload,
+                payload: record.payload,
                 bounds: first.bounds.start..first.bounds.end,
             };
 
@@ -284,12 +284,12 @@ impl Deframer {
         &mut self,
         next_span: FragmentSpan,
         containing_buffer: &'b [u8],
-    ) -> EncodedMessage<&'b [u8]> {
+    ) -> Record<&'b [u8]> {
         if self.spans.is_empty() {
             self.discard = self.processed;
         }
 
-        EncodedMessage {
+        Record {
             typ: ContentType::Handshake,
             version: EncodableVersion::Legacy(next_span.version),
             payload: Delocator::new(containing_buffer).slice_from_range(&next_span.bounds),
@@ -435,7 +435,7 @@ impl FragmentSpan {
 }
 
 pub(crate) struct Deframed<'a> {
-    pub(crate) message: EncodedMessage<InboundOpaque<'a>>,
+    pub(crate) record: Record<InboundOpaque<'a>>,
     pub(crate) bounds: Range<usize>,
 }
 
@@ -488,11 +488,11 @@ mod tests {
         std::println!("after:  {deframer:?}");
 
         let span = deframer.complete_span().unwrap();
-        let msg = deframer.message(span, &input);
-        std::println!("msg {msg:?}");
-        assert_eq!(msg.typ, ContentType::Handshake);
-        assert_eq!(msg.version.version(), ProtocolVersion::TLSv1_3);
-        assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x01, 0xff]);
+        let record = deframer.message(span, &input);
+        std::println!("record {record:?}");
+        assert_eq!(record.typ, ContentType::Handshake);
+        assert_eq!(record.version.version(), ProtocolVersion::TLSv1_3);
+        assert_eq!(record.payload, &[0x21, 0x00, 0x00, 0x01, 0xff]);
 
         input.drain(..deframer.take_discard());
 
@@ -511,10 +511,10 @@ mod tests {
         deframer.coalesce(&mut input).unwrap();
         let span = deframer.complete_span().unwrap();
 
-        let msg = std::dbg!(deframer.message(span, &input));
-        assert_eq!(msg.typ, ContentType::Handshake);
-        assert_eq!(msg.version.version(), ProtocolVersion::TLSv1_3);
-        assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x05, 1, 2, 3, 4, 5]);
+        let record = std::dbg!(deframer.message(span, &input));
+        assert_eq!(record.typ, ContentType::Handshake);
+        assert_eq!(record.version.version(), ProtocolVersion::TLSv1_3);
+        assert_eq!(record.payload, &[0x21, 0x00, 0x00, 0x05, 1, 2, 3, 4, 5]);
 
         input.drain(..deframer.take_discard());
 
@@ -564,12 +564,12 @@ mod tests {
         add_bytes(&mut deframer, 8..12, &input);
 
         let span = deframer.complete_span().unwrap();
-        let msg = deframer.message(span, &input);
+        let record = deframer.message(span, &input);
         assert!(deframer.complete_span().is_none());
 
-        assert_eq!(msg.typ, ContentType::Handshake);
-        assert_eq!(msg.version.version(), ProtocolVersion::TLSv1_3);
-        assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x01, 0xab]);
+        assert_eq!(record.typ, ContentType::Handshake);
+        assert_eq!(record.version.version(), ProtocolVersion::TLSv1_3);
+        assert_eq!(record.payload, &[0x21, 0x00, 0x00, 0x01, 0xab]);
         // second span is incomplete, so no discard yet
         assert_eq!(deframer.discard, 0);
     }
@@ -581,8 +581,8 @@ mod tests {
 
         let mut deframer = Deframer::default();
         while let Some(result) = deframer.deframe(&mut input) {
-            let Deframed { message, bounds } = result.unwrap();
-            let plain = message.into_plain_message();
+            let Deframed { record, bounds } = result.unwrap();
+            let plain = record.into_plain_record();
             std::println!("message {plain:?}");
 
             deframer.input_message(
@@ -598,10 +598,10 @@ mod tests {
 
         for _ in 0..4 {
             let span = deframer.complete_span().unwrap();
-            let msg = deframer.message(span, &input[..]);
+            let record = deframer.message(span, &input[..]);
             assert!(matches!(
-                msg,
-                EncodedMessage {
+                record,
+                Record {
                     typ: ContentType::Handshake,
                     ..
                 }
@@ -610,10 +610,10 @@ mod tests {
         }
 
         let span = deframer.complete_span().unwrap();
-        let msg = deframer.message(span, &input[..]);
+        let record = deframer.message(span, &input[..]);
         assert!(matches!(
-            msg,
-            EncodedMessage {
+            record,
+            Record {
                 typ: ContentType::Handshake,
                 ..
             }
@@ -664,12 +664,12 @@ mod tests {
         let mut buffer = [0x17, 0x03, 0x03, 0x00, 0x01, 0x00];
         let mut deframer = Deframer::default();
 
-        let Deframed { message, bounds } = deframer
+        let Deframed { record, bounds } = deframer
             .deframe(&mut buffer)
             .unwrap()
             .unwrap();
 
-        assert_eq!(message.typ, ContentType::ApplicationData);
+        assert_eq!(record.typ, ContentType::ApplicationData);
         assert_eq!(bounds.end, 6);
         assert!(deframer.deframe(&mut buffer).is_none());
     }
@@ -681,20 +681,20 @@ mod tests {
         ];
         let mut deframer = Deframer::default();
 
-        let Deframed { message, bounds } = deframer
+        let Deframed { record, bounds } = deframer
             .deframe(&mut buffer)
             .unwrap()
             .unwrap();
 
-        assert_eq!(message.typ, ContentType::Handshake);
+        assert_eq!(record.typ, ContentType::Handshake);
         assert_eq!(bounds.end, 6);
 
-        let Deframed { message, bounds } = deframer
+        let Deframed { record, bounds } = deframer
             .deframe(&mut buffer)
             .unwrap()
             .unwrap();
 
-        assert_eq!(message.typ, ContentType::ApplicationData);
+        assert_eq!(record.typ, ContentType::ApplicationData);
         assert_eq!(bounds.end, 12);
         assert!(deframer.deframe(&mut buffer).is_none());
     }
@@ -757,8 +757,8 @@ mod tests {
         let mut end = 0;
 
         while let Some(result) = deframer.deframe(&mut buffer) {
-            let Deframed { message, bounds } = result.unwrap();
-            assert_eq!(ContentType::Handshake, message.typ);
+            let Deframed { record, bounds } = result.unwrap();
+            assert_eq!(ContentType::Handshake, record.typ);
             count += 1;
             end = bounds.end;
         }

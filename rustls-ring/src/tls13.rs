@@ -5,8 +5,8 @@ use ring::hkdf::{self, KeyType};
 use ring::{aead, hmac};
 use rustls::crypto::CipherSuite;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
-    Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, Nonce,
+    OutboundPlain, Record, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::enums::ContentType;
@@ -210,18 +210,18 @@ struct Tls13MessageDecrypter {
 impl MessageEncrypter for Tls13MessageEncrypter {
     fn encrypt<'a>(
         &mut self,
-        msg: EncodedMessage<OutboundPlain<'_>>,
+        record: Record<OutboundPlain<'_>>,
         seq: u64,
         out: &'a mut [u8],
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let total_len = self.encrypted_payload_len(msg.payload.len());
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let total_len = self.encrypted_payload_len(record.payload.len());
         let mut payload = EncryptBuffer::new(out, total_len)?;
 
         let typ = ContentType::ApplicationData;
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(typ, msg.version.encode(), total_len));
-        payload.extend_from_chunks(&msg.payload);
-        payload.extend_from_slice(&msg.typ.to_array());
+        let aad = aead::Aad::from(make_tls13_aad(typ, record.version.encode(), total_len));
+        payload.extend_from_chunks(&record.payload);
+        payload.extend_from_slice(&record.typ.to_array());
 
         match self
             .enc_key
@@ -231,9 +231,9 @@ impl MessageEncrypter for Tls13MessageEncrypter {
             Err(_) => return Err(Error::EncryptError),
         }
 
-        Ok(EncodedMessage {
+        Ok(Record {
             typ,
-            version: msg.version,
+            version: record.version,
             payload: payload.into_written(),
         })
     }
@@ -246,18 +246,18 @@ impl MessageEncrypter for Tls13MessageEncrypter {
 impl MessageDecrypter for Tls13MessageDecrypter {
     fn decrypt<'a>(
         &mut self,
-        mut msg: EncodedMessage<InboundOpaque<'a>>,
+        mut record: Record<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let payload = &mut msg.payload;
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let payload = &mut record.payload;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);
         }
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
         let aad = aead::Aad::from(make_tls13_aad(
-            msg.typ,
-            msg.version.version(),
+            record.typ,
+            record.version.version(),
             payload.len(),
         ));
         let plain_len = self
@@ -267,7 +267,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
             .len();
 
         payload.truncate(plain_len);
-        msg.into_tls13_unpadded_message()
+        record.into_tls13_unpadded_record()
     }
 }
 

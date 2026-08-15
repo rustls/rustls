@@ -865,7 +865,7 @@ mod tests {
         Tls13ClientSessionInput, VerifiedIdentity,
     };
     use crate::conn::Connection;
-    use crate::crypto::cipher::EncodedMessage;
+    use crate::crypto::cipher::Record;
     use crate::crypto::hpke::{HpkeAead, HpkeKdf};
     use crate::crypto::{CipherSuite, GetRandomFailed, Identity, TEST_PROVIDER, tls13_only};
     use crate::msgs::{
@@ -1090,7 +1090,7 @@ mod tests {
         fn client_hello_in(bytes: &[u8]) -> ClientHelloPayload {
             let mut reader = Reader::new(bytes);
             while reader.any_left() {
-                let encoded = EncodedMessage::<Payload<'_>>::read(&mut reader)
+                let record = Record::<Payload<'_>>::read(&mut reader)
                     .unwrap()
                     .into_owned();
                 if let Ok(Message {
@@ -1100,7 +1100,7 @@ mod tests {
                             ..
                         },
                     ..
-                }) = Message::try_from(&encoded)
+                }) = Message::try_from(&record)
                 {
                     return ch;
                 }

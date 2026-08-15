@@ -3,9 +3,9 @@ use alloc::boxed::Box;
 use pki_types::FipsStatus;
 use ring::aead;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter,
-    MessageEncrypter, NONCE_LEN, Nonce, OutboundPlain, Tls12AeadAlgorithm,
-    UnsupportedOperationError, make_tls12_aad,
+    AeadKey, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
+    NONCE_LEN, Nonce, OutboundPlain, Record, Tls12AeadAlgorithm, UnsupportedOperationError,
+    make_tls12_aad,
 };
 use rustls::crypto::kx::KeyExchangeAlgorithm;
 use rustls::crypto::tls12::PrfUsingHmac;
@@ -257,10 +257,10 @@ const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 impl MessageDecrypter for GcmMessageDecrypter {
     fn decrypt<'a>(
         &mut self,
-        mut msg: EncodedMessage<InboundOpaque<'a>>,
+        mut record: Record<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let payload = &msg.payload;
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let payload = &record.payload;
         if payload.len() < GCM_OVERHEAD {
             return Err(Error::DecryptError);
         }
@@ -274,12 +274,12 @@ impl MessageDecrypter for GcmMessageDecrypter {
 
         let aad = aead::Aad::from(make_tls12_aad(
             seq,
-            msg.typ,
-            msg.version.version(),
+            record.typ,
+            record.version.version(),
             payload.len() - GCM_OVERHEAD,
         ));
 
-        let payload = &mut msg.payload;
+        let payload = &mut record.payload;
         let plain_len = self
             .dec_key
             .open_within(nonce, aad, payload, GCM_EXPLICIT_NONCE_LEN..)
@@ -291,29 +291,29 @@ impl MessageDecrypter for GcmMessageDecrypter {
         }
 
         payload.truncate(plain_len);
-        Ok(msg.into_plain_message())
+        Ok(record.into_plain_record())
     }
 }
 
 impl MessageEncrypter for GcmMessageEncrypter {
     fn encrypt<'a>(
         &mut self,
-        msg: EncodedMessage<OutboundPlain<'_>>,
+        record: Record<OutboundPlain<'_>>,
         seq: u64,
         out: &'a mut [u8],
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let total_len = self.encrypted_payload_len(msg.payload.len());
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let total_len = self.encrypted_payload_len(record.payload.len());
         let mut payload = EncryptBuffer::new(out, total_len)?;
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
         let aad = aead::Aad::from(make_tls12_aad(
             seq,
-            msg.typ,
-            msg.version.encode(),
-            msg.payload.len(),
+            record.typ,
+            record.version.encode(),
+            record.payload.len(),
         ));
         payload.extend_from_slice(&nonce.as_ref()[4..]);
-        payload.extend_from_chunks(&msg.payload);
+        payload.extend_from_chunks(&record.payload);
 
         match self.enc_key.seal_in_place_separate_tag(
             nonce,
@@ -324,9 +324,9 @@ impl MessageEncrypter for GcmMessageEncrypter {
             Err(_) => return Err(Error::EncryptError),
         }
 
-        Ok(EncodedMessage {
-            typ: msg.typ,
-            version: msg.version,
+        Ok(Record {
+            typ: record.typ,
+            version: record.version,
             payload: payload.into_written(),
         })
     }
@@ -357,10 +357,10 @@ const CHACHAPOLY1305_OVERHEAD: usize = 16;
 impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
     fn decrypt<'a>(
         &mut self,
-        mut msg: EncodedMessage<InboundOpaque<'a>>,
+        mut record: Record<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let payload = &msg.payload;
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let payload = &record.payload;
 
         if payload.len() < CHACHAPOLY1305_OVERHEAD {
             return Err(Error::DecryptError);
@@ -370,12 +370,12 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
             aead::Nonce::assume_unique_for_key(Nonce::new(&self.dec_offset, seq).to_array()?);
         let aad = aead::Aad::from(make_tls12_aad(
             seq,
-            msg.typ,
-            msg.version.version(),
+            record.typ,
+            record.version.version(),
             payload.len() - CHACHAPOLY1305_OVERHEAD,
         ));
 
-        let payload = &mut msg.payload;
+        let payload = &mut record.payload;
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, payload)
@@ -387,29 +387,29 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         }
 
         payload.truncate(plain_len);
-        Ok(msg.into_plain_message())
+        Ok(record.into_plain_record())
     }
 }
 
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
     fn encrypt<'a>(
         &mut self,
-        msg: EncodedMessage<OutboundPlain<'_>>,
+        record: Record<OutboundPlain<'_>>,
         seq: u64,
         out: &'a mut [u8],
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let total_len = self.encrypted_payload_len(msg.payload.len());
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let total_len = self.encrypted_payload_len(record.payload.len());
         let mut payload = EncryptBuffer::new(out, total_len)?;
 
         let nonce =
             aead::Nonce::assume_unique_for_key(Nonce::new(&self.enc_offset, seq).to_array()?);
         let aad = aead::Aad::from(make_tls12_aad(
             seq,
-            msg.typ,
-            msg.version.encode(),
-            msg.payload.len(),
+            record.typ,
+            record.version.encode(),
+            record.payload.len(),
         ));
-        payload.extend_from_chunks(&msg.payload);
+        payload.extend_from_chunks(&record.payload);
 
         match self
             .enc_key
@@ -419,9 +419,9 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
             Err(_) => return Err(Error::EncryptError),
         }
 
-        Ok(EncodedMessage {
-            typ: msg.typ,
-            version: msg.version,
+        Ok(Record {
+            typ: record.typ,
+            version: record.version,
             payload: payload.into_written(),
         })
     }

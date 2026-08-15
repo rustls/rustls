@@ -2,8 +2,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use crate::crypto::cipher::{
-    EncodableVersion, EncodedMessage, EncryptionState, MessageEncrypter, OutboundPlain, Payload,
-    PreEncryptAction,
+    EncodableVersion, EncryptionState, MessageEncrypter, OutboundPlain, Payload, PreEncryptAction,
+    Record,
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
@@ -90,7 +90,7 @@ impl SendPath {
     /// Encrypt and queue each fragment in `iter`.
     fn send_messages<'a, const MUST_ENCRYPT: bool>(
         &mut self,
-        iter: impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>>,
+        iter: impl ExactSizeIterator<Item = Record<OutboundPlain<'a>>>,
         tls: &mut Vec<u8>,
     ) {
         self.perhaps_write_key_update(tls);
@@ -107,10 +107,10 @@ impl SendPath {
             tls.reserve(count * record_len);
         }
 
-        for m in iter {
+        for record in iter {
             // Alerts are always sendable -- never quashed by a PreEncryptAction.
             if MUST_ENCRYPT
-                && m.typ != ContentType::Alert
+                && record.typ != ContentType::Alert
                 && self.preflight_encrypt(0, tls).is_err()
             {
                 return;
@@ -119,8 +119,8 @@ impl SendPath {
             match MUST_ENCRYPT {
                 true => self
                     .encrypt_state
-                    .encrypt_outgoing(m, tls),
-                false => m.encode_unencrypted(tls),
+                    .encrypt_outgoing(record, tls),
+                false => record.encode_unencrypted(tls),
             }
         }
     }
@@ -182,10 +182,10 @@ impl SendOutput for SendPath {
             return;
         }
 
-        let message = EncodedMessage::<Payload<'static>>::from(Message::build_key_update_notify());
+        let record = Record::<Payload<'static>>::from(Message::build_key_update_notify());
         let mut queued = Vec::new();
         self.encrypt_state
-            .encrypt_outgoing(message.borrow_outbound(), &mut queued);
+            .encrypt_outgoing(record.borrow_outbound(), &mut queued);
         self.key_update_remote = KeyUpdateRemote::Queued(queued);
 
         if let Some(mut ks) = self.tls13_key_schedule.take() {
@@ -230,11 +230,11 @@ impl SendOutput for SendPath {
 
     /// Send a raw TLS message, fragmenting it if needed.
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, tls: &mut Vec<u8>) {
-        let encoded = EncodedMessage::from(m);
+        let record = Record::from(m);
         let fragments = self.message_fragmenter.fragment(
-            encoded.typ,
-            encoded.version,
-            encoded.payload.bytes().into(),
+            record.typ,
+            record.version,
+            record.payload.bytes().into(),
             self.encrypt_state
                 .encrypted_record_overhead(),
         );

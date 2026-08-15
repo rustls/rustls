@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use pki_types::{DnsName, FipsStatus, SubjectPublicKeyInfoDer};
 use provider::cipher_suite;
 use rustls::client::Resumption;
-use rustls::crypto::cipher::{EncodableVersion, EncodedMessage, Payload};
+use rustls::crypto::cipher::{EncodableVersion, Payload, Record};
 use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{
     CipherSuite, Credentials, CryptoProvider, Identity, InconsistentKeys, SelectedCredential,
@@ -727,7 +727,7 @@ fn server_rejects_empty_post_handshake_alert_fragment() {
     // Per RFC 9846 section 5.4, empty handshake and alert fragments must be rejected.
     let mut raw_client = RawTls::new_client(client);
     raw_client.encrypt_and_send(
-        &EncodedMessage {
+        &Record {
             typ: ContentType::Alert,
             version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
             payload: Payload::new(vec![]),
@@ -1380,9 +1380,9 @@ fn connection_types_are_not_huge() {
 
 #[test]
 fn test_client_rejects_illegal_tls13_ccs() {
-    fn corrupt_ccs(msg: &mut EncodedMessage<Vec<u8>>) -> Altered {
-        if msg.typ == ContentType::ChangeCipherSpec {
-            println!("seen CCS {:?}", msg.typ);
+    fn corrupt_ccs(record: &mut Record<Vec<u8>>) -> Altered {
+        if record.typ == ContentType::ChangeCipherSpec {
+            println!("seen CCS {:?}", record.typ);
             return Altered::Raw(encoding::message_framing(
                 ContentType::ChangeCipherSpec,
                 ProtocolVersion::TLSv1_2,
@@ -1582,8 +1582,8 @@ fn test_client_construction_requires_66_bytes_of_random_material() {
 
 #[test]
 fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message() {
-    fn inject_corrupt_finished_message(msg: &mut EncodedMessage<Vec<u8>>) -> Altered {
-        if msg.typ == ContentType::ChangeCipherSpec {
+    fn inject_corrupt_finished_message(record: &mut Record<Vec<u8>>) -> Altered {
+        if record.typ == ContentType::ChangeCipherSpec {
             // interdict "real" ChangeCipherSpec with its encoding, plus a faulty encrypted Finished.
             let mut raw_change_cipher_spec = encoding::message_framing(
                 ContentType::ChangeCipherSpec,
@@ -1800,7 +1800,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls13_handshake() {
 
     let mut raw_server = RawTls::new_server(server);
 
-    let msg = EncodedMessage {
+    let record = Record {
         typ: ContentType::Handshake,
         version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: Payload::new(encoding::handshake_framing(
@@ -1808,7 +1808,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls13_handshake() {
             vec![],
         )),
     };
-    raw_server.encrypt_and_send(&msg, &mut client_input);
+    raw_server.encrypt_and_send(&record, &mut client_input);
     let err = client
         .process_new_packets(&mut client_input, &mut client_output)
         .handle_all(&mut Vec::new())
@@ -1846,7 +1846,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
 
     let mut raw_server = RawTls::new_server(server);
 
-    let msg = EncodedMessage {
+    let record = Record {
         typ: ContentType::Handshake,
         version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: Payload::new(encoding::handshake_framing(
@@ -1856,7 +1856,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
     };
 
     // one is allowed (and elicits a warning alert)
-    raw_server.encrypt_and_send(&msg, &mut client_input);
+    raw_server.encrypt_and_send(&record, &mut client_input);
     client
         .process_new_packets(&mut client_input, &mut client_output)
         .handle_all(&mut Vec::new())
@@ -1868,7 +1868,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
     });
 
     // second is fatal
-    raw_server.encrypt_and_send(&msg, &mut client_input);
+    raw_server.encrypt_and_send(&record, &mut client_input);
     assert_eq!(
         client
             .process_new_packets(&mut client_input, &mut client_output)
@@ -1902,12 +1902,12 @@ fn test_illegal_client_renegotiation_attempt_after_tls13_handshake() {
 
     let mut raw_client = RawTls::new_client(client);
 
-    let msg = EncodedMessage {
+    let record = Record {
         typ: ContentType::Handshake,
         version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: Payload::new(encoding::basic_client_hello(vec![])),
     };
-    raw_client.encrypt_and_send(&msg, &mut server_input);
+    raw_client.encrypt_and_send(&record, &mut server_input);
     let err = server
         .process_new_packets(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
@@ -2093,14 +2093,14 @@ fn server_invalid_sni_policy() {
     const SERVER_NAME_BAD: &str = "[XXXxxxXXX]";
     const SERVER_NAME_IPV4: &str = "10.11.12.13";
 
-    fn replace_sni(sni_replacement: &str) -> impl Fn(&mut EncodedMessage<Vec<u8>>) -> Altered + '_ {
+    fn replace_sni(sni_replacement: &str) -> impl Fn(&mut Record<Vec<u8>>) -> Altered + '_ {
         assert_eq!(sni_replacement.len(), SERVER_NAME_GOOD.len());
-        move |m: &mut EncodedMessage<Vec<u8>>| {
-            if m.typ != ContentType::Handshake {
+        move |record: &mut Record<Vec<u8>>| {
+            if record.typ != ContentType::Handshake {
                 return Altered::InPlace;
             }
 
-            let Some(start) = m
+            let Some(start) = record
                 .payload
                 .windows(SERVER_NAME_GOOD.len())
                 .position(|w| w == SERVER_NAME_GOOD.as_bytes())
@@ -2108,7 +2108,7 @@ fn server_invalid_sni_policy() {
                 return Altered::InPlace;
             };
 
-            m.payload[start..][..SERVER_NAME_GOOD.len()]
+            record.payload[start..][..SERVER_NAME_GOOD.len()]
                 .copy_from_slice(sni_replacement.as_bytes());
             Altered::InPlace
         }
