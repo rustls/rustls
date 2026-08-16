@@ -772,17 +772,15 @@ impl<const KEY_SIZE: usize> KeySchedule<KEY_SIZE> {
         //     raise MessageLimitReachedError
         //   self.seq += 1
 
-        // Determine the maximum sequence number using the AEAD nonce's length in bits.
-        // Do this as an u128 to prevent overflowing.
-        let max_seq_num = (1u128 << (NONCE_LEN * 8)) - 1;
-
-        // Promote the u32 sequence number to an u128 and compare against the maximum allowed
-        // sequence number.
-        if u128::from(self.seq_num) >= max_seq_num {
-            return Err(aws_lc_rs::error::Unspecified);
-        }
-
-        self.seq_num += 1;
+        // `seq_num` is a `u32`, and `compute_nonce` only mixes those four bytes into
+        // the nonce, so the usable sequence space ends at `u32::MAX` -- far below the
+        // RFC's `(1 << (8*Nn)) - 1` limit, which a `u32` can never reach. Refuse to
+        // advance past it rather than wrapping back to zero, which would recompute an
+        // already-used nonce and repeat a (key, nonce) pair.
+        self.seq_num = self
+            .seq_num
+            .checked_add(1)
+            .ok_or(aws_lc_rs::error::Unspecified)?;
         Ok(())
     }
 }
@@ -1037,6 +1035,21 @@ mod tests {
                 ),
             }
         }
+    }
+
+    #[test]
+    fn seq_num_does_not_wrap() {
+        // At the last representable sequence number the context must refuse to
+        // advance. Otherwise `seq_num` wraps back to zero and `compute_nonce`
+        // reproduces the nonce already used at seq 0, reusing a (key, nonce) pair.
+        let mut ks = KeySchedule::<AES_128_KEY_LEN> {
+            aead: &aead::AES_128_GCM,
+            key: AeadKey([0u8; AES_128_KEY_LEN]),
+            base_nonce: [0u8; NONCE_LEN],
+            seq_num: u32::MAX,
+        };
+        assert!(ks.increment_seq_num().is_err());
+        assert_eq!(ks.seq_num, u32::MAX);
     }
 }
 
