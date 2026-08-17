@@ -13,7 +13,7 @@ use crate::common_state::{
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Connection, ConnectionCommon, KeyingMaterialExporter, MessageHandler, MessageIter, SideData,
+    Connection, ConnectionCommon, KeyingMaterialExporter, MessageHandler, NeedsInput, SideData,
     StateMachine, TlsInputBuffer,
 };
 #[cfg(doc)]
@@ -202,7 +202,7 @@ impl fmt::Debug for ServerConnection {
 #[derive(Debug)]
 pub enum ServerHandshake {
     /// More data needs to be received to make progress.
-    NeedsInput(NeedsInput),
+    NeedsInput(NeedsInput<ServerSide>),
 
     /// A complete `ClientHello` has been received.
     ///
@@ -231,7 +231,7 @@ impl ServerHandshake {
     /// [`ServerHandshake`].
     ///
     /// The returned object should be fed data from a single potential client.
-    pub fn start() -> NeedsInput {
+    pub fn start() -> NeedsInput<ServerSide> {
         NeedsInput {
             inner: ConnectionCommon::for_acceptor(Protocol::Tcp),
         }
@@ -267,71 +267,6 @@ impl TryFrom<ConnectionCommon<ServerSide>> for ServerHandshake {
                 Self::NeedsInput(NeedsInput { inner })
             }
         })
-    }
-}
-
-/// More data needs to be supplied to make progress.
-///
-/// Provide the data to [`Self::process()`].
-pub struct NeedsInput {
-    inner: ConnectionCommon<ServerSide>,
-}
-
-impl NeedsInput {
-    /// Progress the handshake by receiving further data.
-    ///
-    /// The data is obtained via `input`.  Any output produced is appended to `output` and
-    /// should be sent to the peer (including if this function returns an error, because
-    /// the `output` may contain an alert.)
-    ///
-    /// An error from this function is otherwise fatal to the connection, as it consumes
-    /// the [`NeedsInput`] object.
-    ///
-    /// On success, this returns a [`ServerHandshake`] specifying what to do to progress
-    /// the connection.  If this is a [`ServerHandshake::NeedsInput`] then obtaining more
-    /// input (eg, from a socket or other source) is certainly necessary.
-    pub fn process(
-        mut self,
-        input: &mut dyn TlsInputBuffer,
-        tls: &mut Vec<u8>,
-    ) -> Result<ServerHandshake, Error> {
-        let mut iter = MessageIter::new(input, tls, None, &mut self.inner, false);
-        let r = loop {
-            match iter.next() {
-                Some(Ok(_)) => {}
-                Some(Err(e)) => break Err(e),
-                None => break Ok(()),
-            };
-
-            // end loop as soon as traffic state is entered, as the above loop drops
-            // incoming appdata.
-            if iter
-                .state()
-                .as_ref()
-                .map(|st| st.is_traffic())
-                .unwrap_or_default()
-            {
-                break Ok(());
-            }
-        };
-
-        input.discard(
-            self.inner
-                .common
-                .recv
-                .deframer
-                .take_discard(),
-        );
-
-        r?;
-        ServerHandshake::try_from(self.inner)
-    }
-}
-
-impl fmt::Debug for NeedsInput {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NeedsInput")
-            .finish_non_exhaustive()
     }
 }
 
@@ -635,7 +570,14 @@ impl SideOutput for ServerConnectionData {
 #[derive(Debug)]
 pub struct ServerSide;
 
-impl SideData for ServerSide {}
+impl SideData for ServerSide {
+    type Handshake = ServerHandshake;
+
+    #[expect(private_interfaces)]
+    fn handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error> {
+        ServerHandshake::try_from(common)
+    }
+}
 
 impl crate::conn::private::Side for ServerSide {
     type Data = ServerConnectionData;

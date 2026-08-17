@@ -123,6 +123,71 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
     fn fips(&self) -> FipsStatus;
 }
 
+/// More data needs to be supplied to make progress.
+///
+/// Provide the data to [`Self::process()`].
+pub struct NeedsInput<Side: SideData> {
+    pub(crate) inner: ConnectionCommon<Side>,
+}
+
+impl<Side: SideData> NeedsInput<Side> {
+    /// Progress the handshake by receiving further data.
+    ///
+    /// The data is obtained via `input`.  Any output produced is appended to `output` and
+    /// should be sent to the peer (including if this function returns an error, because
+    /// the `output` may contain an alert.)
+    ///
+    /// An error from this function is otherwise fatal to the connection, as it consumes
+    /// the [`NeedsInput`] object.
+    ///
+    /// On success, this returns a handshake object specifying what to do to progress
+    /// the connection.  If this contains another [`NeedsInput`] object then obtaining more
+    /// input (eg, from a socket or other source) is certainly necessary.
+    pub fn process(
+        mut self,
+        input: &mut dyn TlsInputBuffer,
+        tls: &mut Vec<u8>,
+    ) -> Result<Side::Handshake, Error> {
+        let mut iter = MessageIter::new(input, tls, None, &mut self.inner, false);
+        let r = loop {
+            match iter.next() {
+                Some(Ok(_)) => {}
+                Some(Err(e)) => break Err(e),
+                None => break Ok(()),
+            };
+
+            // end loop as soon as traffic state is entered, as the above loop drops
+            // incoming appdata.
+            if iter
+                .state()
+                .as_ref()
+                .map(|st| st.is_traffic())
+                .unwrap_or_default()
+            {
+                break Ok(());
+            }
+        };
+
+        input.discard(
+            self.inner
+                .common
+                .recv
+                .deframer
+                .take_discard(),
+        );
+
+        r?;
+        Side::handshake_from_inner(self.inner)
+    }
+}
+
+impl<S: SideData> fmt::Debug for NeedsInput<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NeedsInput")
+            .finish_non_exhaustive()
+    }
+}
+
 /// TLS connection state with side-specific data (`Side`).
 ///
 /// This is one of the core abstractions of the rustls API. It represents a single connection
@@ -553,7 +618,14 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
 
 /// Data specific to the peer's side (client or server).
 #[expect(private_bounds)]
-pub trait SideData: private::Side {}
+pub trait SideData: private::Side + Sized {
+    /// Type representing an in-progress handshake.
+    type Handshake;
+
+    #[doc(hidden)]
+    #[expect(private_interfaces)]
+    fn handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error>;
+}
 
 pub(crate) mod private {
     use super::*;
