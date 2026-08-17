@@ -12,8 +12,8 @@ use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event,
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Connection, ConnectionCommon, KeyingMaterialExporter, MessageHandler, SideCommonOutput,
-    SideData,
+    Connection, ConnectionCommon, KeyingMaterialExporter, MessageHandler, NeedsInput,
+    SideCommonOutput, SideData,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -200,6 +200,18 @@ impl ClientConnectionBuilder {
     }
 }
 
+pub enum ClientHandshake {
+    NeedsInput(NeedsInput<ClientSide>),
+}
+
+impl TryFrom<ConnectionCommon<ClientSide>> for ClientHandshake {
+    type Error = Error;
+
+    fn try_from(inner: ConnectionCommon<ClientSide>) -> Result<Self, Self::Error> {
+        Ok(Self::NeedsInput(NeedsInput { inner }))
+    }
+}
+
 /// Allows writing of early data in resumed TLS 1.3 connections.
 ///
 /// "Early data" is also known as "0-RTT data".
@@ -306,7 +318,14 @@ impl ConnectionCommon<ClientSide> {
 #[derive(Debug)]
 pub struct ClientSide;
 
-impl SideData for ClientSide {}
+impl SideData for ClientSide {
+    type Handshake = ClientHandshake;
+
+    #[expect(private_interfaces)]
+    fn handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error> {
+        ClientHandshake::try_from(common)
+    }
+}
 
 impl crate::conn::private::Side for ClientSide {
     type Data = ClientConnectionData;
