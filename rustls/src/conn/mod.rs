@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::fmt::{self, Debug};
+use core::fmt;
 use core::ops::{Deref, DerefMut};
 
 use kernel::KernelConnection;
@@ -33,7 +33,7 @@ pub(crate) mod split;
 use split::SplitConnection;
 
 /// A trait generalizing over buffered client or server connections.
-pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
+pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
     /// The side (client or server) that this type implements.
     type Side: SideData;
 
@@ -400,7 +400,7 @@ impl<'a, 'm, Side: SideData + private::Side> Drop for MessageHandler<'a, 'm, Sid
     }
 }
 
-impl<S: SideData> Debug for MessageHandler<'_, '_, S> {
+impl<S: SideData> fmt::Debug for MessageHandler<'_, '_, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MessageHandler")
             .field("done", &self.done)
@@ -446,7 +446,7 @@ impl KeyingMaterialExporter {
     }
 }
 
-impl Debug for KeyingMaterialExporter {
+impl fmt::Debug for KeyingMaterialExporter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("KeyingMaterialExporter")
             .finish_non_exhaustive()
@@ -574,7 +574,7 @@ pub trait SideData: private::Side {}
 pub(crate) mod private {
     use super::*;
 
-    pub(crate) trait Side: Debug {
+    pub(crate) trait Side: fmt::Debug {
         /// Data storage type.
         type Data: SideOutput;
         /// State machine type.
