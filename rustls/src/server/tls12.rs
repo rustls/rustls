@@ -14,7 +14,7 @@ use crate::ConnectionTrafficSecrets;
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
-use crate::conn::{ConnectionRandoms, Input};
+use crate::conn::{ConnectionRandoms, Input, VerifyPeerIdentityInternal};
 use crate::crypto::cipher::{EncodableVersion, Payload, RecordDecrypter, RecordEncrypter};
 use crate::crypto::kx::{ActiveKeyExchange, SupportedKxGroup};
 use crate::crypto::{Identity, TicketProducer};
@@ -28,7 +28,7 @@ use crate::msgs::{
     HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload, Message, MessagePayload,
     NewSessionTicketPayload, NewSessionTicketPayloadTls13, Reader, SessionId,
 };
-use crate::server::hs::{VerifyClientIdentity, VerifyClientIdentityInternal};
+use crate::server::ServerSide;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
@@ -594,7 +594,7 @@ struct AwaitClientIdentityVerification {
     peer_identity: Identity<'static>,
 }
 
-impl VerifyClientIdentityInternal for AwaitClientIdentityVerification {
+impl VerifyPeerIdentityInternal<ServerSide> for AwaitClientIdentityVerification {
     fn presented_identity(&self) -> Result<ClientIdentity<'static, '_>, Error> {
         Ok(ClientIdentity {
             identity: &self.peer_identity,
@@ -629,9 +629,7 @@ impl VerifyClientIdentityInternal for AwaitClientIdentityVerification {
 
 impl From<Box<AwaitClientIdentityVerification>> for ServerState {
     fn from(value: Box<AwaitClientIdentityVerification>) -> Self {
-        Self::VerifyClientIdentity(VerifyClientIdentity::from(
-            value as Box<dyn VerifyClientIdentityInternal>,
-        ))
+        Self::VerifyClientIdentity(value as Box<dyn VerifyPeerIdentityInternal<ServerSide>>)
     }
 }
 

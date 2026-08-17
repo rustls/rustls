@@ -21,9 +21,7 @@ pub use config::{
 };
 
 mod connection;
-pub use connection::{
-    Accepted, ReadEarlyData, ServerConnection, ServerHandshake, ServerSide, VerifyClientIdentity,
-};
+pub use connection::{Accepted, ReadEarlyData, ServerConnection, ServerHandshake, ServerSide};
 
 pub(crate) mod handy;
 #[cfg(feature = "webpki")]
@@ -31,9 +29,7 @@ pub use handy::ServerNameResolver;
 pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
 
 mod hs;
-pub(crate) use hs::{
-    ChooseConfig, ServerHandler, ServerState, VerifyClientIdentity as HandshakeVerifyClientIdentity,
-};
+pub(crate) use hs::{ChooseConfig, ServerHandler, ServerState};
 
 mod tls12;
 pub(crate) use tls12::TLS12_HANDLER;
