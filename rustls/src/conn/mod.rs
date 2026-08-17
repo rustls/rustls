@@ -8,7 +8,9 @@ use pki_types::FipsStatus;
 
 use crate::common_state::{
     CommonState, ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent,
+    maybe_send_fatal_alert,
 };
+use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
@@ -186,6 +188,98 @@ impl<S: SideData> fmt::Debug for NeedsInput<S> {
         f.debug_struct("NeedsInput")
             .finish_non_exhaustive()
     }
+}
+
+/// The peer's presented identity must be verified.
+///
+/// The caller has three choices:
+///
+/// - Call [`Self::with_config()`].  This calls the configured verifier trait
+///   ([`ClientVerifier::verify_identity()`][] or [`ServerVerifier::verify_identity()`][])
+///   synchronously.
+///
+/// - Call [`Self::presented_identity()`] to obtain the peer's presented identity,
+///   verify that outside the library (perhaps asynchronously), and then continue the handshake with
+///   [`Self::continue_with()`].
+///
+///   If the verification fails, the error can be passed into [`Self::continue_with()`] to follow
+///   a uniform error handling path.
+///
+/// - Abandon the handshake by discarding this object.
+///
+/// The returned object is a further handshake state for this side.  Commonly this will
+/// contain a [`NeedsInput`] which will accept and process further data.
+///
+/// [`ClientVerifier::verify_identity()`]: crate::verify::ClientVerifier::verify_identity
+/// [`ServerVerifier::verify_identity()`]: crate::verify::ServerVerifier::verify_identity
+pub struct VerifyPeerIdentity<Side: SideData> {
+    // invariant: `inner.state` is `Err(_)` and requires restoring
+    pub(crate) inner: ConnectionCommon<Side>,
+    pub(crate) verify_identity: Box<dyn VerifyPeerIdentityInternal<Side>>,
+}
+
+impl<Side: SideData> VerifyPeerIdentity<Side> {
+    /// Progress the handshake by calling the pre-configured certificate verification trait.
+    pub fn with_config(self, tls: &mut Vec<u8>) -> Result<Side::Handshake, Error> {
+        Self::next(self.inner, self.verify_identity.with_config(), tls)
+    }
+
+    /// Progress the handshake by incorporating the result of an external verification.
+    ///
+    /// Further data to send to the peer may be appended to `tls`.
+    ///
+    /// If `verification_result` is an error, this error is returned and the handshake terminates.
+    /// An alert may be appended to `tls` for sending to the peer.
+    pub fn continue_with(
+        self,
+        verification_result: Result<VerifiedIdentity<'static>, Error>,
+        tls: &mut Vec<u8>,
+    ) -> Result<Side::Handshake, Error> {
+        Self::next(
+            self.inner,
+            verification_result.and_then(|verified| {
+                self.verify_identity
+                    .continue_with(verified)
+            }),
+            tls,
+        )
+    }
+
+    /// Inspect the identity that the peer has provided.
+    pub fn presented_identity(&self) -> Result<Side::PeerIdentity<'_>, Error> {
+        self.verify_identity
+            .presented_identity()
+    }
+
+    fn next(
+        mut inner: ConnectionCommon<Side>,
+        result: Result<Side::State, Error>,
+        tls: &mut Vec<u8>,
+    ) -> Result<Side::Handshake, Error> {
+        if let Err(err) = &result {
+            maybe_send_fatal_alert(&mut inner.common.send, err, tls);
+        }
+
+        inner.state = result;
+        Side::handshake_from_inner(inner)
+    }
+}
+
+impl<Side: SideData> fmt::Debug for VerifyPeerIdentity<Side> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VerifyPeerIdentity")
+            .finish_non_exhaustive()
+    }
+}
+
+/// Trait to maintain static unreachablity of per-protocol-version code.
+pub(crate) trait VerifyPeerIdentityInternal<Side: SideData>: Send + Sync {
+    fn presented_identity(&self) -> Result<Side::PeerIdentity<'_>, Error>;
+    fn with_config(self: Box<Self>) -> Result<Side::State, Error>;
+    fn continue_with(
+        self: Box<Self>,
+        verified: VerifiedIdentity<'static>,
+    ) -> Result<Side::State, Error>;
 }
 
 /// TLS connection state with side-specific data (`Side`).
@@ -621,6 +715,9 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
 pub trait SideData: private::Side + Sized {
     /// Type representing an in-progress handshake.
     type Handshake;
+
+    /// Type representing the peer's identity.
+    type PeerIdentity<'a>;
 
     #[doc(hidden)]
     #[expect(private_interfaces)]
