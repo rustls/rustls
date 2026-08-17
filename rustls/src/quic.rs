@@ -9,15 +9,16 @@ use crate::TlsInputBuffer;
 use crate::client::ClientSide;
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
-use crate::conn::{ConnectionCommon, KeyingMaterialExporter, MessageIter, SideData, StateMachine};
+use crate::conn::{
+    ConnectionCommon, KeyingMaterialExporter, MessageIter, SideData, StateMachine,
+    VerifySidePeerIdentity,
+};
 use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{Message, MessagePayload, ServerExtensionsInput, TransportParameters};
-use crate::server::{
-    ChooseConfig, ClientHello, HandshakeVerifyClientIdentity, ServerConfig, ServerSide, ServerState,
-};
+use crate::server::{ChooseConfig, ClientHello, ServerConfig, ServerSide, ServerState};
 use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
 use crate::tls13::Tls13CipherSuite;
@@ -541,7 +542,7 @@ fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
 pub struct VerifyClientIdentity {
     // invariant: `inner.state` is `Err(_)` and requires restoring
     inner: QuicCommon<ServerSide>,
-    verify: HandshakeVerifyClientIdentity,
+    verify: Box<dyn VerifySidePeerIdentity<ServerSide>>,
 }
 
 impl VerifyClientIdentity {

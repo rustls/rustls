@@ -8,8 +8,11 @@ use rustls::client::ClientConnection;
 use rustls::crypto::VerifiedIdentity;
 use rustls::enums::ProtocolVersion;
 use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage, PeerMisbehaved};
-use rustls::server::{ServerHandshake, VerifyClientIdentity};
-use rustls::{ClientConfig, Connection, ServerConfig, ServerConnection, SliceInput, VecInput};
+use rustls::server::{ServerHandshake, ServerSide};
+use rustls::{
+    ClientConfig, Connection, ServerConfig, ServerConnection, SliceInput, VecInput,
+    VerifyPeerIdentity,
+};
 use rustls_test::{
     ErrorFromPeer, MockClientVerifier, MultiTest, do_handshake, do_handshake_until_both_error,
     do_handshake_until_error, encoding, make_pair_for_arc_configs,
@@ -256,7 +259,12 @@ fn server_external_verifier_error_sends_alert() {
 fn server_external_verifier_test_setup(
     client_config: Arc<ClientConfig>,
     server_config: Arc<ServerConfig>,
-) -> (VerifyClientIdentity, Vec<u8>, ClientConnection, Vec<u8>) {
+) -> (
+    VerifyPeerIdentity<ServerSide>,
+    Vec<u8>,
+    ClientConnection,
+    Vec<u8>,
+) {
     let mut client_output = Vec::new();
     let mut client = client_config
         .connect(server_name("localhost"))
