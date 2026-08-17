@@ -25,6 +25,7 @@ use crate::quic::QuicOutput;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::tracing::trace;
+use crate::verify::ServerIdentity;
 
 /// This represents a single TLS client connection.
 pub struct ClientConnection {
@@ -320,6 +321,7 @@ pub struct ClientSide;
 
 impl SideData for ClientSide {
     type Handshake = ClientHandshake;
+    type PeerIdentity<'a: 'b, 'b> = ServerIdentity<'a, 'b>;
 
     #[expect(private_interfaces)]
     fn handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error> {
