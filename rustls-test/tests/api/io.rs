@@ -1981,16 +1981,25 @@ fn test_client_handshake() {
                 .unwrap();
             client_output.clear();
 
+            let mut client_input = SliceInput::new(&mut server_output);
             let next = client
-                .process(&mut SliceInput::new(&mut server_output), &mut client_output)
+                .process(&mut client_input, &mut client_output)
                 .unwrap();
-            server_output.clear();
+            let used = client_input.into_used();
+            server_output.drain(..used);
 
             server
                 .process_new_packets(&mut SliceInput::new(&mut client_output), &mut server_output)
                 .handle_all(&mut Vec::new())
                 .unwrap();
             client_output.clear();
+
+            let next = match next {
+                ClientHandshake::VerifyServerIdentity(verify) => verify
+                    .with_config(&mut client_output)
+                    .unwrap(),
+                next => next,
+            };
 
             client = match next {
                 ClientHandshake::NeedsInput(client) => client,

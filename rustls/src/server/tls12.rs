@@ -602,19 +602,20 @@ impl VerifyPeerIdentityInternal<ServerSide> for AwaitClientIdentityVerification 
         })
     }
 
-    fn with_config(self: Box<Self>) -> Result<ServerState, Error> {
+    fn with_config(self: Box<Self>, output: &mut dyn Output<'_>) -> Result<ServerState, Error> {
         let peer_identity = self
             .hs
             .config
             .verifier
             .verify_identity(&self.presented_identity()?)?;
 
-        self.continue_with(peer_identity)
+        self.continue_with(peer_identity, output)
     }
 
     fn continue_with(
         self: Box<Self>,
         peer_identity: VerifiedIdentity<'static>,
+        _output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         Ok(Box::new(ExpectClientKx {
             hs: self.hs,
