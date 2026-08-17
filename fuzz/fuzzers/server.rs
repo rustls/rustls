@@ -7,7 +7,7 @@ use std::io;
 use std::sync::Arc;
 
 use rustls::server::{Accepted, ServerHandshake};
-use rustls::{Connection, ServerConfig, ServerConnection, VecInput};
+use rustls::{Connection, Error, ServerConfig, ServerConnection, VecInput};
 
 fuzz_target!(|data: &[u8]| {
     match data.split_first() {
@@ -39,37 +39,34 @@ fn fuzz_handshake_api(data: &[u8]) {
     loop {
         let rd = input.read(&mut stream).unwrap_or(0);
 
-        server = match server.process(&mut input, &mut output) {
-            Ok(ServerHandshake::Accepted(accepted)) => {
-                fuzz_accepted(&mut stream, &mut input, accepted);
-                break;
-            }
-            Ok(ServerHandshake::NeedsInput(next)) => next,
-            Ok(_) => unreachable!(),
-            Err(_) => {
-                break;
-            }
+        let next = match server.process(&mut input, &mut output) {
+            Ok(ServerHandshake::Accepted(accepted)) => choose_config(accepted, &mut output),
+            other => other,
         };
+
+        server = match next {
+            Ok(ServerHandshake::NeedsInput(next)) => next,
+            // the handshake completed, failed, or reached a state this
+            // configuration cannot produce: nothing more to feed it.
+            Ok(_) | Err(_) => break,
+        };
+
         if rd == 0 {
             break;
         }
     }
 }
 
-fn fuzz_accepted(stream: &mut dyn io::Read, input: &mut VecInput, accepted: Accepted) {
-    let maybe_server = accepted.choose_config(
+fn choose_config(accepted: Accepted, output: &mut Vec<u8>) -> Result<ServerHandshake, Error> {
+    accepted.choose_config(
         Arc::new(
             ServerConfig::builder(rustls_fuzzing_provider::PROVIDER.into())
                 .with_no_client_auth()
                 .with_server_credential_resolver(rustls_fuzzing_provider::server_cert_resolver())
                 .unwrap(),
         ),
-        &mut vec![],
-    );
-
-    if let Ok(ServerHandshake::NeedsInput(next)) = maybe_server {
-        service_connection(stream, input, &mut next.into_buffered_connection());
-    }
+        output,
+    )
 }
 
 fn service_connection(

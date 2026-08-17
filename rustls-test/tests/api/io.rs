@@ -2199,32 +2199,46 @@ fn test_acceptor_continues_tls13_hrr_with_compatibility_ccs() {
     else {
         panic!("unexpected state");
     };
-    let mut server = receive.into_buffered_connection();
-    let mut server_output = Vec::new();
 
-    let mut client_input = VecInput::default();
-    client_input
-        .read(&mut io::Cursor::new(output))
+    client
+        .read_tls(&mut SliceInput::new(&mut output), &mut client_output)
+        .handle_all(&mut Vec::new())
         .unwrap();
+    output.clear();
 
-    do_handshake(
-        &mut client_input,
-        &mut client_output,
-        &mut client,
-        &mut server_input,
-        &mut server_output,
-        &mut server,
-    );
+    let ServerHandshake::NeedsInput(receive) = receive
+        .process(&mut SliceInput::new(&mut client_output), &mut output)
+        .unwrap()
+    else {
+        panic!("unexpected state");
+    };
+    client_output.clear();
+
+    client
+        .read_tls(&mut SliceInput::new(&mut output), &mut client_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    output.clear();
+
+    let ServerHandshake::Complete(server) = receive
+        .process(&mut SliceInput::new(&mut client_output), &mut output)
+        .unwrap()
+    else {
+        panic!("unexpected state");
+    };
 
     assert_eq!(
         client.handshake_kind(),
         Some(HandshakeKind::FullWithHelloRetryRequest)
     );
     assert_eq!(
-        server.handshake_kind(),
+        server.outputs.handshake_kind(),
         Some(HandshakeKind::FullWithHelloRetryRequest)
     );
-    assert_eq!(server.protocol_version(), Some(ProtocolVersion::TLSv1_3));
+    assert_eq!(
+        server.outputs.protocol_version(),
+        Some(ProtocolVersion::TLSv1_3)
+    );
 }
 
 #[test]
