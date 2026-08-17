@@ -14,19 +14,19 @@ use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
     Connection, ConnectionCommon, KeyingMaterialExporter, MessageHandler, NeedsInput, SideData,
-    StateMachine, TlsInputBuffer,
+    StateMachine, TlsInputBuffer, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
 use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::error::Error;
 use crate::msgs::ServerExtensionsInput;
-use crate::server::hs::{self, ChooseConfig, ExpectClientHello, ReadClientHello, ServerState};
+use crate::server::hs::{ChooseConfig, ExpectClientHello, ReadClientHello, ServerState};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::tracing::trace;
 use crate::vecbuf::ChunkVecBuffer;
-use crate::verify::{ClientIdentity, VerifiedIdentity};
+use crate::verify::ClientIdentity;
 
 /// This represents a single TLS server connection.
 ///
@@ -211,8 +211,8 @@ pub enum ServerHandshake {
 
     /// The client's presented identity must be verified.
     ///
-    /// See [`VerifyClientIdentity`] for how to proceed.
-    VerifyClientIdentity(VerifyClientIdentity),
+    /// See [`VerifyPeerIdentity`] for how to proceed.
+    VerifyClientIdentity(VerifyPeerIdentity<ServerSide>),
 
     /// The handshake is complete.
     ///
@@ -250,7 +250,7 @@ impl TryFrom<ConnectionCommon<ServerSide>> for ServerHandshake {
             }),
 
             ServerState::VerifyClientIdentity(verify_identity) => {
-                Self::VerifyClientIdentity(VerifyClientIdentity {
+                Self::VerifyClientIdentity(VerifyPeerIdentity {
                     inner,
                     verify_identity,
                 })
@@ -323,83 +323,6 @@ impl Accepted {
 impl fmt::Debug for Accepted {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Accepted")
-            .finish_non_exhaustive()
-    }
-}
-
-/// The client's presented identity must be verified.
-///
-/// The caller has three choices:
-///
-/// - Call [`Self::with_config()`].  This calls [`ClientVerifier::verify_identity()`][] synchronously.
-///
-/// - Call [`Self::presented_identity()`] to obtain the peer's presented identity,
-///   verify that outside the library (perhaps asynchronously), and then continue the handshake with
-///   [`Self::continue_with()`].
-///
-///   If the verification fails, the error can be passed into [`Self::continue_with()`] to follow
-///   a uniform error handling path.
-///
-/// - Abandon the handshake by discarding this object.
-///
-/// The returned object is a further [`ServerHandshake`].  Commonly this will be a
-/// [`ServerHandshake::NeedsInput`] which will accept and process further data.
-///
-/// [`ClientVerifier::verify_identity()`]: crate::verify::ClientVerifier::verify_identity
-pub struct VerifyClientIdentity {
-    // invariant: `inner.state` is `Err(_)` and requires restoring
-    inner: ConnectionCommon<ServerSide>,
-    verify_identity: hs::VerifyClientIdentity,
-}
-
-impl VerifyClientIdentity {
-    /// Progress the handshake by calling the pre-configured certificate verification trait.
-    pub fn with_config(self, tls: &mut Vec<u8>) -> Result<ServerHandshake, Error> {
-        Self::next(self.inner, self.verify_identity.with_config(), tls)
-    }
-
-    /// Progress the handshake by incorporating the result of an external verification.
-    ///
-    /// If `verification_result` is an error, this error is returned and the handshake terminates.
-    /// An alert may be appended to `tls` for sending to the peer.
-    pub fn continue_with(
-        self,
-        verification_result: Result<VerifiedIdentity<'static>, Error>,
-        tls: &mut Vec<u8>,
-    ) -> Result<ServerHandshake, Error> {
-        Self::next(
-            self.inner,
-            verification_result.and_then(|verified| {
-                self.verify_identity
-                    .continue_with(verified)
-            }),
-            tls,
-        )
-    }
-
-    /// Inspect the identity that the client has provided.
-    pub fn presented_identity(&self) -> Result<ClientIdentity<'static, '_>, Error> {
-        self.verify_identity
-            .presented_identity()
-    }
-
-    fn next(
-        mut inner: ConnectionCommon<ServerSide>,
-        result: Result<ServerState, Error>,
-        tls: &mut Vec<u8>,
-    ) -> Result<ServerHandshake, Error> {
-        if let Err(err) = &result {
-            maybe_send_fatal_alert(&mut inner.common.send, err, tls);
-        }
-
-        inner.state = result;
-        ServerHandshake::try_from(inner)
-    }
-}
-
-impl fmt::Debug for VerifyClientIdentity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("VerifyClientIdentity")
             .finish_non_exhaustive()
     }
 }
@@ -571,6 +494,8 @@ pub struct ServerSide;
 
 impl SideData for ServerSide {
     type Handshake = ServerHandshake;
+
+    type PeerIdentity<'a> = ClientIdentity<'static, 'a>;
 
     #[expect(private_interfaces)]
     fn handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error> {

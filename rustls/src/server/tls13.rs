@@ -14,7 +14,7 @@ use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{Event, HandshakeFlightTls13, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
-use crate::conn::{ConnectionRandoms, Input, TrafficTemperCounters};
+use crate::conn::{ConnectionRandoms, Input, TrafficTemperCounters, VerifyPeerIdentityInternal};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{Identity, rand};
@@ -28,7 +28,8 @@ use crate::msgs::{
     HandshakePayload, KeyUpdateRequest, Message, MessagePayload, NewSessionTicketPayloadTls13,
     PresharedKeyIdentity, Reader, ServerTicketRequestHint, SizedPayload,
 };
-use crate::server::hs::{ExpectClientHello, VerifyClientIdentity, VerifyClientIdentityInternal};
+use crate::server::ServerSide;
+use crate::server::hs::ExpectClientHello;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::{
@@ -1103,7 +1104,7 @@ struct AwaitClientIdentityVerification {
     peer_identity: Identity<'static>,
 }
 
-impl VerifyClientIdentityInternal for AwaitClientIdentityVerification {
+impl VerifyPeerIdentityInternal<ServerSide> for AwaitClientIdentityVerification {
     fn presented_identity(&self) -> Result<ClientIdentity<'static, '_>, Error> {
         Ok(ClientIdentity {
             identity: &self.peer_identity,
@@ -1136,9 +1137,7 @@ impl VerifyClientIdentityInternal for AwaitClientIdentityVerification {
 
 impl From<Box<AwaitClientIdentityVerification>> for ServerState {
     fn from(value: Box<AwaitClientIdentityVerification>) -> Self {
-        Self::VerifyClientIdentity(VerifyClientIdentity::from(
-            value as Box<dyn VerifyClientIdentityInternal>,
-        ))
+        Self::VerifyClientIdentity(value as Box<dyn VerifyPeerIdentityInternal<ServerSide>>)
     }
 }
 
