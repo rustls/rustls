@@ -326,11 +326,6 @@ impl NeedsInput {
         r?;
         ServerHandshake::try_from(self.inner)
     }
-
-    /// Temporary escape hatch during migration to new API.
-    pub fn into_buffered_connection(self) -> ServerConnection {
-        ServerConnection { inner: self.inner }
-    }
 }
 
 impl fmt::Debug for NeedsInput {
