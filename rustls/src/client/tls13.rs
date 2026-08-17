@@ -11,15 +11,15 @@ use super::hs::{
     GroupAndKeyShare, process_alpn_protocol,
 };
 use super::{
-    ClientAuthDetails, ClientHelloDetails, Retrieved, ServerCertDetails, Tls13ClientSessionInput,
-    Tls13Session,
+    ClientAuthDetails, ClientHelloDetails, ClientSide, Retrieved, ServerCertDetails,
+    Tls13ClientSessionInput, Tls13Session,
 };
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{
     EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Output, OutputEvent, Protocol, Side,
 };
 use crate::conn::kernel::KernelState;
-use crate::conn::{ConnectionRandoms, Input, TrafficTemperCounters};
+use crate::conn::{ConnectionRandoms, Input, TrafficTemperCounters, VerifyPeerIdentityInternal};
 use crate::crypto::cipher::{EncodableVersion, Payload};
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
@@ -1157,7 +1157,7 @@ impl ExpectCertificateVerify {
         let handshake_hash = self.hs.transcript.current_hash();
         self.hs.transcript.add_message(&message);
 
-        AwaitServerIdentityVerification {
+        Ok(Box::new(AwaitServerIdentityVerification {
             hs: self.hs,
             suite: self.suite,
             quic_params: self.quic_params,
@@ -1167,8 +1167,8 @@ impl ExpectCertificateVerify {
             peer_identity: presented_identity.into_owned(),
             cert_verify,
             handshake_hash,
-        }
-        .with_config()
+        })
+        .into())
     }
 }
 
@@ -1191,19 +1191,31 @@ struct AwaitServerIdentityVerification {
     handshake_hash: crypto::hash::Output,
 }
 
-impl AwaitServerIdentityVerification {
-    fn with_config(self) -> Result<ClientState, Error> {
+impl VerifyPeerIdentityInternal<ClientSide> for AwaitServerIdentityVerification {
+    fn presented_identity(&self) -> Result<ServerIdentity<'static, '_>, Error> {
+        Ok(ServerIdentity {
+            identity: &self.peer_identity,
+            server_name: &self.hs.session_key.server_name,
+            ocsp_response: &self.ocsp_response,
+            now: self.hs.config.current_time()?,
+        })
+    }
+
+    fn with_config(self: Box<Self>, output: &mut dyn Output<'_>) -> Result<ClientState, Error> {
         let peer_identity = self
             .hs
             .config
             .verifier()
-            .verify_identity(&ServerIdentity {
-                identity: &self.peer_identity,
-                server_name: &self.hs.session_key.server_name,
-                ocsp_response: &self.ocsp_response,
-                now: self.hs.config.current_time()?,
-            })?;
+            .verify_identity(&self.presented_identity()?)?;
 
+        self.continue_with(peer_identity, output)
+    }
+
+    fn continue_with(
+        self: Box<Self>,
+        peer_identity: VerifiedIdentity<'static>,
+        _output: &mut dyn Output<'_>,
+    ) -> Result<ClientState, Error> {
         // 2. Verify their signature on the handshake.
         let sig_verified = self
             .hs
@@ -1228,6 +1240,12 @@ impl AwaitServerIdentityVerification {
             in_early_traffic: false,
         })
         .into())
+    }
+}
+
+impl From<Box<AwaitServerIdentityVerification>> for ClientState {
+    fn from(value: Box<AwaitServerIdentityVerification>) -> Self {
+        Self::VerifyServerIdentity(value as Box<dyn VerifyPeerIdentityInternal<ClientSide>>)
     }
 }
 

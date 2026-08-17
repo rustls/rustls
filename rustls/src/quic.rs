@@ -8,10 +8,10 @@ use pki_types::{DnsName, FipsStatus, ServerName};
 use crate::TlsInputBuffer;
 use crate::client::{ClientConfig, ClientSide};
 pub use crate::common_state::Side;
-use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
+use crate::common_state::{CommonState, ConnectionOutputs, Output, Protocol};
 use crate::conn::{
-    ConnectionCommon, KeyingMaterialExporter, MessageIter, SideData, StateMachine,
-    VerifyPeerIdentityInternal,
+    ConnectionCommon, KeyingMaterialExporter, MessageIter, SideCommonOutput, SideData,
+    StateMachine, VerifyPeerIdentityInternal,
 };
 use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
@@ -609,7 +609,8 @@ pub struct VerifyClientIdentity {
 impl VerifyClientIdentity {
     /// Progress the handshake by calling the pre-configured certificate verification trait.
     pub fn with_config(self) -> Result<ServerHandshake, Error> {
-        Self::next(self.inner, self.verify.with_config())
+        let Self { inner, verify } = self;
+        Self::next(inner, |output| verify.with_config(output))
     }
 
     /// Progress the handshake by incorporating the result of an external verification.
@@ -619,10 +620,10 @@ impl VerifyClientIdentity {
         self,
         verification_result: Result<VerifiedIdentity<'static>, Error>,
     ) -> Result<ServerHandshake, Error> {
-        Self::next(
-            self.inner,
-            verification_result.and_then(|verified| self.verify.continue_with(verified)),
-        )
+        let Self { inner, verify } = self;
+        Self::next(inner, |output| {
+            verification_result.and_then(|verified| verify.continue_with(verified, output))
+        })
     }
 
     /// Inspect the identity that the client has provided.
@@ -632,8 +633,19 @@ impl VerifyClientIdentity {
 
     fn next(
         mut inner: QuicCommon<ServerSide>,
-        result: Result<ServerState, Error>,
+        advance: impl FnOnce(&mut dyn Output<'_>) -> Result<ServerState, Error>,
     ) -> Result<ServerHandshake, Error> {
+        let mut tls = Vec::new();
+        let result = advance(&mut SideCommonOutput {
+            side: &mut inner.common.side,
+            quic: Some(&mut inner.quic),
+            common: &mut inner.common.common,
+            tls: &mut tls,
+        });
+
+        // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
+        debug_assert!(tls.is_empty());
+
         inner.common.state = result;
         ServerHandshake::try_from(inner)
     }

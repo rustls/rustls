@@ -162,10 +162,10 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
             }
 
             if self.advance && !st.wants_input() {
-                st = match st.handle_without_input() {
+                st = match st.handle_without_input(&mut output) {
                     Ok(st) => st,
                     Err(err) => {
-                        maybe_send_fatal_alert(self.output.send, &err, self.tls);
+                        maybe_send_fatal_alert(output.other.send, &err, output.tls);
                         *self.state = Err(err.clone());
                         return Some(Err(err));
                     }

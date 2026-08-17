@@ -5,14 +5,14 @@ use core::{fmt, mem};
 use pki_types::{FipsStatus, ServerName};
 
 use super::config::ClientConfig;
-use super::hs::ClientHelloInput;
+use super::hs::{ClientHelloInput, ClientState};
 use crate::client::EchStatus;
 use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
     Connection, ConnectionCommon, KeyingMaterialExporter, MessageHandler, SideCommonOutput,
-    SideData, StateMachine,
+    SideData, StateMachine, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -239,6 +239,11 @@ pub enum ClientHandshake {
     /// More data needs to be received to make progress.
     NeedsInput(NeedsInput<ClientSide>),
 
+    /// The server's presented identity must be verified.
+    ///
+    /// See [`VerifyPeerIdentity`] for how to proceed.
+    VerifyServerIdentity(VerifyPeerIdentity<ClientSide>),
+
     /// The handshake is complete.
     ///
     /// Now see [`SplitConnection`] to continue the connection.
@@ -252,6 +257,13 @@ impl TryFrom<ConnectionCommon<ClientSide>> for ClientHandshake {
         const MISUSED: Error = Error::Unreachable("forgot to restore state");
 
         Ok(match mem::replace(&mut inner.state, Err(MISUSED))? {
+            ClientState::VerifyServerIdentity(verify_identity) => {
+                Self::VerifyServerIdentity(VerifyPeerIdentity {
+                    inner,
+                    verify_identity,
+                })
+            }
+
             state if state.is_traffic() => {
                 inner.state = Ok(state);
                 Self::Complete(SplitConnection::try_from(inner)?)
@@ -384,7 +396,7 @@ impl SideData for ClientSide {
 
 impl crate::conn::private::Side for ClientSide {
     type Data = ClientConnectionData;
-    type State = super::hs::ClientState;
+    type State = ClientState;
 }
 
 impl SideOutput for ClientConnectionData {
