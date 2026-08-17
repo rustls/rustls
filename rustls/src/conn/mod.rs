@@ -232,7 +232,12 @@ pub struct VerifyPeerIdentity<Side: SideData> {
 impl<Side: SideData> VerifyPeerIdentity<Side> {
     /// Progress the handshake by calling the pre-configured certificate verification trait.
     pub fn with_config(self, tls: &mut Vec<u8>) -> Result<Side::Handshake, Error> {
-        Self::next(self.inner, self.verify_identity.with_config(), tls)
+        let Self {
+            inner,
+            verify_identity,
+        } = self;
+
+        Self::next(inner, |output| verify_identity.with_config(output), tls)
     }
 
     /// Progress the handshake by incorporating the result of an external verification.
@@ -246,12 +251,17 @@ impl<Side: SideData> VerifyPeerIdentity<Side> {
         verification_result: Result<VerifiedIdentity<'static>, Error>,
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
+        let Self {
+            inner,
+            verify_identity,
+        } = self;
+
         Self::next(
-            self.inner,
-            verification_result.and_then(|verified| {
-                self.verify_identity
-                    .continue_with(verified)
-            }),
+            inner,
+            |output| {
+                verification_result
+                    .and_then(|verified| verify_identity.continue_with(verified, output))
+            },
             tls,
         )
     }
@@ -264,9 +274,16 @@ impl<Side: SideData> VerifyPeerIdentity<Side> {
 
     fn next(
         mut inner: ConnectionCommon<Side>,
-        result: Result<Side::State, Error>,
+        advance: impl FnOnce(&mut dyn Output<'_>) -> Result<Side::State, Error>,
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
+        let result = advance(&mut SideCommonOutput {
+            side: &mut inner.side,
+            quic: None,
+            common: &mut inner.common,
+            tls,
+        });
+
         if let Err(err) = &result {
             maybe_send_fatal_alert(&mut inner.common.send, err, tls);
         }
@@ -286,10 +303,11 @@ impl<Side: SideData> fmt::Debug for VerifyPeerIdentity<Side> {
 /// Trait to maintain static unreachablity of per-protocol-version code.
 pub(crate) trait VerifyPeerIdentityInternal<Side: SideData>: Send + Sync {
     fn presented_identity(&self) -> Result<Side::PeerIdentity<'_>, Error>;
-    fn with_config(self: Box<Self>) -> Result<Side::State, Error>;
+    fn with_config(self: Box<Self>, output: &mut dyn Output<'_>) -> Result<Side::State, Error>;
     fn continue_with(
         self: Box<Self>,
         verified: VerifiedIdentity<'static>,
+        output: &mut dyn Output<'_>,
     ) -> Result<Side::State, Error>;
 }
 
@@ -764,10 +782,10 @@ pub(crate) trait StateMachine: Sized {
     /// Return true if the current state requires input to be provided via `handle()`.
     fn wants_input(&self) -> bool;
 
-    /// Advance the state machine using no input if possible.
+    /// Advance the state machine using no input, emitting data to `output`.
     ///
-    /// This should return `Ok(self)` otherwise.
-    fn handle_without_input(self) -> Result<Self, Error>;
+    /// This should return `Ok(self)` if the current state requires input.
+    fn handle_without_input(self, output: &mut dyn Output<'_>) -> Result<Self, Error>;
 
     fn is_traffic(&self) -> bool;
     fn handle_decrypt_error(&mut self);

@@ -81,9 +81,9 @@ impl crate::conn::StateMachine for ServerState {
         !matches!(self, Self::ChooseConfig(_) | Self::VerifyClientIdentity(_))
     }
 
-    fn handle_without_input(self) -> Result<Self, Error> {
+    fn handle_without_input(self, output: &mut dyn Output<'_>) -> Result<Self, Error> {
         match self {
-            Self::VerifyClientIdentity(vci) => vci.with_config(),
+            Self::VerifyClientIdentity(vci) => vci.with_config(output),
             _ => Ok(self),
         }
     }
