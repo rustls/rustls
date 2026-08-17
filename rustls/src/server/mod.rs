@@ -22,8 +22,7 @@ pub use config::{
 
 mod connection;
 pub use connection::{
-    Accepted, NeedsInput, ReadEarlyData, ServerConnection, ServerHandshake, ServerSide,
-    VerifyClientIdentity,
+    Accepted, ReadEarlyData, ServerConnection, ServerHandshake, ServerSide, VerifyClientIdentity,
 };
 
 pub(crate) mod handy;
