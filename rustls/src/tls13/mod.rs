@@ -57,11 +57,11 @@ pub struct Tls13CipherSuite {
     /// [`crypto::tls13::HkdfUsingHmac`].
     pub hkdf_provider: &'static dyn crypto::tls13::Hkdf,
 
-    /// How to produce a [MessageDecrypter] or [MessageEncrypter]
+    /// How to produce a [RecordDecrypter] or [RecordEncrypter]
     /// from raw key material.
     ///
-    /// [MessageDecrypter]: crate::crypto::cipher::MessageDecrypter
-    /// [MessageEncrypter]: crate::crypto::cipher::MessageEncrypter
+    /// [RecordDecrypter]: crate::crypto::cipher::RecordDecrypter
+    /// [RecordEncrypter]: crate::crypto::cipher::RecordEncrypter
     pub aead_alg: &'static dyn crypto::cipher::Tls13AeadAlgorithm,
 
     /// How to create QUIC header and record protection algorithms

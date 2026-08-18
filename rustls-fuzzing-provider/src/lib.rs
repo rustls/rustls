@@ -5,8 +5,9 @@ use std::sync::Arc;
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::ServerVerifier;
 use rustls::crypto::cipher::{
-    AeadKey, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
-    OutboundPlain, Record, Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError,
+    AeadKey, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape, OutboundPlain, Record,
+    RecordDecrypter, RecordEncrypter, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
+    UnsupportedOperationError,
 };
 use rustls::crypto::kx::{
     KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup,
@@ -266,11 +267,11 @@ const KX_SHARED_SECRET: &[u8] = b"KxSharedSecretKxSharedSecret";
 struct Aead;
 
 impl Tls13AeadAlgorithm for Aead {
-    fn encrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn RecordEncrypter> {
         Box::new(Tls13Cipher)
     }
 
-    fn decrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn RecordDecrypter> {
         Box::new(Tls13Cipher)
     }
 
@@ -288,11 +289,11 @@ impl Tls13AeadAlgorithm for Aead {
 }
 
 impl Tls12AeadAlgorithm for Aead {
-    fn encrypter(&self, _key: AeadKey, _iv: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, _key: AeadKey, _iv: &[u8], _: &[u8]) -> Box<dyn RecordEncrypter> {
         Box::new(Tls12Cipher)
     }
 
-    fn decrypter(&self, _key: AeadKey, _iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, _key: AeadKey, _iv: &[u8]) -> Box<dyn RecordDecrypter> {
         Box::new(Tls12Cipher)
     }
 
@@ -316,7 +317,7 @@ impl Tls12AeadAlgorithm for Aead {
 
 struct Tls13Cipher;
 
-impl MessageEncrypter for Tls13Cipher {
+impl RecordEncrypter for Tls13Cipher {
     fn encrypt<'a>(
         &mut self,
         record: Record<OutboundPlain<'_>>,
@@ -352,7 +353,7 @@ impl MessageEncrypter for Tls13Cipher {
     }
 }
 
-impl MessageDecrypter for Tls13Cipher {
+impl RecordDecrypter for Tls13Cipher {
     fn decrypt<'a>(
         &mut self,
         mut record: Record<InboundOpaque<'a>>,
@@ -386,7 +387,7 @@ impl MessageDecrypter for Tls13Cipher {
 
 struct Tls12Cipher;
 
-impl MessageEncrypter for Tls12Cipher {
+impl RecordEncrypter for Tls12Cipher {
     fn encrypt<'a>(
         &mut self,
         record: Record<OutboundPlain<'_>>,
@@ -420,7 +421,7 @@ impl MessageEncrypter for Tls12Cipher {
     }
 }
 
-impl MessageDecrypter for Tls12Cipher {
+impl RecordDecrypter for Tls12Cipher {
     fn decrypt<'a>(
         &mut self,
         mut record: Record<InboundOpaque<'a>>,

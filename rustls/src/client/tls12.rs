@@ -15,7 +15,7 @@ use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
 use crate::conn::{ConnectionRandoms, Input};
-use crate::crypto::cipher::{EncodableVersion, MessageDecrypter, MessageEncrypter, Payload};
+use crate::crypto::cipher::{EncodableVersion, Payload, RecordDecrypter, RecordEncrypter};
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{Identity, Signer};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
@@ -927,8 +927,8 @@ struct ExpectNewTicket {
     hs: HandshakeState,
     secrets: ConnectionSecrets,
     peer_identity: VerifiedIdentity<'static>,
-    resuming: Option<(Tls12Session, Box<dyn MessageEncrypter>)>,
-    pending_decrypter: Box<dyn MessageDecrypter>,
+    resuming: Option<(Tls12Session, Box<dyn RecordEncrypter>)>,
+    pending_decrypter: Box<dyn RecordDecrypter>,
     sig_verified: HandshakeSignatureValid,
 }
 
@@ -970,8 +970,8 @@ struct ExpectCcs {
     hs: HandshakeState,
     secrets: ConnectionSecrets,
     peer_identity: VerifiedIdentity<'static>,
-    resuming: Option<(Tls12Session, Box<dyn MessageEncrypter>)>,
-    pending_decrypter: Box<dyn MessageDecrypter>,
+    resuming: Option<(Tls12Session, Box<dyn RecordEncrypter>)>,
+    pending_decrypter: Box<dyn RecordDecrypter>,
     ticket: Option<NewSessionTicketPayload>,
     sig_verified: HandshakeSignatureValid,
 }
@@ -999,7 +999,7 @@ impl ExpectCcs {
         output
             .receive()
             .decrypt_state
-            .set_message_decrypter(self.pending_decrypter, &proof);
+            .set_record_decrypter(self.pending_decrypter, &proof);
 
         Ok(Box::new(ExpectFinished {
             hs: self.hs,
@@ -1022,7 +1022,7 @@ impl From<Box<ExpectCcs>> for ClientState {
 pub(super) struct ExpectFinished {
     hs: HandshakeState,
     peer_identity: VerifiedIdentity<'static>,
-    resuming: Option<(Tls12Session, Box<dyn MessageEncrypter>)>,
+    resuming: Option<(Tls12Session, Box<dyn RecordEncrypter>)>,
     ticket: Option<NewSessionTicketPayload>,
     secrets: ConnectionSecrets,
     sig_verified: HandshakeSignatureValid,

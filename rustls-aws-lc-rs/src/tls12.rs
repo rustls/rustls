@@ -3,8 +3,8 @@ use alloc::boxed::Box;
 use aws_lc_rs::{aead, tls_prf};
 use pki_types::FipsStatus;
 use rustls::crypto::cipher::{
-    AeadKey, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
-    NONCE_LEN, Nonce, OutboundPlain, Record, Tls12AeadAlgorithm, UnsupportedOperationError,
+    AeadKey, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape, NONCE_LEN, Nonce, OutboundPlain,
+    Record, RecordDecrypter, RecordEncrypter, Tls12AeadAlgorithm, UnsupportedOperationError,
     make_tls12_aad,
 };
 use rustls::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret};
@@ -149,13 +149,13 @@ pub(crate) static AES256_GCM: GcmAlgorithm = GcmAlgorithm(&aead::AES_256_GCM);
 pub(crate) struct GcmAlgorithm(&'static aead::Algorithm);
 
 impl Tls12AeadAlgorithm for GcmAlgorithm {
-    fn decrypter(&self, dec_key: AeadKey, dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, dec_key: AeadKey, dec_iv: &[u8]) -> Box<dyn RecordDecrypter> {
         // safety: see `encrypter()`.
         let dec_key =
             aead::TlsRecordOpeningKey::new(self.0, aead::TlsProtocolId::TLS12, dec_key.as_ref())
                 .unwrap();
 
-        let mut ret = GcmMessageDecrypter {
+        let mut ret = GcmRecordDecrypter {
             dec_key,
             dec_salt: [0u8; 4],
         };
@@ -170,7 +170,7 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
         enc_key: AeadKey,
         write_iv: &[u8],
         explicit: &[u8],
-    ) -> Box<dyn MessageEncrypter> {
+    ) -> Box<dyn RecordEncrypter> {
         // safety: `TlsRecordSealingKey::new` fails if
         // - `enc_key`'s length is wrong for `algorithm`.  But the length is defined by
         //   `algorithm.key_len()` in `key_block_shape()`, below.
@@ -187,7 +187,7 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
             aead::TlsRecordSealingKey::new(self.0, aead::TlsProtocolId::TLS13, enc_key.as_ref())
                 .unwrap();
         let iv = gcm_iv(write_iv, explicit);
-        Box::new(GcmMessageEncrypter { enc_key, iv })
+        Box::new(GcmRecordEncrypter { enc_key, iv })
     }
 
     fn key_block_shape(&self) -> KeyBlockShape {
@@ -220,21 +220,21 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
 pub(crate) struct ChaCha20Poly1305;
 
 impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
-    fn decrypter(&self, dec_key: AeadKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, dec_key: AeadKey, iv: &[u8]) -> Box<dyn RecordDecrypter> {
         let dec_key = aead::LessSafeKey::new(
             aead::UnboundKey::new(&aead::CHACHA20_POLY1305, dec_key.as_ref()).unwrap(),
         );
-        Box::new(ChaCha20Poly1305MessageDecrypter {
+        Box::new(ChaCha20Poly1305RecordDecrypter {
             dec_key,
             dec_offset: Iv::new(iv).expect("IV length validated by key_block_shape"),
         })
     }
 
-    fn encrypter(&self, enc_key: AeadKey, enc_iv: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, enc_key: AeadKey, enc_iv: &[u8], _: &[u8]) -> Box<dyn RecordEncrypter> {
         let enc_key = aead::LessSafeKey::new(
             aead::UnboundKey::new(&aead::CHACHA20_POLY1305, enc_key.as_ref()).unwrap(),
         );
-        Box::new(ChaCha20Poly1305MessageEncrypter {
+        Box::new(ChaCha20Poly1305RecordEncrypter {
             enc_key,
             enc_offset: Iv::new(enc_iv).expect("IV length validated by key_block_shape"),
         })
@@ -267,14 +267,14 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
     }
 }
 
-/// A `MessageEncrypter` for AES-GCM AEAD ciphersuites. TLS 1.2 only.
-struct GcmMessageEncrypter {
+/// A `RecordEncrypter` for AES-GCM AEAD ciphersuites. TLS 1.2 only.
+struct GcmRecordEncrypter {
     enc_key: aead::TlsRecordSealingKey,
     iv: Iv,
 }
 
-/// A `MessageDecrypter` for AES-GCM AEAD ciphersuites.  TLS1.2 only.
-struct GcmMessageDecrypter {
+/// A `RecordDecrypter` for AES-GCM AEAD ciphersuites.  TLS1.2 only.
+struct GcmRecordDecrypter {
     dec_key: aead::TlsRecordOpeningKey,
     dec_salt: [u8; 4],
 }
@@ -282,7 +282,7 @@ struct GcmMessageDecrypter {
 const GCM_EXPLICIT_NONCE_LEN: usize = 8;
 const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
-impl MessageDecrypter for GcmMessageDecrypter {
+impl RecordDecrypter for GcmRecordDecrypter {
     fn decrypt<'a>(
         &mut self,
         mut record: Record<InboundOpaque<'a>>,
@@ -323,7 +323,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
     }
 }
 
-impl MessageEncrypter for GcmMessageEncrypter {
+impl RecordEncrypter for GcmRecordEncrypter {
     fn encrypt<'a>(
         &mut self,
         msg: Record<OutboundPlain<'_>>,
@@ -387,23 +387,23 @@ impl MessageEncrypter for GcmMessageEncrypter {
 
 /// The RFC 7905/RFC 7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
-/// TLS1.3 uses `TLS13MessageEncrypter`.
-struct ChaCha20Poly1305MessageEncrypter {
+/// TLS1.3 uses `Tls13RecordEncrypter`.
+struct ChaCha20Poly1305RecordEncrypter {
     enc_key: aead::LessSafeKey,
     enc_offset: Iv,
 }
 
 /// The RFC 7905/RFC 7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
-/// TLS1.3 uses `TLS13MessageDecrypter`.
-struct ChaCha20Poly1305MessageDecrypter {
+/// TLS1.3 uses `Tls13RecordDecrypter`.
+struct ChaCha20Poly1305RecordDecrypter {
     dec_key: aead::LessSafeKey,
     dec_offset: Iv,
 }
 
 const CHACHAPOLY1305_OVERHEAD: usize = 16;
 
-impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
+impl RecordDecrypter for ChaCha20Poly1305RecordDecrypter {
     fn decrypt<'a>(
         &mut self,
         mut record: Record<InboundOpaque<'a>>,
@@ -441,7 +441,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
     }
 }
 
-impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
+impl RecordEncrypter for ChaCha20Poly1305RecordEncrypter {
     fn encrypt<'a>(
         &mut self,
         msg: Record<OutboundPlain<'_>>,

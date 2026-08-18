@@ -116,7 +116,7 @@ impl<'a> Record<InboundOpaque<'a>> {
     ///
     /// This should only be used for messages that are known to be in plaintext. Otherwise, the
     /// [`Record<InboundOpaque<'_>>`] should be decrypted into an
-    /// `Record<&'_ [u8]>` using a `MessageDecrypter`.
+    /// `Record<&'_ [u8]>` using a `RecordDecrypter`.
     pub fn into_plain_record_range(self, range: Range<usize>) -> Record<&'a [u8]> {
         Record {
             typ: self.typ,
@@ -129,7 +129,7 @@ impl<'a> Record<InboundOpaque<'a>> {
     ///
     /// This should only be used for messages that are known to be in plaintext. Otherwise, the
     /// [`Record<InboundOpaque<'a>>`] should be decrypted into a
-    /// `Record<&'a [u8]>` using a `MessageDecrypter`.
+    /// `Record<&'a [u8]>` using a `RecordDecrypter`.
     pub fn into_plain_record(self) -> Record<&'a [u8]> {
         Record {
             typ: self.typ,
@@ -374,24 +374,24 @@ impl<'a> From<&'a Vec<u8>> for OutboundPlain<'a> {
     }
 }
 
-/// A fixed-size buffer into which a [`MessageEncrypter`][] writes an encrypted message payload.
+/// A fixed-size buffer into which a [`RecordEncrypter`][] writes an encrypted message payload.
 ///
-/// This wraps the output buffer passed to [`MessageEncrypter::encrypt()`][], tracking how
+/// This wraps the output buffer passed to [`RecordEncrypter::encrypt()`][], tracking how
 /// much of it has been written as the append methods fill it front-to-back. It writes
 /// into caller-owned memory and cannot grow. [`Self::new()`] checks that the caller's
 /// buffer can hold the `len` bytes the encrypter declared, and the append methods then
 /// panic if the writes exceed that length.
 ///
-/// Such a panic always indicates a bug in the `MessageEncrypter` implementation, not a
+/// Such a panic always indicates a bug in the `RecordEncrypter` implementation, not a
 /// runtime condition the caller can handle. The same implementation declares the total
-/// length up front (via [`MessageEncrypter::encrypted_payload_len()`]) and performs the
+/// length up front (via [`RecordEncrypter::encrypted_payload_len()`]) and performs the
 /// writes, so overflowing the buffer means the two disagree. The record layer also
 /// relies on that declared length for framing, so there is no way to recover from the
 /// mismatch after the fact.
 ///
-/// [`MessageEncrypter`]: crate::crypto::cipher::MessageEncrypter
-/// [`MessageEncrypter::encrypt()`]: crate::crypto::cipher::MessageEncrypter::encrypt()
-/// [`MessageEncrypter::encrypted_payload_len()`]: crate::crypto::cipher::MessageEncrypter::encrypted_payload_len()
+/// [`RecordEncrypter`]: crate::crypto::cipher::RecordEncrypter
+/// [`RecordEncrypter::encrypt()`]: crate::crypto::cipher::RecordEncrypter::encrypt()
+/// [`RecordEncrypter::encrypted_payload_len()`]: crate::crypto::cipher::RecordEncrypter::encrypted_payload_len()
 pub struct EncryptBuffer<'a> {
     buf: &'a mut [u8],
     used: usize,
@@ -416,7 +416,7 @@ impl<'a> EncryptBuffer<'a> {
     /// Append bytes from an `OutboundPlain`'s chunks.
     ///
     /// Panics if the write would extend beyond the `len` given to [`Self::new()`],
-    /// which indicates a bug in the calling `MessageEncrypter` implementation (see
+    /// which indicates a bug in the calling `RecordEncrypter` implementation (see
     /// the type-level documentation).
     pub fn extend_from_chunks(&mut self, chunks: &OutboundPlain<'_>) {
         match chunks {
@@ -433,7 +433,7 @@ impl<'a> EncryptBuffer<'a> {
     /// Append bytes from a slice.
     ///
     /// Panics if the write would extend beyond the `len` given to [`Self::new()`],
-    /// which indicates a bug in the calling `MessageEncrypter` implementation (see
+    /// which indicates a bug in the calling `RecordEncrypter` implementation (see
     /// the type-level documentation).
     pub fn extend_from_slice(&mut self, slice: &[u8]) {
         self.buf[self.used..self.used + slice.len()].copy_from_slice(slice);
@@ -456,7 +456,7 @@ impl AsMut<[u8]> for EncryptBuffer<'_> {
 ///
 /// When encountered in an [`Record`], it represents a plaintext payload. It can be
 /// decrypted from an [`InboundOpaque`] or encrypted by a
-/// [`MessageEncrypter`](crate::crypto::cipher::MessageEncrypter), and it is also used for
+/// [`RecordEncrypter`](crate::crypto::cipher::RecordEncrypter), and it is also used for
 /// joining and fragmenting.
 #[non_exhaustive]
 #[derive(Clone, Eq, PartialEq)]

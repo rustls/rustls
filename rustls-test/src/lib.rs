@@ -9,7 +9,7 @@ use rustls::client::{
     ClientSessionKey, ServerVerifierBuilder, Tls13Session, WantsClientCert, WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{
-    EncodableVersion, InboundOpaque, MessageDecrypter, MessageEncrypter, Payload, Record,
+    EncodableVersion, InboundOpaque, Payload, Record, RecordDecrypter, RecordEncrypter,
 };
 use rustls::crypto::kx::{NamedGroup, SupportedKxGroup};
 use rustls::crypto::{
@@ -1451,9 +1451,9 @@ impl ClientVerifier for MockClientVerifier {
 /// It consumes one of the peers, extracts its secrets, and then reconstitutes the
 /// message encrypter/decrypter.  It does not do fragmentation/joining.
 pub struct RawTls {
-    encrypter: Box<dyn MessageEncrypter>,
+    encrypter: Box<dyn RecordEncrypter>,
     enc_seq: u64,
-    decrypter: Box<dyn MessageDecrypter>,
+    decrypter: Box<dyn RecordDecrypter>,
     dec_seq: u64,
 }
 
@@ -1977,8 +1977,8 @@ pub fn certificate_error_expecting_name(expected: &str) -> CertificateError {
 mod plaintext {
     use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
-        AeadKey, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
-        OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError,
+        AeadKey, EncryptBuffer, InboundOpaque, Iv, OutboundPlain, RecordDecrypter, RecordEncrypter,
+        Tls13AeadAlgorithm, UnsupportedOperationError,
     };
 
     use super::*;
@@ -1986,11 +1986,11 @@ mod plaintext {
     pub(super) struct Aead;
 
     impl Tls13AeadAlgorithm for Aead {
-        fn encrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn MessageEncrypter> {
+        fn encrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn RecordEncrypter> {
             Box::new(Encrypter)
         }
 
-        fn decrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn MessageDecrypter> {
+        fn decrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn RecordDecrypter> {
             Box::new(Decrypter)
         }
 
@@ -2009,7 +2009,7 @@ mod plaintext {
 
     struct Encrypter;
 
-    impl MessageEncrypter for Encrypter {
+    impl RecordEncrypter for Encrypter {
         fn encrypt<'a>(
             &mut self,
             record: Record<OutboundPlain<'_>>,
@@ -2033,7 +2033,7 @@ mod plaintext {
 
     struct Decrypter;
 
-    impl MessageDecrypter for Decrypter {
+    impl RecordDecrypter for Decrypter {
         fn decrypt<'a>(
             &mut self,
             record: Record<InboundOpaque<'a>>,

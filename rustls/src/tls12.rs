@@ -8,7 +8,7 @@ use zeroize::Zeroizing;
 
 use crate::common_state::{Protocol, Side};
 use crate::conn::{ConnectionRandoms, Exporter};
-use crate::crypto::cipher::{AeadKey, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm};
+use crate::crypto::cipher::{AeadKey, RecordDecrypter, RecordEncrypter, Tls12AeadAlgorithm};
 use crate::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::crypto::tls12::PrfSecret;
 use crate::crypto::{self, SignatureScheme, hash};
@@ -61,7 +61,7 @@ pub struct Tls12CipherSuite {
     /// The precise scheme used is then chosen from this set by the selected authentication key.
     pub sign: &'static [SignatureScheme],
 
-    /// How to produce a [`MessageDecrypter`] or [`MessageEncrypter`]
+    /// How to produce a [`RecordDecrypter`] or [`RecordEncrypter`]
     /// from raw key material.
     pub aead_alg: &'static dyn Tls12AeadAlgorithm,
 }
@@ -212,9 +212,9 @@ impl ConnectionSecrets {
         }
     }
 
-    /// Make a `MessageCipherPair` based on the given supported ciphersuite `self.suite`,
+    /// Make a `RecordCipherPair` based on the given supported ciphersuite `self.suite`,
     /// and the session's `secrets`.
-    pub(crate) fn make_cipher_pair(&self, side: Side) -> MessageCipherPair {
+    pub(crate) fn make_cipher_pair(&self, side: Side) -> RecordCipherPair {
         // Make a key block, and chop it up.
         // Note: we don't implement any ciphersuites with nonzero mac_key_len.
         let key_block = self.make_key_block();
@@ -398,7 +398,7 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
     randoms
 }
 
-type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
+type RecordCipherPair = (Box<dyn RecordDecrypter>, Box<dyn RecordEncrypter>);
 
 pub(crate) fn decode_kx_params<'a, T: KxDecode<'a>>(
     kx_algorithm: KeyExchangeAlgorithm,

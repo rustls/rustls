@@ -4,8 +4,8 @@ use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
 use pki_types::FipsStatus;
 use rustls::crypto::cipher::{
-    AeadKey, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, Nonce,
-    OutboundPlain, Record, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, EncryptBuffer, InboundOpaque, Iv, Nonce, OutboundPlain, Record, RecordDecrypter,
+    RecordEncrypter, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::crypto::{self, CipherSuite};
@@ -98,17 +98,17 @@ pub static TLS13_AES_128_GCM_SHA256: &Tls13CipherSuite = &Tls13CipherSuite {
 struct Chacha20Poly1305Aead(AeadAlgorithm);
 
 impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
-    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordEncrypter> {
         // safety: the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
-        Box::new(AeadMessageEncrypter {
+        Box::new(AeadRecordEncrypter {
             enc_key: aead::LessSafeKey::new(aead::UnboundKey::new(self.0.0, key.as_ref()).unwrap()),
             iv,
         })
     }
 
-    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordDecrypter> {
         // safety: the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
-        Box::new(AeadMessageDecrypter {
+        Box::new(AeadRecordDecrypter {
             dec_key: aead::LessSafeKey::new(aead::UnboundKey::new(self.0.0, key.as_ref()).unwrap()),
             iv,
         })
@@ -134,11 +134,11 @@ impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
 struct Aes256GcmAead(AeadAlgorithm);
 
 impl Tls13AeadAlgorithm for Aes256GcmAead {
-    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordEncrypter> {
         self.0.encrypter(key, iv)
     }
 
-    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordDecrypter> {
         self.0.decrypter(key, iv)
     }
 
@@ -162,11 +162,11 @@ impl Tls13AeadAlgorithm for Aes256GcmAead {
 struct Aes128GcmAead(AeadAlgorithm);
 
 impl Tls13AeadAlgorithm for Aes128GcmAead {
-    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordEncrypter> {
         self.0.encrypter(key, iv)
     }
 
-    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordDecrypter> {
         self.0.decrypter(key, iv)
     }
 
@@ -192,11 +192,11 @@ struct AeadAlgorithm(&'static aead::Algorithm);
 
 impl AeadAlgorithm {
     // using aead::TlsRecordSealingKey
-    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordEncrypter> {
         // safety:
         // - the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
         // - this function should only be used for `Algorithm::AES_128_GCM` or `Algorithm::AES_256_GCM`
-        Box::new(GcmMessageEncrypter {
+        Box::new(GcmRecordEncrypter {
             enc_key: aead::TlsRecordSealingKey::new(
                 self.0,
                 aead::TlsProtocolId::TLS13,
@@ -208,11 +208,11 @@ impl AeadAlgorithm {
     }
 
     // using aead::TlsRecordOpeningKey
-    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordDecrypter> {
         // safety:
         // - the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
         // - this function should only be used for `Algorithm::AES_128_GCM` or `Algorithm::AES_256_GCM`
-        Box::new(GcmMessageDecrypter {
+        Box::new(GcmRecordDecrypter {
             dec_key: aead::TlsRecordOpeningKey::new(
                 self.0,
                 aead::TlsProtocolId::TLS13,
@@ -228,17 +228,17 @@ impl AeadAlgorithm {
     }
 }
 
-struct AeadMessageEncrypter {
+struct AeadRecordEncrypter {
     enc_key: aead::LessSafeKey,
     iv: Iv,
 }
 
-struct AeadMessageDecrypter {
+struct AeadRecordDecrypter {
     dec_key: aead::LessSafeKey,
     iv: Iv,
 }
 
-impl MessageEncrypter for AeadMessageEncrypter {
+impl RecordEncrypter for AeadRecordEncrypter {
     fn encrypt<'a>(
         &mut self,
         msg: Record<OutboundPlain<'_>>,
@@ -300,7 +300,7 @@ impl MessageEncrypter for AeadMessageEncrypter {
     }
 }
 
-impl MessageDecrypter for AeadMessageDecrypter {
+impl RecordDecrypter for AeadRecordDecrypter {
     fn decrypt<'a>(
         &mut self,
         mut record: Record<InboundOpaque<'a>>,
@@ -328,12 +328,12 @@ impl MessageDecrypter for AeadMessageDecrypter {
     }
 }
 
-struct GcmMessageEncrypter {
+struct GcmRecordEncrypter {
     enc_key: aead::TlsRecordSealingKey,
     iv: Iv,
 }
 
-impl MessageEncrypter for GcmMessageEncrypter {
+impl RecordEncrypter for GcmRecordEncrypter {
     fn encrypt<'a>(
         &mut self,
         msg: Record<OutboundPlain<'_>>,
@@ -395,12 +395,12 @@ impl MessageEncrypter for GcmMessageEncrypter {
     }
 }
 
-struct GcmMessageDecrypter {
+struct GcmRecordDecrypter {
     dec_key: aead::TlsRecordOpeningKey,
     iv: Iv,
 }
 
-impl MessageDecrypter for GcmMessageDecrypter {
+impl RecordDecrypter for GcmRecordDecrypter {
     fn decrypt<'a>(
         &mut self,
         mut record: Record<InboundOpaque<'a>>,

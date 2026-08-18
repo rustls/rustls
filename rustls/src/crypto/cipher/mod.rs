@@ -19,13 +19,13 @@ pub use messages::{
 mod record_layer;
 pub(crate) use record_layer::{Decrypted, DecryptionState, EncryptionState, PreEncryptAction};
 
-/// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suite.
+/// Factory trait for building `RecordEncrypter` and `RecordDecrypter` for a TLS1.3 cipher suite.
 pub trait Tls13AeadAlgorithm: Send + Sync {
-    /// Build a `MessageEncrypter` for the given key/iv.
-    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter>;
+    /// Build a `RecordEncrypter` for the given key/iv.
+    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordEncrypter>;
 
-    /// Build a `MessageDecrypter` for the given key/iv.
-    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter>;
+    /// Build a `RecordDecrypter` for the given key/iv.
+    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordDecrypter>;
 
     /// The length of key in bytes required by `encrypter()` and `decrypter()`.
     fn key_len(&self) -> usize;
@@ -51,9 +51,9 @@ pub trait Tls13AeadAlgorithm: Send + Sync {
     }
 }
 
-/// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.2 cipher suite.
+/// Factory trait for building `RecordEncrypter` and `RecordDecrypter` for a TLS1.2 cipher suite.
 pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
-    /// Build a `MessageEncrypter` for the given key/iv and extra key block (which can be used for
+    /// Build a `RecordEncrypter` for the given key/iv and extra key block (which can be used for
     /// improving explicit nonce size security, if needed).
     ///
     /// The length of `key` is set by [`KeyBlockShape::enc_key_len`].
@@ -61,14 +61,14 @@ pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
     /// The length of `iv` is set by [`KeyBlockShape::fixed_iv_len`].
     ///
     /// The length of `extra` is set by [`KeyBlockShape::explicit_nonce_len`].
-    fn encrypter(&self, key: AeadKey, iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
+    fn encrypter(&self, key: AeadKey, iv: &[u8], extra: &[u8]) -> Box<dyn RecordEncrypter>;
 
-    /// Build a `MessageDecrypter` for the given key/iv.
+    /// Build a `RecordDecrypter` for the given key/iv.
     ///
     /// The length of `key` is set by [`KeyBlockShape::enc_key_len`].
     ///
     /// The length of `iv` is set by [`KeyBlockShape::fixed_iv_len`].
-    fn decrypter(&self, key: AeadKey, iv: &[u8]) -> Box<dyn MessageDecrypter>;
+    fn decrypter(&self, key: AeadKey, iv: &[u8]) -> Box<dyn RecordDecrypter>;
 
     /// Return a `KeyBlockShape` that defines how large the `key_block` is and how it
     /// is split up prior to calling `encrypter()`, `decrypter()` and/or `extract_keys()`.
@@ -146,7 +146,7 @@ pub struct KeyBlockShape {
 }
 
 /// Objects with this trait can decrypt TLS messages.
-pub trait MessageDecrypter: Send + Sync {
+pub trait RecordDecrypter: Send + Sync {
     /// Decrypt the given TLS message `record`, using the sequence number
     /// `seq` which can be used to derive a unique [`Nonce`].
     fn decrypt<'a>(
@@ -157,7 +157,7 @@ pub trait MessageDecrypter: Send + Sync {
 }
 
 /// Objects with this trait can encrypt TLS messages.
-pub trait MessageEncrypter: Send + Sync {
+pub trait RecordEncrypter: Send + Sync {
     /// Encrypt the given TLS message `record` into `out`, using the sequence number
     /// `seq` which can be used to derive a unique [`Nonce`].
     ///
@@ -169,7 +169,7 @@ pub trait MessageEncrypter: Send + Sync {
     /// The returned message describes the resulting record: its payload borrows the
     /// written prefix of `out`, and its `typ` and `version` are what the record
     /// header should carry on the wire. Encoding the record header is the caller's
-    /// responsibility and implementations of the `MessageEncrypter` trait must not
+    /// responsibility and implementations of the `RecordEncrypter` trait must not
     /// write it to `out` themselves.
     fn encrypt<'a>(
         &mut self,
@@ -430,11 +430,11 @@ pub(crate) struct FakeAead;
 
 #[cfg(test)]
 impl Tls12AeadAlgorithm for FakeAead {
-    fn encrypter(&self, _: AeadKey, _: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, _: AeadKey, _: &[u8], _: &[u8]) -> Box<dyn RecordEncrypter> {
         todo!()
     }
 
-    fn decrypter(&self, _: AeadKey, _: &[u8]) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, _: AeadKey, _: &[u8]) -> Box<dyn RecordDecrypter> {
         todo!()
     }
 

@@ -15,7 +15,7 @@ use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
 use crate::conn::{ConnectionRandoms, Input};
-use crate::crypto::cipher::{EncodableVersion, MessageDecrypter, MessageEncrypter, Payload};
+use crate::crypto::cipher::{EncodableVersion, Payload, RecordDecrypter, RecordEncrypter};
 use crate::crypto::kx::{ActiveKeyExchange, SupportedKxGroup};
 use crate::crypto::{Identity, TicketProducer};
 use crate::enums::{
@@ -766,7 +766,7 @@ struct ExpectCcs {
     hs: HandshakeState,
     secrets: ConnectionSecrets,
     peer_identity: Option<VerifiedIdentity<'static>>,
-    resuming_decrypter: Option<Box<dyn MessageDecrypter>>,
+    resuming_decrypter: Option<Box<dyn RecordDecrypter>>,
 }
 
 impl ExpectCcs {
@@ -802,7 +802,7 @@ impl ExpectCcs {
         output
             .receive()
             .decrypt_state
-            .set_message_decrypter(decrypter, &proof);
+            .set_record_decrypter(decrypter, &proof);
 
         Ok(Box::new(ExpectFinished {
             hs: self.hs,
@@ -983,7 +983,7 @@ pub(super) struct ExpectFinished {
     secrets: ConnectionSecrets,
     peer_identity: Option<VerifiedIdentity<'static>>,
     resuming: bool,
-    pending_encrypter: Option<Box<dyn MessageEncrypter>>,
+    pending_encrypter: Option<Box<dyn RecordEncrypter>>,
 }
 
 impl ExpectFinished {
