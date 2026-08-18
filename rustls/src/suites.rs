@@ -21,7 +21,7 @@ pub struct CipherSuiteCommon {
 
     /// Number of TCP-TLS messages that can be safely encrypted with a single key of this type
     ///
-    /// Once a `MessageEncrypter` produced for this suite has encrypted more than
+    /// Once a `RecordEncrypter` produced for this suite has encrypted more than
     /// `confidentiality_limit` messages, an attacker gains an advantage in distinguishing it
     /// from an ideal pseudorandom permutation (PRP).
     ///

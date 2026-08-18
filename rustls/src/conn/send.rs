@@ -2,8 +2,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use crate::crypto::cipher::{
-    EncodableVersion, EncryptionState, MessageEncrypter, OutboundPlain, Payload, PreEncryptAction,
-    Record,
+    EncodableVersion, EncryptionState, OutboundPlain, Payload, PreEncryptAction, Record,
+    RecordEncrypter,
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
@@ -200,9 +200,9 @@ impl SendOutput for SendPath {
         }
     }
 
-    fn set_encrypter(&mut self, encrypter: Box<dyn MessageEncrypter>, max_messages: u64) {
+    fn set_encrypter(&mut self, encrypter: Box<dyn RecordEncrypter>, max_records: u64) {
         self.encrypt_state
-            .set_message_encrypter(encrypter, max_messages);
+            .set_record_encrypter(encrypter, max_records);
     }
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>) {
@@ -295,7 +295,7 @@ pub(crate) trait SendOutput {
 
     fn note_key_update_response(&mut self);
 
-    fn set_encrypter(&mut self, cipher: Box<dyn MessageEncrypter>, max_messages: u64);
+    fn set_encrypter(&mut self, cipher: Box<dyn RecordEncrypter>, max_records: u64);
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>);
 

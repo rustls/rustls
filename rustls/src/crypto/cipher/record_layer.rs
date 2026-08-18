@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::cmp::min;
 
 use crate::crypto::cipher::{
-    InboundOpaque, MessageDecrypter, MessageEncrypter, OutboundPlain, Record, encode_record_header,
+    InboundOpaque, OutboundPlain, Record, RecordDecrypter, RecordEncrypter, encode_record_header,
 };
 use crate::error::Error;
 use crate::msgs::{HEADER_SIZE, HandshakeAlignedProof};
@@ -11,7 +11,7 @@ use crate::tracing::trace;
 
 /// Record layer that tracks encryption keys.
 pub(crate) struct EncryptionState {
-    message_encrypter: Option<Box<dyn MessageEncrypter>>,
+    record_encrypter: Option<Box<dyn RecordEncrypter>>,
     write_seq_max: u64,
     write_seq: u64,
 }
@@ -20,7 +20,7 @@ impl EncryptionState {
     /// Create new record layer with no keys.
     pub(crate) fn new() -> Self {
         Self {
-            message_encrypter: None,
+            record_encrypter: None,
             write_seq_max: 0,
             write_seq: 0,
         }
@@ -46,7 +46,7 @@ impl EncryptionState {
         let written = self.encrypt_outgoing_into(plain, &mut output[start..]);
         debug_assert_eq!(
             written, needed,
-            "MessageEncrypter::encrypt() returned wrong length"
+            "RecordEncrypter::encrypt() returned wrong length"
         );
         output.truncate(start + written);
     }
@@ -66,7 +66,7 @@ impl EncryptionState {
         out: &mut [u8],
     ) -> usize {
         assert!(self.pre_encrypt_action(0) != Some(PreEncryptAction::Refuse));
-        let encrypter = self.message_encrypter.as_mut().unwrap();
+        let encrypter = self.record_encrypter.as_mut().unwrap();
 
         let seq = self.write_seq;
         self.write_seq += 1;
@@ -79,7 +79,7 @@ impl EncryptionState {
 
         #[cfg(debug_assertions)]
         {
-            // `MessageEncrypter::encrypt()` requires the returned payload to be
+            // `RecordEncrypter::encrypt()` requires the returned payload to be
             // the written prefix of the passed-in buffer. Try to catch misbehaving
             // implementations in debug mode. In release builds a violation would corrupt
             // the sent stream.
@@ -96,16 +96,16 @@ impl EncryptionState {
         HEADER_SIZE + len
     }
 
-    /// Set and start using the given `MessageEncrypter` for future outgoing
+    /// Set and start using the given `RecordEncrypter` for future outgoing
     /// message encryption.
-    pub(crate) fn set_message_encrypter(
+    pub(crate) fn set_record_encrypter(
         &mut self,
-        cipher: Box<dyn MessageEncrypter>,
-        max_messages: u64,
+        cipher: Box<dyn RecordEncrypter>,
+        max_records: u64,
     ) {
         *self = Self {
-            message_encrypter: Some(cipher),
-            write_seq_max: min(SEQ_SOFT_LIMIT, max_messages),
+            record_encrypter: Some(cipher),
+            write_seq_max: min(SEQ_SOFT_LIMIT, max_records),
             write_seq: 0,
         };
     }
@@ -123,7 +123,7 @@ impl EncryptionState {
     }
 
     pub(crate) fn encrypted_len(&self, payload_len: usize) -> usize {
-        self.message_encrypter
+        self.record_encrypter
             .as_ref()
             .map(|enc| enc.encrypted_payload_len(payload_len))
             .unwrap_or_default()
@@ -135,7 +135,7 @@ impl EncryptionState {
     }
 
     pub(crate) fn is_encrypting(&self) -> bool {
-        self.message_encrypter.is_some()
+        self.record_encrypter.is_some()
     }
 
     pub(crate) fn write_seq(&self) -> u64 {
@@ -145,7 +145,7 @@ impl EncryptionState {
 
 /// Record layer that tracks decryption keys.
 pub(crate) struct DecryptionState {
-    message_decrypter: Option<Box<dyn MessageDecrypter>>,
+    record_decrypter: Option<Box<dyn RecordDecrypter>>,
     read_seq: u64,
     has_decrypted: bool,
 
@@ -159,7 +159,7 @@ impl DecryptionState {
     /// Create new record layer with no keys.
     pub(crate) fn new() -> Self {
         Self {
-            message_decrypter: None,
+            record_decrypter: None,
             read_seq: 0,
             has_decrypted: false,
             trial_decryption_len: None,
@@ -175,7 +175,7 @@ impl DecryptionState {
         &mut self,
         encr: Record<InboundOpaque<'a>>,
     ) -> Result<Option<Decrypted<'a>>, Error> {
-        let Some(decrypter) = &mut self.message_decrypter else {
+        let Some(decrypter) = &mut self.record_decrypter else {
             return Ok(Some(Decrypted {
                 want_close_before_decrypt: false,
                 plaintext: encr.into_plain_record(),
@@ -212,28 +212,28 @@ impl DecryptionState {
         }
     }
 
-    /// Set and start using the given `MessageDecrypter` for future incoming
+    /// Set and start using the given `RecordDecrypter` for future incoming
     /// message decryption.
-    pub(crate) fn set_message_decrypter(
+    pub(crate) fn set_record_decrypter(
         &mut self,
-        cipher: Box<dyn MessageDecrypter>,
+        cipher: Box<dyn RecordDecrypter>,
         _proof: &HandshakeAlignedProof,
     ) {
-        self.message_decrypter = Some(cipher);
+        self.record_decrypter = Some(cipher);
         self.read_seq = 0;
         self.trial_decryption_len = None;
     }
 
-    /// Set and start using the given `MessageDecrypter` for future incoming
+    /// Set and start using the given `RecordDecrypter` for future incoming
     /// message decryption, and enable "trial decryption" mode for when TLS1.3
     /// 0-RTT is attempted but rejected by the server.
-    pub(crate) fn set_message_decrypter_with_trial_decryption(
+    pub(crate) fn set_record_decrypter_with_trial_decryption(
         &mut self,
-        cipher: Box<dyn MessageDecrypter>,
+        cipher: Box<dyn RecordDecrypter>,
         max_length: usize,
         _proof: &HandshakeAlignedProof,
     ) {
-        self.message_decrypter = Some(cipher);
+        self.record_decrypter = Some(cipher);
         self.read_seq = 0;
         self.trial_decryption_len = Some(max_length);
     }
@@ -307,7 +307,7 @@ mod tests {
     #[test]
     fn test_has_decrypted() {
         struct PassThroughDecrypter;
-        impl MessageDecrypter for PassThroughDecrypter {
+        impl RecordDecrypter for PassThroughDecrypter {
             fn decrypt<'a>(
                 &mut self,
                 record: Record<InboundOpaque<'a>>,
@@ -319,7 +319,7 @@ mod tests {
 
         // A record layer starts out invalid, having never decrypted.
         let mut record_layer = DecryptionState::new();
-        assert!(record_layer.message_decrypter.is_none());
+        assert!(record_layer.record_decrypter.is_none());
         assert_eq!(record_layer.read_seq, 0);
         assert!(!record_layer.has_decrypted());
 
@@ -327,8 +327,8 @@ mod tests {
         // has decrypted.
         let deframer = Deframer::default();
         record_layer
-            .set_message_decrypter(Box::new(PassThroughDecrypter), &deframer.aligned().unwrap());
-        assert!(record_layer.message_decrypter.is_some());
+            .set_record_decrypter(Box::new(PassThroughDecrypter), &deframer.aligned().unwrap());
+        assert!(record_layer.record_decrypter.is_some());
         assert_eq!(record_layer.read_seq, 0);
         assert!(!record_layer.has_decrypted());
 
@@ -347,7 +347,7 @@ mod tests {
         // Resetting the record layer message decrypter (as if a key update occurred) should reset
         // the read_seq number, but not our knowledge of whether we have decrypted previously.
         record_layer
-            .set_message_decrypter(Box::new(PassThroughDecrypter), &deframer.aligned().unwrap());
+            .set_record_decrypter(Box::new(PassThroughDecrypter), &deframer.aligned().unwrap());
         assert_eq!(record_layer.read_seq, 0);
         assert!(record_layer.has_decrypted());
     }

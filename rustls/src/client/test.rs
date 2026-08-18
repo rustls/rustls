@@ -12,7 +12,7 @@ use pki_types::{CertificateDer, FipsStatus, ServerName, UnixTime};
 use super::{Tls12Session, Tls13ClientSessionInput, Tls13Session};
 use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
 use crate::crypto::cipher::{
-    EncodableVersion, MessageEncrypter, Payload, Record, encode_record_header,
+    EncodableVersion, Payload, Record, RecordEncrypter, encode_record_header,
 };
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::test_provider::{FakeKeyExchangeGroup, KEY_EXCHANGE_GROUP, TLS_TEST_SUITE};
@@ -768,7 +768,7 @@ impl FakeServerCrypto {
         }
     }
 
-    fn server_handshake_encrypter(&self) -> Box<dyn MessageEncrypter> {
+    fn server_handshake_encrypter(&self) -> Box<dyn RecordEncrypter> {
         let secret = self
             .server_handshake_secret
             .get()

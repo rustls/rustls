@@ -5,7 +5,7 @@ use core::ops::Deref;
 
 use crate::common_state::{Output, Side};
 use crate::conn::{Exporter, ReceivePath, SendOutput};
-use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
+use crate::crypto::cipher::{AeadKey, Iv, RecordDecrypter, Tls13AeadAlgorithm};
 use crate::crypto::kx::SharedSecret;
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expand};
 use crate::crypto::{hash, hmac};
@@ -403,7 +403,7 @@ impl KeyScheduleHandshake {
                 .set_decrypter(secret, receive, proof),
             Some(max_early_data_size) => receive
                 .decrypt_state
-                .set_message_decrypter_with_trial_decryption(
+                .set_record_decrypter_with_trial_decryption(
                     self.ks
                         .derive_decrypter(&self.client_handshake_traffic_secret),
                     max_early_data_size,
@@ -938,10 +938,10 @@ impl KeyScheduleSuite {
     ) {
         receive
             .decrypt_state
-            .set_message_decrypter(self.derive_decrypter(secret), proof);
+            .set_record_decrypter(self.derive_decrypter(secret), proof);
     }
 
-    fn derive_decrypter(&self, secret: &OkmBlock) -> Box<dyn MessageDecrypter> {
+    fn derive_decrypter(&self, secret: &OkmBlock) -> Box<dyn RecordDecrypter> {
         let suite = self.state.suite();
         let expander = suite
             .hkdf_provider

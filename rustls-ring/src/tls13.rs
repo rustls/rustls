@@ -5,8 +5,8 @@ use ring::hkdf::{self, KeyType};
 use ring::{aead, hmac};
 use rustls::crypto::CipherSuite;
 use rustls::crypto::cipher::{
-    AeadKey, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, Nonce,
-    OutboundPlain, Record, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, EncryptBuffer, InboundOpaque, Iv, Nonce, OutboundPlain, Record, RecordDecrypter,
+    RecordEncrypter, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::enums::ContentType;
@@ -91,11 +91,11 @@ pub static TLS13_AES_128_GCM_SHA256: &Tls13CipherSuite = &Tls13CipherSuite {
 struct Chacha20Poly1305Aead(AeadAlgorithm);
 
 impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
-    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordEncrypter> {
         self.0.encrypter(key, iv)
     }
 
-    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordDecrypter> {
         self.0.decrypter(key, iv)
     }
 
@@ -119,11 +119,11 @@ impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
 struct Aes256GcmAead(AeadAlgorithm);
 
 impl Tls13AeadAlgorithm for Aes256GcmAead {
-    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordEncrypter> {
         self.0.encrypter(key, iv)
     }
 
-    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordDecrypter> {
         self.0.decrypter(key, iv)
     }
 
@@ -147,11 +147,11 @@ impl Tls13AeadAlgorithm for Aes256GcmAead {
 struct Aes128GcmAead(AeadAlgorithm);
 
 impl Tls13AeadAlgorithm for Aes128GcmAead {
-    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordEncrypter> {
         self.0.encrypter(key, iv)
     }
 
-    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordDecrypter> {
         self.0.decrypter(key, iv)
     }
 
@@ -176,17 +176,17 @@ impl Tls13AeadAlgorithm for Aes128GcmAead {
 struct AeadAlgorithm(&'static aead::Algorithm);
 
 impl AeadAlgorithm {
-    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordEncrypter> {
         // safety: the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
-        Box::new(Tls13MessageEncrypter {
+        Box::new(Tls13RecordEncrypter {
             enc_key: aead::LessSafeKey::new(aead::UnboundKey::new(self.0, key.as_ref()).unwrap()),
             iv,
         })
     }
 
-    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordDecrypter> {
         // safety: the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
-        Box::new(Tls13MessageDecrypter {
+        Box::new(Tls13RecordDecrypter {
             dec_key: aead::LessSafeKey::new(aead::UnboundKey::new(self.0, key.as_ref()).unwrap()),
             iv,
         })
@@ -197,17 +197,17 @@ impl AeadAlgorithm {
     }
 }
 
-struct Tls13MessageEncrypter {
+struct Tls13RecordEncrypter {
     enc_key: aead::LessSafeKey,
     iv: Iv,
 }
 
-struct Tls13MessageDecrypter {
+struct Tls13RecordDecrypter {
     dec_key: aead::LessSafeKey,
     iv: Iv,
 }
 
-impl MessageEncrypter for Tls13MessageEncrypter {
+impl RecordEncrypter for Tls13RecordEncrypter {
     fn encrypt<'a>(
         &mut self,
         record: Record<OutboundPlain<'_>>,
@@ -243,7 +243,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
     }
 }
 
-impl MessageDecrypter for Tls13MessageDecrypter {
+impl RecordDecrypter for Tls13RecordDecrypter {
     fn decrypt<'a>(
         &mut self,
         mut record: Record<InboundOpaque<'a>>,
