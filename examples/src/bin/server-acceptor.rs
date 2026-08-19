@@ -109,7 +109,7 @@ fn main() {
                 }
 
                 ServerHandshake::VerifyClientIdentity(verify) => verify
-                    .use_verifier_trait(&mut output)
+                    .with_config(&mut output)
                     .expect("error verifying client certificate for connection"),
 
                 ServerHandshake::Complete(connection) => break connection,
