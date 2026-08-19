@@ -188,12 +188,10 @@ impl OpenConnection {
 
     /// We're a connection, and we have something to do.
     fn ready(&mut self, registry: &mio::Registry, ev: &mio::event::Event) {
-        // If we're readable: read some TLS.  Then
-        // see if that yielded new plaintext.  Then
-        // see if the backend is readable too.
+        // If we're readable: read some TLS, handle any plaintext it
+        // yields, then see if the backend is readable too.
         if ev.is_readable() {
             self.do_tls_read();
-            self.try_plain_read();
             self.try_back_read();
             self.flush_pending();
         }
@@ -242,11 +240,15 @@ impl OpenConnection {
             Ok(_) => {}
         };
 
-        // Process newly-received TLS messages.
+        // Process newly-received TLS messages, collecting any plaintext
+        // application data.  The `MessageHandler` API hands the plaintext
+        // back to us through `handle_all`, so there is no separate
+        // "read plaintext" step anymore.
+        let mut received_plaintext = Vec::new();
         if let Err(err) = self
             .tls_conn
             .process_new_packets(&mut self.input, &mut self.output)
-            .handle_all(&mut Vec::new())
+            .handle_all(&mut received_plaintext)
         {
             error!("cannot process packet: {err:?}");
 
@@ -254,24 +256,10 @@ impl OpenConnection {
             self.do_tls_write_and_handle_error();
 
             self.closing = true;
-        }
-    }
-
-    fn try_plain_read(&mut self) {
-        // Read and process all available plaintext.
-        let mut received_plaintext = Vec::new();
-        let iter = self
-            .tls_conn
-            .process_new_packets(&mut self.input, &mut self.output);
-        match iter.handle_all(&mut received_plaintext) {
-            Ok(_) => {}
-            Err(error) => {
-                error!("cannot read plaintext: {error:?}");
-                self.closing = true;
-                return;
-            }
+            return;
         }
 
+        // Handle any 0-RTT early data.
         if let Some(mut early_data) = self.tls_conn.early_data() {
             let mut buf = Vec::new();
             early_data
