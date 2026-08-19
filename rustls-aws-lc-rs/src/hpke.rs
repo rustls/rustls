@@ -737,7 +737,7 @@ struct KeySchedule<const KEY_SIZE: usize> {
     aead: &'static aead::Algorithm,
     key: AeadKey<KEY_SIZE>,
     base_nonce: [u8; NONCE_LEN],
-    seq_num: u32,
+    seq_num: u128,
 }
 
 impl<const KEY_SIZE: usize> KeySchedule<KEY_SIZE> {
@@ -749,12 +749,12 @@ impl<const KEY_SIZE: usize> KeySchedule<KEY_SIZE> {
         //   seq_bytes = I2OSP(seq, Nn)
         //   return xor(self.base_nonce, seq_bytes)
 
-        // Each new N-byte nonce is conceptually two parts:
-        //   * N-4 bytes of the base nonce (0s in `nonce` to XOR in as-is).
-        //   * 4 bytes derived from the sequence number XOR the base nonce.
-        let mut nonce = [0; NONCE_LEN];
+        // `increment_seq_num` bounds `seq_num` below `(1 << (8 * NONCE_LEN)) - 1`, so
+        // the upper bytes of the big-endian encoding are always zero and taking the
+        // low NONCE_LEN bytes is I2OSP(seq, Nn).
         let seq_bytes = self.seq_num.to_be_bytes();
-        nonce[NONCE_LEN - seq_bytes.len()..].copy_from_slice(&seq_bytes);
+        let mut nonce = [0; NONCE_LEN];
+        nonce.copy_from_slice(&seq_bytes[seq_bytes.len() - NONCE_LEN..]);
 
         for (n, &b) in nonce.iter_mut().zip(&self.base_nonce) {
             *n ^= b;
@@ -773,12 +773,11 @@ impl<const KEY_SIZE: usize> KeySchedule<KEY_SIZE> {
         //   self.seq += 1
 
         // Determine the maximum sequence number using the AEAD nonce's length in bits.
-        // Do this as an u128 to prevent overflowing.
         let max_seq_num = (1u128 << (NONCE_LEN * 8)) - 1;
 
-        // Promote the u32 sequence number to an u128 and compare against the maximum allowed
-        // sequence number.
-        if u128::from(self.seq_num) >= max_seq_num {
+        // Refuse to advance past the maximum: `compute_nonce` only encodes NONCE_LEN
+        // bytes of the counter, so going further would repeat an already-used nonce.
+        if self.seq_num >= max_seq_num {
             return Err(aws_lc_rs::error::Unspecified);
         }
 
@@ -1037,6 +1036,23 @@ mod tests {
                 ),
             }
         }
+    }
+
+    #[test]
+    fn seq_num_does_not_wrap() {
+        // At the last usable sequence number the context must refuse to advance.
+        // Otherwise the counter passes `(1 << (8 * NONCE_LEN)) - 1` and
+        // `compute_nonce` reproduces the nonce already used at seq 0, reusing a
+        // (key, nonce) pair.
+        let max_seq_num = (1u128 << (NONCE_LEN * 8)) - 1;
+        let mut ks = KeySchedule::<AES_128_KEY_LEN> {
+            aead: &aead::AES_128_GCM,
+            key: AeadKey([0u8; AES_128_KEY_LEN]),
+            base_nonce: [0u8; NONCE_LEN],
+            seq_num: max_seq_num,
+        };
+        assert!(ks.increment_seq_num().is_err());
+        assert_eq!(ks.seq_num, max_seq_num);
     }
 }
 
