@@ -83,7 +83,7 @@ impl crate::conn::StateMachine for ServerState {
 
     fn handle_without_input(self) -> Result<Self, Error> {
         match self {
-            Self::VerifyClientIdentity(vci) => vci.use_verifier_trait(),
+            Self::VerifyClientIdentity(vci) => vci.with_config(),
             _ => Ok(self),
         }
     }
@@ -798,7 +798,7 @@ impl VerifyClientIdentity {
     }
 
     /// Progress the handshake by calling the verifier trait synchronously.
-    pub(crate) fn use_verifier_trait(self) -> Result<ServerState, Error> {
+    pub(crate) fn with_config(self) -> Result<ServerState, Error> {
         self.inner.with_config()
     }
 
