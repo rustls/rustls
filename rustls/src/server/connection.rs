@@ -40,11 +40,16 @@ impl ServerConnection {
     /// Make a new ServerConnection.  `config` controls how
     /// we behave in the TLS protocol.
     pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
+        Self::new_with_protocol(config, Protocol::Tcp)
+    }
+
+    /// Make a new ServerConnection over the specified transport protocol.
+    pub fn new_with_protocol(config: Arc<ServerConfig>, protocol: Protocol) -> Result<Self, Error> {
         Ok(Self {
             inner: ConnectionCommon::for_server(
                 config,
                 ServerExtensionsInput::default(),
-                Protocol::Tcp,
+                protocol,
             )?,
         })
     }

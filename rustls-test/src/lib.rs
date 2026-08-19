@@ -30,8 +30,8 @@ use rustls::server::{
 };
 use rustls::{
     ClientConfig, ClientConnection, ConfigBuilder, Connection, ConnectionTrafficSecrets,
-    DistinguishedName, MessageHandler, RootCertStore, ServerConfig, ServerConnection, SideData,
-    SupportedCipherSuite, VecInput, WantsVerifier,
+    DistinguishedName, MessageHandler, Protocol, RootCertStore, ServerConfig, ServerConnection,
+    SideData, SupportedCipherSuite, VecInput, WantsVerifier,
 };
 use tracing::{Event, Level, Metadata, field, span, subscriber};
 
@@ -826,7 +826,17 @@ pub fn make_pair(
     provider: &CryptoProvider,
     client_output: &mut Vec<u8>,
 ) -> (ClientConnection, ServerConnection) {
-    make_pair_for_configs(
+    make_pair_with_protocol(Protocol::Tcp, kt, provider, client_output)
+}
+
+pub fn make_pair_with_protocol(
+    protocol: Protocol,
+    kt: KeyType,
+    provider: &CryptoProvider,
+    client_output: &mut Vec<u8>,
+) -> (ClientConnection, ServerConnection) {
+    make_pair_for_configs_with_protocol(
+        protocol,
         make_client_config(kt, provider),
         make_server_config(kt, provider),
         client_output,
@@ -838,7 +848,17 @@ pub fn make_pair_for_configs(
     server_config: ServerConfig,
     client_output: &mut Vec<u8>,
 ) -> (ClientConnection, ServerConnection) {
-    make_pair_for_arc_configs(
+    make_pair_for_configs_with_protocol(Protocol::Tcp, client_config, server_config, client_output)
+}
+
+pub fn make_pair_for_configs_with_protocol(
+    protocol: Protocol,
+    client_config: ClientConfig,
+    server_config: ServerConfig,
+    client_output: &mut Vec<u8>,
+) -> (ClientConnection, ServerConnection) {
+    make_pair_for_arc_configs_with_protocol(
+        protocol,
         &Arc::new(client_config),
         &Arc::new(server_config),
         client_output,
@@ -850,12 +870,27 @@ pub fn make_pair_for_arc_configs(
     server_config: &Arc<ServerConfig>,
     client_output: &mut Vec<u8>,
 ) -> (ClientConnection, ServerConnection) {
+    make_pair_for_arc_configs_with_protocol(
+        Protocol::Tcp,
+        client_config,
+        server_config,
+        client_output,
+    )
+}
+
+pub fn make_pair_for_arc_configs_with_protocol(
+    protocol: Protocol,
+    client_config: &Arc<ClientConfig>,
+    server_config: &Arc<ServerConfig>,
+    client_output: &mut Vec<u8>,
+) -> (ClientConnection, ServerConnection) {
     (
         client_config
             .connect(server_name("localhost"))
+            .with_protocol(protocol)
             .build(client_output)
             .unwrap(),
-        ServerConnection::new(server_config.clone()).unwrap(),
+        ServerConnection::new_with_protocol(server_config.clone(), protocol).unwrap(),
     )
 }
 

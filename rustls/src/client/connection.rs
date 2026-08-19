@@ -169,6 +169,7 @@ pub struct ClientConnectionBuilder {
     pub(crate) config: Arc<ClientConfig>,
     pub(crate) name: ServerName<'static>,
     pub(crate) alpn_protocols: Option<Vec<ApplicationProtocol<'static>>>,
+    pub(crate) protocol: Protocol,
 }
 
 impl ClientConnectionBuilder {
@@ -178,12 +179,19 @@ impl ClientConnectionBuilder {
         self
     }
 
+    /// Specify the transport protocol for the conneciton.
+    pub fn with_protocol(mut self, protocol: Protocol) -> Self {
+        self.protocol = protocol;
+        self
+    }
+
     /// Finalize the builder and create the `ClientConnection`.
     pub fn build(self, tls: &mut Vec<u8>) -> Result<ClientConnection, Error> {
         let Self {
             config,
             name,
             alpn_protocols,
+            protocol,
         } = self;
 
         let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
@@ -193,7 +201,7 @@ impl ClientConnectionBuilder {
                 name,
                 ClientExtensionsInput::from_alpn(alpn_protocols),
                 None,
-                Protocol::Tcp,
+                protocol,
                 tls,
             )?,
         })

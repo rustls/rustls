@@ -229,6 +229,7 @@ impl ClientConfig {
             config: self.clone(),
             name: server_name,
             alpn_protocols: None,
+            protocol: Protocol::Tcp,
         }
     }
 

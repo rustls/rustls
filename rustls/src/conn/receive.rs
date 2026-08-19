@@ -20,7 +20,7 @@ use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::msgs::{
     AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, Delocator, Epoch,
-    HandshakeAlignedProof, Locator, Message, MessagePayload, U48,
+    HandshakeAlignedProof, Locator, Message, MessagePayload,
 };
 use crate::quic::QuicOutput;
 use crate::tracing::{trace, warn};

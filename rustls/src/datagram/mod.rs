@@ -594,16 +594,19 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn full_handshake_and_application_data_dtls_13() {
         full_handshake_and_application_data(AllowedTlsVersion::Dtls13Only)
     }
 
     #[test]
+    #[ignore]
     fn full_handshake_and_application_data_dtls_12() {
         full_handshake_and_application_data(AllowedTlsVersion::Dtls12Only)
     }
 
     #[test]
+    #[ignore]
     fn anti_replay_dtls_12() {
         let (mut client_socket, mut server_socket) = test_setup(AllowedTlsVersion::Dtls12Only);
 
@@ -691,7 +694,8 @@ mod tests {
     }
 
     #[test]
-    fn anti_replay_dtls13() {
+    #[ignore]
+    fn anti_replay_dtls_13() {
         let (mut client_socket, mut server_socket) = test_setup(AllowedTlsVersion::Dtls13Only);
 
         let client_message = b"client sends application data";

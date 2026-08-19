@@ -23,7 +23,7 @@ use rustls::server::{
 };
 use rustls::{
     ClientConfig, ClientConnection, Connection as _, HandshakeKind, KeyingMaterialExporter,
-    ServerConfig, ServerConnection, SliceInput, SupportedCipherSuite, VecInput,
+    Protocol, ServerConfig, ServerConnection, SliceInput, SupportedCipherSuite, VecInput,
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls::{
@@ -36,9 +36,9 @@ use rustls_test::{
     Altered, ClientConfigExt, ClientStorage, ClientStorageOp, CountingSubscriber, ErrorFromPeer,
     KeyType, MockServerVerifier, MultiTest, RawTls, ServerConfigExt, do_handshake,
     do_handshake_until_error, do_suite_and_kx_test, encoding, make_client_config, make_pair,
-    make_pair_for_arc_configs, make_pair_for_configs, make_server_config, provider_with_one_suite,
-    provider_with_suites, server_name, transfer, transfer_altered,
-    unsafe_plaintext_crypto_provider,
+    make_pair_for_arc_configs, make_pair_for_configs, make_pair_for_configs_with_protocol,
+    make_server_config, provider_with_one_suite, provider_with_suites, server_name, transfer,
+    transfer_altered, unsafe_plaintext_crypto_provider,
 };
 
 use super::{provider, provider_is_aws_lc_rs, provider_is_fips, provider_is_ring};
@@ -234,6 +234,7 @@ fn unoffered_alpn_test(check_selected_alpn: bool) -> Result<rustls::IoState, Err
 }
 
 fn version_test(
+    protocol: Protocol,
     client_versions: &[ProtocolVersion],
     server_versions: &[ProtocolVersion],
     result: Option<ProtocolVersion>,
@@ -249,8 +250,12 @@ fn version_test(
 
     let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) =
-        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let (mut client, mut server) = make_pair_for_configs_with_protocol(
+        protocol,
+        client_config,
+        server_config,
+        &mut client_output,
+    );
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -283,13 +288,19 @@ fn version_test(
 fn apply_versions(provider: CryptoProvider, versions: &[ProtocolVersion]) -> CryptoProvider {
     match versions {
         []
-        | [ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2]
-        | [ProtocolVersion::TLSv1_2, ProtocolVersion::TLSv1_3] => provider,
-        [ProtocolVersion::TLSv1_3] => CryptoProvider {
+        | [
+            ProtocolVersion::TLSv1_3 | ProtocolVersion::DTLSv1_3,
+            ProtocolVersion::TLSv1_2 | ProtocolVersion::DTLSv1_2,
+        ]
+        | [
+            ProtocolVersion::TLSv1_2 | ProtocolVersion::DTLSv1_2,
+            ProtocolVersion::TLSv1_3 | ProtocolVersion::DTLSv1_3,
+        ] => provider,
+        [ProtocolVersion::TLSv1_3 | ProtocolVersion::DTLSv1_3] => CryptoProvider {
             tls12_cipher_suites: Cow::Borrowed(&[]),
             ..provider
         },
-        [ProtocolVersion::TLSv1_2] => CryptoProvider {
+        [ProtocolVersion::TLSv1_2 | ProtocolVersion::DTLSv1_2] => CryptoProvider {
             tls13_cipher_suites: Cow::Borrowed(&[]),
             ..provider
         },
@@ -300,48 +311,105 @@ fn apply_versions(provider: CryptoProvider, versions: &[ProtocolVersion]) -> Cry
 #[test]
 fn versions() {
     // default -> 1.3
-    version_test(&[], &[], Some(ProtocolVersion::TLSv1_3));
+    version_test(Protocol::Tcp, &[], &[], Some(ProtocolVersion::TLSv1_3));
+
+    // UDP, default, DTLS 1.3
+    version_test(Protocol::Udp, &[], &[], Some(ProtocolVersion::DTLSv1_3));
 
     // client default, server 1.2 -> 1.2
     version_test(
+        Protocol::Tcp,
         &[],
         &[ProtocolVersion::TLSv1_2],
         Some(ProtocolVersion::TLSv1_2),
+    );
+
+    // UDP, client default, server 1.2 -> 1.2
+    version_test(
+        Protocol::Udp,
+        &[],
+        &[ProtocolVersion::DTLSv1_2],
+        Some(ProtocolVersion::DTLSv1_2),
     );
 
     // client 1.2, server default -> 1.2
     version_test(
+        Protocol::Tcp,
         &[ProtocolVersion::TLSv1_2],
         &[],
         Some(ProtocolVersion::TLSv1_2),
     );
 
+    // UDP, client 1.2, server default -> 1.2
+    version_test(
+        Protocol::Udp,
+        &[ProtocolVersion::DTLSv1_2],
+        &[],
+        Some(ProtocolVersion::DTLSv1_2),
+    );
+
     // client 1.2, server 1.3 -> fail
     version_test(
+        Protocol::Tcp,
         &[ProtocolVersion::TLSv1_2],
         &[ProtocolVersion::TLSv1_3],
+        None,
+    );
+
+    // UDP, client 1.2, server 1.3 -> fail
+    version_test(
+        Protocol::Udp,
+        &[ProtocolVersion::DTLSv1_2],
+        &[ProtocolVersion::DTLSv1_3],
         None,
     );
 
     // client 1.3, server 1.2 -> fail
     version_test(
+        Protocol::Tcp,
         &[ProtocolVersion::TLSv1_3],
         &[ProtocolVersion::TLSv1_2],
         None,
     );
 
+    // UDP, client 1.3, server 1.2 -> fail
+    version_test(
+        Protocol::Udp,
+        &[ProtocolVersion::DTLSv1_3],
+        &[ProtocolVersion::DTLSv1_2],
+        None,
+    );
+
     // client 1.3, server 1.2+1.3 -> 1.3
     version_test(
+        Protocol::Tcp,
         &[ProtocolVersion::TLSv1_3],
         &[ProtocolVersion::TLSv1_2, ProtocolVersion::TLSv1_3],
         Some(ProtocolVersion::TLSv1_3),
     );
 
+    // UDP, client 1.3, server 1.2+1.3 -> 1.3
+    version_test(
+        Protocol::Udp,
+        &[ProtocolVersion::DTLSv1_3],
+        &[ProtocolVersion::DTLSv1_2, ProtocolVersion::DTLSv1_3],
+        Some(ProtocolVersion::DTLSv1_3),
+    );
+
     // client 1.2+1.3, server 1.2 -> 1.2
     version_test(
+        Protocol::Tcp,
         &[ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
         &[ProtocolVersion::TLSv1_2],
         Some(ProtocolVersion::TLSv1_2),
+    );
+
+    // UDP, client 1.2+1.3, server 1.2 -> 1.2
+    version_test(
+        Protocol::Udp,
+        &[ProtocolVersion::DTLSv1_3, ProtocolVersion::DTLSv1_2],
+        &[ProtocolVersion::DTLSv1_2],
+        Some(ProtocolVersion::DTLSv1_2),
     );
 }
 
