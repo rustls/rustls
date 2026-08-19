@@ -2,12 +2,13 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::ops::Deref;
 
-use pki_types::{FipsStatus, ServerName};
+use pki_types::{EchConfigListBytes, FipsStatus, ServerName};
 
 use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
 use crate::TlsInputBuffer;
 use crate::client::EchStatus;
+use crate::client::ech::{EchConfig, EchMode};
 use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
@@ -19,7 +20,7 @@ use crate::conn::{
 use crate::crypto;
 use crate::crypto::cipher::OutboundPlain;
 use crate::enums::ApplicationProtocol;
-use crate::error::Error;
+use crate::error::{ApiMisuse, Error, RejectedEch};
 use crate::msgs::ClientExtensionsInput;
 use crate::quic::QuicOutput;
 use crate::suites::ExtractedSecrets;
@@ -165,10 +166,12 @@ impl Deref for ClientConnection {
 /// Builder for [`ClientConnection`] values.
 ///
 /// Create one with [`ClientConfig::connect()`].
+#[derive(Debug)]
 pub struct ClientConnectionBuilder {
     pub(crate) config: Arc<ClientConfig>,
     pub(crate) name: ServerName<'static>,
     pub(crate) alpn_protocols: Option<Vec<ApplicationProtocol<'static>>>,
+    pub(crate) ech_mode: Option<EchMode>,
 }
 
 impl ClientConnectionBuilder {
@@ -178,12 +181,97 @@ impl ClientConnectionBuilder {
         self
     }
 
+    /// Provide a slice of [`EchConfigListBytes`] configurations to use to
+    /// connect using ECH. The slice's elements will be iterated until an ECH
+    /// configuration that is compatible with the HPKE provider's supported
+    /// suites is found.
+    ///
+    /// # Errors
+    ///
+    /// One of the provided ECH configurations must be compatible with the HPKE provider's supported
+    /// suites or an [`EncryptedClientHelloError::NoCompatibleConfig`](crate::error::EncryptedClientHelloError::NoCompatibleConfig)
+    /// error will be returned.
+    ///
+    /// If no ECH HPKE suites were provided with
+    /// [`ConfigBuilder::with_ech_hpke_suites`](crate::builder::ConfigBuilder::with_ech_hpke_suites),
+    /// [`ApiMisuse::NoEchHpkeSuites`] will be returned instead.
+    pub fn with_ech(
+        mut self,
+        ech_config_list_slice: &[EchConfigListBytes<'_>],
+    ) -> Result<Self, Error> {
+        if self.config.ech_hpke_suites.is_empty() {
+            return Err(Error::ApiMisuse(ApiMisuse::NoEchHpkeSuites));
+        }
+
+        self.ech_mode = Some(EchMode::from_ech_config_list(
+            ech_config_list_slice,
+            &self.config.ech_hpke_suites,
+        )?);
+
+        Ok(self)
+    }
+
+    /// Configure the builder to use ECH GREASE.
+    ///
+    /// ECH GREASE is a mechanism to make a non-ECH connection appear as if it is one.
+    /// This way, the extent to which ECH connections stick out is reduced and
+    /// thus, network ossification is mitigated.
+    ///
+    /// If your client uses ECH but doesn't have a configuration for a server it
+    /// wants to connect to, it is recommended per ECH's RFC 9849 to instead
+    /// GREASE the connection for the reasons listed above.
+    ///
+    /// # Note
+    ///
+    /// In order to not stick out, this method will use the first one of the
+    /// provided HPKE and stick with it. ECH's RFC 9849 says that "The selection SHOULD vary",
+    /// however, since both Google's BoringSSL & Mozilla's NSS apparently don't
+    /// do that, we follow similar behavior in order to blend in with them.
+    ///
+    /// # Errors
+    ///
+    /// This method will error if the HPKE provider fails to generate a placeholder public key.
+    ///
+    /// If no ECH HPKE suites were provided with
+    /// [`ConfigBuilder::with_ech_hpke_suites`](crate::builder::ConfigBuilder::with_ech_hpke_suites),
+    /// [`ApiMisuse::NoEchHpkeSuites`] will be returned instead.
+    pub fn with_ech_grease(mut self) -> Result<Self, Error> {
+        if self.config.ech_hpke_suites.is_empty() {
+            return Err(Error::ApiMisuse(ApiMisuse::NoEchHpkeSuites));
+        }
+
+        // just pick the first HPKE suite and stick with it
+        //
+        // the RFC says that the suites should vary to prevent fingerprinting,
+        // but both BoringSSL + NSS seem to do what we do here, so in order to
+        // not stick out, we just copy that behavior
+        self.ech_mode = Some(EchMode::grease_from_suite(self.config.ech_hpke_suites[0])?);
+
+        Ok(self)
+    }
+
+    /// Retrying ECH using a retry config from a server's previous rejection
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the server provided no retry configurations in [`RejectedEch`], or if
+    /// none of the retry configurations are compatible with the HPKE provider's supported suites.
+    pub fn with_ech_for_retry(mut self, rejection: RejectedEch) -> Result<Self, Error> {
+        self.ech_mode = Some(EchMode::Enable(EchConfig::for_retry(
+            rejection,
+            &self.config.ech_hpke_suites,
+        )?));
+
+        Ok(self)
+    }
+
     /// Finalize the builder and create the `ClientConnection`.
     pub fn build(self, tls: &mut Vec<u8>) -> Result<ClientConnection, Error> {
         let Self {
             config,
             name,
             alpn_protocols,
+            ech_mode,
         } = self;
 
         let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
@@ -194,6 +282,7 @@ impl ClientConnectionBuilder {
                 ClientExtensionsInput::from_alpn(alpn_protocols),
                 None,
                 Protocol::Tcp,
+                ech_mode,
                 tls,
             )?,
         })
@@ -269,6 +358,7 @@ impl ConnectionCommon<ClientSide> {
         extra_exts: ClientExtensionsInput,
         quic: Option<&mut dyn QuicOutput>,
         protocol: Protocol,
+        ech_mode: Option<EchMode>,
         tls: &mut Vec<u8>,
     ) -> Result<Self, Error> {
         let mut common_state = CommonState::new(Side::Client, config.fips());
@@ -284,7 +374,8 @@ impl ConnectionCommon<ClientSide> {
             tls,
         };
 
-        let input = ClientHelloInput::new(name, &extra_exts, protocol, &mut output, config)?;
+        let input =
+            ClientHelloInput::new(name, &extra_exts, protocol, &mut output, config, ech_mode)?;
         let state = input.start_handshake(extra_exts, &mut output)?;
 
         Ok(Self::new(state, data, common_state))

@@ -120,6 +120,7 @@ impl ClientConnection {
             exts,
             Some(&mut quic),
             Protocol::Quic(version),
+            None,
             &mut tls,
         )?;
 
