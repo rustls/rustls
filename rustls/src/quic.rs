@@ -553,7 +553,7 @@ fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
 ///
 /// The caller has three choices:
 ///
-/// - Call [`Self::use_verifier_trait()`].  This calls [`ClientVerifier::verify_identity()`][]
+/// - Call [`Self::with_config()`].  This calls [`ClientVerifier::verify_identity()`][]
 ///   synchronously.
 ///
 /// - Call [`Self::presented_identity()`] to obtain the peer's presented identity,
@@ -577,8 +577,8 @@ pub struct VerifyClientIdentity {
 
 impl VerifyClientIdentity {
     /// Progress the handshake by calling the pre-configured certificate verification trait.
-    pub fn use_verifier_trait(self) -> Result<ServerHandshake, Error> {
-        Self::next(self.inner, self.verify.use_verifier_trait())
+    pub fn with_config(self) -> Result<ServerHandshake, Error> {
+        Self::next(self.inner, self.verify.with_config())
     }
 
     /// Progress the handshake by incorporating the result of an external verification.

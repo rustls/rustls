@@ -298,8 +298,7 @@ fn test_quic_acceptor() {
                 assert!(expect.client_auth);
                 println!("{verify:?}");
                 println!("identity: {:?}", verify.presented_identity());
-                let ServerHandshake::NeedsInput(server) = verify.use_verifier_trait().unwrap()
-                else {
+                let ServerHandshake::NeedsInput(server) = verify.with_config().unwrap() else {
                     panic!("unexpected state");
                 };
                 let ServerHandshake::Complete(server) = server
