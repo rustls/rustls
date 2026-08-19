@@ -2015,7 +2015,7 @@ fn test_full_server_handshake() {
                 assert!(expect.client_auth);
                 println!("client identity {:?}", vci.presented_identity());
                 let ServerHandshake::NeedsInput(receive) = vci
-                    .use_verifier_trait(&mut server_output)
+                    .with_config(&mut server_output)
                     .unwrap()
                 else {
                     panic!("unexpected state");
