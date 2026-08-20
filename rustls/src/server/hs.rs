@@ -758,20 +758,21 @@ impl ExpectClientHello {
             }
         }
 
-        let first_supported_dhe_kxg = if version == ProtocolVersion::TLSv1_2 {
-            // https://datatracker.ietf.org/doc/html/rfc7919#section-4 (paragraph 2)
-            let first_supported_dhe_kxg = self
-                .config
-                .provider
-                .kx_groups
-                .iter()
-                .find(|skxg| skxg.name().key_exchange_algorithm() == KeyExchangeAlgorithm::DHE);
-            ffdhe_possible |= !ffdhe_offered && first_supported_dhe_kxg.is_some();
-            first_supported_dhe_kxg
-        } else {
-            // In TLS1.3, the server may only directly negotiate a group.
-            None
-        };
+        let first_supported_dhe_kxg =
+            if version == ProtocolVersion::TLSv1_2 || version == ProtocolVersion::DTLSv1_2 {
+                // https://datatracker.ietf.org/doc/html/rfc7919#section-4 (paragraph 2)
+                let first_supported_dhe_kxg = self
+                    .config
+                    .provider
+                    .kx_groups
+                    .iter()
+                    .find(|skxg| skxg.name().key_exchange_algorithm() == KeyExchangeAlgorithm::DHE);
+                ffdhe_possible |= !ffdhe_offered && first_supported_dhe_kxg.is_some();
+                first_supported_dhe_kxg
+            } else {
+                // In TLS1.3, the server may only directly negotiate a group.
+                None
+            };
 
         if !ecdhe_possible && !ffdhe_possible {
             return Err(PeerIncompatible::NoKxGroupsInCommon);
@@ -814,7 +815,7 @@ impl ExpectClientHello {
                 suite.usable_for_kx_algorithm(kx_group.name().key_exchange_algorithm())
             });
 
-        if version == ProtocolVersion::TLSv1_3 {
+        if version == ProtocolVersion::TLSv1_3 || version == ProtocolVersion::DTLSv1_3 {
             // This unwrap is structurally guaranteed by the early return for `!ffdhe_possible && !ecdhe_possible`
             return Ok((suite, *maybe_skxg.unwrap()));
         }

@@ -391,7 +391,7 @@ pub trait ActiveKeyExchange: Send + Sync {
         peer_pub_key: &[u8],
         tls_version: ProtocolVersion,
     ) -> Result<SharedSecret, Error> {
-        if tls_version == ProtocolVersion::TLSv1_3 {
+        if tls_version == ProtocolVersion::TLSv1_3 || tls_version == ProtocolVersion::DTLSv1_3 {
             return self.complete(peer_pub_key);
         }
 
@@ -578,7 +578,7 @@ impl NamedGroup {
     /// Returns whether this `NamedGroup` is usable for the given protocol version.
     pub fn usable_for_version(&self, version: ProtocolVersion) -> bool {
         match version {
-            ProtocolVersion::TLSv1_3 => true,
+            ProtocolVersion::TLSv1_3 | ProtocolVersion::DTLSv1_3 => true,
             _ => !matches!(
                 *self,
                 Self::MLKEM512

@@ -658,23 +658,20 @@ mod client_hello {
         output: &mut dyn Output<'_>,
         group: NamedGroup,
     ) {
-        let legacy_version = match version {
-            ProtocolVersion::DTLSv1_3 => ProtocolVersion::DTLSv1_2,
-            _ => ProtocolVersion::TLSv1_2,
-        };
+        let version = EncodableVersion::Legacy(version);
         let req = HelloRetryRequest {
-            legacy_version,
+            legacy_version: version.encode(),
             session_id,
             cipher_suite: suite.common.suite,
             extensions: HelloRetryRequestExtensions {
                 key_share: Some(group),
-                supported_versions: Some(version),
+                supported_versions: Some(version.version()),
                 ..Default::default()
             },
         };
 
         let m = Message {
-            version: EncodableVersion::Legacy(version),
+            version,
             payload: MessagePayload::handshake(
                 HandshakeMessagePayload(HandshakePayload::HelloRetryRequest(req)),
                 output.outbound_handshake_seq(),

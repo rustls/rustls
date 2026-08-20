@@ -380,7 +380,8 @@ impl ReceivePath {
             //   expect any plaintext.
             // * The payload size is indicative of a plaintext alert message.
             ContentType::Alert
-                if self.negotiated_version() == ProtocolVersion::TLSv1_3
+                if (self.negotiated_version() == ProtocolVersion::TLSv1_3
+                    || self.negotiated_version() == ProtocolVersion::DTLSv1_3)
                     && !self.decrypt_state.has_decrypted()
                     && message.payload.len() <= 2 =>
             {
@@ -498,6 +499,7 @@ impl ReceivePath {
     ) -> Result<bool, Error> {
         if !self.may_receive_application_data
             || self.negotiated_version() == ProtocolVersion::TLSv1_3
+            || self.negotiated_version() == ProtocolVersion::DTLSv1_3
         {
             return Ok(false);
         }
@@ -537,7 +539,8 @@ impl ReceivePath {
         if alert.level == AlertLevel::Warning {
             self.temper_counters
                 .received_warning_alert()?;
-            if self.negotiated_version() == ProtocolVersion::TLSv1_3
+            if (self.negotiated_version() == ProtocolVersion::TLSv1_3
+                || self.negotiated_version() == ProtocolVersion::DTLSv1_3)
                 && alert.description != AlertDescription::UserCanceled
             {
                 return Err(PeerMisbehaved::IllegalWarningAlert(alert.description).into());

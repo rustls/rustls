@@ -280,7 +280,11 @@ impl DecryptionState {
         let seq = self
             .epoch
             .per_record_additional_data(record_seq, encr.version.version());
-        std::println!("{:?} decrypting with {seq:#018x}", self.side);
+        std::println!(
+            "{:?} decrypting with epoch {:?} and {seq:#018x}",
+            self.side,
+            self.epoch,
+        );
         match decrypter.decrypt(encr, seq) {
             Ok(plaintext) => {
                 self.read_seq += 1;
