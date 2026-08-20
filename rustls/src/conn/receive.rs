@@ -191,14 +191,14 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
                 *self.state = Ok(st);
                 return Some(Ok(payload));
             }
+
+            if matches!(self.mode, MessageIterMode::Handshake) && st.is_traffic() {
+                break;
+            }
         }
 
         *self.state = Ok(st);
         None
-    }
-
-    pub(crate) fn state(&self) -> &Result<Side::State, Error> {
-        self.state
     }
 }
 
@@ -208,7 +208,7 @@ pub(crate) enum MessageIterMode {
 
     /// Handshake mode.
     ///
-    /// Stop iteration when when external input is needed to progress handshake.
+    /// Stop iteration when when external input is needed to progress handshake, or the handshake ends.
     Handshake,
 }
 
