@@ -242,6 +242,7 @@ fn test_quic_acceptor() {
         let mut client_initial = flatten_events(&mut client);
         assert!(client_initial.len() > 8);
         println!("client_initial: {client_initial:x?}");
+        let expected_hello = client_initial.clone();
 
         let ServerHandshake::NeedsInput(needs_input) = needs_input
             .process(&mut SliceInput::new(&mut client_initial[..8]), &mut vec![])
@@ -256,6 +257,8 @@ fn test_quic_acceptor() {
         else {
             panic!("unexpected state after full hello");
         };
+
+        assert_eq!(accepted.client_hello_bytes(), expected_hello);
 
         let client_hello = accepted.client_hello();
         assert_eq!(
