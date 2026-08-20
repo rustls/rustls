@@ -10,8 +10,8 @@ use crate::client::ClientSide;
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
 use crate::conn::{
-    ConnectionCommon, KeyingMaterialExporter, MessageIter, SideCommonOutput, SideData,
-    StateMachine, VerifySidePeerIdentity,
+    ConnectionCommon, KeyingMaterialExporter, MessageIter, MessageIterMode, SideCommonOutput,
+    SideData, StateMachine, VerifySidePeerIdentity,
 };
 use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
@@ -117,7 +117,8 @@ impl Connection for ClientConnection {
     }
 
     fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
-        self.inner.read_hs(input, true)
+        self.inner
+            .read_hs(input, MessageIterMode::All)
     }
 
     fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
@@ -261,7 +262,8 @@ impl Connection for ServerConnection {
     }
 
     fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
-        self.inner.read_hs(input, true)
+        self.inner
+            .read_hs(input, MessageIterMode::All)
     }
 
     fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
@@ -417,7 +419,8 @@ impl NeedsInput {
         input: &mut dyn TlsInputBuffer,
         output: &mut Vec<QuicEvent>,
     ) -> Result<ServerHandshake, Error> {
-        self.inner.read_hs(input, false)?;
+        self.inner
+            .read_hs(input, MessageIterMode::Handshake)?;
         output.extend(self.inner.events());
         ServerHandshake::try_from(self.inner)
     }
@@ -646,7 +649,11 @@ impl<Side: SideData> QuicCommon<Side> {
         ))
     }
 
-    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer, advance: bool) -> Result<(), Error> {
+    fn read_hs(
+        &mut self,
+        input: &mut dyn TlsInputBuffer,
+        mode: MessageIterMode,
+    ) -> Result<(), Error> {
         self.common
             .common
             .recv
@@ -659,7 +666,7 @@ impl<Side: SideData> QuicCommon<Side> {
             &mut tls,
             Some(&mut self.quic),
             &mut self.common,
-            advance,
+            mode,
         );
         let result = match iter.next() {
             Some(Ok(_)) | None => Ok(()),
