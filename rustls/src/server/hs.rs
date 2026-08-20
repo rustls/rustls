@@ -446,6 +446,14 @@ impl ChooseConfig {
             .with_input(ClientHelloInput::from_input(&self.client_hello)?, output)
     }
 
+    pub(crate) fn client_hello_bytes(&self) -> &[u8] {
+        let MessagePayload::Handshake { encoded, .. } = &self.client_hello.message.payload else {
+            unreachable!();
+        };
+
+        encoded.bytes()
+    }
+
     pub(crate) fn client_hello(&self) -> ClientHello<'_> {
         let MessagePayload::Handshake {
             parsed: HandshakeMessagePayload(HandshakePayload::ClientHello(client_hello)),

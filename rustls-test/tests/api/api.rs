@@ -2012,6 +2012,14 @@ fn large_client_hello_acceptor() {
     let mut state = ServerHandshake::NeedsInput(ServerHandshake::start());
     let mut input = VecInput::default();
     let hello = include_bytes!("../data/bug2227-clienthello.bin");
+    const RECORD_HEADER_LEN: usize = 5;
+    let first_record_end =
+        RECORD_HEADER_LEN + usize::from(u16::from_be_bytes([hello[3], hello[4]]));
+    let expected_hello = [
+        &hello[RECORD_HEADER_LEN..first_record_end],
+        &hello[first_record_end + RECORD_HEADER_LEN..],
+    ]
+    .concat();
     let mut cursor = io::Cursor::new(hello);
 
     loop {
@@ -2023,6 +2031,7 @@ fn large_client_hello_acceptor() {
                 .unwrap(),
             ServerHandshake::Accepted(accepted) => {
                 println!("{accepted:?}");
+                assert_eq!(accepted.client_hello_bytes(), expected_hello);
                 break;
             }
             other => panic!("unexpected {other:?}"),
@@ -2065,6 +2074,34 @@ fn acceptor_with_illegal_max_fragment_size() {
         output.is_empty(),
         "illegal max fragment size should not send an alert, as it is a local configuration issue"
     );
+}
+
+#[test]
+fn acceptor_client_hello_bytes() {
+    let hello = encoding::basic_client_hello(vec![]);
+
+    let receive = ServerHandshake::start();
+    let mut input = VecInput::default();
+    input
+        .read(
+            &mut encoding::record_framing(
+                ContentType::Handshake,
+                ProtocolVersion::TLSv1_2,
+                hello.clone(),
+            )
+            .as_slice(),
+        )
+        .unwrap();
+
+    let mut output = vec![];
+    let ServerHandshake::Accepted(accepted) = receive
+        .process(&mut input, &mut output)
+        .unwrap()
+    else {
+        panic!("unexpected receive state");
+    };
+
+    assert_eq!(accepted.client_hello_bytes(), hello);
 }
 
 #[test]

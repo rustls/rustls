@@ -514,6 +514,18 @@ impl Accepted {
         self.choose_config.client_hello()
     }
 
+    /// Get the raw, wire-encoded `ClientHello`, including information not exposed by
+    /// [`Accepted::client_hello()`], such as extension order and unknown extensions.
+    ///
+    /// # Warning
+    ///
+    /// External parsers may interpret the `ClientHello` differently from rustls.
+    /// Do not use externally parsed values for security-sensitive decisions that
+    /// must agree with rustls's interpretation.
+    pub fn client_hello_bytes(&self) -> &[u8] {
+        self.choose_config.client_hello_bytes()
+    }
+
     /// Choose a [`ServerConfig`] to progress the handshake.
     ///
     /// Resolves an [`Accepted`], providing the [`ServerConfig`] that should be used for
