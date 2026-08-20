@@ -407,9 +407,9 @@ fn versions() {
     // UDP, client 1.3, server 1.3 -> 1.3
     version_test(
         Protocol::Udp,
-        &[ProtocolVersion::TLSv1_3],
-        &[ProtocolVersion::TLSv1_3],
-        Some(ProtocolVersion::TLSv1_3),
+        &[ProtocolVersion::DTLSv1_3],
+        &[ProtocolVersion::DTLSv1_3],
+        Some(ProtocolVersion::DTLSv1_3),
     );
 
     // client 1.2+1.3, server 1.2 -> 1.2

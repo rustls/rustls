@@ -93,7 +93,7 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
     pub fn into_tls13_unpadded_message(mut self) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let payload = &mut self.payload;
 
-        if self.typ != ContentType::ApplicationData {
+        if self.typ != ContentType::ApplicationData && self.typ != ContentType::Dtls13Ciphertext {
             return Err(PeerMisbehaved::IllegalTls13ContentType.into());
         }
 

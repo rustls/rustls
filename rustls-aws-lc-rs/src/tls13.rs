@@ -4,12 +4,13 @@ use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
 use pki_types::FipsStatus;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
-    Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, EncodableVersion, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter,
+    MessageEncrypter, Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError,
+    make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::crypto::{self, CipherSuite};
-use rustls::enums::ContentType;
+use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::Error;
 use rustls::version::TLS13_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite};
@@ -412,9 +413,23 @@ impl MessageDecrypter for GcmMessageDecrypter {
         }
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
+        // TODO(DTLS): the encrypt side forces the content type to application data in the AAD. On
+        // the wire, DTLS 1.3 messages appear to have content type Dtls13Ciphertext, in that the
+        // first byte is a unified header bitmap. Check for that and sub in
+        // ContentType::ApplicationData.
+        // But all of this is wrong anyway: the AAD for DTLS 1.3 is the unified header itself. That
+        // means we need to make that value available to this context.
+        let (aad_typ, aad_version) = if msg.typ == ContentType::Dtls13Ciphertext {
+            (
+                ContentType::ApplicationData,
+                EncodableVersion::Legacy(ProtocolVersion::DTLSv1_2),
+            )
+        } else {
+            (msg.typ, msg.version)
+        };
         let aad = aead::Aad::from(make_tls13_aad(
-            msg.typ,
-            msg.version.version(),
+            aad_typ,
+            aad_version.version(),
             payload.len(),
         ));
         let plain_len = self

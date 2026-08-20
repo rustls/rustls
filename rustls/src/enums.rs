@@ -172,6 +172,8 @@ enum_builder! {
         Handshake => 0x16,
         ApplicationData => 0x17,
         Heartbeat => 0x18,
+        // TODO(DTLS): should probably get rid of this and instead use the content type of
+        // deprotected DTLS 1.3 records
         Dtls13Ciphertext => 0x20,
     }
 }
