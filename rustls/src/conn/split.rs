@@ -9,7 +9,8 @@ use crate::client::ClientSide;
 use crate::common_state::UnborrowedPayload;
 use crate::conn::kernel::KernelConnection;
 use crate::conn::{
-    ConnectionCommon, MessageIter, ReceivePath, SendOutput, SendPath, TlsInputBuffer,
+    ConnectionCommon, MessageIter, MessageIterMode, ReceivePath, SendOutput, SendPath,
+    TlsInputBuffer,
 };
 use crate::crypto::cipher::{OutboundPlain, RecordEncrypter};
 use crate::enums::ProtocolVersion;
@@ -208,8 +209,14 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             side: &mut Discard,
         };
 
-        let mut iter =
-            MessageIter::<Side, _>::receive(input, tls, &mut state, &mut recv, output, true);
+        let mut iter = MessageIter::<Side, _>::receive(
+            input,
+            tls,
+            &mut state,
+            &mut recv,
+            output,
+            MessageIterMode::Normal,
+        );
         let received_plain = match iter.next() {
             Some(Ok(payload)) => Some(payload),
             Some(Err(error)) => {
