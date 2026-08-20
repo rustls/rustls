@@ -25,7 +25,7 @@ use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 pub mod kernel;
 
 mod receive;
-pub(crate) use receive::{Input, MessageIter, ReceivePath, TrafficTemperCounters};
+pub(crate) use receive::{Input, MessageIter, MessageIterMode, ReceivePath, TrafficTemperCounters};
 pub use receive::{SliceInput, TlsInputBuffer, VecInput};
 
 mod send;
@@ -161,7 +161,13 @@ impl<Side: SideData> NeedsInput<Side> {
         input: &mut dyn TlsInputBuffer,
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
-        let mut iter = MessageIter::new(input, tls, None, &mut self.inner, false);
+        let mut iter = MessageIter::new(
+            input,
+            tls,
+            None,
+            &mut self.inner,
+            MessageIterMode::Handshake,
+        );
         let r = loop {
             match iter.next() {
                 Some(Ok(_)) => {}
@@ -511,7 +517,7 @@ impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
         core: &'a mut ConnectionCommon<Side>,
     ) -> Self {
         Self {
-            iter: MessageIter::new(input, tls, None, core, true),
+            iter: MessageIter::new(input, tls, None, core, MessageIterMode::Normal),
             done: false,
         }
     }
