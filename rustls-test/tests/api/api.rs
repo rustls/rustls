@@ -2068,6 +2068,34 @@ fn acceptor_with_illegal_max_fragment_size() {
 }
 
 #[test]
+fn acceptor_client_hello_bytes() {
+    let hello = encoding::basic_client_hello(vec![]);
+
+    let receive = ServerHandshake::start();
+    let mut input = VecInput::default();
+    input
+        .read(
+            &mut encoding::message_framing(
+                ContentType::Handshake,
+                ProtocolVersion::TLSv1_2,
+                hello.clone(),
+            )
+            .as_slice(),
+        )
+        .unwrap();
+
+    let mut output = vec![];
+    let ServerHandshake::Accepted(accepted) = receive
+        .process(&mut input, &mut output)
+        .unwrap()
+    else {
+        panic!("unexpected receive state");
+    };
+
+    assert_eq!(accepted.client_hello_bytes(), hello);
+}
+
+#[test]
 fn excess_client_hello_acceptor() {
     // this is a trivial ClientHello, followed by a fragment of a ClientHello
     let mut hello = encoding::basic_client_hello(vec![]);

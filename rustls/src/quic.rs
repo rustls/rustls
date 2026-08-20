@@ -484,6 +484,20 @@ impl Accepted {
         self.choose_config.client_hello()
     }
 
+    /// Get the wire-encoded bytes of the `ClientHello` for this connection.
+    ///
+    /// This is the complete TLS handshake message as received from the client,
+    /// starting with the four-byte handshake message header, and is identical
+    /// to the bytes hashed into the handshake transcript.  If the client offered
+    /// Encrypted Client Hello, this is the outer `ClientHello` as received.
+    ///
+    /// This can be fed to an external parser to observe parts of the message
+    /// that are not covered by [`Accepted::client_hello()`], such as the
+    /// order of extensions or extensions unknown to this library.
+    pub fn client_hello_bytes(&self) -> &[u8] {
+        self.choose_config.client_hello_bytes()
+    }
+
     /// Choose a [`ServerConfig`] to progress the handshake.
     ///
     /// Resolves an [`Accepted`], providing the [`ServerConfig`] that should be used for
