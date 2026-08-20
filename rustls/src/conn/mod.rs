@@ -163,17 +163,6 @@ impl<Side: SideData> NeedsInput<Side> {
                 Some(Err(e)) => break Err(e),
                 None => break Ok(()),
             };
-
-            // end loop as soon as traffic state is entered, as the above loop drops
-            // incoming appdata.
-            if iter
-                .state()
-                .as_ref()
-                .map(|st| st.is_traffic())
-                .unwrap_or_default()
-            {
-                break Ok(());
-            }
         };
 
         input.discard(
