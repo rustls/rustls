@@ -363,7 +363,6 @@ pub mod compress;
 mod conn;
 /// Crypto provider interface.
 pub mod crypto;
-pub mod datagram;
 pub mod error;
 mod hash_hs;
 mod limited_cache;
