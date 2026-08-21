@@ -29,14 +29,9 @@ fn handshake_fragments_flush_with_record(version: ProtocolVersion) {
         )
         .unwrap();
 
-    let fragments: Vec<_> = fragmenter
-        .fragment_dtls_handshake_message(
-            EncodableVersion::Legacy(version),
-            HandshakeType::ClientHello,
-            11.into(),
-            encoded_handshake,
-        )
-        .collect();
+    let flight = [(HandshakeType::ClientHello, 11.into(), encoded_handshake)];
+    let fragments = fragmenter
+        .fragment_dtls_handshake_message_flight(EncodableVersion::Legacy(version), &flight);
     assert_eq!(fragments.len(), 4);
 
     for (
@@ -45,15 +40,7 @@ fn handshake_fragments_flush_with_record(version: ProtocolVersion) {
             EncodedMessage {
                 typ,
                 version: encoded_version,
-                payload:
-                    DtlsHandshakeFragment {
-                        msg_type,
-                        length,
-                        message_seq,
-                        fragment_offset,
-                        fragment_length,
-                        fragment,
-                    },
+                payload,
             },
             (expected_fragment_offset, expected_fragment_length),
         ),
@@ -62,6 +49,14 @@ fn handshake_fragments_flush_with_record(version: ProtocolVersion) {
         .zip([(0, 32), (32, 32), (64, 32), (96, 4)])
         .enumerate()
     {
+        let DtlsHandshakeFragment {
+            msg_type,
+            length,
+            message_seq,
+            fragment_offset,
+            fragment_length,
+            fragment,
+        } = DtlsHandshakeFragment::read_bytes(payload.bytes()).unwrap();
         assert_eq!(typ, ContentType::Handshake, "fragment {idx}");
         assert_eq!(encoded_version.version(), version, "fragment {idx}");
         assert_eq!(msg_type, HandshakeType::ClientHello, "fragment {idx}");

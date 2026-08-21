@@ -83,14 +83,9 @@ fn single_handshake_fragment(version: ProtocolVersion, encrypted: bool) {
     };
     let record = EncodedMessage::from(test_handshake_message(version));
 
-    let records: Vec<_> = Fragmenter::default()
-        .fragment_dtls_handshake_message(
-            EncodableVersion::Legacy(version),
-            HandshakeType::ClientHello,
-            0.into(),
-            record.payload.bytes(),
-        )
-        .collect();
+    let flight = [(HandshakeType::ClientHello, 0.into(), record.payload.bytes())];
+    let records = Fragmenter::default()
+        .fragment_dtls_handshake_message_flight(EncodableVersion::Legacy(version), &flight);
     assert_eq!(records.len(), 1);
 
     let mut record_wire_bytes = EncodedMessage {
@@ -195,14 +190,9 @@ fn multiple_handshake_fragment_in_order(
             Protocol::Udp,
         )
         .unwrap();
-    let records: Vec<_> = message_fragmenter
-        .fragment_dtls_handshake_message(
-            EncodableVersion::Legacy(version),
-            HandshakeType::ClientHello,
-            0.into(),
-            &record.payload.bytes(),
-        )
-        .collect();
+    let flight = [(HandshakeType::ClientHello, 0.into(), record.payload.bytes())];
+    let records = message_fragmenter
+        .fragment_dtls_handshake_message_flight(EncodableVersion::Legacy(version), &flight);
     assert_eq!(records.len(), 3);
 
     let mut encoded_records = Vec::new();
@@ -212,11 +202,7 @@ fn multiple_handshake_fragment_in_order(
             EncodedMessage {
                 typ: record.typ,
                 version: record.version,
-                payload: record
-                    .payload
-                    .get_encoding()
-                    .as_slice()
-                    .into(),
+                payload: record.payload.bytes().into(),
             }
             .to_unencrypted_bytes(EncodingContext {
                 payload_is_encrypted: encrypted,
@@ -356,13 +342,16 @@ fn multiple_handshake_fragment_overlapping(version: ProtocolVersion) {
             Protocol::Udp,
         )
         .unwrap();
-    let mut records: Vec<_> = message_fragmenter
-        .fragment_dtls_handshake_message(
-            EncodableVersion::Legacy(version),
-            HandshakeType::ClientHello,
-            0.into(),
-            &record.payload.bytes(),
-        )
+    let flight = [(HandshakeType::ClientHello, 0.into(), record.payload.bytes())];
+    let encoded_records = message_fragmenter
+        .fragment_dtls_handshake_message_flight(EncodableVersion::Legacy(version), &flight);
+    let mut records: Vec<_> = encoded_records
+        .iter()
+        .map(|t| EncodedMessage {
+            typ: t.typ,
+            version: t.version,
+            payload: DtlsHandshakeFragment::read_bytes(t.payload.bytes()).unwrap(),
+        })
         .collect();
     assert_eq!(records.len(), 4);
 
@@ -490,20 +479,20 @@ fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_1(version: Pro
             Protocol::Udp,
         )
         .unwrap();
-    let records: Vec<_> = message_fragmenter
-        .fragment_dtls_handshake_message(
-            EncodableVersion::Legacy(version),
+    let flight = [
+        (
             HandshakeType::ClientHello,
             666.into(), // [2, 154]
-            &first_record.payload.bytes(),
-        )
-        .chain(message_fragmenter.fragment_dtls_handshake_message(
-            EncodableVersion::Legacy(version),
+            first_record.payload.bytes(),
+        ),
+        (
             HandshakeType::ClientHello,
             667.into(), // [2, 155]
-            &second_record.payload.bytes(),
-        ))
-        .collect();
+            second_record.payload.bytes(),
+        ),
+    ];
+    let records = message_fragmenter
+        .fragment_dtls_handshake_message_flight(EncodableVersion::Legacy(version), &flight);
     assert_eq!(records.len(), 8);
 
     // Interleave the fragments of the two handshake messages to simulate UDP messages arriving out
@@ -619,20 +608,20 @@ fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_2(version: Pro
             Protocol::Udp,
         )
         .unwrap();
-    let records: Vec<_> = message_fragmenter
-        .fragment_dtls_handshake_message(
-            EncodableVersion::Legacy(version),
+    let flight = [
+        (
             HandshakeType::ClientHello,
             666.into(), // [2, 154]
-            &first_record.payload.bytes(),
-        )
-        .chain(message_fragmenter.fragment_dtls_handshake_message(
-            EncodableVersion::Legacy(version),
+            first_record.payload.bytes(),
+        ),
+        (
             HandshakeType::ClientHello,
             667.into(), // [2, 155]
-            &second_record.payload.bytes(),
-        ))
-        .collect();
+            second_record.payload.bytes(),
+        ),
+    ];
+    let records = message_fragmenter
+        .fragment_dtls_handshake_message_flight(EncodableVersion::Legacy(version), &flight);
     assert_eq!(records.len(), 8);
 
     // Interleave the fragments of the two handshake messages to simulate UDP messages arriving out

@@ -6,7 +6,7 @@ use crate::crypto::cipher::{
     EncodableVersion, EncodedMessage, EncodingContext, EncryptionState, MessageEncrypter,
     OutboundPlain, Payload, PreEncryptAction,
 };
-use crate::enums::{ContentType, ProtocolVersion};
+use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
 use crate::msgs::{
     AlertLevel, Codec, EncrypterDecrypterPurpose, Fragmenter, HandshakeSequence,
@@ -248,6 +248,43 @@ impl SendPath {
             ProtocolVersion::TLSv1_2
         }
     }
+
+    fn send_dtls_handshake_flight<E: AsRef<[u8]>>(
+        &mut self,
+        m: &Message<'_>,
+        encoded: &[(HandshakeType, HandshakeSequenceNumber, E)],
+        must_encrypt: bool,
+        tls: &mut Vec<u8>,
+    ) {
+        let messages: Vec<_> = self
+            .message_fragmenter
+            .fragment_dtls_handshake_message_flight(m.version, encoded)
+            .into_iter()
+            .map(|m| EncodedMessage {
+                typ: m.typ,
+                version: m.version,
+                payload: m.payload.get_encoding(),
+            })
+            .collect();
+        match must_encrypt {
+            true => self.send_messages::<true>(
+                messages.iter().map(|m| EncodedMessage {
+                    typ: m.typ,
+                    version: m.version,
+                    payload: m.payload.as_slice().into(),
+                }),
+                tls,
+            ),
+            false => self.send_messages::<false>(
+                messages.iter().map(|m| EncodedMessage {
+                    typ: m.typ,
+                    version: m.version,
+                    payload: m.payload.as_slice().into(),
+                }),
+                tls,
+            ),
+        };
+    }
 }
 
 impl SendOutput for SendPath {
@@ -327,68 +364,15 @@ impl SendOutput for SendPath {
                     seq,
                 },
             ) => {
-                let messages: Vec<_> = self
-                    .message_fragmenter
-                    .fragment_dtls_handshake_message(
-                        m.version,
-                        parsed.0.handshake_type(),
-                        *seq,
-                        encoded.bytes(),
-                    )
-                    .map(|m| EncodedMessage {
-                        typ: m.typ,
-                        version: m.version,
-                        payload: m.payload.get_encoding(),
-                    })
-                    .collect();
-                match must_encrypt {
-                    true => self.send_messages::<true>(
-                        messages.iter().map(|m| EncodedMessage {
-                            typ: m.typ,
-                            version: m.version,
-                            payload: m.payload.as_slice().into(),
-                        }),
-                        tls,
-                    ),
-                    false => self.send_messages::<false>(
-                        messages.iter().map(|m| EncodedMessage {
-                            typ: m.typ,
-                            version: m.version,
-                            payload: m.payload.as_slice().into(),
-                        }),
-                        tls,
-                    ),
-                };
+                self.send_dtls_handshake_flight(
+                    &m,
+                    &[(parsed.0.handshake_type(), *seq, encoded.bytes())],
+                    must_encrypt,
+                    tls,
+                );
             }
             (Protocol::Udp, MessagePayload::HandshakeFlight(encoded)) => {
-                let messages: Vec<_> = self
-                    .message_fragmenter
-                    .fragment_dtls_handshake_message_flight(m.version, encoded)
-                    .into_iter()
-                    .map(|m| EncodedMessage {
-                        typ: m.typ,
-                        version: m.version,
-                        payload: m.payload.get_encoding(),
-                    })
-                    .collect();
-                match must_encrypt {
-                    true => self.send_messages::<true>(
-                        messages.iter().map(|m| EncodedMessage {
-                            typ: m.typ,
-                            version: m.version,
-                            payload: m.payload.as_slice().into(),
-                        }),
-                        tls,
-                    ),
-                    false => self.send_messages::<false>(
-                        messages.iter().map(|m| EncodedMessage {
-                            typ: m.typ,
-                            version: m.version,
-                            payload: m.payload.as_slice().into(),
-                        }),
-                        tls,
-                    ),
-                };
+                self.send_dtls_handshake_flight(&m, encoded, must_encrypt, tls);
             }
             // Other DTLS messages are required to fit into a single record. Application data should
             // be chunked by the application before being handled off to rustls.

@@ -36,75 +36,19 @@ pub(crate) struct Fragmenter {
 }
 
 impl Fragmenter {
-    /// Take a DTLS handshake message and fragment it into multiple unencrypted outbound messages,
-    /// each consisting of a DTLSPlaintext ([1]). Other DTLS messages may not be fragmented.
+    /// Fragment the flight of handshake messages into DTLS plaintext records.
     ///
-    /// [1]: https://datatracker.ietf.org/doc/html/rfc9147#appendix-A.1
-    // TODO(DTLS): this method should go away, and instead fragmenting a single
-    // message should be achieved by passing a slice of one element to
-    // Self::fragment_dtls_handshake_message_flight
-    pub(crate) fn fragment_dtls_handshake_message<'a>(
-        &self,
-        version: EncodableVersion,
-        msg_type: HandshakeType,
-        handshake_sequence_number: HandshakeSequenceNumber,
-        handshake_payload: &'a [u8],
-    ) -> impl ExactSizeIterator<Item = EncodedMessage<DtlsHandshakeFragment<'a>>> + 'a {
-        // handshake_payload will have been encoded as a TLS handshake message, so we discard the
-        // front 4 bytes (1 byte of handshake type plus 3 bytes of length) so that we can re-encode
-        // as a DTLS handshake fragment.
-        let handshake_payload = &handshake_payload[4..];
-        assert!(handshake_payload.len() <= U24::MAX as usize);
-        let length = U24(handshake_payload.len() as u32);
-        let mut fragment_offset = 0;
-
-        Chunker::new(
-            handshake_payload.into(),
-            NonZeroUsize::new(self.max_frag.get() - DTLS_HANDSHAKE_HEADER_SIZE).unwrap(),
-        )
-        .map(move |payload| {
-            assert!(fragment_offset <= U24::MAX);
-            assert!(payload.len() <= U24::MAX as usize);
-            let payload_len = payload.len() as u32;
-
-            let fragment = match payload {
-                OutboundPlain::Single(buf) => Payload::Borrowed(buf),
-                OutboundPlain::Multiple { .. } => {
-                    panic!("should never construct OutboundPlain::Multiple from a Payload")
-                }
-            };
-
-            let fragment = DtlsHandshakeFragment {
-                msg_type,
-                length,
-                message_seq: handshake_sequence_number,
-                fragment_offset: U24(fragment_offset),
-                fragment_length: U24(payload_len),
-                fragment,
-            };
-
-            fragment_offset += payload_len;
-
-            EncodedMessage {
-                typ: ContentType::Handshake,
-                version,
-                payload: fragment,
-            }
-        })
-    }
-
-    /// Fragment the provided flight of handshake messages (represented as tuples of the handshake
-    /// type and the encoded handshake message payload) as one or more DTLS records.
+    /// The emitted `EncodedMessage` values encode a DTLSPlaintext ([1]).
     ///
-    /// Each record may contain more than one handshake message, or just a single handshake
+    /// Each emitted record may contain more than one handshake message, or just a single handshake
     /// fragment.
     ///
-    /// `handshake_sequence_number` is the handshake sequence number for the first message in this
-    /// flight.
-    pub(crate) fn fragment_dtls_handshake_message_flight<'a>(
+    /// [1]: https://datatracker.ietf.org/doc/html/rfc9147#appendix-A.1
+    pub(crate) fn fragment_dtls_handshake_message_flight<'a, E: AsRef<[u8]>>(
         &self,
         version: EncodableVersion,
-        handshake_messages: &'a [(HandshakeType, HandshakeSequenceNumber, Vec<u8>)],
+        // TODO(timg): take &[u8] instead of Vec<u8> here
+        handshake_messages: &'a [(HandshakeType, HandshakeSequenceNumber, E)],
     ) -> Vec<EncodedMessage<Payload<'a>>> {
         let mut records = Vec::new();
         // The current record we are packing with the handshake flight. Does not include record
@@ -130,7 +74,7 @@ impl Fragmenter {
             // handshake_payload will have been encoded as a TLS handshake message, so we discard the
             // front 4 bytes (1 byte of handshake type plus 3 bytes of length) so that we can re-encode
             // as a DTLS handshake fragment.
-            let handshake_payload = &handshake_payload[4..];
+            let handshake_payload = &handshake_payload.as_ref()[4..];
             assert!(handshake_payload.len() <= U24::MAX as usize);
             let length = U24(handshake_payload.len() as u32);
 
