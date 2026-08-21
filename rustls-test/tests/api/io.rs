@@ -413,8 +413,8 @@ fn client_complete_io_for_write() {
             )
             .unwrap();
             assert!(rdlen == 0 && wrlen > 0);
-            println!("{:?}", pipe.message_lengths());
-            assert_eq!(pipe.message_lengths(), vec![42, 42]);
+            println!("{:?}", pipe.record_lengths());
+            assert_eq!(pipe.record_lengths(), vec![42, 42]);
             assert_eq!(&pipe.received, b"0123456789012345678901234567890123456789",);
         }
     }
@@ -626,8 +626,8 @@ fn buffered_client_complete_io_for_write() {
             )
             .unwrap();
             assert!(rdlen == 0 && wrlen > 0);
-            println!("{:?}", pipe.message_lengths());
-            assert_eq!(pipe.message_lengths(), vec![42, 42]);
+            println!("{:?}", pipe.record_lengths());
+            assert_eq!(pipe.record_lengths(), vec![42, 42]);
             assert_eq!(&pipe.received, b"0123456789012345678901234567890123456789",);
         }
     }
@@ -760,7 +760,7 @@ fn server_complete_io_for_write() {
             )
             .unwrap();
             assert!(rdlen == 0 && wrlen > 0);
-            assert_eq!(pipe.message_lengths(), vec![42, 42]);
+            assert_eq!(pipe.record_lengths(), vec![42, 42]);
             assert_eq!(&pipe.received, b"0123456789012345678901234567890123456789",);
         }
     }
@@ -1570,7 +1570,7 @@ fn server_appdata_record_layout() {
         .write_tls(b"01234567890123456789".into(), &mut server_output)
         .unwrap();
     assert_eq!(84, server_output.len());
-    assert_eq!(message_lengths(&server_output), vec![42, 42]);
+    assert_eq!(record_lengths(&server_output), vec![42, 42]);
     transfer(&mut server_output, &mut client_input);
     let mut received = Vec::new();
     client
@@ -1608,7 +1608,7 @@ fn client_appdata_record_layout() {
         .write_tls(b"01234567890123456789".into(), &mut client_output)
         .unwrap();
     assert_eq!(84, client_output.len());
-    assert_eq!(message_lengths(&client_output), vec![42, 42]);
+    assert_eq!(record_lengths(&client_output), vec![42, 42]);
     transfer(&mut client_output, &mut server_input);
     let mut received = Vec::new();
     server
@@ -1647,7 +1647,7 @@ fn server_handshake_with_half_rtt_data() {
 
     // don't assert exact sizes here, to avoid a brittle test
     assert!(server_output.len() > 2400); // its pretty big (contains cert chain)
-    assert_eq!(message_lengths(&server_output).len(), 5); // at least a server hello/ccs/cert/serverkx/0.5rtt data
+    assert_eq!(record_lengths(&server_output).len(), 5); // at least a server hello/ccs/cert/serverkx/0.5rtt data
     transfer(&mut server_output, &mut client_input);
 
     // The client decrypts the 0.5-RTT application data as part of this flight.
@@ -1701,7 +1701,7 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
 
     // don't assert exact sizes here, to avoid a brittle test
     assert!(server_output.len() > 2400); // its pretty big (contains cert chain)
-    assert_eq!(message_lengths(&server_output).len(), 3); // at least a server hello/ccs/cert/serverkx data
+    assert_eq!(record_lengths(&server_output).len(), 3); // at least a server hello/ccs/cert/serverkx data
     transfer(&mut server_output, &mut client_input);
 
     // client second flight
@@ -1725,7 +1725,7 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
         .write_tls(b"0123456789".into(), &mut server_output)
         .unwrap();
     assert_eq!(server_output.len(), 258);
-    let lengths = message_lengths(&server_output);
+    let lengths = record_lengths(&server_output);
     assert_eq!(lengths[lengths.len() - 2..], [42, 32]);
     transfer(&mut server_output, &mut client_input);
     let mut received = Vec::new();
@@ -1770,7 +1770,7 @@ fn client_handshake_flights() {
 
     // don't assert exact sizes here, to avoid a brittle test
     assert!(client_output.len() > 200); // just the client hello
-    assert_eq!(message_lengths(&client_output).len(), 1); // only a client hello
+    assert_eq!(record_lengths(&client_output).len(), 1); // only a client hello
     transfer(&mut client_output, &mut server_input);
     server
         .process_new_packets(&mut server_input, &mut server_output)
@@ -1791,7 +1791,7 @@ fn client_handshake_flights() {
 
     // CCS, finished, then two application data records
     assert_eq!(client_output.len(), 138);
-    assert_eq!(message_lengths(&client_output), vec![6, 58, 42, 32]);
+    assert_eq!(record_lengths(&client_output), vec![6, 58, 42, 32]);
     transfer(&mut client_output, &mut server_input);
     let mut received = Vec::new();
     server
@@ -1814,7 +1814,7 @@ fn test_client_mtu_reduction() {
         let (_client, _server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config, &mut client_output);
 
-        for length in message_lengths(&client_output) {
+        for length in record_lengths(&client_output) {
             assert!(length <= 64);
         }
     }
@@ -1849,7 +1849,7 @@ fn test_server_mtu_reduction() {
             server
                 .write_tls((&big_data).into(), &mut server_output)
                 .unwrap();
-            for length in message_lengths(&server_output) {
+            for length in record_lengths(&server_output) {
                 assert!(length <= 64);
             }
             transfer(&mut server_output, &mut client_input);
@@ -1864,7 +1864,7 @@ fn test_server_mtu_reduction() {
             .process_new_packets(&mut server_input, &mut server_output)
             .handle_all(&mut Vec::new())
             .unwrap();
-        for length in message_lengths(&server_output) {
+        for length in record_lengths(&server_output) {
             assert!(length <= 64);
         }
         transfer(&mut server_output, &mut client_input);
@@ -2117,7 +2117,7 @@ fn test_server_handshake() {
         // Minimal valid 1-byte application data message is not a handshake message
         acceptor_input
             .read(
-                &mut encoding::message_framing(
+                &mut encoding::record_framing(
                     ContentType::ApplicationData,
                     ProtocolVersion::TLSv1_2,
                     vec![0x00],
@@ -2138,7 +2138,7 @@ fn test_server_handshake() {
         // Minimal 1-byte ClientHello message is not a legal handshake message
         acceptor_input
             .read(
-                &mut encoding::message_framing(
+                &mut encoding::record_framing(
                     ContentType::Handshake,
                     ProtocolVersion::TLSv1_2,
                     encoding::handshake_framing(HandshakeType::ClientHello, vec![0x00]),
@@ -2641,7 +2641,7 @@ fn test_close_notify_sent_prior_to_handshake_complete() {
     let mut server_output = Vec::new();
     server_input
         .read(
-            &mut encoding::message_framing(
+            &mut encoding::record_framing(
                 ContentType::Handshake,
                 ProtocolVersion::TLSv1_2,
                 encoding::basic_client_hello(vec![]),
@@ -2746,7 +2746,7 @@ fn test_read_tls_artificial_eof_after_close_notify() {
     );
 }
 
-fn message_lengths(mut tls: &[u8]) -> Vec<usize> {
+fn record_lengths(mut tls: &[u8]) -> Vec<usize> {
     let mut lengths = Vec::new();
     while !tls.is_empty() {
         let length = 5 + u16::from_be_bytes([tls[3], tls[4]]) as usize;

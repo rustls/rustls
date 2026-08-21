@@ -19,7 +19,7 @@ pub(crate) struct SendPath {
     has_sent_fatal_alert: bool,
     /// If we signaled end of stream.
     pub(crate) has_sent_close_notify: bool,
-    message_fragmenter: Fragmenter,
+    fragmenter: Fragmenter,
     key_update_local: KeyUpdateLocal,
     key_update_remote: KeyUpdateRemote,
     negotiated_version: Option<ProtocolVersion>,
@@ -73,8 +73,8 @@ impl SendPath {
         tls: &mut Vec<u8>,
     ) -> usize {
         let len = payload.len();
-        self.send_messages::<true>(
-            self.message_fragmenter.fragment(
+        self.send_records::<true>(
+            self.fragmenter.fragment(
                 ContentType::ApplicationData,
                 EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
                 payload,
@@ -88,7 +88,7 @@ impl SendPath {
     }
 
     /// Encrypt and queue each fragment in `iter`.
-    fn send_messages<'a, const MUST_ENCRYPT: bool>(
+    fn send_records<'a, const MUST_ENCRYPT: bool>(
         &mut self,
         iter: impl ExactSizeIterator<Item = Record<OutboundPlain<'a>>>,
         tls: &mut Vec<u8>,
@@ -139,7 +139,7 @@ impl SendPath {
     }
 
     pub(crate) fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
-        self.message_fragmenter
+        self.fragmenter
             .set_max_fragment_size(new)
     }
 
@@ -231,7 +231,7 @@ impl SendOutput for SendPath {
     /// Send a raw TLS message, fragmenting it if needed.
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, tls: &mut Vec<u8>) {
         let record = Record::from(m);
-        let fragments = self.message_fragmenter.fragment(
+        let fragments = self.fragmenter.fragment(
             record.typ,
             record.version,
             record.payload.bytes().into(),
@@ -240,8 +240,8 @@ impl SendOutput for SendPath {
         );
 
         match must_encrypt {
-            true => self.send_messages::<true>(fragments, tls),
-            false => self.send_messages::<false>(fragments, tls),
+            true => self.send_records::<true>(fragments, tls),
+            false => self.send_records::<false>(fragments, tls),
         }
     }
 }
@@ -254,7 +254,7 @@ impl Default for SendPath {
             may_send_half_rtt_data: false,
             has_sent_fatal_alert: false,
             has_sent_close_notify: false,
-            message_fragmenter: Fragmenter::default(),
+            fragmenter: Fragmenter::default(),
             key_update_local: KeyUpdateLocal::Idle,
             key_update_remote: KeyUpdateRemote::Idle,
             negotiated_version: None,

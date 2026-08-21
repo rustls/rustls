@@ -145,9 +145,9 @@ pub struct KeyBlockShape {
     pub explicit_nonce_len: usize,
 }
 
-/// Objects with this trait can decrypt TLS messages.
+/// Objects with this trait can decrypt TLS records.
 pub trait RecordDecrypter: Send + Sync {
-    /// Decrypt the given TLS message `record`, using the sequence number
+    /// Decrypt the given TLS record, using the sequence number
     /// `seq` which can be used to derive a unique [`Nonce`].
     fn decrypt<'a>(
         &mut self,
@@ -156,9 +156,9 @@ pub trait RecordDecrypter: Send + Sync {
     ) -> Result<Record<&'a [u8]>, Error>;
 }
 
-/// Objects with this trait can encrypt TLS messages.
+/// Objects with this trait can encrypt TLS records.
 pub trait RecordEncrypter: Send + Sync {
-    /// Encrypt the given TLS message `record` into `out`, using the sequence number
+    /// Encrypt the given TLS record into `out`, using the sequence number
     /// `seq` which can be used to derive a unique [`Nonce`].
     ///
     /// The encrypted payload including all framing the ciphersuite requires, such
@@ -166,7 +166,7 @@ pub trait RecordEncrypter: Send + Sync {
     /// front of `out`. `out` must be at least [`Self::encrypted_payload_len()`] bytes
     /// long. See [`EncryptBuffer`] for a convenient wrapper.
     ///
-    /// The returned message describes the resulting record: its payload borrows the
+    /// The return value describes the resulting record: its payload borrows the
     /// written prefix of `out`, and its `typ` and `version` are what the record
     /// header should carry on the wire. Encoding the record header is the caller's
     /// responsibility and implementations of the `RecordEncrypter` trait must not
@@ -181,9 +181,9 @@ pub trait RecordEncrypter: Send + Sync {
     /// Return the length of the ciphertext that results from encrypting plaintext of length `payload_len`.
     ///
     /// For a zero `payload_len` this should return the _minimum_ overhead for any
-    /// message.  Then, to fragment a long message into chunks of length `F`,
+    /// payload.  Then, to fragment a long payload into chunks of length `F`,
     /// Rustls will first set `A := encrypted_payload_len(0)` and then supply the
-    /// message to [`Self::encrypt()`] in chunks of length `F - A`.  Each `encrypt()`
+    /// payload to [`Self::encrypt()`] in chunks of length `F - A`.  Each `encrypt()`
     /// is then free to pad or otherwise transform the length at its option.
     fn encrypted_payload_len(&self, payload_len: usize) -> usize;
 }
@@ -237,7 +237,7 @@ impl AsRef<[u8]> for Iv {
     }
 }
 
-/// A nonce.  This is unique for all messages on a connection.
+/// A nonce.  This is unique for all records on a connection.
 pub struct Nonce {
     buf: [u8; Iv::MAX_LEN],
     len: usize,

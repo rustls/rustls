@@ -6,7 +6,7 @@ use crate::crypto::cipher::{EncodableVersion, InboundOpaque, Record, RecordError
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader, U24};
-use crate::msgs::{HEADER_SIZE, read_opaque_message_header};
+use crate::msgs::{HEADER_SIZE, read_record_header};
 
 mod buffers;
 use buffers::Coalescer;
@@ -55,7 +55,7 @@ impl Deframer {
     pub(crate) fn deframe<'a>(&mut self, buf: &'a mut [u8]) -> Option<Result<Deframed<'a>, Error>> {
         let mut reader = Reader::new(buf.get(self.processed..)?);
 
-        let (typ, version, len) = match read_opaque_message_header(&mut reader) {
+        let (typ, version, len) = match read_record_header(&mut reader) {
             Ok(header) => header,
             Err(err) => {
                 let err = match err {
@@ -166,8 +166,8 @@ impl Deframer {
     ///
     /// In a normal TLS stream, handshake messages need not be contiguous.
     /// For example, each handshake message could be delivered in its own
-    /// outer TLS message.  This would mean the handshake messages are
-    /// separated by the outer TLS message headers, and likely also
+    /// outer TLS record.  This would mean the handshake messages are
+    /// separated by the outer TLS record headers, and likely also
     /// separated by encryption overhead (any explicit nonce in front,
     /// any padding and authentication tag afterwards).
     ///
@@ -280,7 +280,7 @@ impl Deframer {
     ///
     /// If this was the last pending handshake message, marks the processed
     /// buffer region for discard.
-    pub(crate) fn message<'b>(
+    pub(crate) fn record<'b>(
         &mut self,
         next_span: FragmentSpan,
         containing_buffer: &'b [u8],
@@ -410,7 +410,7 @@ impl Iterator for DissectHandshakeIter<'_> {
 
 #[derive(Debug)]
 pub(crate) struct FragmentSpan {
-    /// version taken from containing message.
+    /// version taken from containing record.
     version: ProtocolVersion,
 
     /// size of the handshake message body (excluding header)
@@ -488,7 +488,7 @@ mod tests {
         std::println!("after:  {deframer:?}");
 
         let span = deframer.complete_span().unwrap();
-        let record = deframer.message(span, &input);
+        let record = deframer.record(span, &input);
         std::println!("record {record:?}");
         assert_eq!(record.typ, ContentType::Handshake);
         assert_eq!(record.version.version(), ProtocolVersion::TLSv1_3);
@@ -511,7 +511,7 @@ mod tests {
         deframer.coalesce(&mut input).unwrap();
         let span = deframer.complete_span().unwrap();
 
-        let record = std::dbg!(deframer.message(span, &input));
+        let record = std::dbg!(deframer.record(span, &input));
         assert_eq!(record.typ, ContentType::Handshake);
         assert_eq!(record.version.version(), ProtocolVersion::TLSv1_3);
         assert_eq!(record.payload, &[0x21, 0x00, 0x00, 0x05, 1, 2, 3, 4, 5]);
@@ -527,7 +527,7 @@ mod tests {
         let mut input = vec![0x21, 0x01, 0x00, X, 0x00, 0xab, X];
         let mut deframer = Deframer::default();
 
-        // split header over multiple messages, which motivates doing
+        // split header over multiple records, which motivates doing
         // this check in `coalesce()`
         add_bytes(&mut deframer, 0..3, &input);
         add_bytes(&mut deframer, 4..6, &input);
@@ -564,7 +564,7 @@ mod tests {
         add_bytes(&mut deframer, 8..12, &input);
 
         let span = deframer.complete_span().unwrap();
-        let record = deframer.message(span, &input);
+        let record = deframer.record(span, &input);
         assert!(deframer.complete_span().is_none());
 
         assert_eq!(record.typ, ContentType::Handshake);
@@ -583,7 +583,7 @@ mod tests {
         while let Some(result) = deframer.deframe(&mut input) {
             let Deframed { record, bounds } = result.unwrap();
             let plain = record.into_plain_record();
-            std::println!("message {plain:?}");
+            std::println!("record {plain:?}");
 
             deframer.input_message(
                 plain.version.version(),
@@ -598,7 +598,7 @@ mod tests {
 
         for _ in 0..4 {
             let span = deframer.complete_span().unwrap();
-            let record = deframer.message(span, &input[..]);
+            let record = deframer.record(span, &input[..]);
             assert!(matches!(
                 record,
                 Record {
@@ -610,7 +610,7 @@ mod tests {
         }
 
         let span = deframer.complete_span().unwrap();
-        let record = deframer.message(span, &input[..]);
+        let record = deframer.record(span, &input[..]);
         assert!(matches!(
             record,
             Record {
@@ -660,7 +660,7 @@ mod tests {
     }
 
     #[test]
-    fn iterate_one_message() {
+    fn iterate_one_record() {
         let mut buffer = [0x17, 0x03, 0x03, 0x00, 0x01, 0x00];
         let mut deframer = Deframer::default();
 
@@ -675,7 +675,7 @@ mod tests {
     }
 
     #[test]
-    fn iterate_two_messages() {
+    fn iterate_two_records() {
         let mut buffer = [
             0x16, 0x03, 0x03, 0x00, 0x01, 0x00, 0x17, 0x03, 0x03, 0x00, 0x01, 0x00,
         ];
@@ -724,7 +724,7 @@ mod tests {
     }
 
     #[test]
-    fn iterator_excess_message_length_rejected() {
+    fn iterator_excess_record_length_rejected() {
         let mut buffer = include_bytes!("../../testdata/deframer-invalid-length.bin").to_vec();
         let mut deframer = Deframer::default();
         let result = deframer.deframe(&mut buffer).unwrap();
@@ -735,7 +735,7 @@ mod tests {
     }
 
     #[test]
-    fn iterator_zero_message_length_rejected() {
+    fn iterator_zero_record_length_rejected() {
         let mut buffer = include_bytes!("../../testdata/deframer-invalid-empty.bin").to_vec();
         let mut deframer = Deframer::default();
         let result = deframer.deframe(&mut buffer).unwrap();
@@ -746,7 +746,7 @@ mod tests {
     }
 
     #[test]
-    fn iterator_over_many_messages() {
+    fn iterator_over_many_records() {
         let client_hello = include_bytes!("../../testdata/deframer-test.1.bin");
         let mut buffer = Vec::with_capacity(3 * client_hello.len());
         buffer.extend(client_hello);

@@ -26,9 +26,9 @@ impl EncryptionState {
         }
     }
 
-    /// Encrypt a TLS message, returning the fully-encoded record.
+    /// Encrypt a TLS record, returning the fully-encoded record.
     ///
-    /// `plain` is a TLS message we'd like to send.  This function
+    /// `plain` is a TLS record we'd like to send.  This function
     /// panics if the requisite keying material hasn't been established yet.
     ///
     /// The result including framing is appended to `output`.
@@ -51,7 +51,7 @@ impl EncryptionState {
         output.truncate(start + written);
     }
 
-    /// Encrypt a TLS message directly into `out`, returning the encoded
+    /// Encrypt a TLS record directly into `out`, returning the encoded
     /// record's length.
     ///
     /// The record, header included, is written to the front of `out`,
@@ -97,7 +97,7 @@ impl EncryptionState {
     }
 
     /// Set and start using the given `RecordEncrypter` for future outgoing
-    /// message encryption.
+    /// record encryption.
     pub(crate) fn set_record_encrypter(
         &mut self,
         cipher: Box<dyn RecordEncrypter>,
@@ -110,10 +110,10 @@ impl EncryptionState {
         };
     }
 
-    /// Return a remedial action when we are near to encrypting too many messages.
+    /// Return a remedial action when we are near to encrypting too many records.
     ///
     /// `add` is added to the current sequence number.  `add` as `0` means
-    /// "the next message processed by `encrypt_outgoing`"
+    /// "the next record processed by `encrypt_outgoing`"
     pub(crate) fn pre_encrypt_action(&self, add: u64) -> Option<PreEncryptAction> {
         match self.write_seq.saturating_add(add) {
             v if v == self.write_seq_max => Some(PreEncryptAction::RefreshOrClose),
@@ -149,9 +149,9 @@ pub(crate) struct DecryptionState {
     read_seq: u64,
     has_decrypted: bool,
 
-    // Message encrypted with other keys may be encountered, so failures
+    // Records encrypted with other keys may be encountered, so failures
     // should be swallowed by the caller.  This struct tracks the amount
-    // of message size this is allowed for.
+    // of record size this is allowed for.
     trial_decryption_len: Option<usize>,
 }
 
@@ -166,9 +166,9 @@ impl DecryptionState {
         }
     }
 
-    /// Decrypt a TLS message.
+    /// Decrypt a TLS record.
     ///
-    /// `encr` is a decoded message allegedly received from the peer.
+    /// `encr` is a decoded record allegedly received from the peer.
     /// If it can be decrypted, its decryption is returned.  Otherwise,
     /// an error is returned.
     pub(crate) fn decrypt_incoming<'a>(
@@ -183,7 +183,7 @@ impl DecryptionState {
         };
 
         // Set to `true` if the peer appears to getting close to encrypting
-        // too many messages with this key.
+        // too many records with this key.
         //
         // Perhaps if we send an alert well before their counter wraps, a
         // buggy peer won't make a terrible mistake here?
@@ -205,7 +205,7 @@ impl DecryptionState {
                 }))
             }
             Err(Error::DecryptError) if self.doing_trial_decryption(encrypted_len) => {
-                trace!("Dropping undecryptable message after aborted early_data");
+                trace!("Dropping undecryptable record after aborted early_data");
                 Ok(None)
             }
             Err(err) => Err(err),
@@ -213,7 +213,7 @@ impl DecryptionState {
     }
 
     /// Set and start using the given `RecordDecrypter` for future incoming
-    /// message decryption.
+    /// record decryption.
     pub(crate) fn set_record_decrypter(
         &mut self,
         cipher: Box<dyn RecordDecrypter>,
@@ -225,7 +225,7 @@ impl DecryptionState {
     }
 
     /// Set and start using the given `RecordDecrypter` for future incoming
-    /// message decryption, and enable "trial decryption" mode for when TLS1.3
+    /// record decryption, and enable "trial decryption" mode for when TLS1.3
     /// 0-RTT is attempted but rejected by the server.
     pub(crate) fn set_record_decrypter_with_trial_decryption(
         &mut self,
@@ -242,7 +242,7 @@ impl DecryptionState {
         self.trial_decryption_len = None;
     }
 
-    /// Return true if we have ever decrypted a message. This is used in place
+    /// Return true if we have ever decrypted a record. This is used in place
     /// of checking the read_seq since that will be reset on key updates.
     pub(crate) fn has_decrypted(&self) -> bool {
         self.has_decrypted
@@ -269,9 +269,9 @@ impl DecryptionState {
 /// Result of decryption.
 #[derive(Debug)]
 pub(crate) struct Decrypted<'a> {
-    /// Whether the peer appears to be getting close to encrypting too many messages with this key.
+    /// Whether the peer appears to be getting close to encrypting too many records with this key.
     pub(crate) want_close_before_decrypt: bool,
-    /// The decrypted message.
+    /// The decrypted record.
     pub(crate) plaintext: Record<&'a [u8]>,
 }
 
@@ -332,7 +332,7 @@ mod tests {
         assert_eq!(record_layer.read_seq, 0);
         assert!(!record_layer.has_decrypted());
 
-        // Decrypting a message should update the read_seq and track that we have now performed
+        // Decrypting a record should update the read_seq and track that we have now performed
         // a decryption.
         record_layer
             .decrypt_incoming(Record::new(
@@ -344,7 +344,7 @@ mod tests {
         assert_eq!(record_layer.read_seq, 1);
         assert!(record_layer.has_decrypted());
 
-        // Resetting the record layer message decrypter (as if a key update occurred) should reset
+        // Resetting the record layer decrypter (as if a key update occurred) should reset
         // the read_seq number, but not our knowledge of whether we have decrypted previously.
         record_layer
             .set_record_decrypter(Box::new(PassThroughDecrypter), &deframer.aligned().unwrap());
