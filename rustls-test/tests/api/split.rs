@@ -383,13 +383,12 @@ fn read_invalid_data_and_send_alert() {
         .err()
         .unwrap();
     assert_eq!(
-        err.error,
+        err,
         Error::InvalidMessage(InvalidMessage::InvalidContentType)
     );
-    assert!(!err.tls().is_empty());
 
     server_input
-        .read(&mut Cursor::new(err.tls()))
+        .read(&mut Cursor::new(&mut alert))
         .unwrap();
     assert_eq!(
         server
