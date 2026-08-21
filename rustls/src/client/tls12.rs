@@ -1025,7 +1025,6 @@ impl ExpectCcs {
         // message.
         let proof = input.check_aligned_handshake()?;
 
-        std::println!("tls 12 client setting message decrypter");
         // Note: msgs layer validates trivial contents of CCS.
         output
             .receive()

@@ -549,13 +549,10 @@ fn client_requiring_rpk_receives_server_ee(
         ),
     };
     let mut input = VecInput::default();
-    std::println!("Reading server hello");
     input
         .read(&mut sh.into_wire_bytes().as_slice())
         .unwrap();
     process(&mut input, &mut conn).unwrap();
-
-    std::println!("done processing server hello");
 
     let ee = Message {
         version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
@@ -585,7 +582,6 @@ fn client_requiring_rpk_receives_server_ee(
         &mut enc_ee[..HEADER_SIZE],
     );
 
-    std::println!("done fake server encrypt");
     input
         .read(&mut enc_ee.as_slice())
         .unwrap();

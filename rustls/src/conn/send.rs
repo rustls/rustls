@@ -287,7 +287,6 @@ impl SendOutput for SendPath {
         max_messages: u64,
         purpose: EncrypterDecrypterPurpose,
     ) {
-        std::println!("{:?} setting message encrypter", self.side);
         self.encrypt_state
             .set_message_encrypter(encrypter, max_messages, purpose, self.negotiated_version());
     }
@@ -328,7 +327,6 @@ impl SendOutput for SendPath {
                     seq,
                 },
             ) => {
-                std::println!("send path handshake seq: {:?}", self.handshake_sequence);
                 let messages: Vec<_> = self
                     .message_fragmenter
                     .fragment_dtls_handshake_message(
@@ -337,17 +335,10 @@ impl SendOutput for SendPath {
                         *seq,
                         encoded.bytes(),
                     )
-                    .map(|m| {
-                        std::println!(
-                            "send path post fragment sending {:?} seq {:?}",
-                            m.typ,
-                            m.payload.message_seq
-                        );
-                        EncodedMessage {
-                            typ: m.typ,
-                            version: m.version,
-                            payload: m.payload.get_encoding(),
-                        }
+                    .map(|m| EncodedMessage {
+                        typ: m.typ,
+                        version: m.version,
+                        payload: m.payload.get_encoding(),
                     })
                     .collect();
                 match must_encrypt {

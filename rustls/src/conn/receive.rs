@@ -348,12 +348,6 @@ impl ReceivePath {
         buffer: &'b mut [u8],
         locator: &Locator,
     ) -> Result<DeframeResult<'b>, Error> {
-        std::println!(
-            "{:?} deframing with epoch {:?} read seq {}",
-            self.side,
-            self.decrypt_state.epoch(),
-            self.decrypt_state.read_seq()
-        );
         let (message, bounds, epoch, record_seq) = match self.deframer.deframe(
             buffer,
             self.decrypt_state.epoch(),
@@ -368,7 +362,6 @@ impl ReceivePath {
             Some(Err(err)) => return Err(err),
             None => return Ok(DeframeResult::None),
         };
-        std::println!("{:?} deframed from wire: {record_seq}", self.side);
 
         let allowed_plaintext = match message.typ {
             // CCS messages are always plaintext.

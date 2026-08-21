@@ -420,22 +420,16 @@ impl KeyScheduleHandshake {
                 proof,
                 EncrypterDecrypterPurpose::HandshakeMessages,
             ),
-            Some(max_early_data_size) => {
-                std::println!(
-                    "tls 13 {:?} setting message decrypter (trial decryption)",
-                    self.ks.side
-                );
-                receive
-                    .decrypt_state
-                    .set_message_decrypter_with_trial_decryption(
-                        self.ks
-                            .derive_decrypter(&self.client_handshake_traffic_secret),
-                        max_early_data_size,
-                        proof,
-                        EncrypterDecrypterPurpose::HandshakeMessages,
-                        receive.negotiated_version(),
-                    )
-            }
+            Some(max_early_data_size) => receive
+                .decrypt_state
+                .set_message_decrypter_with_trial_decryption(
+                    self.ks
+                        .derive_decrypter(&self.client_handshake_traffic_secret),
+                    max_early_data_size,
+                    proof,
+                    EncrypterDecrypterPurpose::HandshakeMessages,
+                    receive.negotiated_version(),
+                ),
         }
     }
 
@@ -978,7 +972,6 @@ impl KeyScheduleSuite {
         let key = derive_traffic_key(expander.as_ref(), suite.aead_alg);
         let iv = derive_traffic_iv(expander.as_ref(), suite.aead_alg.iv_len());
 
-        std::println!("tls 13 {:?} setting message encrypter", self.side);
         send.set_encrypter(
             suite.aead_alg.encrypter(key, iv),
             suite.common.confidentiality_limit,
@@ -993,7 +986,6 @@ impl KeyScheduleSuite {
         proof: &HandshakeAlignedProof,
         purpose: EncrypterDecrypterPurpose,
     ) {
-        std::println!("tls 13 {:?} setting message decrypter", self.side);
         receive
             .decrypt_state
             .set_message_decrypter(

@@ -54,7 +54,6 @@ impl ReplayWindow {
             self.observed_seq = self.observed_seq.unbounded_shr(shift);
             self.next_expected_seq = seq + 1;
             self.observed_seq |= 1 << u128::BITS - 1;
-            std::println!("observing seq {seq}");
 
             return Ok(());
         }
@@ -68,7 +67,6 @@ impl ReplayWindow {
         }
 
         self.observed_seq |= mask;
-        std::println!("observing seq {seq}");
 
         Ok(())
     }

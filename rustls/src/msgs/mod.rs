@@ -955,8 +955,6 @@ impl Epoch {
             (..) => panic!("illegal epoch transition from {self:?} for {purpose:?}"),
         };
 
-        std::println!("transitioning from {self:?} to {new_epoch:?} for {purpose:?}");
-
         new_epoch
     }
 

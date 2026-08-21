@@ -365,7 +365,6 @@ impl MessageEncrypter for GcmMessageEncrypter {
         } else {
             aead::Aad::from(tls13_aad.as_slice())
         };
-        std::println!("encrypting with GCM and aad {:?}", aad.as_ref());
 
         let payload = match msg.payload.single_chunk() {
             // Contiguous plaintext is sealed out-of-place, straight from the borrowed
@@ -435,13 +434,11 @@ impl MessageDecrypter for GcmMessageDecrypter {
         let tls13_aad = make_tls13_aad(msg.typ, msg.version.version(), msg.payload.len());
         let aad = if msg.version.version().is_datagram_tls() {
             // For DTLS 1.3, the AAD is the record's unified header, verbatim
-            std::println!("aad DTLS style");
             aead::Aad::from(msg.payload.0)
         } else {
             aead::Aad::from(tls13_aad.as_slice())
         };
 
-        std::println!("decrypting with GCM and aad {:?}", aad.as_ref());
         let payload = &mut msg.payload;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);
@@ -565,7 +562,6 @@ mod tests {
     fn sealed_records_open() {
         for suite in ALL_TLS13_CIPHER_SUITES {
             for plain in [&b""[..], b"hello"] {
-                std::println!("plaintext: {plain:?}");
                 let mut sealed = seal(suite, OutboundPlain::from(plain), 0x00);
                 let msg = EncodedMessage::new(
                     ContentType::ApplicationData,

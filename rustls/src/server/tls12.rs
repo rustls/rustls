@@ -839,7 +839,6 @@ impl ExpectCcs {
             }
         };
 
-        std::println!("tls 12 server setting message decrypter");
         output
             .receive()
             .decrypt_state

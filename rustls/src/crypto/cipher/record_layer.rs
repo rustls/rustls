@@ -28,7 +28,6 @@ pub(crate) struct EncryptionState {
 impl EncryptionState {
     /// Create new record layer with no keys.
     pub(crate) fn new(side: Side) -> Self {
-        std::println!("new encryption state for {side:?}");
         Self {
             message_encrypter: None,
             write_seq_max: 0,
@@ -91,13 +90,6 @@ impl EncryptionState {
         let seq = self
             .epoch
             .per_record_additional_data(self.write_seq, plain.version.version());
-        std::println!(
-            "{:?} encrypting with epoch {:?} and seq {seq:#018x} and write seq {} and version {:?}",
-            self.side,
-            self.epoch,
-            self.write_seq,
-            plain.version.version(),
-        );
         self.write_seq += 1;
 
         let (header, payload) = out.split_at_mut(header_size);
@@ -286,11 +278,6 @@ impl DecryptionState {
         let seq = self
             .epoch
             .per_record_additional_data(record_seq, encr.version.version());
-        std::println!(
-            "{:?} decrypting with epoch {:?} and {seq:#018x}",
-            self.side,
-            self.epoch,
-        );
         match decrypter.decrypt(encr, seq) {
             Ok(plaintext) => {
                 self.read_seq += 1;
