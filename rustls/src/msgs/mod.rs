@@ -891,11 +891,12 @@ impl Epoch {
 
     /// Compute additional data for record protection.
     ///
-    /// For DTLS 1.2, this is the 16 bit epoch number concatenated with the 48 bit sequence number
-    /// that gets fed into the MAC ([1]).
+    /// For most protocol versions, this is just the sequence number.
     ///
-    /// For all other protocol versions, this is the sequence number, possibly reconstructed per
-    /// [2].
+    /// For DTLS 1.2, this is the 16 bit epoch number concatenated with the 48 bit sequence number
+    /// ([1]).
+    ///
+    /// For DTLS 1.3, this is the sequence number, reconstructed from the unified header ([2]).
     ///
     /// [1]: https://www.rfc-editor.org/info/rfc6347/#section-4.1.2.1
     /// [2]: https://www.rfc-editor.org/info/rfc9147/#section-4.2.2
