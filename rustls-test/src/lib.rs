@@ -264,18 +264,18 @@ where
             payload,
         };
 
-        let message_enc = match filter(&mut record) {
+        let record_enc = match filter(&mut record) {
             Altered::InPlace => {
-                encoding::message_framing(record.typ, version, record.payload.clone())
+                encoding::record_framing(record.typ, version, record.payload.clone())
             }
             Altered::Raw(data) => data,
         };
 
-        let message_enc_reader: &mut dyn io::Read = &mut &message_enc[..];
+        let record_enc_reader: &mut dyn io::Read = &mut &record_enc[..];
         let len = right_input
-            .read(message_enc_reader)
+            .read(record_enc_reader)
             .unwrap();
-        assert_eq!(len, message_enc.len());
+        assert_eq!(len, record_enc.len());
     }
 
     left_output.clear();
@@ -1854,7 +1854,7 @@ impl<'a, C: Connection> OtherSession<'a, C> {
             .collect()
     }
 
-    pub fn message_lengths(&self) -> Vec<usize> {
+    pub fn record_lengths(&self) -> Vec<usize> {
         let mut buffer = vec![];
         for writev in &self.writevs {
             for chunk in writev {
@@ -2344,7 +2344,7 @@ pub mod encoding {
     }
 
     /// Apply message framing to `body`.
-    pub fn message_framing(ty: ContentType, vers: ProtocolVersion, body: Vec<u8>) -> Vec<u8> {
+    pub fn record_framing(ty: ContentType, vers: ProtocolVersion, body: Vec<u8>) -> Vec<u8> {
         let mut body = len_u16(body);
         body.splice(0..0, vers.to_array());
         body.splice(0..0, ty.to_array());
@@ -2450,12 +2450,12 @@ pub mod encoding {
     pub fn alert(desc: AlertDescription, suffix: &[u8]) -> Vec<u8> {
         let mut body = vec![ALERT_LEVEL_FATAL, desc.into()];
         body.extend_from_slice(suffix);
-        message_framing(ContentType::Alert, ProtocolVersion::TLSv1_2, body)
+        record_framing(ContentType::Alert, ProtocolVersion::TLSv1_2, body)
     }
 
     /// Return a full TLS message containing a warning alert.
     pub fn warning_alert(desc: AlertDescription) -> Vec<u8> {
-        message_framing(
+        record_framing(
             ContentType::Alert,
             ProtocolVersion::TLSv1_2,
             vec![ALERT_LEVEL_WARNING, desc.into()],

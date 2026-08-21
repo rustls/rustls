@@ -163,7 +163,7 @@ fn test_client_sends_helloretryrequest() {
             .unwrap();
         client_output.clear();
         assert!(wrlen > 200);
-        assert_eq!(pipe.message_lengths().len(), 1);
+        assert_eq!(pipe.record_lengths().len(), 1);
     }
 
     assert_eq!(client.handshake_kind(), None);
@@ -177,7 +177,7 @@ fn test_client_sends_helloretryrequest() {
             .unwrap();
         server_output.clear();
         assert!(wrlen < 100); // just the hello retry request
-        assert_eq!(pipe.message_lengths().len(), 2); // hello retry request and CCS
+        assert_eq!(pipe.record_lengths().len(), 2); // hello retry request and CCS
     }
 
     assert_eq!(client.handshake_kind(), None);
@@ -191,7 +191,7 @@ fn test_client_sends_helloretryrequest() {
             .unwrap();
         client_output.clear();
         assert!(wrlen > 200); // just the client hello retry
-        assert_eq!(pipe.message_lengths().len(), 2); // only a CCS & client hello retry
+        assert_eq!(pipe.record_lengths().len(), 2); // only a CCS & client hello retry
     }
 
     // server completes handshake
@@ -202,7 +202,7 @@ fn test_client_sends_helloretryrequest() {
             .unwrap();
         server_output.clear();
         assert!(wrlen > 200);
-        assert_eq!(pipe.message_lengths().len(), 2); // { server hello / encrypted exts / cert / cert-verify } / finished
+        assert_eq!(pipe.record_lengths().len(), 2); // { server hello / encrypted exts / cert / cert-verify } / finished
     }
 
     assert_eq!(
@@ -437,7 +437,7 @@ fn test_server_rejects_clients_without_any_kx_groups() {
     let mut server_input = VecInput::default();
     server_input
         .read(
-            &mut encoding::message_framing(
+            &mut encoding::record_framing(
                 ContentType::Handshake,
                 ProtocolVersion::TLSv1_2,
                 encoding::client_hello_with_extensions(vec![

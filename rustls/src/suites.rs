@@ -19,13 +19,13 @@ pub struct CipherSuiteCommon {
     /// Which hash function the suite uses.
     pub hash_provider: &'static dyn hash::Hash,
 
-    /// Number of TCP-TLS messages that can be safely encrypted with a single key of this type
+    /// Number of TCP-TLS records that can be safely encrypted with a single key of this type
     ///
     /// Once a `RecordEncrypter` produced for this suite has encrypted more than
-    /// `confidentiality_limit` messages, an attacker gains an advantage in distinguishing it
+    /// `confidentiality_limit` records, an attacker gains an advantage in distinguishing it
     /// from an ideal pseudorandom permutation (PRP).
     ///
-    /// This is to be set on the assumption that messages are maximally sized --
+    /// This is to be set on the assumption that record payloads are maximally sized --
     /// each is 2<sup>14</sup> bytes. It **does not** consider confidentiality limits for
     /// QUIC connections - see the [`quic::PacketKey::confidentiality_limit`] field for
     /// this context.

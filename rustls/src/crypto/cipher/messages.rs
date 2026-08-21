@@ -6,17 +6,17 @@ use crate::Protocol;
 use crate::crypto::cipher::EncryptionState;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerMisbehaved};
-use crate::msgs::{Codec, HEADER_SIZE, MAX_FRAGMENT_LEN, Reader, hex, read_opaque_message_header};
+use crate::msgs::{Codec, HEADER_SIZE, MAX_FRAGMENT_LEN, Reader, hex, read_record_header};
 
-/// A TLS message with encoded (but not necessarily encrypted) payload.
+/// A TLS record with encoded (but not necessarily encrypted) payload.
 #[expect(clippy::exhaustive_structs)]
 #[derive(Clone, Debug)]
 pub struct Record<P> {
-    /// The content type of this message.
+    /// The content type of this record.
     pub typ: ContentType,
-    /// The protocol version of this message.
+    /// The protocol version of this record.
     pub version: EncodableVersion,
-    /// The payload of this message.
+    /// The payload of this record.
     pub payload: P,
 }
 
@@ -37,7 +37,7 @@ impl<'a> Record<Payload<'a>> {
     /// `RecordError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
     pub(crate) fn read(r: &mut Reader<'a>) -> Result<Self, RecordError> {
-        let (typ, version, len) = read_opaque_message_header(r)?;
+        let (typ, version, len) = read_record_header(r)?;
 
         let content = r
             .take(len as usize)
@@ -81,10 +81,10 @@ impl Record<&'_ [u8]> {
 }
 
 impl<'a> Record<InboundOpaque<'a>> {
-    /// For TLS1.3 (only), checks the length msg.payload is valid and removes the padding.
+    /// For TLS1.3 (only), checks the length record.payload is valid and removes the padding.
     ///
-    /// Returns an error if the message (pre-unpadding) is too long, or the padding is invalid,
-    /// or the message (post-unpadding) is too long.
+    /// Returns an error if the record payload (pre-unpadding) is too long, or the padding is invalid,
+    /// or the record payload (post-unpadding) is too long.
     pub fn into_tls13_unpadded_record(mut self) -> Result<Record<&'a [u8]>, Error> {
         let payload = &mut self.payload;
 
@@ -109,12 +109,12 @@ impl<'a> Record<InboundOpaque<'a>> {
         Ok(self.into_plain_record())
     }
 
-    /// Force conversion into a plaintext message.
+    /// Force conversion into a plaintext record.
     ///
-    /// `range` restricts the resulting message: this function panics if it is out of range for
-    /// the underlying message payload.
+    /// `range` restricts the resulting record: this function panics if it is out of range for
+    /// the underlying record payload.
     ///
-    /// This should only be used for messages that are known to be in plaintext. Otherwise, the
+    /// This should only be used for records that are known to be in plaintext. Otherwise, the
     /// [`Record<InboundOpaque<'_>>`] should be decrypted into an
     /// `Record<&'_ [u8]>` using a `RecordDecrypter`.
     pub fn into_plain_record_range(self, range: Range<usize>) -> Record<&'a [u8]> {
@@ -125,9 +125,9 @@ impl<'a> Record<InboundOpaque<'a>> {
         }
     }
 
-    /// Force conversion into a plaintext message.
+    /// Force conversion into a plaintext record.
     ///
-    /// This should only be used for messages that are known to be in plaintext. Otherwise, the
+    /// This should only be used for records that are known to be in plaintext. Otherwise, the
     /// [`Record<InboundOpaque<'a>>`] should be decrypted into a
     /// `Record<&'a [u8]>` using a `RecordDecrypter`.
     pub fn into_plain_record(self) -> Record<&'a [u8]> {
@@ -140,7 +140,7 @@ impl<'a> Record<InboundOpaque<'a>> {
 }
 
 impl Record<OutboundPlain<'_>> {
-    /// Encode this message into its unencrypted wire representation, including
+    /// Encode this record into its unencrypted wire representation, including
     /// its record header.
     pub(crate) fn to_unencrypted_bytes(&self) -> Vec<u8> {
         let len = self.payload.len();
@@ -374,7 +374,7 @@ impl<'a> From<&'a Vec<u8>> for OutboundPlain<'a> {
     }
 }
 
-/// A fixed-size buffer into which a [`RecordEncrypter`][] writes an encrypted message payload.
+/// A fixed-size buffer into which a [`RecordEncrypter`][] writes an encrypted record payload.
 ///
 /// This wraps the output buffer passed to [`RecordEncrypter::encrypt()`][], tracking how
 /// much of it has been written as the append methods fill it front-to-back. It writes
@@ -601,11 +601,11 @@ impl EncodableVersion {
 
 /// Decode a TLS1.3 `TLSInnerPlaintext` encoding.
 ///
-/// `p` is a message payload, immediately post-decryption.  This function
+/// `p` is a record payload, immediately post-decryption.  This function
 /// removes zero padding bytes, until a non-zero byte is encountered which is
 /// the content type, which is returned.  See RFC 9846 s5.2.
 ///
-/// ContentType(0) is returned if the message payload is empty or all zeroes.
+/// ContentType(0) is returned if the record payload is empty or all zeroes.
 fn unpad_tls13_payload(p: &mut InboundOpaque<'_>) -> ContentType {
     loop {
         match p.pop() {
@@ -616,7 +616,7 @@ fn unpad_tls13_payload(p: &mut InboundOpaque<'_>) -> ContentType {
     }
 }
 
-/// Errors from trying to parse a TLS message.
+/// Errors from trying to parse a TLS record.
 #[expect(missing_docs)]
 #[non_exhaustive]
 #[derive(Debug)]
@@ -796,7 +796,7 @@ mod tests {
     }
 
     #[test]
-    fn encoded_message_encoding_version() {
+    fn record_encoding_version() {
         for (version, expect) in [
             (
                 EncodableVersion::InitialClientHello(Protocol::Tcp),

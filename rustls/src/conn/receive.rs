@@ -145,7 +145,7 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
             let result =
                 match output
                     .recv
-                    .receive_message(record, hs_aligned, output.tls, output.other.send)
+                    .receive_record(record, hs_aligned, output.tls, output.other.send)
                 {
                     Ok(Some(input)) => st.handle(input, &mut output),
                     Ok(None) => Ok(st),
@@ -234,15 +234,15 @@ impl ReceivePath {
         }
     }
 
-    /// Pull a message out of the deframer and send any messages that need to be sent as a result.
+    /// Pull a potentially coalesced record out of the deframer.
     fn deframe<'b>(&mut self, buffer: &'b mut [u8]) -> Result<Option<Decrypted<'b>>, Error> {
         let locator = Locator::new(buffer);
 
         let mut want_close_before_decrypt = false;
         loop {
-            // before processing any more of `buffer`, return any extant messages from `deframer`
+            // before processing any more of `buffer`, return any extant records from `deframer`
             if let Some(span) = self.deframer.complete_span() {
-                let plaintext = self.deframer.message(span, buffer);
+                let plaintext = self.deframer.record(span, buffer);
 
                 // trial decryption finishes with the first handshake message after it started.
                 self.decrypt_state
@@ -293,7 +293,7 @@ impl ReceivePath {
             // do an end-run around the borrow checker, converting `record` (containing
             // a borrowed slice) to an unborrowed one (containing a `Range` into the
             // same buffer).  the reborrow happens inside the branch that returns the
-            // message.
+            // record.
             //
             // is fixed by -Zpolonius
             // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md#problem-case-3-conditional-control-flow-across-functions
@@ -332,7 +332,7 @@ impl ReceivePath {
             // Alerts are allowed to be plaintext if-and-only-if:
             // * The negotiated protocol version is TLS 1.3. - In TLS 1.2 it is unambiguous when
             //   keying changes based on the CCS message. Only TLS 1.3 requires these heuristics.
-            // * We have not yet decrypted any messages from the peer - if we have we don't
+            // * We have not yet decrypted any records from the peer - if we have we don't
             //   expect any plaintext.
             // * The payload size is indicative of a plaintext alert message.
             ContentType::Alert
@@ -342,7 +342,7 @@ impl ReceivePath {
             {
                 true
             }
-            // In other circumstances, we expect all messages to be encrypted.
+            // In other circumstances, we expect all records to be encrypted.
             _ => false,
         };
 
@@ -377,16 +377,16 @@ impl ReceivePath {
         }
     }
 
-    /// Take a TLS message `record` and map it into an `Input`
+    /// Take a TLS record and map it into an `Input`
     ///
     /// `Input` is the input to our state machine.
     ///
-    /// The message is mapped into `None` if it should be dropped with no further
+    /// The record is mapped into `None` if it should be dropped with no further
     /// action.
     ///
     /// Otherwise the caller must present the returned `Input` to the state machine to
     /// progress the connection.
-    pub(crate) fn receive_message<'a>(
+    pub(crate) fn receive_record<'a>(
         &mut self,
         record: Record<&'a [u8]>,
         aligned_handshake: Option<HandshakeAlignedProof>,
@@ -399,7 +399,7 @@ impl ReceivePath {
             return Ok(None);
         }
 
-        // Now we can fully parse the message payload.
+        // Now we can fully parse the record payload.
         let message = Message::try_from(record)?;
 
         // For alerts, we have separate logic.
@@ -798,7 +798,7 @@ impl VecInput {
         }
 
         // Try to do the largest reads possible. Note that if
-        // we get a message with a length field out of range here,
+        // we get a record with a length field out of range here,
         // we do a zero length read.  That looks like an EOF to
         // the next layer up, which is fine.
         let new_bytes = rd.read(&mut self.buf[self.used..])?;

@@ -13,13 +13,13 @@ pub(crate) struct Fragmenter {
 }
 
 impl Fragmenter {
-    /// Take `payload` and fragment it into new messages with given type and version.
+    /// Take `payload` and fragment it into new records with given type and version.
     ///
-    /// Each returned message size is no more than the most recently configured
+    /// Each returned record size is no more than the most recently configured
     /// `set_max_fragment_size()`, less an allowance for `encryption_overhead` which
     /// should be zero if no encryption will be performed.
     ///
-    /// Return an iterator across those messages.
+    /// Return an iterator across those records.
     ///
     /// Payloads are borrowed from `payload`.
     pub(crate) fn fragment<'a>(
@@ -115,7 +115,7 @@ mod tests {
     use crate::crypto::cipher::{EncodableVersion, OutboundPlain, Payload, Record};
     use crate::enums::{ContentType, ProtocolVersion};
 
-    fn msg_eq(
+    fn record_eq(
         record: &Record<OutboundPlain<'_>>,
         total_len: usize,
         typ: &ContentType,
@@ -149,7 +149,7 @@ mod tests {
             .fragment(record.typ, record.version, record.payload.bytes().into(), 0)
             .collect::<Vec<_>>();
         assert_eq!(q.len(), 3);
-        msg_eq(
+        record_eq(
             &q[0],
             32,
             &typ,
@@ -159,7 +159,7 @@ mod tests {
                 24, 25, 26, 27,
             ],
         );
-        msg_eq(
+        record_eq(
             &q[1],
             32,
             &typ,
@@ -169,7 +169,7 @@ mod tests {
                 49, 50, 51, 52, 53, 54,
             ],
         );
-        msg_eq(
+        record_eq(
             &q[2],
             20,
             &typ,
@@ -193,7 +193,7 @@ mod tests {
             .fragment(record.typ, record.version, record.payload.bytes().into(), 0)
             .collect::<Vec<_>>();
         assert_eq!(q.len(), 1);
-        msg_eq(
+        record_eq(
             &q[0],
             PACKET_OVERHEAD + 8,
             &ContentType::Handshake,
@@ -216,21 +216,21 @@ mod tests {
             .fragment(typ, version, borrowed_payload, 0)
             .collect::<Vec<_>>();
         assert_eq!(fragments.len(), 3);
-        msg_eq(
+        record_eq(
             &fragments[0],
             37,
             &typ,
             &version,
             b"aaaaaaaabbbbbbbbbbbbcccccccccccc",
         );
-        msg_eq(
+        record_eq(
             &fragments[1],
             37,
             &typ,
             &version,
             b"ccccccccccccccccccccdddddddddddd",
         );
-        msg_eq(&fragments[2], 13, &typ, &version, b"dddddddd");
+        record_eq(&fragments[2], 13, &typ, &version, b"dddddddd");
     }
 
     #[test]

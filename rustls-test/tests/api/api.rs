@@ -212,7 +212,7 @@ fn unoffered_alpn_test(check_selected_alpn: bool) -> Result<rustls::IoState, Err
     let mut input = VecInput::default();
     input
         .read(
-            &mut encoding::message_framing(
+            &mut encoding::record_framing(
                 ContentType::Handshake,
                 ProtocolVersion::TLSv1_2,
                 encoding::server_hello(
@@ -1383,7 +1383,7 @@ fn test_client_rejects_illegal_tls13_ccs() {
     fn corrupt_ccs(record: &mut Record<Vec<u8>>) -> Altered {
         if record.typ == ContentType::ChangeCipherSpec {
             println!("seen CCS {:?}", record.typ);
-            return Altered::Raw(encoding::message_framing(
+            return Altered::Raw(encoding::record_framing(
                 ContentType::ChangeCipherSpec,
                 ProtocolVersion::TLSv1_2,
                 vec![0x01, 0x02],
@@ -1581,16 +1581,16 @@ fn test_client_construction_requires_66_bytes_of_random_material() {
 }
 
 #[test]
-fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message() {
-    fn inject_corrupt_finished_message(record: &mut Record<Vec<u8>>) -> Altered {
+fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_record() {
+    fn inject_corrupt_finished_record(record: &mut Record<Vec<u8>>) -> Altered {
         if record.typ == ContentType::ChangeCipherSpec {
             // interdict "real" ChangeCipherSpec with its encoding, plus a faulty encrypted Finished.
-            let mut raw_change_cipher_spec = encoding::message_framing(
+            let mut raw_change_cipher_spec = encoding::record_framing(
                 ContentType::ChangeCipherSpec,
                 ProtocolVersion::TLSv1_2,
                 vec![0x01],
             );
-            let mut corrupt_finished = encoding::message_framing(
+            let mut corrupt_finished = encoding::record_framing(
                 ContentType::Handshake,
                 ProtocolVersion::TLSv1_2,
                 vec![0u8; 0x28],
@@ -1643,7 +1643,7 @@ fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message
         .unwrap();
     transfer_altered(
         &mut server_output,
-        inject_corrupt_finished_message,
+        inject_corrupt_finished_record,
         &mut client_input,
     );
 
@@ -2039,7 +2039,7 @@ fn acceptor_with_illegal_max_fragment_size() {
     let mut input = VecInput::default();
     input
         .read(
-            &mut encoding::message_framing(
+            &mut encoding::record_framing(
                 ContentType::Handshake,
                 ProtocolVersion::TLSv1_2,
                 encoding::basic_client_hello(vec![]),
@@ -2073,7 +2073,7 @@ fn excess_client_hello_acceptor() {
     let mut hello = encoding::basic_client_hello(vec![]);
     hello.extend(&hello[..10].to_vec());
     let mut hello =
-        encoding::message_framing(ContentType::Handshake, ProtocolVersion::TLSv1_2, hello);
+        encoding::record_framing(ContentType::Handshake, ProtocolVersion::TLSv1_2, hello);
 
     let receive = ServerHandshake::start();
     let mut output = vec![];

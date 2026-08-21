@@ -130,7 +130,7 @@ pub mod fuzzing {
             return;
         };
 
-        //println!("msg = {:#?}", m);
+        //println!("record = {record:#?}");
         let expected_version = msg.version.encode();
         let enc = Record::<Payload<'_>>::from(msg)
             .borrow_outbound()
@@ -233,7 +233,7 @@ impl<'a> TryFrom<&'a Record<Payload<'a>>> for Message<'a> {
     }
 }
 
-pub(crate) fn read_opaque_message_header(
+pub(crate) fn read_record_header(
     r: &mut Reader<'_>,
 ) -> Result<(ContentType, ProtocolVersion, u16), RecordError> {
     let typ = ContentType::read(r).map_err(|_| RecordError::TooShortForHeader)?;
