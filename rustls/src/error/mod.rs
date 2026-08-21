@@ -4,15 +4,12 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
-use core::ops::Deref;
 use std::time::SystemTimeError;
 
 use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
 #[cfg(feature = "webpki")]
 use webpki::ExtendedKeyUsage;
 
-use crate::common_state::maybe_send_fatal_alert;
-use crate::conn::SendPath;
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{CipherSuite, GetRandomFailed, InconsistentKeys};
 use crate::enums::{ContentType, HandshakeType};
@@ -1760,47 +1757,3 @@ mod other_error {
 }
 
 pub use other_error::OtherError;
-
-/// An [`Error`] along with the (possibly encrypted) alert to send to
-/// the peer.
-///
-/// This borrows the output buffer passed to the operation that failed;
-/// the alert (if one is to be sent) has been appended to that buffer.
-pub struct ErrorWithAlert<'a> {
-    /// The error
-    pub error: Error,
-    pub(crate) tls: &'a mut Vec<u8>,
-}
-
-impl<'a> ErrorWithAlert<'a> {
-    pub(crate) fn new(error: Error, send_path: &mut SendPath, tls: &'a mut Vec<u8>) -> Self {
-        maybe_send_fatal_alert(send_path, &error, tls);
-        Self { error, tls }
-    }
-
-    /// Yields remaining TLS data, if any, to send to the peer.
-    ///
-    /// The returned slice is the contents of the output buffer passed to the failed operation:
-    /// the alert (if one is to be sent) and any TLS data generated before the error.  Send it to
-    /// the peer before closing the connection.
-    pub fn tls(&self) -> &[u8] {
-        self.tls
-    }
-}
-
-impl Deref for ErrorWithAlert<'_> {
-    type Target = Error;
-
-    fn deref(&self) -> &Self::Target {
-        &self.error
-    }
-}
-
-impl fmt::Debug for ErrorWithAlert<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ErrorWithAlert")
-            .field("error", &self.error)
-            .field("tls", &self.tls.len())
-            .finish_non_exhaustive()
-    }
-}

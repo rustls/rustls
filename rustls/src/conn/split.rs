@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
-use core::ops::{DerefMut, Range};
+use core::ops::Range;
 use std::sync::MutexGuard;
 
 use super::receive::{Discard, JoinOutput};
@@ -13,7 +13,7 @@ use crate::conn::{
 };
 use crate::crypto::cipher::{OutboundPlain, RecordEncrypter};
 use crate::enums::ProtocolVersion;
-use crate::error::{AlertDescription, ErrorWithAlert};
+use crate::error::AlertDescription;
 use crate::lock::Mutex;
 use crate::msgs::{AlertLevel, Delocator, Message};
 use crate::sync::Arc;
@@ -184,14 +184,12 @@ impl<Side: SideData> ReceiveTraffic<Side> {
     ///
     /// An error from this function permanently breaks the ability to receive
     /// data from the peer. The error may be accompanied by a TLS alert,
-    /// which can be obtained from the returned [`ErrorWithAlert`] and sent
-    /// to the peer. Following this, the underlying IO medium should be
-    /// closed by the application.
-    pub fn read<'a, 't>(
+    /// which is appended to `tls`.
+    pub fn read<'a>(
         self,
         input: &'a mut impl TlsInputBuffer,
-        tls: &'t mut Vec<u8>,
-    ) -> Result<ReceiveTrafficState<'a, Side>, ErrorWithAlert<'t>> {
+        tls: &mut Vec<u8>,
+    ) -> Result<ReceiveTrafficState<'a, Side>, Error> {
         let Self {
             state,
             mut recv,
@@ -212,15 +210,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             MessageIter::<Side, _>::receive(input, tls, &mut state, &mut recv, output, true);
         let received_plain = match iter.next() {
             Some(Ok(payload)) => Some(payload),
-            Some(Err(error)) => {
-                return Err(ErrorWithAlert::new(
-                    error,
-                    send_adapter
-                        .as_locked(false)
-                        .deref_mut(),
-                    tls,
-                ));
-            }
+            Some(Err(error)) => return Err(error),
             None => None,
         };
 
@@ -230,13 +220,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
         if let Some(unborrowed) = received_plain {
             let pending_discard = recv.deframer.take_discard();
             let UnborrowedPayload::Unborrowed(range) = unborrowed else {
-                return Err(ErrorWithAlert::new(
-                    Error::Unreachable("decrypted data should be borrowed"),
-                    send_adapter
-                        .as_locked(false)
-                        .deref_mut(),
-                    tls,
-                ));
+                return Err(Error::Unreachable("decrypted data should be borrowed"));
             };
 
             if let SendAdapter::Locked { send_required, .. } = send_adapter {
