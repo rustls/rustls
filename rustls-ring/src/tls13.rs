@@ -5,9 +5,8 @@ use ring::hkdf::{self, KeyType};
 use ring::{aead, hmac};
 use rustls::crypto::CipherSuite;
 use rustls::crypto::cipher::{
-    AeadKey, EncodableVersion, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter,
-    MessageEncrypter, Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError,
-    make_tls13_aad,
+    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
+    Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::enums::{ContentType, ProtocolVersion};
@@ -213,6 +212,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         &mut self,
         msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
+        header: &'a [u8],
         out: &'a mut [u8],
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
@@ -220,7 +220,14 @@ impl MessageEncrypter for Tls13MessageEncrypter {
 
         let typ = ContentType::ApplicationData;
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(typ, msg.version.encode(), total_len));
+        let tls13_aad = make_tls13_aad(typ, msg.version.encode(), total_len);
+        let aad = if msg.version.version().is_datagram_tls() {
+            // For DTLS 1.3, the AAD is the record's unified header, verbatim
+            aead::Aad::from(header)
+        } else {
+            aead::Aad::from(tls13_aad.as_slice())
+        };
+
         payload.extend_from_chunks(&msg.payload);
         payload.extend_from_slice(&msg.typ.to_array());
 
@@ -242,6 +249,10 @@ impl MessageEncrypter for Tls13MessageEncrypter {
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
         payload_len + 1 + self.enc_key.algorithm().tag_len()
     }
+
+    fn protocol_version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_3
+    }
 }
 
 impl MessageDecrypter for Tls13MessageDecrypter {
@@ -250,25 +261,20 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         mut msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
+        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
+        let tls13_aad = make_tls13_aad(msg.typ, msg.version.version(), msg.payload.len());
+        let aad = if msg.version.version().is_datagram_tls() {
+            // For DTLS 1.3, the AAD is the record's unified header, verbatim
+            aead::Aad::from(msg.payload.0)
+        } else {
+            aead::Aad::from(tls13_aad.as_slice())
+        };
+
         let payload = &mut msg.payload;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);
         }
 
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let (aad_typ, aad_version) = if msg.typ == ContentType::Dtls13Ciphertext {
-            (
-                ContentType::ApplicationData,
-                EncodableVersion::Legacy(ProtocolVersion::DTLSv1_2),
-            )
-        } else {
-            (msg.typ, msg.version)
-        };
-        let aad = aead::Aad::from(make_tls13_aad(
-            aad_typ,
-            aad_version.version(),
-            payload.len(),
-        ));
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, payload)

@@ -16,7 +16,7 @@ use crate::crypto::{
     self, CipherSuite, CipherSuiteCommon, GetRandomFailed, HashAlgorithm, SignatureScheme,
     TicketProducer, WebPkiSupportedAlgorithms, hash, hmac, tls12, tls13,
 };
-use crate::enums::ContentType;
+use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::PeerMisbehaved;
 use crate::pki_types::{
     AlgorithmIdentifier, InvalidSignature, PrivateKeyDer, SignatureVerificationAlgorithm,
@@ -371,6 +371,7 @@ impl MessageEncrypter for Tls13Cipher {
         &mut self,
         m: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
+        _header: &[u8],
         out: &'a mut [u8],
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
@@ -399,6 +400,10 @@ impl MessageEncrypter for Tls13Cipher {
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
         payload_len + 1 + AEAD_OVERHEAD
+    }
+
+    fn protocol_version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_3
     }
 }
 
@@ -441,6 +446,7 @@ impl MessageEncrypter for Tls12Cipher {
         &mut self,
         m: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
+        _header: &[u8],
         out: &'a mut [u8],
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
@@ -467,6 +473,10 @@ impl MessageEncrypter for Tls12Cipher {
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
         payload_len + AEAD_OVERHEAD
+    }
+
+    fn protocol_version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_2
     }
 }
 

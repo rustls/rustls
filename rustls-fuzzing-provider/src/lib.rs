@@ -17,7 +17,7 @@ use rustls::crypto::{
     SelectedCredential, SignatureScheme, TicketProducer, WebPkiSupportedAlgorithms, hash, tls12,
     tls13,
 };
-use rustls::enums::ContentType;
+use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::{PeerIncompatible, PeerMisbehaved};
 use rustls::pki_types::{
     AlgorithmIdentifier, CertificateDer, FipsStatus, InvalidSignature, PrivateKeyDer,
@@ -322,6 +322,7 @@ impl MessageEncrypter for Tls13Cipher {
         &mut self,
         m: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
+        _header: &[u8],
         out: &'a mut [u8],
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
@@ -350,6 +351,10 @@ impl MessageEncrypter for Tls13Cipher {
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
         payload_len + 1 + AEAD_OVERHEAD
+    }
+
+    fn protocol_version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_3
     }
 }
 
@@ -392,6 +397,7 @@ impl MessageEncrypter for Tls12Cipher {
         &mut self,
         m: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
+        _header: &[u8],
         out: &'a mut [u8],
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
@@ -418,6 +424,10 @@ impl MessageEncrypter for Tls12Cipher {
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
         payload_len + AEAD_OVERHEAD
+    }
+
+    fn protocol_version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_2
     }
 }
 

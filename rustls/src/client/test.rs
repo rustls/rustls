@@ -572,7 +572,7 @@ fn client_requiring_rpk_receives_server_ee(
     let ee = ee.borrow_outbound();
     let mut enc_ee = vec![0u8; HEADER_SIZE + encrypter.encrypted_payload_len(ee.payload.len())];
     let encrypted = encrypter
-        .encrypt(ee, 0, &mut enc_ee[HEADER_SIZE..])
+        .encrypt(ee, 0, &[], &mut enc_ee[HEADER_SIZE..])
         .unwrap();
 
     let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());

@@ -4,9 +4,8 @@ use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
 use pki_types::FipsStatus;
 use rustls::crypto::cipher::{
-    AeadKey, EncodableVersion, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter,
-    MessageEncrypter, Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError,
-    make_tls13_aad,
+    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
+    Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::crypto::{self, CipherSuite};
@@ -244,13 +243,20 @@ impl MessageEncrypter for AeadMessageEncrypter {
         &mut self,
         msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
+        header: &'a [u8],
         out: &'a mut [u8],
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
 
         let typ = ContentType::ApplicationData;
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(typ, msg.version.encode(), total_len));
+        let tls13_aad = make_tls13_aad(typ, msg.version.encode(), total_len);
+        let aad = if msg.version.version().is_datagram_tls() {
+            // For DTLS 1.3, the AAD is the record's unified header, verbatim
+            aead::Aad::from(header)
+        } else {
+            aead::Aad::from(tls13_aad.as_slice())
+        };
 
         let payload = match msg.payload.single_chunk() {
             // Contiguous plaintext is sealed out-of-place, straight from the borrowed
@@ -299,6 +305,10 @@ impl MessageEncrypter for AeadMessageEncrypter {
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
         payload_len + 1 + self.enc_key.algorithm().tag_len()
     }
+
+    fn protocol_version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_3
+    }
 }
 
 impl MessageDecrypter for AeadMessageDecrypter {
@@ -307,17 +317,19 @@ impl MessageDecrypter for AeadMessageDecrypter {
         mut msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
+        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
+        let tls13_aad = make_tls13_aad(msg.typ, msg.version.version(), msg.payload.len());
+        let aad = if msg.version.version().is_datagram_tls() {
+            // For DTLS 1.3, the AAD is the record's unified header, verbatim
+            aead::Aad::from(msg.payload.0)
+        } else {
+            aead::Aad::from(tls13_aad.as_slice())
+        };
+
         let payload = &mut msg.payload;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);
         }
-
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(
-            msg.typ,
-            msg.version.version(),
-            payload.len(),
-        ));
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, payload)
@@ -339,13 +351,21 @@ impl MessageEncrypter for GcmMessageEncrypter {
         &mut self,
         msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
+        header: &'a [u8],
         out: &'a mut [u8],
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
 
         let typ = ContentType::ApplicationData;
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(typ, msg.version.encode(), total_len));
+        let tls13_aad = make_tls13_aad(typ, msg.version.encode(), total_len);
+        let aad = if msg.version.version().is_datagram_tls() {
+            // For DTLS 1.3, the AAD is the record's unified header, verbatim
+            aead::Aad::from(header)
+        } else {
+            aead::Aad::from(tls13_aad.as_slice())
+        };
+        std::println!("encrypting with GCM and aad {:?}", aad.as_ref());
 
         let payload = match msg.payload.single_chunk() {
             // Contiguous plaintext is sealed out-of-place, straight from the borrowed
@@ -394,6 +414,10 @@ impl MessageEncrypter for GcmMessageEncrypter {
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
         payload_len + 1 + self.enc_key.algorithm().tag_len()
     }
+
+    fn protocol_version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_3
+    }
 }
 
 struct GcmMessageDecrypter {
@@ -407,31 +431,21 @@ impl MessageDecrypter for GcmMessageDecrypter {
         mut msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
+        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
+        let tls13_aad = make_tls13_aad(msg.typ, msg.version.version(), msg.payload.len());
+        let aad = if msg.version.version().is_datagram_tls() {
+            // For DTLS 1.3, the AAD is the record's unified header, verbatim
+            std::println!("aad DTLS style");
+            aead::Aad::from(msg.payload.0)
+        } else {
+            aead::Aad::from(tls13_aad.as_slice())
+        };
+
+        std::println!("decrypting with GCM and aad {:?}", aad.as_ref());
         let payload = &mut msg.payload;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);
         }
-
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        // TODO(DTLS): the encrypt side forces the content type to application data in the AAD. On
-        // the wire, DTLS 1.3 messages appear to have content type Dtls13Ciphertext, in that the
-        // first byte is a unified header bitmap. Check for that and sub in
-        // ContentType::ApplicationData.
-        // But all of this is wrong anyway: the AAD for DTLS 1.3 is the unified header itself. That
-        // means we need to make that value available to this context.
-        let (aad_typ, aad_version) = if msg.typ == ContentType::Dtls13Ciphertext {
-            (
-                ContentType::ApplicationData,
-                EncodableVersion::Legacy(ProtocolVersion::DTLSv1_2),
-            )
-        } else {
-            (msg.typ, msg.version)
-        };
-        let aad = aead::Aad::from(make_tls13_aad(
-            aad_typ,
-            aad_version.version(),
-            payload.len(),
-        ));
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, payload)
@@ -551,11 +565,12 @@ mod tests {
     fn sealed_records_open() {
         for suite in ALL_TLS13_CIPHER_SUITES {
             for plain in [&b""[..], b"hello"] {
+                std::println!("plaintext: {plain:?}");
                 let mut sealed = seal(suite, OutboundPlain::from(plain), 0x00);
                 let msg = EncodedMessage::new(
                     ContentType::ApplicationData,
                     EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
-                    InboundOpaque(&mut sealed),
+                    InboundOpaque(&[], &mut sealed),
                 );
                 let mut decrypter = suite
                     .aead_alg
@@ -580,7 +595,7 @@ mod tests {
         );
         let mut out = vec![fill; encrypter.encrypted_payload_len(msg.payload.len())];
         encrypter
-            .encrypt(msg, TEST_SEQ, &mut out)
+            .encrypt(msg, TEST_SEQ, &[], &mut out)
             .unwrap()
             .payload
             .to_vec()

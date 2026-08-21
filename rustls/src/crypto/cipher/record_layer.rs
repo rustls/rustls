@@ -8,7 +8,7 @@ use crate::crypto::cipher::{
     EncodedMessage, EncodingContext, InboundOpaque, MessageDecrypter, MessageEncrypter,
     OutboundPlain, encode_record_header,
 };
-use crate::enums::ProtocolVersion;
+use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::{EncrypterDecrypterPurpose, Epoch, HandshakeAlignedProof};
 use crate::tracing::trace;
@@ -100,10 +100,30 @@ impl EncryptionState {
         );
         self.write_seq += 1;
 
+        let (header, payload) = out.split_at_mut(header_size);
+
+        encode_record_header(
+            match plain.version.version() {
+                ProtocolVersion::TLSv1_2 | ProtocolVersion::DTLSv1_2 => plain.typ,
+                ProtocolVersion::TLSv1_3 | ProtocolVersion::DTLSv1_3 => {
+                    ContentType::ApplicationData
+                }
+                v => panic!("unsupported protocol version {v:?}"),
+            },
+            plain.version,
+            payload.len() as u16,
+            EncodingContext {
+                payload_is_encrypted: true,
+                epoch: self.epoch,
+                record_seq: seq,
+            },
+            header,
+        );
+
         #[cfg(debug_assertions)]
-        let (out_ptr, out_len) = (out.as_ptr(), out.len());
+        let (out_ptr, out_len) = (payload.as_ptr(), payload.len());
         let encrypted = encrypter
-            .encrypt(plain, seq, &mut out[header_size..])
+            .encrypt(plain, seq, header, payload)
             .unwrap();
 
         #[cfg(debug_assertions)]
@@ -112,27 +132,13 @@ impl EncryptionState {
             // the written prefix of the passed-in buffer. Try to catch misbehaving
             // implementations in debug mode. In release builds a violation would corrupt
             // the sent stream.
-            debug_assert_eq!(
-                encrypted.payload.as_ptr(),
-                out_ptr.wrapping_add(header_size)
-            );
-            debug_assert!(encrypted.payload.len() <= out_len - header_size);
+            debug_assert_eq!(encrypted.payload.as_ptr(), out_ptr);
+            debug_assert!(encrypted.payload.len() <= out_len);
         }
 
-        let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
-        debug_assert!(len <= usize::from(u16::MAX));
-        encode_record_header(
-            typ,
-            version,
-            len as u16,
-            EncodingContext {
-                payload_is_encrypted: true,
-                epoch: self.epoch,
-                record_seq: seq,
-            },
-            &mut out[..header_size],
-        );
-        header_size + len
+        debug_assert!(encrypted.payload.len() <= usize::from(u16::MAX));
+
+        header_size + encrypted.payload.len()
     }
 
     /// Set and start using the given `MessageEncrypter` for future outgoing
@@ -473,7 +479,7 @@ mod tests {
                 EncodedMessage::new(
                     ContentType::Handshake,
                     EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
-                    InboundOpaque(&mut [0xC0, 0xFF, 0xEE]),
+                    InboundOpaque(&[], &mut [0xC0, 0xFF, 0xEE]),
                 ),
                 record_layer.read_seq,
             )

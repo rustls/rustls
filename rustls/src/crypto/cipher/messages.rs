@@ -554,34 +554,37 @@ impl fmt::Debug for Payload<'_> {
     }
 }
 
-/// A borrowed payload buffer.
+/// A borrowed buffer containing an opaque inbound TLS record.
+///
+/// This buffer contains the record header and the encrypted payload. The length of the header
+/// depends on the protocol version in use.
 #[derive(Debug)]
 #[expect(clippy::exhaustive_structs)]
-pub struct InboundOpaque<'a>(pub &'a mut [u8]);
+pub struct InboundOpaque<'a>(pub &'a [u8], pub &'a mut [u8]);
 
 impl<'a> InboundOpaque<'a> {
     /// Truncate the payload to `len` bytes.
     pub fn truncate(&mut self, len: usize) {
-        if len >= self.0.len() {
+        if len >= self.1.len() {
             return;
         }
 
-        self.0 = core::mem::take(&mut self.0)
+        self.1 = core::mem::take(&mut self.1)
             .split_at_mut(len)
             .0;
     }
 
     pub(crate) fn into_inner(self) -> &'a mut [u8] {
-        self.0
+        self.1
     }
 
     pub(crate) fn pop(&mut self) -> Option<u8> {
-        if self.0.is_empty() {
+        if self.1.is_empty() {
             return None;
         }
 
-        let len = self.0.len();
-        let last = self.0[len - 1];
+        let len = self.1.len();
+        let last = self.1[len - 1];
         self.truncate(len - 1);
         Some(last)
     }
@@ -591,13 +594,13 @@ impl Deref for InboundOpaque<'_> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        self.0
+        self.1
     }
 }
 
 impl DerefMut for InboundOpaque<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0
+        self.1
     }
 }
 

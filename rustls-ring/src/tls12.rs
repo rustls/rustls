@@ -10,6 +10,7 @@ use rustls::crypto::cipher::{
 use rustls::crypto::kx::KeyExchangeAlgorithm;
 use rustls::crypto::tls12::PrfUsingHmac;
 use rustls::crypto::{CipherSuite, SignatureScheme};
+use rustls::enums::ProtocolVersion;
 use rustls::error::Error;
 use rustls::version::TLS12_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls12CipherSuite};
@@ -300,6 +301,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
         &mut self,
         msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
+        _header: &[u8],
         out: &'a mut [u8],
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
@@ -333,6 +335,10 @@ impl MessageEncrypter for GcmMessageEncrypter {
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
         payload_len + GCM_EXPLICIT_NONCE_LEN + self.enc_key.algorithm().tag_len()
+    }
+
+    fn protocol_version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_2
     }
 }
 
@@ -396,6 +402,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         &mut self,
         msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
+        _header: &[u8],
         out: &'a mut [u8],
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
@@ -428,6 +435,10 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
         payload_len + self.enc_key.algorithm().tag_len()
+    }
+
+    fn protocol_version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_2
     }
 }
 

@@ -156,18 +156,25 @@ impl Deframer {
             )
         };
 
-        let (payload, bounds) = if let Some(bounds) = was_future_record {
-            (&mut buf[bounds.start + header_size..bounds.end], bounds)
+        let (header, payload, bounds) = if let Some(bounds) = was_future_record {
+            let (header, rest) = buf.split_at_mut(bounds.start + header_size);
+            (
+                header,
+                &mut rest[..bounds.end - (bounds.start + header_size)],
+                bounds,
+            )
         } else {
             // we now have a TLS header and body on the front of `self.buf`.  remove
             // it from the front.
             let end = self.processed + header_size + len as usize;
             let head = buf.get_mut(..end)?;
             // This bound, returned from the function, INCLUDES the TLS record header. However
-            // message.payload DOES NOT, and starts at (possibly) the handshake header.
+            // message.payload is split into the header and payload, separately.
             let bounds = self.processed..end;
             self.processed = end;
-            (&mut head[bounds.start + header_size..], bounds)
+            let record = &mut head[bounds.start..];
+            let (header, rest) = record.split_at_mut(header_size);
+            (header, rest, bounds)
         };
 
         // If a message is from the very next epoch, we buffer it so that it can be processed later.
@@ -192,7 +199,7 @@ impl Deframer {
             message: EncodedMessage {
                 typ,
                 version: EncodableVersion::Legacy(version),
-                payload: InboundOpaque(payload),
+                payload: InboundOpaque(header, payload),
             },
             bounds,
             epoch: msg_epoch,

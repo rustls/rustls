@@ -179,6 +179,7 @@ pub trait MessageEncrypter: Send + Sync {
         &mut self,
         msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
+        header: &'a [u8],
         out: &'a mut [u8],
     ) -> Result<EncodedMessage<&'a [u8]>, Error>;
 
@@ -190,6 +191,13 @@ pub trait MessageEncrypter: Send + Sync {
     /// message to [`Self::encrypt()`] in chunks of length `F - A`.  Each `encrypt()`
     /// is then free to pad or otherwise transform the length at its option.
     fn encrypted_payload_len(&self, payload_len: usize) -> usize;
+
+    /// The protocol version that this message encrypter implements.
+    ///
+    /// This is a hack to make rustls-test, which does not use the record_layer module, work, since
+    /// it does odd things like send a TLS 1.3 ServerHello after a TLS 1.2 handshake has been
+    /// performed. This should go away before appearing in any PR.
+    fn protocol_version(&self) -> ProtocolVersion;
 }
 
 /// A write or read IV.
