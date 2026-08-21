@@ -375,21 +375,22 @@ fn read_invalid_data_and_send_alert() {
         &mut server,
     );
 
-    let receive = client.split().unwrap().receive;
+    let SplitConnection { send, receive, .. } = client.split().unwrap();
 
-    let mut alert = Vec::new();
     let err = receive
-        .read(&mut SliceInput::new(&mut [0u8; 5]), &mut alert)
+        .read(&mut SliceInput::new(&mut [0u8; 5]))
         .err()
         .unwrap();
     assert_eq!(
-        err.error,
+        err,
         Error::InvalidMessage(InvalidMessage::InvalidContentType)
     );
-    assert!(!err.tls().is_empty());
+
+    client_output.clear();
+    send.close(&mut client_output);
 
     server_input
-        .read(&mut Cursor::new(err.tls()))
+        .read(&mut Cursor::new(&mut client_output))
         .unwrap();
     assert_eq!(
         server
@@ -407,10 +408,7 @@ fn check_receive<Side: SideData>(
     mut consume_state: impl ConsumeReceiveState,
 ) -> (Vec<u8>, Option<ReceiveTraffic<Side>>) {
     let mut inp = SliceInput::new(&mut chunk);
-    let recv = consume_state.consume(dbg!(
-        recv.read(&mut inp, &mut Vec::new())
-            .unwrap()
-    ));
+    let recv = consume_state.consume(dbg!(recv.read(&mut inp).unwrap()));
     let used = inp.into_used();
     chunk.drain(..used);
     (chunk, recv)
@@ -423,10 +421,7 @@ fn check_receive_all<Side: SideData>(
     mut consume_state: impl ConsumeReceiveState,
 ) -> Option<ReceiveTraffic<Side>> {
     let mut inp = SliceInput::new(&mut chunk);
-    let recv = consume_state.consume(dbg!(
-        recv.read(&mut inp, &mut Vec::new())
-            .unwrap()
-    ));
+    let recv = consume_state.consume(dbg!(recv.read(&mut inp).unwrap()));
     assert_eq!(inp.into_used(), chunk.len());
     recv
 }
