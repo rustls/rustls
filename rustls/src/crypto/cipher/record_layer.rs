@@ -187,27 +187,6 @@ impl EncryptionState {
     pub(crate) fn epoch(&self) -> Epoch {
         self.epoch
     }
-
-    /// Increment the write sequence number.
-    ///
-    /// This should be called when unencrypted messages are processed, such as handshake messages
-    /// before keys are negotiated. Otherwise the sequence number is incremented by
-    /// `encrypt_outgoing[_into]`.
-    pub(crate) fn increment_write_seq(&mut self) -> u64 {
-        if self.epoch == Epoch::EncryptedHandshakeMessages {
-            // TLS 1.3 will send unencrypted ChangeCipherSpec messages even after establishing keys.
-            // We do not want to increment the sequence number for that so make it a no-op.
-            return self.write_seq;
-        }
-
-        if self.epoch != Epoch::Unencrypted {
-            panic!("cannot increment sequence externally once encryption has started");
-        }
-
-        let old = self.write_seq;
-        self.write_seq += 1;
-        old
-    }
 }
 
 /// Record layer that tracks decryption keys.
@@ -365,27 +344,6 @@ impl DecryptionState {
             }
             _ => false,
         }
-    }
-
-    /// Increment the read sequence number.
-    ///
-    /// This should be called when unencrypted messages are processed, such as handshake messages
-    /// before keys are negotiated. Otherwise the sequence number is incremented by
-    /// `Self::decrypt_incoming`.
-    pub(crate) fn increment_seq(&mut self) -> u64 {
-        if self.epoch == Epoch::EncryptedHandshakeMessages {
-            // TLS 1.3 will send unencrypted ChangeCipherSpec messages even after establishing keys.
-            // We do not want to increment the sequence number for that so make it a no-op.
-            return self.read_seq;
-        }
-
-        if self.epoch != Epoch::Unencrypted {
-            panic!("cannot increment sequence externally once encryption has started");
-        }
-
-        let old = self.read_seq;
-        self.read_seq += 1;
-        old
     }
 }
 
