@@ -425,11 +425,33 @@ impl TryFrom<QuicCommon<ServerSide>> for ServerHandshake {
 /// More data needs to be processed to make progress.
 ///
 /// Provide the data to [`Self::process()`].
+///
+/// This type dereferences to [`ConnectionOutputs`]. Individual outputs are `None`
+/// until they are learned during the handshake.
 pub struct NeedsInput {
     inner: QuicCommon<ServerSide>,
 }
 
 impl NeedsInput {
+    /// Return the TLS-encoded transport parameters received from the peer.
+    ///
+    /// While the transport parameters are available before the handshake completes,
+    /// they cannot be fully trusted until then. Reliance on them should be minimized.
+    /// Any tampering with the parameters will cause the handshake to fail.
+    pub fn quic_transport_parameters(&self) -> Option<&[u8]> {
+        self.inner.quic_transport_parameters()
+    }
+
+    /// Compute the keys for decrypting 0-RTT packets, if available.
+    pub fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
+        self.inner.zero_rtt_keys()
+    }
+
+    /// Retrieves the server name supplied by the client, if any.
+    pub fn server_name(&self) -> Option<&DnsName<'_>> {
+        self.inner.common.side.server_name()
+    }
+
     /// Progress the handshake by receiving further unencrypted TLS handshake data.
     ///
     /// The input should be ordered QUIC CRYPTO stream data for one encryption level.
@@ -458,6 +480,14 @@ impl NeedsInput {
         self.inner.read_hs(input, false)?;
         output.extend(self.inner.events());
         ServerHandshake::try_from(self.inner)
+    }
+}
+
+impl Deref for NeedsInput {
+    type Target = ConnectionOutputs;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
     }
 }
 

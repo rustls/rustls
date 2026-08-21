@@ -279,6 +279,26 @@ fn test_quic_acceptor() {
         else {
             panic!("unexpected state");
         };
+        assert_eq!(server.quic_transport_parameters(), Some(client_params));
+        assert!(server.zero_rtt_keys().is_none());
+        assert_eq!(server.server_name().map(AsRef::as_ref), Some("localhost"));
+        assert_eq!(
+            server
+                .alpn_protocol()
+                .map(AsRef::as_ref),
+            Some(b"h3".as_slice())
+        );
+        assert_eq!(server.protocol_version(), Some(ProtocolVersion::TLSv1_3));
+        assert!(
+            server
+                .negotiated_cipher_suite()
+                .is_some()
+        );
+        assert!(
+            server
+                .negotiated_key_exchange_group()
+                .is_some()
+        );
         quic_insert(server_flight, &mut client).unwrap();
 
         let mut server_flight = vec![];
@@ -324,6 +344,68 @@ fn test_quic_acceptor() {
         assert!(!server.is_handshaking());
         assert_eq!(client.quic_transport_parameters(), Some(server_params));
     }
+}
+
+#[test]
+fn test_quic_acceptor_exposes_zero_rtt_keys_before_completion() {
+    let kt = KeyType::default();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+
+    let mut client_config = make_client_config(kt, &provider);
+    client_config.enable_early_data = true;
+    let client_config = Arc::new(client_config);
+
+    let mut server_config = make_server_config(kt, &provider);
+    server_config.max_early_data_size = 0xffff_ffff;
+    let server_config = Arc::new(server_config);
+
+    let client_params: &[u8] = b"client params";
+    let server_params: &[u8] = b"server params";
+
+    let mut client = quic::ClientConnection::new(
+        client_config.clone(),
+        quic::Version::V1,
+        server_name("localhost"),
+        client_params.to_vec(),
+    )
+    .unwrap();
+    let mut server = quic::ServerConnection::new(
+        server_config.clone(),
+        quic::Version::V1,
+        server_params.to_vec(),
+    )
+    .unwrap();
+    do_quic_handshake(&mut client, &mut server);
+    quic_transfer(&mut server, &mut client).unwrap();
+    quic_transfer(&mut client, &mut server).unwrap();
+    assert!(client.tls13_tickets_received() > 0);
+
+    let mut client = quic::ClientConnection::new(
+        client_config,
+        quic::Version::V1,
+        server_name("localhost"),
+        client_params.to_vec(),
+    )
+    .unwrap();
+
+    let mut client_initial = flatten_events(&mut client);
+    assert!(client.zero_rtt_keys().is_some());
+    let ServerHandshake::Accepted(accepted) = ServerHandshake::start(quic::Version::V1)
+        .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
+        .unwrap()
+    else {
+        panic!("unexpected state after ClientHello");
+    };
+
+    let ServerHandshake::NeedsInput(server) = accepted
+        .choose_config(server_config, server_params.to_vec(), &mut vec![])
+        .unwrap()
+    else {
+        panic!("unexpected state after choosing config");
+    };
+    assert_eq!(server.quic_transport_parameters(), Some(client_params));
+    assert!(server.zero_rtt_keys().is_some());
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
 }
 
 #[test]
