@@ -918,7 +918,7 @@ impl Epoch {
         purpose: EncrypterDecrypterPurpose,
         version: ProtocolVersion,
     ) -> Self {
-        let new_epoch = match (self, purpose, version) {
+        match (self, purpose, version) {
             // Can go from unencrypted to early data, regardless of version.
             (Self::Unencrypted, EncrypterDecrypterPurpose::EarlyData, _) => Self::EarlyData,
             // Can go from unencrypted or early data to handshake messages, but only for 1.3
@@ -953,9 +953,7 @@ impl Epoch {
                 ProtocolVersion::TLSv1_2 | ProtocolVersion::DTLSv1_2,
             ) => panic!("rustls does not support rekey in (D)TLS 1.2"),
             (..) => panic!("illegal epoch transition from {self:?} for {purpose:?}"),
-        };
-
-        new_epoch
+        }
     }
 
     /// Read an `Epoch` value from a wire message.
