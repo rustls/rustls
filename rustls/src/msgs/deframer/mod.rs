@@ -102,7 +102,10 @@ impl Deframer {
             let length = length.unwrap_or_else(|| buf.len() as u16);
 
             (
-                ContentType::Dtls13Ciphertext,
+                // We will claim to have seen application data on the wire, so that the record can
+                // be handled similarly to a stream TLS 1.3 record, meaning that the true content
+                // type will be in the last unpadded byte of the deprotected record.
+                ContentType::ApplicationData,
                 ProtocolVersion::DTLSv1_3,
                 epoch,
                 sequence,

@@ -1074,10 +1074,7 @@ fn multiple_fragments_application_data(version: ProtocolVersion) {
         assert_eq!(bounds.start, expect_start);
         assert_eq!(bounds.end, expect_end);
 
-        let mut message = message.into_plain_message();
-        if message.typ == ContentType::Dtls13Ciphertext {
-            message.typ = ContentType::ApplicationData;
-        }
+        let message = message.into_plain_message();
         assert_eq!(message.typ, ContentType::ApplicationData);
         assert_eq!(message.version.version(), version);
         assert_eq!(epoch, expect_epoch);
