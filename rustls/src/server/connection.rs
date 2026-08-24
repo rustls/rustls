@@ -290,7 +290,7 @@ impl Accepted {
 
     /// Choose a [`ServerConfig`] to progress the handshake.
     ///
-    /// Output to send to the peer is appended to `output`.  Typically, this is the `ServerHello`,
+    /// Output to send to the peer is appended to `tls`.  Typically, this is the `ServerHello`,
     /// but it may also be an `Alert` if an error is returned.
     ///
     /// Returns an error if configuration-dependent validation of the received `ClientHello` message fails.
