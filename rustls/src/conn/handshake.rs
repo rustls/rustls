@@ -9,18 +9,20 @@
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::mem;
 
 use super::{
-    ConnectionCommon, MessageIter, MessageIterMode, SideCommonOutput, SideData,
+    ConnectionCommon, MessageIter, MessageIterMode, SideCommonOutput, SideData, StateMachine,
     VerifyPeerIdentityInternal,
 };
 use crate::TlsInputBuffer;
+use crate::client::{ClientSide, ClientState};
 use crate::common_state::{Output, maybe_send_fatal_alert};
 use crate::crypto::VerifiedIdentity;
 use crate::error::Error;
 use crate::msgs::ServerExtensionsInput;
 use crate::quic::QuicOutput;
-use crate::server::{ChooseConfig, ClientHello, ServerConfig, ServerSide};
+use crate::server::{ChooseConfig, ClientHello, ServerConfig, ServerSide, ServerState};
 use crate::sync::Arc;
 
 pub(crate) struct Core<Side: SideData, T: Transport> {
@@ -68,9 +70,82 @@ impl<Side: SideData, T: Transport> Core<Side, T> {
                 .deframer
                 .take_discard(),
         );
-
         result?;
         Ok(Self { inner, transport })
+    }
+}
+
+/// The states a server handshake can be in, for any transport.
+pub(crate) enum ServerNext<T: Transport> {
+    NeedsInput(Core<ServerSide, T>),
+    ChooseConfig(AcceptedCore<T>),
+    VerifyClientIdentity(VerifyCore<ServerSide, T>),
+    Complete(Core<ServerSide, T>),
+}
+
+impl<T: Transport> TryFrom<Core<ServerSide, T>> for ServerNext<T> {
+    type Error = Error;
+
+    fn try_from(mut core: Core<ServerSide, T>) -> Result<Self, Error> {
+        const MISUSED: Error = Error::Unreachable("forgot to restore state");
+
+        Ok(match mem::replace(&mut core.inner.state, Err(MISUSED))? {
+            ServerState::ChooseConfig(choose_config) => Self::ChooseConfig(AcceptedCore {
+                core,
+                choose_config,
+            }),
+
+            ServerState::VerifyClientIdentity(verify_identity) => {
+                Self::VerifyClientIdentity(VerifyCore {
+                    core,
+                    verify_identity,
+                })
+            }
+
+            state if state.is_traffic() => {
+                core.inner.state = Ok(state);
+                Self::Complete(core)
+            }
+
+            state => {
+                core.inner.state = Ok(state);
+                Self::NeedsInput(core)
+            }
+        })
+    }
+}
+
+/// The states a client handshake can be in, for any transport.
+pub(crate) enum ClientNext<T: Transport> {
+    NeedsInput(Core<ClientSide, T>),
+    VerifyServerIdentity(VerifyCore<ClientSide, T>),
+    Complete(Core<ClientSide, T>),
+}
+
+impl<T: Transport> TryFrom<Core<ClientSide, T>> for ClientNext<T> {
+    type Error = Error;
+
+    fn try_from(mut core: Core<ClientSide, T>) -> Result<Self, Error> {
+        const MISUSED: Error = Error::Unreachable("forgot to restore state");
+
+        Ok(match mem::replace(&mut core.inner.state, Err(MISUSED))? {
+            ClientState::VerifyServerIdentity(verify_identity) => {
+                Self::VerifyServerIdentity(VerifyCore {
+                    core,
+                    verify_identity,
+                })
+            }
+
+            state if state.is_traffic() => {
+                core.inner.state = Ok(state);
+                Self::Complete(core)
+            }
+
+            state => {
+                core.inner.state = Ok(state);
+                Self::NeedsInput(core)
+            }
+        })
     }
 }
 
@@ -80,13 +155,6 @@ pub(crate) struct AcceptedCore<T: Transport> {
 }
 
 impl<T: Transport> AcceptedCore<T> {
-    pub(crate) fn new(core: Core<ServerSide, T>, choose_config: Box<ChooseConfig>) -> Self {
-        Self {
-            core,
-            choose_config,
-        }
-    }
-
     pub(crate) fn client_hello(&self) -> ClientHello<'_> {
         self.choose_config.client_hello()
     }
@@ -126,16 +194,6 @@ pub(crate) struct VerifyCore<Side: SideData, T: Transport> {
 }
 
 impl<Side: SideData, T: Transport> VerifyCore<Side, T> {
-    pub(crate) fn new(
-        core: Core<Side, T>,
-        verify_identity: Box<dyn VerifyPeerIdentityInternal<Side>>,
-    ) -> Self {
-        Self {
-            core,
-            verify_identity,
-        }
-    }
-
     pub(crate) fn with_config(self, tls: &mut Vec<u8>) -> Result<Core<Side, T>, Error> {
         let Self {
             core,
