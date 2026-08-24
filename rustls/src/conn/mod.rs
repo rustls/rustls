@@ -25,7 +25,7 @@ pub mod kernel;
 
 mod handshake;
 pub use handshake::{Accepted, Tcp, Transport, VerifyPeerIdentity};
-pub(crate) use handshake::{Core, sealed};
+pub(crate) use handshake::{ClientNext, Core, ServerNext, sealed};
 
 mod receive;
 pub(crate) use receive::{
@@ -144,7 +144,7 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
 /// More data needs to be supplied to make progress.
 ///
 /// Provide the data to [`Self::process()`].
-pub struct NeedsInput<Side: SideData>(Core<Side, Tcp>);
+pub struct NeedsInput<Side: SideData>(pub(crate) Core<Side, Tcp>);
 
 impl<Side: SideData> NeedsInput<Side> {
     pub(crate) fn new(inner: ConnectionCommon<Side>) -> Self {
@@ -168,7 +168,7 @@ impl<Side: SideData> NeedsInput<Side> {
         input: &mut dyn TlsInputBuffer,
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
-        Side::tcp_handshake_from_inner(self.0.process(input, tls)?.inner)
+        Side::tcp_handshake_from_core(self.0.process(input, tls)?)
     }
 }
 
@@ -688,7 +688,7 @@ pub trait SideData: private::Side + Sized {
 
     #[doc(hidden)]
     #[expect(private_interfaces)]
-    fn tcp_handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error>;
+    fn tcp_handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error>;
 
     #[doc(hidden)]
     #[expect(private_interfaces)]

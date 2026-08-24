@@ -11,13 +11,13 @@ pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
 use crate::conn::{
     Accepted, ConnectionCommon, Core, KeyingMaterialExporter, MessageIter, MessageIterMode,
-    SideData, StateMachine, Transport, VerifyPeerIdentity,
+    ServerNext, SideData, Transport, VerifyPeerIdentity,
 };
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{Message, MessagePayload, ServerExtensionsInput, TransportParameters};
-use crate::server::{ServerConfig, ServerSide, ServerState};
+use crate::server::{ServerConfig, ServerSide};
 use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
 use crate::tls13::Tls13CipherSuite;
@@ -333,45 +333,23 @@ impl ServerHandshake {
     }
 
     pub(crate) fn from_core(
-        core: Core<ServerSide, Quic>,
+        mut core: Core<ServerSide, Quic>,
         output: &mut Vec<QuicEvent>,
     ) -> Result<Self, Error> {
-        let Core {
-            inner,
-            mut transport,
-        } = core;
+        output.extend(core.transport.events());
 
-        output.extend(transport.events());
-        Self::try_from(QuicCommon::new(inner, transport))
-    }
-}
+        Ok(match ServerNext::try_from(core)? {
+            ServerNext::NeedsInput(core) => Self::NeedsInput(NeedsInput(core)),
 
-impl TryFrom<QuicCommon<ServerSide>> for ServerHandshake {
-    type Error = Error;
+            ServerNext::ChooseConfig(accepted) => Self::Accepted(accepted),
 
-    fn try_from(mut inner: QuicCommon<ServerSide>) -> Result<Self, Error> {
-        const MISUSED: Error = Error::Unreachable("forgot to restore state");
+            ServerNext::VerifyClientIdentity(verify) => Self::VerifyClientIdentity(verify),
 
-        Ok(match mem::replace(&mut inner.common.state, Err(MISUSED))? {
-            ServerState::ChooseConfig(choose_config) => {
-                let QuicCommon { common, quic } = inner;
-                Self::Accepted(Accepted::new(Core::new(common, quic), choose_config))
-            }
-
-            ServerState::VerifyClientIdentity(verify) => {
-                let QuicCommon { common, quic } = inner;
-                Self::VerifyClientIdentity(VerifyPeerIdentity::new(Core::new(common, quic), verify))
-            }
-
-            state if state.is_traffic() => {
-                inner.common.state = Ok(state);
-                Self::Complete(ServerConnection { inner })
-            }
-
-            state => {
-                inner.common.state = Ok(state);
-                let QuicCommon { common, quic } = inner;
-                Self::NeedsInput(NeedsInput(Core::new(common, quic)))
+            ServerNext::Complete(core) => {
+                let Core { inner, transport } = core;
+                Self::Complete(ServerConnection {
+                    inner: QuicCommon::new(inner, transport),
+                })
             }
         })
     }
@@ -424,6 +402,8 @@ impl NeedsInput {
     /// - a [`ServerHandshake::NeedsInput`] if more data is required.
     /// - a [`ServerHandshake::Accepted`] if a whole `ClientHello` has been received,
     ///   and a choice of [`ServerConfig`] is required to continue.
+    /// - a [`ServerHandshake::VerifyClientIdentity`] if the client's identity requires
+    ///   verification.
     /// - a [`ServerHandshake::Complete`] if the handshake is complete.
     ///
     /// `output` has any resulting handshake messages or key changes appended to it.
@@ -438,13 +418,7 @@ impl NeedsInput {
             .deframer
             .input_quic(input.slice_mut())?;
 
-        let Core {
-            inner,
-            mut transport,
-        } = self.0.process(input, &mut Vec::new())?;
-
-        output.extend(transport.events());
-        ServerHandshake::try_from(QuicCommon::new(inner, transport))
+        ServerHandshake::from_core(self.0.process(input, &mut Vec::new())?, output)
     }
 }
 
