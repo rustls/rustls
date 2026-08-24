@@ -9,20 +9,23 @@
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::fmt;
+use core::{fmt, mem};
 
 use super::{
     ConnectionCommon, MessageIter, MessageIterMode, NeedsInput, SideCommonOutput, SideData,
-    VerifySidePeerIdentity,
+    StateMachine, VerifySidePeerIdentity,
 };
 use crate::TlsInputBuffer;
+use crate::client::{ClientSide, ClientState};
 use crate::common_state::maybe_send_fatal_alert;
 use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::Payload;
 use crate::error::Error;
 use crate::msgs::{ServerExtensionsInput, TransportParameters};
 use crate::quic::{self, Quic, QuicEvent, QuicOutput};
-use crate::server::{ChooseConfig, ClientHello, ServerConfig, ServerHandshake, ServerSide};
+use crate::server::{
+    ChooseConfig, ClientHello, ServerConfig, ServerHandshake, ServerSide, ServerState,
+};
 use crate::sync::Arc;
 use crate::tracing::trace;
 
@@ -74,6 +77,80 @@ impl<Side: SideData, T: Transport> Core<Side, T> {
     }
 }
 
+/// The states a server handshake can be in, for any transport.
+pub(crate) enum ServerNext<T: Transport> {
+    NeedsInput(Core<ServerSide, T>),
+    ChooseConfig(Accepted<T>),
+    VerifyClientIdentity(VerifyPeerIdentity<ServerSide, T>),
+    Complete(Core<ServerSide, T>),
+}
+
+impl<T: Transport> TryFrom<Core<ServerSide, T>> for ServerNext<T> {
+    type Error = Error;
+
+    fn try_from(mut core: Core<ServerSide, T>) -> Result<Self, Error> {
+        const MISUSED: Error = Error::Unreachable("forgot to restore state");
+
+        Ok(match mem::replace(&mut core.inner.state, Err(MISUSED))? {
+            ServerState::ChooseConfig(choose_config) => Self::ChooseConfig(Accepted {
+                core,
+                choose_config,
+            }),
+
+            ServerState::VerifyClientIdentity(verify_identity) => {
+                Self::VerifyClientIdentity(VerifyPeerIdentity {
+                    core,
+                    verify_identity,
+                })
+            }
+
+            state if state.is_traffic() => {
+                core.inner.state = Ok(state);
+                Self::Complete(core)
+            }
+
+            state => {
+                core.inner.state = Ok(state);
+                Self::NeedsInput(core)
+            }
+        })
+    }
+}
+
+/// The states a client handshake can be in, for any transport.
+pub(crate) enum ClientNext<T: Transport> {
+    NeedsInput(Core<ClientSide, T>),
+    VerifyServerIdentity(VerifyPeerIdentity<ClientSide, T>),
+    Complete(Core<ClientSide, T>),
+}
+
+impl<T: Transport> TryFrom<Core<ClientSide, T>> for ClientNext<T> {
+    type Error = Error;
+
+    fn try_from(mut core: Core<ClientSide, T>) -> Result<Self, Error> {
+        const MISUSED: Error = Error::Unreachable("forgot to restore state");
+
+        Ok(match mem::replace(&mut core.inner.state, Err(MISUSED))? {
+            ClientState::VerifyServerIdentity(verify_identity) => {
+                Self::VerifyServerIdentity(VerifyPeerIdentity {
+                    core,
+                    verify_identity,
+                })
+            }
+
+            state if state.is_traffic() => {
+                core.inner.state = Ok(state);
+                Self::Complete(core)
+            }
+
+            state => {
+                core.inner.state = Ok(state);
+                Self::NeedsInput(core)
+            }
+        })
+    }
+}
+
 /// Represents that a `ClientHello` message has been received.
 ///
 /// The handshake can be progressed by choosing a [`ServerConfig`] based on
@@ -85,13 +162,6 @@ pub struct Accepted<T: Transport> {
 }
 
 impl<T: Transport> Accepted<T> {
-    pub(crate) fn new(core: Core<ServerSide, T>, choose_config: Box<ChooseConfig>) -> Self {
-        Self {
-            core,
-            choose_config,
-        }
-    }
-
     /// Get the [`ClientHello`] for this connection.
     pub fn client_hello(&self) -> ClientHello<'_> {
         let ch = self.choose_config.client_hello();
@@ -139,7 +209,7 @@ impl Accepted<Tcp> {
         tls: &mut Vec<u8>,
     ) -> Result<ServerHandshake, Error> {
         let core = self.partial_choose_config(config, ServerExtensionsInput::default(), tls)?;
-        Ok(ServerHandshake::NeedsInput(NeedsInput::new(core.inner)))
+        Ok(ServerHandshake::NeedsInput(NeedsInput(core)))
     }
 }
 
@@ -218,16 +288,6 @@ pub struct VerifyPeerIdentity<Side: SideData, T: Transport> {
 }
 
 impl<Side: SideData, T: Transport> VerifyPeerIdentity<Side, T> {
-    pub(crate) fn new(
-        core: Core<Side, T>,
-        verify_identity: Box<dyn VerifySidePeerIdentity<Side>>,
-    ) -> Self {
-        Self {
-            core,
-            verify_identity,
-        }
-    }
-
     /// Inspect the identity that the peer has provided.
     pub fn presented_identity(&self) -> Result<Side::PeerIdentity<'_>, Error> {
         self.verify_identity
@@ -256,7 +316,7 @@ impl<Side: SideData> VerifyPeerIdentity<Side, Tcp> {
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
         let core = self.partial_continue_with(verification_result, tls)?;
-        Side::tcp_handshake_from_inner(core.inner)
+        Side::tcp_handshake_from_core(core)
     }
 }
 
