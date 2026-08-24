@@ -146,9 +146,9 @@ pub struct NeedsInput<Side: SideData> {
 impl<Side: SideData> NeedsInput<Side> {
     /// Progress the handshake by receiving further data.
     ///
-    /// The data is obtained via `input`.  Any output produced is appended to `output` and
+    /// The data is obtained via `input`.  Any output produced is appended to `tls` and
     /// should be sent to the peer (including if this function returns an error, because
-    /// the `output` may contain an alert.)
+    /// `tls` may contain an alert.)
     ///
     /// An error from this function is otherwise fatal to the connection, as it consumes
     /// the [`NeedsInput`] object.
