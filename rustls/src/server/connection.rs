@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::fmt;
 use core::ops::Deref;
-use core::{fmt, mem};
 
 use pki_types::{DnsName, FipsStatus};
 
@@ -11,7 +11,7 @@ use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
     Accepted, Connection, ConnectionCommon, Core, KeyingMaterialExporter, MessageHandler,
-    NeedsInput, SideData, StateMachine, Tcp, TlsInputBuffer, VerifyPeerIdentity,
+    NeedsInput, ServerNext, SideData, Tcp, TlsInputBuffer, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -266,30 +266,18 @@ impl ServerHandshake {
     }
 }
 
-impl TryFrom<ConnectionCommon<ServerSide>> for ServerHandshake {
+impl TryFrom<Core<ServerSide, Tcp>> for ServerHandshake {
     type Error = Error;
 
-    fn try_from(mut inner: ConnectionCommon<ServerSide>) -> Result<Self, Error> {
-        const MISUSED: Error = Error::Unreachable("forgot to restore state");
+    fn try_from(core: Core<ServerSide, Tcp>) -> Result<Self, Error> {
+        Ok(match ServerNext::try_from(core)? {
+            ServerNext::NeedsInput(core) => Self::NeedsInput(NeedsInput(core)),
 
-        Ok(match mem::replace(&mut inner.state, Err(MISUSED))? {
-            ServerState::ChooseConfig(choose_config) => {
-                Self::Accepted(Accepted::new(Core::new(inner, Tcp), choose_config))
-            }
+            ServerNext::ChooseConfig(accepted) => Self::Accepted(accepted),
 
-            ServerState::VerifyClientIdentity(verify_identity) => Self::VerifyClientIdentity(
-                VerifyPeerIdentity::new(Core::new(inner, Tcp), verify_identity),
-            ),
+            ServerNext::VerifyClientIdentity(verify) => Self::VerifyClientIdentity(verify),
 
-            state if state.is_traffic() => {
-                inner.state = Ok(state);
-                Self::Complete(SplitConnection::try_from(inner)?)
-            }
-
-            state => {
-                inner.state = Ok(state);
-                Self::NeedsInput(NeedsInput::new(inner))
-            }
+            ServerNext::Complete(core) => Self::Complete(SplitConnection::try_from(core.inner)?),
         })
     }
 }
@@ -306,8 +294,8 @@ impl SideData for ServerSide {
     type PeerIdentity<'a> = ClientIdentity<'static, 'a>;
 
     #[expect(private_interfaces)]
-    fn tcp_handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error> {
-        ServerHandshake::try_from(common)
+    fn tcp_handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error> {
+        ServerHandshake::try_from(core)
     }
 
     #[expect(private_interfaces)]
