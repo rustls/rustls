@@ -67,6 +67,39 @@ impl<'a> ApplicationProtocol<'a> {
             Self::Other(data) => ApplicationProtocol::Other(Cow::Owned(data.to_vec())),
         }
     }
+
+    /// Returns the raw byte slice representation of this application protocol.
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        self.as_ref()
+    }
+
+    /// Converts this application protocol to a UTF-8 string slice if valid UTF-8.
+    #[inline]
+    pub fn as_str(&self) -> Result<&str, core::str::Utf8Error> {
+        core::str::from_utf8(self.as_ref())
+    }
+
+    /// Returns `true` if this protocol represents HTTP/2 (`h2`).
+    #[inline]
+    pub fn is_http2(&self) -> bool {
+        matches!(self, Self::Http2)
+    }
+
+    /// Returns `true` if this protocol represents HTTP/3 (`h3`).
+    #[inline]
+    pub fn is_http3(&self) -> bool {
+        matches!(self, Self::Http3)
+    }
+
+    /// Returns `true` if this protocol is any version of HTTP (`http/0.9`, `http/1.0`, `http/1.1`, `h2`, `h3`).
+    #[inline]
+    pub fn is_http(&self) -> bool {
+        matches!(
+            self,
+            Self::Http09 | Self::Http10 | Self::Http11 | Self::Http2 | Self::Http3
+        )
+    }
 }
 
 impl<'a> Codec<'a> for ApplicationProtocol<'a> {
@@ -190,6 +223,26 @@ enum_builder! {
     }
 }
 
+impl ProtocolVersion {
+    /// Returns `true` if this protocol version is TLS 1.3.
+    #[inline]
+    pub const fn is_tls13(self) -> bool {
+        self.0 == Self::TLSv1_3.0
+    }
+
+    /// Returns `true` if this protocol version is TLS 1.2.
+    #[inline]
+    pub const fn is_tls12(self) -> bool {
+        self.0 == Self::TLSv1_2.0
+    }
+
+    /// Returns `true` if this protocol version is any DTLS version.
+    #[inline]
+    pub const fn is_dtls(self) -> bool {
+        matches!(self.0, 0xFEFF | 0xFEFD | 0xFEFC)
+    }
+}
+
 enum_builder! {
     /// The "TLS Certificate Compression Algorithm IDs" TLS protocol enum.
     /// Values in this enum are taken from [RFC 8879].
@@ -252,5 +305,56 @@ mod tests {
             CertificateCompressionAlgorithm::Zstd,
         );
         test_enum8::<CertificateType>(CertificateType::X509, CertificateType::RawPublicKey);
+    }
+
+    #[test]
+    fn test_application_protocol_helpers() {
+        let h2 = ApplicationProtocol::Http2;
+        assert_eq!(h2.as_bytes(), b"h2");
+        assert_eq!(h2.as_str(), Ok("h2"));
+        assert!(h2.is_http2());
+        assert!(!h2.is_http3());
+        assert!(h2.is_http());
+
+        let h3 = ApplicationProtocol::Http3;
+        assert_eq!(h3.as_bytes(), b"h3");
+        assert_eq!(h3.as_str(), Ok("h3"));
+        assert!(!h3.is_http2());
+        assert!(h3.is_http3());
+        assert!(h3.is_http());
+
+        let h11 = ApplicationProtocol::Http11;
+        assert!(h11.is_http());
+        assert!(!h11.is_http2());
+        assert!(!h11.is_http3());
+
+        let h10 = ApplicationProtocol::Http10;
+        assert!(h10.is_http());
+        let h09 = ApplicationProtocol::Http09;
+        assert!(h09.is_http());
+
+        let custom = ApplicationProtocol::from(b"custom-proto");
+        assert_eq!(custom.as_bytes(), b"custom-proto");
+        assert_eq!(custom.as_str(), Ok("custom-proto"));
+        assert!(!custom.is_http());
+        assert!(!custom.is_http2());
+        assert!(!custom.is_http3());
+    }
+
+    #[test]
+    fn test_protocol_version_helpers() {
+        assert!(ProtocolVersion::TLSv1_3.is_tls13());
+        assert!(!ProtocolVersion::TLSv1_3.is_tls12());
+        assert!(!ProtocolVersion::TLSv1_3.is_dtls());
+
+        assert!(ProtocolVersion::TLSv1_2.is_tls12());
+        assert!(!ProtocolVersion::TLSv1_2.is_tls13());
+        assert!(!ProtocolVersion::TLSv1_2.is_dtls());
+
+        assert!(ProtocolVersion::DTLSv1_2.is_dtls());
+        assert!(ProtocolVersion::DTLSv1_0.is_dtls());
+        assert!(ProtocolVersion::DTLSv1_3.is_dtls());
+        assert!(!ProtocolVersion::DTLSv1_2.is_tls13());
+        assert!(!ProtocolVersion::DTLSv1_2.is_tls12());
     }
 }

@@ -150,6 +150,20 @@ impl ConnectionOutputs {
         self.negotiated_version
     }
 
+    /// Returns `true` if TLS 1.3 was negotiated for this connection.
+    #[inline]
+    pub fn is_tls13(&self) -> bool {
+        self.protocol_version()
+            .is_some_and(|v| v.is_tls13())
+    }
+
+    /// Returns `true` if TLS 1.2 was negotiated for this connection.
+    #[inline]
+    pub fn is_tls12(&self) -> bool {
+        self.protocol_version()
+            .is_some_and(|v| v.is_tls12())
+    }
+
     /// Whether the Extended Main Secret extension was negotiated.
     ///
     /// Returns:
@@ -442,3 +456,28 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
 
 pub(crate) type HandshakeFlightTls12<'a> = HandshakeFlight<'a, false>;
 pub(crate) type HandshakeFlightTls13<'a> = HandshakeFlight<'a, true>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_connection_outputs_version_helpers() {
+        let mut outputs = ConnectionOutputs::default();
+        assert_eq!(outputs.protocol_version(), None);
+        assert!(!outputs.is_tls13());
+        assert!(!outputs.is_tls12());
+
+        outputs.negotiated_version = Some(ProtocolVersion::TLSv1_3);
+        assert!(outputs.is_tls13());
+        assert!(!outputs.is_tls12());
+
+        outputs.negotiated_version = Some(ProtocolVersion::TLSv1_2);
+        assert!(!outputs.is_tls13());
+        assert!(outputs.is_tls12());
+
+        outputs.negotiated_version = Some(ProtocolVersion::SSLv3);
+        assert!(!outputs.is_tls13());
+        assert!(!outputs.is_tls12());
+    }
+}
