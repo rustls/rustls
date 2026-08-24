@@ -24,7 +24,9 @@ use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 pub mod kernel;
 
 mod handshake;
-pub(crate) use handshake::{AcceptedCore, Core, NeedsInputCore, Tcp, Transport, VerifyCore};
+pub(crate) use handshake::{
+    AcceptedCore, ClientNext, Core, NeedsInputCore, ServerNext, Tcp, Transport, VerifyCore,
+};
 
 mod receive;
 pub(crate) use receive::{Input, MessageIter, MessageIterMode, ReceivePath, TrafficTemperCounters};
@@ -148,6 +150,10 @@ impl<Side: SideData> NeedsInput<Side> {
         Self(NeedsInputCore::new(Core::new(inner, ())))
     }
 
+    pub(crate) fn from_core(core: NeedsInputCore<Side, Tcp>) -> Self {
+        Self(core)
+    }
+
     /// Progress the handshake by receiving further data.
     ///
     /// The data is obtained via `input`.  Any output produced is appended to `tls` and
@@ -165,7 +171,7 @@ impl<Side: SideData> NeedsInput<Side> {
         input: &mut dyn TlsInputBuffer,
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
-        Side::handshake_from_inner(self.0.process(input, tls)?.inner)
+        Side::handshake_from_core(self.0.process(input, tls)?)
     }
 }
 
@@ -207,7 +213,7 @@ impl<Side: SideData> VerifyPeerIdentity<Side> {
 
     /// Progress the handshake by calling the pre-configured certificate verification trait.
     pub fn with_config(self, tls: &mut Vec<u8>) -> Result<Side::Handshake, Error> {
-        Side::handshake_from_inner(self.0.with_config(tls)?.inner)
+        Side::handshake_from_core(self.0.with_config(tls)?)
     }
 
     /// Progress the handshake by incorporating the result of an external verification.
@@ -221,10 +227,9 @@ impl<Side: SideData> VerifyPeerIdentity<Side> {
         verification_result: Result<VerifiedIdentity<'static>, Error>,
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
-        Side::handshake_from_inner(
+        Side::handshake_from_core(
             self.0
-                .continue_with(verification_result, tls)?
-                .inner,
+                .continue_with(verification_result, tls)?,
         )
     }
 
@@ -696,7 +701,7 @@ pub trait SideData: private::Side + Sized {
 
     #[doc(hidden)]
     #[expect(private_interfaces)]
-    fn handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error>;
+    fn handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error>;
 }
 
 pub(crate) mod private {
