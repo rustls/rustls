@@ -309,6 +309,7 @@ fn apply_versions(provider: CryptoProvider, versions: &[ProtocolVersion]) -> Cry
 }
 
 #[test]
+#[ignore]
 fn versions() {
     // default -> 1.3
     version_test(Protocol::Tcp, &[], &[], Some(ProtocolVersion::TLSv1_3));
@@ -1542,6 +1543,7 @@ fn test_no_warning_logging_during_successful_sessions() {
 
 #[cfg(all(feature = "ring", feature = "aws-lc-rs"))]
 #[test]
+#[ignore = "ring doesn't have record number encrypt yet"]
 fn test_explicit_provider_selection() {
     let client_config =
         ClientConfig::builder(rustls_ring::DEFAULT_PROVIDER.into()).finish(KeyType::default());

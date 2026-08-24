@@ -24,12 +24,20 @@ mod record_layer;
 pub(crate) use record_layer::{Decrypted, DecryptionState, EncryptionState, PreEncryptAction};
 
 /// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suite.
+///
+/// Every TLS 1.3 AEAD suite supported by rustls is required to be DTLS_OK in the IANA registry.
 pub trait Tls13AeadAlgorithm: Send + Sync {
     /// Build a `MessageEncrypter` for the given key/iv.
     fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter>;
 
     /// Build a `MessageDecrypter` for the given key/iv.
     fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter>;
+
+    /// Build a `RecordSequenceNumberEncrypter` for the given key.
+    fn record_sequence_encrypter(
+        &self,
+        key: BlockCipherKey,
+    ) -> Box<dyn RecordSequenceNumberEncrypter>;
 
     /// The length of key in bytes required by `encrypter()` and `decrypter()`.
     fn key_len(&self) -> usize;
@@ -198,6 +206,36 @@ pub trait MessageEncrypter: Send + Sync {
     /// it does odd things like send a TLS 1.3 ServerHello after a TLS 1.2 handshake has been
     /// performed. This should go away before appearing in any PR.
     fn protocol_version(&self) -> ProtocolVersion;
+}
+
+/// Encrypt and decrypt DTLS 1.3 record sequence numbers.
+///
+/// The encryption and decryption procedures are identical so a single trait covers both.
+///
+/// <https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4.2.3>
+pub trait RecordSequenceNumberEncrypter: Send + Sync {
+    /// Encrypt or decrypt the record sequence number `seq`, in-place.
+    ///
+    /// The sequence number is transformed by XORing with a mask computed from the record number
+    /// encryption key and the first 16 bytes of ciphertext.
+    ///
+    /// `ciphertext` MUST be a 16 byte slice.
+    ///
+    /// The sequence number is provided as a byte buffer containing the encoded sequence number. Its
+    /// length may be either 1 or 2 bytes. The output will have the same length.
+    fn transform(&self, seq: &mut [u8], ciphertext: &[u8]) -> Result<(), Error> {
+        assert_eq!(ciphertext.len(), 16, "ciphertext too short to transform");
+        let mask = self.mask(ciphertext)?;
+
+        for (seq, mask) in seq.iter_mut().zip(mask) {
+            *seq = *seq ^ mask;
+        }
+
+        Ok(())
+    }
+
+    /// Compute the mask for record sequence number encryption.
+    fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 16], Error>;
 }
 
 /// A write or read IV.
@@ -434,6 +472,27 @@ impl From<[u8; 16]> for AeadKey {
             buf: array::from_fn(|i| if i < 16 { buf[i] } else { 0 }),
             used: 16,
         }
+    }
+}
+
+/// A key for a single-block cipher (like AES-ECB).
+pub struct BlockCipherKey(AeadKey);
+
+impl BlockCipherKey {
+    pub(crate) fn new(buf: &[u8]) -> Self {
+        Self(AeadKey::new(buf))
+    }
+}
+
+impl AsRef<[u8]> for BlockCipherKey {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl From<[u8; 16]> for BlockCipherKey {
+    fn from(value: [u8; 16]) -> Self {
+        Self(AeadKey::from(value))
     }
 }
 

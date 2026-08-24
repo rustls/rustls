@@ -188,7 +188,7 @@ impl EncodedMessage<OutboundPlain<'_>> {
     }
 }
 
-/// Encode a TLS record header.
+/// Encode a TLS record header. Returns the encoded payload length.
 ///
 /// `typ`, `version` and `len` describe the record's payload.
 pub(crate) fn encode_record_header(
@@ -197,22 +197,27 @@ pub(crate) fn encode_record_header(
     len: u16,
     cx: EncodingContext,
     into: &mut [u8],
-) {
+) -> [u8; 2] {
     if version.version() == ProtocolVersion::DTLSv1_3 && cx.payload_is_encrypted {
-        UnifiedHeader::new(len, cx).encode(into);
-        return;
+        let header = UnifiedHeader::new(len, cx);
+        header.encode(into);
+        // Unwrap safety: we provided a len to the constructor so this is guaranteed to be Some
+        return header.encoded_len().unwrap();
     }
 
     into[0..1].copy_from_slice(&typ.to_array());
     into[1..3].copy_from_slice(&version.encode().to_array());
 
+    let encoded_len = len.to_be_bytes();
     if version.version().is_datagram_tls() {
         into[3..5].copy_from_slice(&cx.epoch.number().to_be_bytes());
         into[5..11].copy_from_slice(&(cx.record_seq).to_be_bytes()[2..]);
-        into[11..13].copy_from_slice(&(len).to_be_bytes());
+        into[11..13].copy_from_slice(&encoded_len);
     } else {
-        into[3..5].copy_from_slice(&len.to_be_bytes());
+        into[3..5].copy_from_slice(&encoded_len);
     }
+
+    encoded_len
 }
 
 /// A collection of borrowed plaintext slices.

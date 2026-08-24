@@ -5,8 +5,9 @@ use ring::hkdf::{self, KeyType};
 use ring::{aead, hmac};
 use rustls::crypto::CipherSuite;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
-    Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, BlockCipherKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter,
+    MessageEncrypter, Nonce, OutboundPlain, RecordSequenceNumberEncrypter, Tls13AeadAlgorithm,
+    UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::enums::{ContentType, ProtocolVersion};
@@ -99,6 +100,13 @@ impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
         self.0.decrypter(key, iv)
     }
 
+    fn record_sequence_encrypter(
+        &self,
+        _key: BlockCipherKey,
+    ) -> Box<dyn RecordSequenceNumberEncrypter> {
+        Box::new(FakeRecordSequenceNumberEncrypter)
+    }
+
     fn key_len(&self) -> usize {
         self.0.key_len()
     }
@@ -127,6 +135,13 @@ impl Tls13AeadAlgorithm for Aes256GcmAead {
         self.0.decrypter(key, iv)
     }
 
+    fn record_sequence_encrypter(
+        &self,
+        _key: BlockCipherKey,
+    ) -> Box<dyn RecordSequenceNumberEncrypter> {
+        Box::new(FakeRecordSequenceNumberEncrypter)
+    }
+
     fn key_len(&self) -> usize {
         self.0.key_len()
     }
@@ -153,6 +168,13 @@ impl Tls13AeadAlgorithm for Aes128GcmAead {
 
     fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
         self.0.decrypter(key, iv)
+    }
+
+    fn record_sequence_encrypter(
+        &self,
+        _key: BlockCipherKey,
+    ) -> Box<dyn RecordSequenceNumberEncrypter> {
+        Box::new(FakeRecordSequenceNumberEncrypter)
     }
 
     fn key_len(&self) -> usize {
@@ -362,6 +384,16 @@ struct Len(usize);
 impl KeyType for Len {
     fn len(&self) -> usize {
         self.0
+    }
+}
+
+struct FakeRecordSequenceNumberEncrypter;
+
+impl RecordSequenceNumberEncrypter for FakeRecordSequenceNumberEncrypter {
+    fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 16], Error> {
+        // This is a fake, dummy encrypter for ring. It's not immediately obvious how to do either
+        // AES-ECB or the ChaCha20 block function using ring.
+        Ok(*ciphertext.as_array().unwrap())
     }
 }
 

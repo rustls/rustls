@@ -2025,8 +2025,9 @@ pub fn certificate_error_expecting_name(expected: &str) -> CertificateError {
 mod plaintext {
     use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
-        AeadKey, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
-        OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError,
+        AeadKey, BlockCipherKey, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter,
+        MessageEncrypter, OutboundPlain, RecordSequenceNumberEncrypter, Tls13AeadAlgorithm,
+        UnsupportedOperationError,
     };
 
     use super::*;
@@ -2040,6 +2041,13 @@ mod plaintext {
 
         fn decrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn MessageDecrypter> {
             Box::new(Decrypter)
+        }
+
+        fn record_sequence_encrypter(
+            &self,
+            _key: BlockCipherKey,
+        ) -> Box<dyn RecordSequenceNumberEncrypter> {
+            Box::new(Encrypter)
         }
 
         fn key_len(&self) -> usize {
@@ -2081,6 +2089,12 @@ mod plaintext {
 
         fn protocol_version(&self) -> ProtocolVersion {
             ProtocolVersion::TLSv1_3
+        }
+    }
+
+    impl RecordSequenceNumberEncrypter for Encrypter {
+        fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 16], Error> {
+            Ok(*ciphertext.as_array().unwrap())
         }
     }
 

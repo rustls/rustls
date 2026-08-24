@@ -5,9 +5,9 @@ use core::time::Duration;
 use std::borrow::Cow;
 
 use crate::crypto::cipher::{
-    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter,
-    MessageEncrypter, OutboundPlain, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
-    UnsupportedOperationError,
+    AeadKey, BlockCipherKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape,
+    MessageDecrypter, MessageEncrypter, OutboundPlain, RecordSequenceNumberEncrypter,
+    Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError,
 };
 use crate::crypto::kx::{
     KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup,
@@ -324,6 +324,13 @@ impl Tls13AeadAlgorithm for Aead {
         Box::new(Tls13Cipher)
     }
 
+    fn record_sequence_encrypter(
+        &self,
+        key: BlockCipherKey,
+    ) -> Box<dyn RecordSequenceNumberEncrypter> {
+        Box::new(Tls13Cipher)
+    }
+
     fn key_len(&self) -> usize {
         16
     }
@@ -404,6 +411,12 @@ impl MessageEncrypter for Tls13Cipher {
 
     fn protocol_version(&self) -> ProtocolVersion {
         ProtocolVersion::TLSv1_3
+    }
+}
+
+impl RecordSequenceNumberEncrypter for Tls13Cipher {
+    fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 16], Error> {
+        Ok(*ciphertext.as_array().unwrap())
     }
 }
 

@@ -6,7 +6,7 @@ use crate::common_state::Side;
 use crate::crypto::cipher::antireplay::ReplayWindow;
 use crate::crypto::cipher::{
     EncodedMessage, EncodingContext, InboundOpaque, MessageDecrypter, MessageEncrypter,
-    OutboundPlain, encode_record_header,
+    OutboundPlain, RecordSequenceNumberEncrypter, encode_record_header,
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
@@ -16,6 +16,7 @@ use crate::tracing::trace;
 /// Record layer that tracks encryption keys.
 pub(crate) struct EncryptionState {
     message_encrypter: Option<Box<dyn MessageEncrypter>>,
+    record_sequence_number_encrypter: Option<Box<dyn RecordSequenceNumberEncrypter>>,
     write_seq_max: u64,
     /// Encryption epoch.
     ///
@@ -30,6 +31,7 @@ impl EncryptionState {
     pub(crate) fn new(side: Side) -> Self {
         Self {
             message_encrypter: None,
+            record_sequence_number_encrypter: None,
             write_seq_max: 0,
             epoch: Epoch::Unencrypted,
             write_seq: 0,
@@ -81,10 +83,8 @@ impl EncryptionState {
         out: &mut [u8],
     ) -> usize {
         assert!(self.pre_encrypt_action(0) != Some(PreEncryptAction::Refuse));
-        let header_size = plain
-            .version
-            .version()
-            .encrypted_header_len();
+        let version_in_use = plain.version.version();
+        let header_size = version_in_use.encrypted_header_len();
         let encrypter = self.message_encrypter.as_mut().unwrap();
 
         let seq = self
@@ -94,8 +94,9 @@ impl EncryptionState {
 
         let (header, payload) = out.split_at_mut(header_size);
 
-        encode_record_header(
-            match plain.version.version() {
+        // First, encode the header, because DTLS 1.3 needs to use it as the AAD.
+        let mut encoded_len = encode_record_header(
+            match version_in_use {
                 ProtocolVersion::TLSv1_2 | ProtocolVersion::DTLSv1_2 => plain.typ,
                 ProtocolVersion::TLSv1_3 | ProtocolVersion::DTLSv1_3 => {
                     ContentType::ApplicationData
@@ -114,23 +115,39 @@ impl EncryptionState {
 
         #[cfg(debug_assertions)]
         let (out_ptr, out_len) = (payload.as_ptr(), payload.len());
-        let encrypted = encrypter
-            .encrypt(plain, seq, header, payload)
-            .unwrap();
+        let encrypted_len = {
+            let encrypted = encrypter
+                .encrypt(plain, seq, header, payload)
+                .unwrap();
 
-        #[cfg(debug_assertions)]
-        {
-            // `MessageEncrypter::encrypt()` requires the returned payload to be
-            // the written prefix of the passed-in buffer. Try to catch misbehaving
-            // implementations in debug mode. In release builds a violation would corrupt
-            // the sent stream.
-            debug_assert_eq!(encrypted.payload.as_ptr(), out_ptr);
-            debug_assert!(encrypted.payload.len() <= out_len);
+            #[cfg(debug_assertions)]
+            {
+                // `MessageEncrypter::encrypt()` requires the returned payload to be
+                // the written prefix of the passed-in buffer. Try to catch misbehaving
+                // implementations in debug mode. In release builds a violation would corrupt
+                // the sent stream.
+                debug_assert_eq!(encrypted.payload.as_ptr(), out_ptr);
+                debug_assert!(encrypted.payload.len() <= out_len);
+            }
+
+            debug_assert!(encrypted.payload.len() <= usize::from(u16::MAX));
+
+            encrypted.payload.len()
+        };
+
+        if version_in_use == ProtocolVersion::DTLSv1_3 {
+            // Now that we have encrypted the record, we can use the ciphertext to encrypt the
+            // record number and overwrite the previously written header.
+            self.record_sequence_number_encrypter
+                .as_ref()
+                .unwrap()
+                .transform(&mut encoded_len, &payload[..16])
+                .unwrap();
+
+            header[3..5].copy_from_slice(&encoded_len);
         }
 
-        debug_assert!(encrypted.payload.len() <= usize::from(u16::MAX));
-
-        header_size + encrypted.payload.len()
+        header_size + encrypted_len
     }
 
     /// Set and start using the given `MessageEncrypter` for future outgoing
@@ -142,13 +159,17 @@ impl EncryptionState {
         purpose: EncrypterDecrypterPurpose,
         version: ProtocolVersion,
     ) {
-        *self = Self {
-            message_encrypter: Some(cipher),
-            write_seq_max: min(SEQ_SOFT_LIMIT, max_messages),
-            epoch: self.epoch.increment(purpose, version),
-            write_seq: 0,
-            side: self.side,
-        };
+        self.message_encrypter = Some(cipher);
+        self.write_seq_max = min(SEQ_SOFT_LIMIT, max_messages);
+        self.epoch = self.epoch.increment(purpose, version);
+        self.write_seq = 0;
+    }
+
+    pub(crate) fn set_record_sequence_number_encrypter(
+        &mut self,
+        encrypter: Box<dyn RecordSequenceNumberEncrypter>,
+    ) {
+        self.record_sequence_number_encrypter = Some(encrypter);
     }
 
     /// Return a remedial action when we are near to encrypting too many messages.
@@ -192,6 +213,7 @@ impl EncryptionState {
 /// Record layer that tracks decryption keys.
 pub(crate) struct DecryptionState {
     message_decrypter: Option<Box<dyn MessageDecrypter>>,
+    record_sequence_number_encrypter: Option<Box<dyn RecordSequenceNumberEncrypter>>,
     /// Encryption epoch.
     ///
     /// This value is tracked for all protocol versions, but only used for Datagram TLS.
@@ -217,6 +239,7 @@ impl DecryptionState {
     pub(crate) fn new(side: Side) -> Self {
         Self {
             message_decrypter: None,
+            record_sequence_number_encrypter: None,
             epoch: Epoch::Unencrypted,
             read_seq: 0,
             has_decrypted: false,
@@ -308,6 +331,13 @@ impl DecryptionState {
         self.epoch = self.epoch.increment(purpose, version);
         self.trial_decryption_len = Some(max_length);
         self.anti_replay = ReplayWindow::default();
+    }
+
+    pub(crate) fn set_record_sequence_number_encrypter(
+        &mut self,
+        encrypter: Box<dyn RecordSequenceNumberEncrypter>,
+    ) {
+        self.record_sequence_number_encrypter = Some(encrypter);
     }
 
     pub(crate) fn finish_trial_decryption(&mut self) {

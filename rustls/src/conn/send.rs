@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use crate::common_state::{Protocol, Side};
 use crate::crypto::cipher::{
     EncodableVersion, EncodedMessage, EncodingContext, EncryptionState, MessageEncrypter,
-    OutboundPlain, Payload, PreEncryptAction,
+    OutboundPlain, Payload, PreEncryptAction, RecordSequenceNumberEncrypter,
 };
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
@@ -336,6 +336,14 @@ impl SendOutput for SendPath {
             .set_message_encrypter(encrypter, max_messages, purpose, self.negotiated_version());
     }
 
+    fn set_record_sequence_number_encrypter(
+        &mut self,
+        encrypter: Box<dyn RecordSequenceNumberEncrypter>,
+    ) {
+        self.encrypt_state
+            .set_record_sequence_number_encrypter(encrypter);
+    }
+
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>) {
         self.tls13_key_schedule = Some(schedule);
     }
@@ -469,6 +477,11 @@ pub(crate) trait SendOutput {
         cipher: Box<dyn MessageEncrypter>,
         max_messages: u64,
         purpose: EncrypterDecrypterPurpose,
+    );
+
+    fn set_record_sequence_number_encrypter(
+        &mut self,
+        encrypter: Box<dyn RecordSequenceNumberEncrypter>,
     );
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>);

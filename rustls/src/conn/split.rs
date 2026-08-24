@@ -11,7 +11,7 @@ use crate::conn::kernel::KernelConnection;
 use crate::conn::{
     ConnectionCommon, MessageIter, ReceivePath, SendOutput, SendPath, TlsInputBuffer,
 };
-use crate::crypto::cipher::{MessageEncrypter, OutboundPlain};
+use crate::crypto::cipher::{MessageEncrypter, OutboundPlain, RecordSequenceNumberEncrypter};
 use crate::enums::ProtocolVersion;
 use crate::error::{AlertDescription, ErrorWithAlert};
 use crate::lock::Mutex;
@@ -504,6 +504,14 @@ impl SendOutput for SendAdapter<'_> {
     ) {
         self.as_locked(false)
             .set_encrypter(cipher, max_messages, purpose);
+    }
+
+    fn set_record_sequence_number_encrypter(
+        &mut self,
+        encrypter: Box<dyn RecordSequenceNumberEncrypter>,
+    ) {
+        self.as_locked(false)
+            .set_record_sequence_number_encrypter(encrypter);
     }
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>) {

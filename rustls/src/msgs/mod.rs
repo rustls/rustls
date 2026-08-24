@@ -1101,9 +1101,9 @@ impl UnifiedHeader {
         // Always encode sequence number as 2 bytes for simplicity
         bytes[0] |= Self::S_BIT_MASK;
         bytes[1..3].copy_from_slice(&(self.sequence as u16).to_be_bytes());
-        if let Some(length) = self.length {
+        if let Some(length) = self.encoded_len() {
             bytes[0] |= Self::L_BIT_MASK;
-            bytes[3..5].copy_from_slice(&length.to_be_bytes());
+            bytes[3..5].copy_from_slice(&length);
         }
 
         debug_assert!(self.epoch.number() <= Self::EE_BITS_MASK as u16);
@@ -1185,6 +1185,10 @@ impl UnifiedHeader {
             ),
             sequence,
         })
+    }
+
+    pub(crate) fn encoded_len(&self) -> Option<[u8; 2]> {
+        self.length.map(|l| l.to_be_bytes())
     }
 }
 

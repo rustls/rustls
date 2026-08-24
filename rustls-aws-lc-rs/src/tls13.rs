@@ -1,11 +1,13 @@
 use alloc::boxed::Box;
 
+use aws_lc_rs::cipher::{AES_128, DecryptionContext, EncryptingKey, UnboundCipherKey};
 use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
 use pki_types::FipsStatus;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
-    Nonce, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, BlockCipherKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter,
+    MessageEncrypter, Nonce, OutboundPlain, RecordSequenceNumberEncrypter, Tls13AeadAlgorithm,
+    UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::crypto::{self, CipherSuite};
@@ -114,6 +116,15 @@ impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
         })
     }
 
+    fn record_sequence_encrypter(
+        &self,
+        key: BlockCipherKey,
+    ) -> Box<dyn RecordSequenceNumberEncrypter> {
+        // TODO(DTLS): provide a GCM encrypter that does AES ECB for now. It's
+        // not obvious how to get at the ChaCha20 block function using aws-lc-rs
+        Box::new(GcmRecordSequenceNumberEncrypter::new(key))
+    }
+
     fn key_len(&self) -> usize {
         self.0.key_len()
     }
@@ -142,6 +153,13 @@ impl Tls13AeadAlgorithm for Aes256GcmAead {
         self.0.decrypter(key, iv)
     }
 
+    fn record_sequence_encrypter(
+        &self,
+        key: BlockCipherKey,
+    ) -> Box<dyn RecordSequenceNumberEncrypter> {
+        Box::new(GcmRecordSequenceNumberEncrypter::new(key))
+    }
+
     fn key_len(&self) -> usize {
         self.0.key_len()
     }
@@ -168,6 +186,13 @@ impl Tls13AeadAlgorithm for Aes128GcmAead {
 
     fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
         self.0.decrypter(key, iv)
+    }
+
+    fn record_sequence_encrypter(
+        &self,
+        key: BlockCipherKey,
+    ) -> Box<dyn RecordSequenceNumberEncrypter> {
+        Box::new(GcmRecordSequenceNumberEncrypter::new(key))
     }
 
     fn key_len(&self) -> usize {
@@ -451,6 +476,48 @@ impl MessageDecrypter for GcmMessageDecrypter {
 
         payload.truncate(plain_len);
         msg.into_tls13_unpadded_message()
+    }
+}
+
+struct GcmRecordSequenceNumberEncrypter {
+    key: BlockCipherKey,
+}
+
+impl GcmRecordSequenceNumberEncrypter {
+    fn new(key: BlockCipherKey) -> Self {
+        Self { key }
+    }
+}
+
+impl RecordSequenceNumberEncrypter for GcmRecordSequenceNumberEncrypter {
+    fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 16], Error> {
+        assert_eq!(ciphertext.len(), AES_128.block_len());
+
+        let key = EncryptingKey::ecb(UnboundCipherKey::new(&AES_128, self.key.as_ref()).map_err(
+            |e| {
+                std::println!("error creating UnboundCipherKey: {e:?}");
+                Error::DecryptError
+            },
+        )?)
+        .map_err(|e| {
+            std::println!("error creating EncryptingKey: {e:?}");
+            Error::DecryptError
+        })?;
+
+        let mut in_out: [u8; 16] = *ciphertext.as_array().unwrap();
+        let context = key
+            .encrypt(&mut in_out[..])
+            .map_err(|e| {
+                std::println!("error encrypting: {e:?}");
+                Error::DecryptError
+            })?;
+        std::println!("Decryption context from AES ECB encrypt: {context:?}");
+        if let DecryptionContext::None = context {
+        } else {
+            panic!("decryption context is some IV")
+        };
+
+        Ok(in_out)
     }
 }
 
