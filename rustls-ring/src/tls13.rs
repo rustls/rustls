@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 
 use pki_types::FipsStatus;
+use ring::aead::quic::HeaderProtectionKey;
 use ring::hkdf::{self, KeyType};
 use ring::{aead, hmac};
 use rustls::crypto::CipherSuite;
@@ -102,9 +103,9 @@ impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
 
     fn record_sequence_encrypter(
         &self,
-        _key: BlockCipherKey,
+        key: BlockCipherKey,
     ) -> Box<dyn RecordSequenceNumberEncrypter> {
-        Box::new(FakeRecordSequenceNumberEncrypter)
+        Box::new(ChaCha20RecordSequenceNumberEncrypter::new(key))
     }
 
     fn key_len(&self) -> usize {
@@ -137,9 +138,9 @@ impl Tls13AeadAlgorithm for Aes256GcmAead {
 
     fn record_sequence_encrypter(
         &self,
-        _key: BlockCipherKey,
+        key: BlockCipherKey,
     ) -> Box<dyn RecordSequenceNumberEncrypter> {
-        Box::new(FakeRecordSequenceNumberEncrypter)
+        Box::new(GcmRecordSequenceNumberEncrypter::new(key))
     }
 
     fn key_len(&self) -> usize {
@@ -172,9 +173,9 @@ impl Tls13AeadAlgorithm for Aes128GcmAead {
 
     fn record_sequence_encrypter(
         &self,
-        _key: BlockCipherKey,
+        key: BlockCipherKey,
     ) -> Box<dyn RecordSequenceNumberEncrypter> {
-        Box::new(FakeRecordSequenceNumberEncrypter)
+        Box::new(GcmRecordSequenceNumberEncrypter::new(key))
     }
 
     fn key_len(&self) -> usize {
@@ -387,13 +388,61 @@ impl KeyType for Len {
     }
 }
 
-struct FakeRecordSequenceNumberEncrypter;
+struct ChaCha20RecordSequenceNumberEncrypter {
+    key: BlockCipherKey,
+}
 
-impl RecordSequenceNumberEncrypter for FakeRecordSequenceNumberEncrypter {
+impl ChaCha20RecordSequenceNumberEncrypter {
+    fn new(key: BlockCipherKey) -> Self {
+        Self { key }
+    }
+}
+
+impl RecordSequenceNumberEncrypter for ChaCha20RecordSequenceNumberEncrypter {
     fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 2], Error> {
-        // This is a fake, dummy encrypter for ring. It's not immediately obvious how to do either
-        // AES-ECB or the ChaCha20 block function using ring.
-        Ok(*ciphertext[..2].as_array().unwrap())
+        // The mask derivation for DTLS 1.3 record number protection is identical to that for QUIC
+        // header protection, which means we can use `aws_lc_rs::aead::quic::HeaderProtectionKey`.
+        let key =
+            HeaderProtectionKey::new(&aead::quic::CHACHA20, self.key.as_ref()).map_err(|_| {
+                std::println!("error creating HeaderProtectionKey");
+                Error::DecryptError
+            })?;
+
+        let mask = key.new_mask(ciphertext).map_err(|_| {
+            std::println!("error creating QUIC new_mask");
+            Error::DecryptError
+        })?;
+
+        Ok([mask[0], mask[1]])
+    }
+}
+
+struct GcmRecordSequenceNumberEncrypter {
+    key: BlockCipherKey,
+}
+
+impl GcmRecordSequenceNumberEncrypter {
+    fn new(key: BlockCipherKey) -> Self {
+        Self { key }
+    }
+}
+
+impl RecordSequenceNumberEncrypter for GcmRecordSequenceNumberEncrypter {
+    fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 2], Error> {
+        // The mask derivation for DTLS 1.3 record number protection is identical to that for QUIC
+        // header protection, which means we can use `ring::aead::quic::HeaderProtectionKey`.
+        let key =
+            HeaderProtectionKey::new(&aead::quic::AES_128, self.key.as_ref()).map_err(|_| {
+                std::println!("error creating HeaderProtectionKey");
+                Error::DecryptError
+            })?;
+
+        let mask = key.new_mask(ciphertext).map_err(|_| {
+            std::println!("error creating QUIC new_mask");
+            Error::DecryptError
+        })?;
+
+        Ok([mask[0], mask[1]])
     }
 }
 

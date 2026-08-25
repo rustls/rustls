@@ -1,7 +1,6 @@
 use alloc::boxed::Box;
 
 use aws_lc_rs::aead::quic::HeaderProtectionKey;
-use aws_lc_rs::cipher::{AES_128, DecryptionContext, EncryptingKey, UnboundCipherKey};
 use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
 use pki_types::FipsStatus;
@@ -377,6 +376,8 @@ impl ChaCha20RecordSequenceNumberEncrypter {
 
 impl RecordSequenceNumberEncrypter for ChaCha20RecordSequenceNumberEncrypter {
     fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 2], Error> {
+        // The mask derivation for DTLS 1.3 record number protection is identical to that for QUIC
+        // header protection, which means we can use `aws_lc_rs::aead::quic::HeaderProtectionKey`.
         let key =
             HeaderProtectionKey::new(&aead::quic::CHACHA20, self.key.as_ref()).map_err(|_| {
                 std::println!("error creating HeaderProtectionKey");
@@ -517,49 +518,20 @@ impl GcmRecordSequenceNumberEncrypter {
 
 impl RecordSequenceNumberEncrypter for GcmRecordSequenceNumberEncrypter {
     fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 2], Error> {
-        assert_eq!(ciphertext.len(), AES_128.block_len());
-
-        let key = EncryptingKey::ecb(UnboundCipherKey::new(&AES_128, self.key.as_ref()).map_err(
-            |e| {
-                std::println!("error creating UnboundCipherKey: {e:?}");
+        // The mask derivation for DTLS 1.3 record number protection is identical to that for QUIC
+        // header protection, which means we can use `aws_lc_rs::aead::quic::HeaderProtectionKey`.
+        let key =
+            HeaderProtectionKey::new(&aead::quic::AES_128, self.key.as_ref()).map_err(|_| {
+                std::println!("error creating HeaderProtectionKey");
                 Error::DecryptError
-            },
-        )?)
-        .map_err(|e| {
-            std::println!("error creating EncryptingKey: {e:?}");
+            })?;
+
+        let mask = key.new_mask(ciphertext).map_err(|_| {
+            std::println!("error creating QUIC new_mask");
             Error::DecryptError
         })?;
 
-        let mut in_out: [u8; 16] = *ciphertext.as_array().unwrap();
-        let context = key
-            .encrypt(&mut in_out[..])
-            .map_err(|e| {
-                std::println!("error encrypting: {e:?}");
-                Error::DecryptError
-            })?;
-        std::println!("Decryption context from AES ECB encrypt: {context:?}");
-        if let DecryptionContext::None = context {
-        } else {
-            panic!("decryption context is some IV")
-        };
-
-        let quic_mask = {
-            let key = HeaderProtectionKey::new(&aead::quic::AES_128, self.key.as_ref()).map_err(
-                |_| {
-                    std::println!("error creating HeaderProtectionKey");
-                    Error::DecryptError
-                },
-            )?;
-
-            key.new_mask(ciphertext).map_err(|_| {
-                std::println!("error creating QUIC new_mask");
-                Error::DecryptError
-            })?
-        };
-
-        assert_eq!(&quic_mask[..], &in_out[..5]);
-
-        Ok([quic_mask[0], quic_mask[1]])
+        Ok([mask[0], mask[1]])
     }
 }
 
