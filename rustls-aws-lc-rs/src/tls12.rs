@@ -633,7 +633,7 @@ mod tests {
                 let msg = EncodedMessage::new(
                     ContentType::ApplicationData,
                     EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
-                    InboundOpaque(&[], &mut sealed),
+                    InboundOpaque(&mut [], &mut sealed),
                 );
                 let shape = suite.aead_alg.key_block_shape();
                 let mut decrypter = suite

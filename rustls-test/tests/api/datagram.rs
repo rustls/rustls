@@ -115,7 +115,6 @@ fn anti_replay_dtls_12() {
 }
 
 #[test]
-#[ignore]
 fn anti_replay_dtls_13() {
     anti_replay_test(ProtocolVersion::DTLSv1_3);
 }

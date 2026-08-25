@@ -197,12 +197,10 @@ pub(crate) fn encode_record_header(
     len: u16,
     cx: EncodingContext,
     into: &mut [u8],
-) -> [u8; 2] {
+) {
     if version.version() == ProtocolVersion::DTLSv1_3 && cx.payload_is_encrypted {
-        let header = UnifiedHeader::new(len, cx);
-        header.encode(into);
-        // Unwrap safety: we provided a len to the constructor so this is guaranteed to be Some
-        return header.encoded_len().unwrap();
+        UnifiedHeader::new(len, cx).encode(into);
+        return;
     }
 
     into[0..1].copy_from_slice(&typ.to_array());
@@ -212,12 +210,10 @@ pub(crate) fn encode_record_header(
     if version.version().is_datagram_tls() {
         into[3..5].copy_from_slice(&cx.epoch.number().to_be_bytes());
         into[5..11].copy_from_slice(&(cx.record_seq).to_be_bytes()[2..]);
-        into[11..13].copy_from_slice(&encoded_len);
+        into[11..13].copy_from_slice(&len.to_be_bytes());
     } else {
         into[3..5].copy_from_slice(&encoded_len);
     }
-
-    encoded_len
 }
 
 /// A collection of borrowed plaintext slices.
@@ -565,7 +561,7 @@ impl fmt::Debug for Payload<'_> {
 /// depends on the protocol version in use.
 #[derive(Debug)]
 #[expect(clippy::exhaustive_structs)]
-pub struct InboundOpaque<'a>(pub &'a [u8], pub &'a mut [u8]);
+pub struct InboundOpaque<'a>(pub &'a mut [u8], pub &'a mut [u8]);
 
 impl<'a> InboundOpaque<'a> {
     /// Truncate the payload to `len` bytes.

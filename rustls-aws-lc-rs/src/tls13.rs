@@ -346,9 +346,9 @@ impl MessageDecrypter for AeadMessageDecrypter {
         let tls13_aad = make_tls13_aad(msg.typ, msg.version.version(), msg.payload.len());
         let aad = if msg.version.version().is_datagram_tls() {
             // For DTLS 1.3, the AAD is the record's unified header, verbatim
-            aead::Aad::from(msg.payload.0)
+            aead::Aad::from(msg.payload.to_vec())
         } else {
-            aead::Aad::from(tls13_aad.as_slice())
+            aead::Aad::from(tls13_aad.to_vec())
         };
 
         let payload = &mut msg.payload;
@@ -459,9 +459,9 @@ impl MessageDecrypter for GcmMessageDecrypter {
         let tls13_aad = make_tls13_aad(msg.typ, msg.version.version(), msg.payload.len());
         let aad = if msg.version.version().is_datagram_tls() {
             // For DTLS 1.3, the AAD is the record's unified header, verbatim
-            aead::Aad::from(msg.payload.0)
+            aead::Aad::from(msg.payload.0.to_vec())
         } else {
-            aead::Aad::from(tls13_aad.as_slice())
+            aead::Aad::from(tls13_aad.to_vec())
         };
 
         let payload = &mut msg.payload;
@@ -633,7 +633,7 @@ mod tests {
                 let msg = EncodedMessage::new(
                     ContentType::ApplicationData,
                     EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
-                    InboundOpaque(&[], &mut sealed),
+                    InboundOpaque(&mut [], &mut sealed),
                 );
                 let mut decrypter = suite
                     .aead_alg

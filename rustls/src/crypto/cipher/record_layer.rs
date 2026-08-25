@@ -87,15 +87,16 @@ impl EncryptionState {
         let header_size = version_in_use.encrypted_header_len();
         let encrypter = self.message_encrypter.as_mut().unwrap();
 
-        let seq = self
+        let record_seq = self
             .epoch
             .per_record_additional_data(self.write_seq, plain.version.version());
+        std::println!("encrypting with record seq {record_seq}");
         self.write_seq += 1;
 
         let (header, payload) = out.split_at_mut(header_size);
 
         // First, encode the header, because DTLS 1.3 needs to use it as the AAD.
-        let mut encoded_len = encode_record_header(
+        encode_record_header(
             match version_in_use {
                 ProtocolVersion::TLSv1_2 | ProtocolVersion::DTLSv1_2 => plain.typ,
                 ProtocolVersion::TLSv1_3 | ProtocolVersion::DTLSv1_3 => {
@@ -108,7 +109,7 @@ impl EncryptionState {
             EncodingContext {
                 payload_is_encrypted: true,
                 epoch: self.epoch,
-                record_seq: seq,
+                record_seq,
             },
             header,
         );
@@ -117,7 +118,7 @@ impl EncryptionState {
         let (out_ptr, out_len) = (payload.as_ptr(), payload.len());
         let encrypted_len = {
             let encrypted = encrypter
-                .encrypt(plain, seq, header, payload)
+                .encrypt(plain, record_seq, header, payload)
                 .unwrap();
 
             #[cfg(debug_assertions)]
@@ -135,16 +136,20 @@ impl EncryptionState {
             encrypted.payload.len()
         };
 
-        if version_in_use == ProtocolVersion::DTLSv1_3 {
+        if let Some(record_sequence_number_encrypter) = self
+            .record_sequence_number_encrypter
+            .as_ref()
+            && version_in_use.is_datagram_tls()
+        {
+            let mut encoded_record_seq = (record_seq as u16).to_be_bytes();
+
             // Now that we have encrypted the record, we can use the ciphertext to encrypt the
             // record number and overwrite the previously written header.
-            self.record_sequence_number_encrypter
-                .as_ref()
-                .unwrap()
-                .transform(&mut encoded_len, &payload[..16])
+            record_sequence_number_encrypter
+                .transform(&mut encoded_record_seq, &payload[..16])
                 .unwrap();
 
-            header[3..5].copy_from_slice(&encoded_len);
+            header[1..3].copy_from_slice(&encoded_record_seq);
         }
 
         header_size + encrypted_len
@@ -265,6 +270,36 @@ impl DecryptionState {
                 plaintext: encr.into_plain_message(),
             }));
         };
+
+        let record_seq = if let Some(record_sequence_number_encrypter) = self
+            .record_sequence_number_encrypter
+            .as_ref()
+            && encr.version.version().is_datagram_tls()
+        {
+            let mut encoded_record_seq = (record_seq as u16).to_be_bytes();
+
+            // Now that we have encrypted the record, we can use the ciphertext to encrypt the
+            // record number and overwrite the previously written header.
+            record_sequence_number_encrypter
+                .transform(&mut encoded_record_seq, &encr.payload.iter().as_ref()[..16])
+                .unwrap();
+
+            // TODO: THIS is where we need to infer the full seq number from the partial decrypted
+            // one
+            encr.payload.0[1..3].copy_from_slice(&encoded_record_seq);
+
+            u16::from_be_bytes(encoded_record_seq) as u64
+        } else {
+            record_seq
+        };
+
+        // Decrypt the record seq no here.
+        // --> How do we reliably determine this is DTLS 1.3?
+        // --> Where are we inferring seq no from epoch and stuff? In deframer?
+        //      --> Yeah, UnifiedHeader::read is doing it now. It needs to stop. Do that here
+        //          after decryption.
+        //      --> We're ok, the anti replay check is after decryption so it'll be fine
+        //          so long as the rec seq in the reutrned value is decrypted
 
         // Set to `true` if the peer appears to getting close to encrypting
         // too many messages with this key.
@@ -454,7 +489,7 @@ mod tests {
                 EncodedMessage::new(
                     ContentType::Handshake,
                     EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
-                    InboundOpaque(&[], &mut [0xC0, 0xFF, 0xEE]),
+                    InboundOpaque(&mut [], &mut [0xC0, 0xFF, 0xEE]),
                 ),
                 record_layer.read_seq,
             )
