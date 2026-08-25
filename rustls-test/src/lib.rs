@@ -2093,8 +2093,8 @@ mod plaintext {
     }
 
     impl RecordSequenceNumberEncrypter for Encrypter {
-        fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 16], Error> {
-            Ok(*ciphertext.as_array().unwrap())
+        fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 2], Error> {
+            Ok(*ciphertext[..2].as_array().unwrap())
         }
     }
 

@@ -415,8 +415,8 @@ impl MessageEncrypter for Tls13Cipher {
 }
 
 impl RecordSequenceNumberEncrypter for Tls13Cipher {
-    fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 16], Error> {
-        Ok(*ciphertext.as_array().unwrap())
+    fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 2], Error> {
+        Ok(*ciphertext[..2].as_array().unwrap())
     }
 }
 

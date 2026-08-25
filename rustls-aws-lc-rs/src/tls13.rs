@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 
+use aws_lc_rs::aead::quic::HeaderProtectionKey;
 use aws_lc_rs::cipher::{AES_128, DecryptionContext, EncryptingKey, UnboundCipherKey};
 use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
@@ -120,9 +121,7 @@ impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
         &self,
         key: BlockCipherKey,
     ) -> Box<dyn RecordSequenceNumberEncrypter> {
-        // TODO(DTLS): provide a GCM encrypter that does AES ECB for now. It's
-        // not obvious how to get at the ChaCha20 block function using aws-lc-rs
-        Box::new(GcmRecordSequenceNumberEncrypter::new(key))
+        Box::new(ChaCha20RecordSequenceNumberEncrypter::new(key))
     }
 
     fn key_len(&self) -> usize {
@@ -366,6 +365,33 @@ impl MessageDecrypter for AeadMessageDecrypter {
     }
 }
 
+struct ChaCha20RecordSequenceNumberEncrypter {
+    key: BlockCipherKey,
+}
+
+impl ChaCha20RecordSequenceNumberEncrypter {
+    fn new(key: BlockCipherKey) -> Self {
+        Self { key }
+    }
+}
+
+impl RecordSequenceNumberEncrypter for ChaCha20RecordSequenceNumberEncrypter {
+    fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 2], Error> {
+        let key =
+            HeaderProtectionKey::new(&aead::quic::CHACHA20, self.key.as_ref()).map_err(|_| {
+                std::println!("error creating HeaderProtectionKey");
+                Error::DecryptError
+            })?;
+
+        let mask = key.new_mask(ciphertext).map_err(|_| {
+            std::println!("error creating QUIC new_mask");
+            Error::DecryptError
+        })?;
+
+        Ok([mask[0], mask[1]])
+    }
+}
+
 struct GcmMessageEncrypter {
     enc_key: aead::TlsRecordSealingKey,
     iv: Iv,
@@ -490,7 +516,7 @@ impl GcmRecordSequenceNumberEncrypter {
 }
 
 impl RecordSequenceNumberEncrypter for GcmRecordSequenceNumberEncrypter {
-    fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 16], Error> {
+    fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 2], Error> {
         assert_eq!(ciphertext.len(), AES_128.block_len());
 
         let key = EncryptingKey::ecb(UnboundCipherKey::new(&AES_128, self.key.as_ref()).map_err(
@@ -517,7 +543,23 @@ impl RecordSequenceNumberEncrypter for GcmRecordSequenceNumberEncrypter {
             panic!("decryption context is some IV")
         };
 
-        Ok(in_out)
+        let quic_mask = {
+            let key = HeaderProtectionKey::new(&aead::quic::AES_128, self.key.as_ref()).map_err(
+                |_| {
+                    std::println!("error creating HeaderProtectionKey");
+                    Error::DecryptError
+                },
+            )?;
+
+            key.new_mask(ciphertext).map_err(|_| {
+                std::println!("error creating QUIC new_mask");
+                Error::DecryptError
+            })?
+        };
+
+        assert_eq!(&quic_mask[..], &in_out[..5]);
+
+        Ok([quic_mask[0], quic_mask[1]])
     }
 }
 

@@ -1060,6 +1060,7 @@ pub(crate) struct UnifiedHeader {
     // TODO: implement connection IDs. We assume them to be 0 length/absent for now.
     connection_id: Vec<u8>,
     epoch: Epoch,
+    long_seq: bool,
     sequence: u64,
     length: Option<u16>,
 }
@@ -1084,6 +1085,7 @@ impl UnifiedHeader {
         Self {
             connection_id: Vec::new(),
             epoch: epoch_low_bits,
+            long_seq: true,
             sequence,
             length: Some(len),
         }
@@ -1117,11 +1119,7 @@ impl UnifiedHeader {
     /// full sequence number based on [RFC 9147 section 4.2.2][1].
     ///
     /// [1]: https://www.rfc-editor.org/info/rfc9147/#section-4.2.2
-    fn read(
-        r: &mut Reader<'_>,
-        current_epoch: Epoch,
-        highest_seq: u64,
-    ) -> Result<Self, InvalidMessage> {
+    pub(crate) fn read(r: &mut Reader<'_>, current_epoch: Epoch) -> Result<Self, InvalidMessage> {
         let bitfield = u8::read(r)?;
 
         if bitfield & Self::FIXED_BITS_MASK != Self::FIXED_BITS {
@@ -1143,30 +1141,6 @@ impl UnifiedHeader {
             u8::read(r)? as u16
         };
 
-        // Reconstruct the sequence number based on the truncated sequence number in a DTLS 1.3
-        // unified header, per [RFC 9147, section 4.2.2][1]:
-        //
-        // > [I]mplementations SHOULD reconstruct the sequence number by computing the full
-        // > sequence number which is numerically closest to one plus the sequence number of
-        // > the highest successfully deprotected record in the current epoch.
-        //
-        // [1]: https://datatracker.ietf.org/doc/html/rfc9147#section-4.2.2
-        // First candidate: clear low bits of highest sequence we've seen and OR in the truncated
-        // sequence number
-        let reconstructed_seq_0: u64 = highest_seq
-            & if long_seq {
-                0xffff_ffff_ffff_0000
-            } else {
-                0xffff_ffff_ffff_ff00
-            }
-            | truncated_sequence_number as u64;
-        // Second candidate: flip the first bit to the left of the truncated portion
-        let reconstructed_seq_1 = reconstructed_seq_0 ^ if long_seq { 0x1_ffff } else { 0x0100 };
-        // Use whichever is closest to latest_seq+1
-        let sequence = min_by_key(reconstructed_seq_0, reconstructed_seq_1, |v| {
-            v.abs_diff(highest_seq + 1)
-        });
-
         let length = if bitfield & Self::L_BIT_MASK > 0 {
             Some(u16::read(r)?)
         } else {
@@ -1183,12 +1157,44 @@ impl UnifiedHeader {
                 current_epoch.number() | (epoch_low_bits as u16),
                 ProtocolVersion::DTLSv1_3,
             ),
-            sequence,
+            long_seq,
+            sequence: truncated_sequence_number as u64,
         })
+    }
+
+    /// Reconstruct the sequence number based on the truncated sequence number in a DTLS 1.3
+    /// unified header, per [RFC 9147, section 4.2.2][1]:
+    ///
+    /// > [I]mplementations SHOULD reconstruct the sequence number by computing the full
+    /// > sequence number which is numerically closest to one plus the sequence number of
+    /// > the highest successfully deprotected record in the current epoch.
+    ///
+    /// [1]: https://datatracker.ietf.org/doc/html/rfc9147#section-4.2.2
+    pub(crate) fn reconstruct_sequence_number(&mut self, highest_seq: u64) {
+        // First candidate: clear low bits of highest sequence we've seen and OR in the truncated
+        // sequence number
+        let reconstructed_seq_0: u64 = highest_seq
+            & if self.long_seq {
+                0xffff_ffff_ffff_0000
+            } else {
+                0xffff_ffff_ffff_ff00
+            }
+            | self.sequence;
+        // Second candidate: flip the first bit to the left of the truncated portion
+        let reconstructed_seq_1 =
+            reconstructed_seq_0 ^ if self.long_seq { 0x1_ffff } else { 0x0100 };
+        // Use whichever is closest to latest_seq+1
+        self.sequence = min_by_key(reconstructed_seq_0, reconstructed_seq_1, |v| {
+            v.abs_diff(highest_seq + 1)
+        });
     }
 
     pub(crate) fn encoded_len(&self) -> Option<[u8; 2]> {
         self.length.map(|l| l.to_be_bytes())
+    }
+
+    pub(crate) fn sequence(&self) -> u64 {
+        self.sequence
     }
 }
 

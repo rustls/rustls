@@ -390,10 +390,10 @@ impl KeyType for Len {
 struct FakeRecordSequenceNumberEncrypter;
 
 impl RecordSequenceNumberEncrypter for FakeRecordSequenceNumberEncrypter {
-    fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 16], Error> {
+    fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 2], Error> {
         // This is a fake, dummy encrypter for ring. It's not immediately obvious how to do either
         // AES-ECB or the ChaCha20 block function using ring.
-        Ok(*ciphertext.as_array().unwrap())
+        Ok(*ciphertext[..2].as_array().unwrap())
     }
 }
 

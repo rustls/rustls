@@ -90,7 +90,8 @@ impl Deframer {
                 length,
                 epoch,
                 sequence,
-            } = match UnifiedHeader::read(&mut reader, current_epoch, highest_record_seq) {
+                ..
+            } = match UnifiedHeader::read(&mut reader, current_epoch) {
                 Ok(header) => header,
                 Err(err) => return Some(Err(err.into())),
             };

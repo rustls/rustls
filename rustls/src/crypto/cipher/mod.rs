@@ -235,7 +235,7 @@ pub trait RecordSequenceNumberEncrypter: Send + Sync {
     }
 
     /// Compute the mask for record sequence number encryption.
-    fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 16], Error>;
+    fn mask(&self, ciphertext: &[u8]) -> Result<[u8; 2], Error>;
 }
 
 /// A write or read IV.

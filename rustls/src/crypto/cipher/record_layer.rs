@@ -10,7 +10,7 @@ use crate::crypto::cipher::{
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
-use crate::msgs::{EncrypterDecrypterPurpose, Epoch, HandshakeAlignedProof};
+use crate::msgs::{EncrypterDecrypterPurpose, Epoch, HandshakeAlignedProof, Reader, UnifiedHeader};
 use crate::tracing::trace;
 
 /// Record layer that tracks encryption keys.
@@ -284,22 +284,18 @@ impl DecryptionState {
                 .transform(&mut encoded_record_seq, &encr.payload.iter().as_ref()[..16])
                 .unwrap();
 
-            // TODO: THIS is where we need to infer the full seq number from the partial decrypted
-            // one
             encr.payload.0[1..3].copy_from_slice(&encoded_record_seq);
 
-            u16::from_be_bytes(encoded_record_seq) as u64
+            // TODO(DTLS): it sucks to have to re-parse the header here. Should work out a way to
+            // make the parsed header available to this function.
+            let mut unified_header =
+                UnifiedHeader::read(&mut Reader::new(encr.payload.0), self.epoch).unwrap();
+            unified_header.reconstruct_sequence_number(self.read_seq);
+
+            unified_header.sequence()
         } else {
             record_seq
         };
-
-        // Decrypt the record seq no here.
-        // --> How do we reliably determine this is DTLS 1.3?
-        // --> Where are we inferring seq no from epoch and stuff? In deframer?
-        //      --> Yeah, UnifiedHeader::read is doing it now. It needs to stop. Do that here
-        //          after decryption.
-        //      --> We're ok, the anti replay check is after decryption so it'll be fine
-        //          so long as the rec seq in the reutrned value is decrypted
 
         // Set to `true` if the peer appears to getting close to encrypting
         // too many messages with this key.
@@ -417,7 +413,7 @@ impl DecryptionState {
 pub(crate) struct Decrypted<'a> {
     /// Whether the peer appears to be getting close to encrypting too many messages with this key.
     pub(crate) want_close_before_decrypt: bool,
-    /// The decrypted message.
+    /// The decrypted message payload.
     pub(crate) plaintext: EncodedMessage<&'a [u8]>,
 }
 
