@@ -333,6 +333,15 @@ impl SideOutput for ServerData {
     }
 }
 
+impl fmt::Debug for ServerData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ServerData")
+            .field("sni", &self.sni)
+            .field("early_data", &self.early_data)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Access to early data facilities in resumed TLS1.3 connections.
 ///
 /// "Early data" is also known as "0-RTT data".
@@ -372,7 +381,7 @@ impl<'a> ReadEarlyData<'a> {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub(super) enum EarlyDataState {
     #[default]
     New,
