@@ -310,9 +310,17 @@ fn exec(
             && !sess.is_handshaking()
             && count > 0
         {
-            if opts.expect_accept_early_data && !client(&mut sess).is_early_data_accepted() {
+            if opts.expect_accept_early_data
+                && !client(&mut sess)
+                    .data()
+                    .is_early_data_accepted()
+            {
                 quit_err("Early data was not accepted, but we expect the opposite");
-            } else if opts.expect_reject_early_data && client(&mut sess).is_early_data_accepted() {
+            } else if opts.expect_reject_early_data
+                && client(&mut sess)
+                    .data()
+                    .is_early_data_accepted()
+            {
                 quit_err("Early data was accepted, but we expect the opposite");
             }
             if opts.expect_version == 0x0304 {
@@ -383,7 +391,7 @@ fn exec(
                 (count == 0 && opts.on_initial_expect_ech_accept) || opts.expect_ech_accept;
             if ech_accept_required
                 && !sess.is_handshaking()
-                && client(&mut sess).ech_status() != EchStatus::Accepted
+                && client(&mut sess).data().ech_status() != EchStatus::Accepted
             {
                 quit_err("ECH was not accepted, but we expect the opposite");
             }

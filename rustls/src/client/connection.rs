@@ -77,7 +77,7 @@ impl ClientConnection {
     ///
     /// The server can choose not to accept any sent early data --
     /// in this case the data is lost but the connection continues.  You
-    /// can tell this happened using [`Self::is_early_data_accepted()`].
+    /// can tell this happened using [`ClientData::is_early_data_accepted()`].
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
         let ConnectionCommon { side, common, .. } = &mut self.inner;
         let early_data = side.early_data.as_mut()?;
@@ -89,20 +89,6 @@ impl ClientConnection {
         }
     }
 
-    /// Returns True if the server signalled it will process early data.
-    ///
-    /// If you sent early data and this returns false at the end of the
-    /// handshake then the server will not process the data.  This
-    /// is not an error, but you may wish to resend the data.
-    pub fn is_early_data_accepted(&self) -> bool {
-        self.inner.side.is_early_data_accepted()
-    }
-
-    /// Return the connection's Encrypted Client Hello (ECH) status.
-    pub fn ech_status(&self) -> EchStatus {
-        self.inner.side.ech_status()
-    }
-
     /// Returns the number of TLS1.3 tickets that have been received.
     pub fn tls13_tickets_received(&self) -> u32 {
         self.inner
@@ -112,7 +98,7 @@ impl ClientConnection {
     }
 
     /// Returns data learned during the connection, specific to being a client.
-    pub fn client_data(&self) -> &ClientData {
+    pub fn data(&self) -> &ClientData {
         &self.inner.side
     }
 }
