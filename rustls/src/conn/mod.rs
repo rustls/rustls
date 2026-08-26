@@ -679,7 +679,7 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
 pub trait SideData: private::Side + Sized {
     /// Type holding data learned during the connection, specific to this side.
     #[expect(private_bounds)]
-    type Data: SideOutput;
+    type Data: SideOutput + fmt::Debug;
 
     /// Type representing an in-progress handshake.
     type Handshake;

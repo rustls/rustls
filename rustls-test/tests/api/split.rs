@@ -6,6 +6,8 @@
 
 use std::io::Cursor;
 
+use pki_types::DnsName;
+use rustls::client::EchStatus;
 use rustls::error::{AlertDescription, ApiMisuse, InvalidMessage};
 use rustls::split::{ReceiveTraffic, ReceiveTrafficState, SplitConnection};
 use rustls::{Connection, Error, SideData, SliceInput, VecInput};
@@ -37,12 +39,17 @@ fn split_pairwise() {
         send: mut client_send,
         receive: mut client_recv,
         outputs: client_outputs,
+        side_outputs: client_side_outputs,
     } = client_split;
     let SplitConnection {
         send: mut server_send,
         receive: mut server_recv,
         outputs: server_outputs,
+        side_outputs: server_side_outputs,
     } = server.split().unwrap();
+
+    println!("{client_side_outputs:?}");
+    println!("{server_side_outputs:?}");
 
     assert_eq!(
         client_outputs.alpn_protocol(),
@@ -67,6 +74,15 @@ fn split_pairwise() {
         server_outputs
             .negotiated_key_exchange_group()
             .map(|kxg| kxg.name()),
+    );
+
+    assert_eq!(client_side_outputs.ech_status(), EchStatus::NotOffered);
+    assert!(!client_side_outputs.is_early_data_accepted());
+
+    assert_eq!(server_side_outputs.received_resumption_data(), None);
+    assert_eq!(
+        server_side_outputs.server_name(),
+        Some(&DnsName::try_from("localhost").unwrap())
     );
 
     let mut flight = Vec::new();
@@ -124,11 +140,13 @@ fn split_incremental() {
         send: mut client_send,
         receive: _,
         outputs: _,
+        side_outputs: _,
     } = client.split().unwrap();
     let SplitConnection {
         send: _,
         receive: mut server_recv,
         outputs: _,
+        side_outputs: _,
     } = server.split().unwrap();
 
     let mut flight = Vec::new();

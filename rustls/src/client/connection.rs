@@ -398,7 +398,7 @@ impl SideOutput for ClientConnectionData {
 }
 
 /// TLS client-specific information determined during a connection.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct ClientConnectionData {
     early_data: Option<EarlyData>,
     ech_status: EchStatus,
@@ -426,6 +426,7 @@ impl ClientConnectionData {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct EarlyData {
     state: EarlyDataState,
     left: usize,
