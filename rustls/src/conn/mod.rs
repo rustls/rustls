@@ -677,6 +677,10 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
 /// Data specific to the peer's side (client or server).
 #[expect(private_bounds)]
 pub trait SideData: private::Side + Sized {
+    /// Type holding data learned during the connection, specific to this side.
+    #[expect(private_bounds)]
+    type Data: SideOutput;
+
     /// Type representing an in-progress handshake.
     type Handshake;
 
@@ -692,8 +696,6 @@ pub(crate) mod private {
     use super::*;
 
     pub(crate) trait Side: fmt::Debug {
-        /// Data storage type.
-        type Data: SideOutput;
         /// State machine type.
         type State: StateMachine;
     }
