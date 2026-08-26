@@ -34,6 +34,13 @@ pub struct SplitConnection<Side: SideData> {
     pub receive: ReceiveTraffic<Side>,
     /// Facts about the connection established during the handshake.
     pub outputs: ConnectionOutputs,
+    /// Role-specific facts about the connection established during the handshake.
+    ///
+    /// This is [`ClientConnectionData`] for clients and [`ServerConnectionData`] for servers.
+    ///
+    /// [`ClientConnectionData`]: crate::client::ClientConnectionData
+    /// [`ServerConnectionData`]: crate::server::ServerConnectionData
+    pub side_outputs: Side::Data,
 }
 
 impl<Side: SideData> SplitConnection<Side> {
@@ -64,6 +71,7 @@ impl<Side: SideData> SplitConnection<Side> {
             send,
             receive,
             outputs,
+            side_outputs: _,
         } = self;
 
         // drop our handle on the send path, so `receive` holds the only one.
@@ -109,6 +117,7 @@ impl<Side: SideData> TryFrom<ConnectionCommon<Side>> for SplitConnection<Side> {
                 pending_flush_sender: false,
             },
             outputs: conn.common.outputs,
+            side_outputs: conn.side,
         })
     }
 }
