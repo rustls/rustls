@@ -5,7 +5,6 @@ use core::{fmt, mem};
 
 use pki_types::{DnsName, FipsStatus};
 
-use crate::TlsInputBuffer;
 use crate::client::ClientSide;
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
@@ -26,6 +25,7 @@ use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
 };
 use crate::verify::ClientIdentity;
+use crate::{ClientConnectionData, ServerConnectionData, TlsInputBuffer};
 
 /// A QUIC client or server connection.
 pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
@@ -105,6 +105,11 @@ impl ClientConnection {
     /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         self.inner.common.exporter()
+    }
+
+    /// Returns data learned during the connection, specific to being a client.
+    pub fn client_data(&self) -> &ClientConnectionData {
+        &self.inner.common.side
     }
 }
 
@@ -252,6 +257,11 @@ impl ServerConnection {
     /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         self.inner.common.exporter()
+    }
+
+    /// Returns data learned during the connection, specific to being a server.
+    pub fn server_data(&self) -> &ServerConnectionData {
+        &self.inner.common.side
     }
 }
 

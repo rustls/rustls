@@ -110,6 +110,11 @@ impl ClientConnection {
             .recv
             .tls13_tickets_received
     }
+
+    /// Returns data learned during the connection, specific to being a client.
+    pub fn client_data(&self) -> &ClientConnectionData {
+        &self.inner.side
+    }
 }
 
 impl Connection for ClientConnection {
@@ -422,6 +427,7 @@ impl ConnectionCommon<ClientSide> {
 pub struct ClientSide;
 
 impl SideData for ClientSide {
+    type Data = ClientConnectionData;
     type Handshake = ClientHandshake;
     type PeerIdentity<'a> = ServerIdentity<'static, 'a>;
 
@@ -432,7 +438,6 @@ impl SideData for ClientSide {
 }
 
 impl crate::conn::private::Side for ClientSide {
-    type Data = ClientConnectionData;
     type State = ClientState;
 }
 
