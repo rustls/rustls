@@ -42,10 +42,6 @@ impl KeyScheduleEarlyClient {
             output.send(),
         );
     }
-
-    pub(crate) fn is_quic(&self) -> bool {
-        self.0.ks.state.is_quic()
-    }
 }
 
 impl Deref for KeyScheduleEarlyClient {
