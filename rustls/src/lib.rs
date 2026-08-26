@@ -424,7 +424,7 @@ pub use client::{ClientConfig, ClientConnection, ClientConnectionData};
 
 /// Items for use in a server.
 pub mod server;
-pub use server::{ServerConfig, ServerConnection};
+pub use server::{ServerConfig, ServerConnection, ServerConnectionData};
 
 /// All defined protocol versions appear in this module.
 ///

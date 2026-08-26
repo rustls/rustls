@@ -21,7 +21,9 @@ pub use config::{
 };
 
 mod connection;
-pub use connection::{Accepted, ReadEarlyData, ServerConnection, ServerHandshake, ServerSide};
+pub use connection::{
+    Accepted, ReadEarlyData, ServerConnection, ServerConnectionData, ServerHandshake, ServerSide,
+};
 
 pub(crate) mod handy;
 #[cfg(feature = "webpki")]
