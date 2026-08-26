@@ -21,7 +21,7 @@ pub use config::{
 };
 
 mod connection;
-pub use connection::{ReadEarlyData, ServerConnection, ServerHandshake, ServerSide};
+pub use connection::{ReadEarlyData, ServerConnection, ServerData, ServerHandshake, ServerSide};
 
 pub use crate::conn::Accepted;
 
