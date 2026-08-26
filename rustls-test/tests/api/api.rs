@@ -916,7 +916,7 @@ fn server_exposes_offered_sni() {
             .unwrap();
 
         let mut server = ServerConnection::new(server_config).unwrap();
-        assert_eq!(None, server.server_name());
+        assert_eq!(None, server.data().server_name());
 
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
@@ -931,7 +931,7 @@ fn server_exposes_offered_sni() {
         );
         assert_eq!(
             Some(&DnsName::try_from("second.testserver.com").unwrap()),
-            server.server_name()
+            server.data().server_name()
         );
     }
 }
@@ -948,7 +948,7 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
 
         let mut server = ServerConnection::new(server_config).unwrap();
 
-        assert_eq!(None, server.server_name());
+        assert_eq!(None, server.data().server_name());
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let mut server_output = Vec::new();
@@ -962,7 +962,7 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
         );
         assert_eq!(
             Some(&DnsName::try_from("second.testserver.com").unwrap()),
-            server.server_name()
+            server.data().server_name()
         );
     }
 }
