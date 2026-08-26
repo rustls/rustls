@@ -134,6 +134,11 @@ impl ServerConnection {
             None
         }
     }
+
+    /// Returns data learned during the connection, specific to being a server.
+    pub fn server_data(&self) -> &ServerData {
+        &self.inner.side
+    }
 }
 
 impl Connection for ServerConnection {
@@ -288,6 +293,7 @@ impl TryFrom<Core<ServerSide, Tcp>> for ServerHandshake {
 pub struct ServerSide;
 
 impl SideData for ServerSide {
+    type Data = ServerData;
     type Handshake = ServerHandshake;
     type QuicHandshake = QuicServerHandshake;
 
@@ -308,7 +314,6 @@ impl SideData for ServerSide {
 }
 
 impl crate::conn::private::Side for ServerSide {
-    type Data = ServerData;
     type State = ServerState;
 }
 
