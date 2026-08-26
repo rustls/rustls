@@ -68,7 +68,11 @@ fn start_connection(config: &Arc<ClientConfig>, domain_name: &str, port: u16) {
 
     // If we didn't send early data, or the server didn't accept it,
     // then send the request as normal.
-    if !stream.conn.is_early_data_accepted() {
+    if !stream
+        .conn
+        .client_data()
+        .is_early_data_accepted()
+    {
         stream
             .write_all(request.as_bytes())
             .unwrap();

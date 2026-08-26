@@ -528,7 +528,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
             .unwrap();
 
         let mut server_input = VecInput::default();
-        assert_eq!(None, server.server_name());
+        assert_eq!(None, server.server_data().server_name());
         transfer(&mut client_output, &mut server_input);
         assert_eq!(
             server
@@ -539,7 +539,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
         );
         assert_eq!(
             Some(&DnsName::try_from("thisdoesnotexist.com").unwrap()),
-            server.server_name()
+            server.server_data().server_name()
         );
     }
 }

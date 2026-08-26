@@ -65,36 +65,6 @@ impl ServerConnection {
         self.inner.split()
     }
 
-    /// Retrieves the server name, if any, used to select the certificate and
-    /// private key.
-    ///
-    /// This returns `None` until some time after the client's server name indication
-    /// (SNI) extension value is processed during the handshake. It will never be
-    /// `None` when the connection is ready to send or process application data,
-    /// unless the client does not support SNI.
-    ///
-    /// This is useful for application protocols that need to enforce that the
-    /// server name matches an application layer protocol hostname. For
-    /// example, HTTP/1.1 servers commonly expect the `Host:` header field of
-    /// every request on a connection to match the hostname in the SNI extension
-    /// when the client provides the SNI extension.
-    ///
-    /// The server name is also used to match sessions during session resumption.
-    pub fn server_name(&self) -> Option<&DnsName<'_>> {
-        self.inner.side.server_name()
-    }
-
-    /// Application-controlled portion of the resumption ticket supplied by the client, if any.
-    ///
-    /// Recovered from the prior session's `set_resumption_data`. Integrity is guaranteed by rustls.
-    ///
-    /// Returns `Some` if and only if a valid resumption ticket has been received from the client.
-    pub fn received_resumption_data(&self) -> Option<&[u8]> {
-        self.inner
-            .side
-            .received_resumption_data()
-    }
-
     /// Set the resumption data to embed in future resumption tickets supplied to the client.
     ///
     /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other

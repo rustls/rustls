@@ -165,7 +165,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tls.write_all(request.as_bytes())?;
         assert!(!tls.conn.is_handshaking());
         assert_eq!(
-            tls.conn.ech_status(),
+            tls.conn.client_data().ech_status(),
             match args.grease {
                 true => EchStatus::Grease,
                 false => EchStatus::Accepted,
