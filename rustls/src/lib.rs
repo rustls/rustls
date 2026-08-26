@@ -419,7 +419,7 @@ pub use crate::webpki::RootCertStore;
 
 /// Items for use in a client.
 pub mod client;
-pub use client::{ClientConfig, ClientConnection};
+pub use client::{ClientConfig, ClientConnection, ClientData};
 
 /// Items for use in a server.
 pub mod server;
