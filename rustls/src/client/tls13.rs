@@ -265,9 +265,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             &proof,
         );
 
-        if !key_schedule.is_quic() {
-            emit_fake_ccs(&mut sent_tls13_fake_ccs, output);
-        }
+        emit_fake_ccs(&mut sent_tls13_fake_ccs, output);
 
         output.output(OutputEvent::HandshakeKind(
             match (&resuming_session, st.done_retry) {
@@ -457,10 +455,8 @@ pub(super) fn derive_early_traffic_secret(
     transcript_buffer: &HandshakeHashBuffer,
     client_random: &[u8; 32],
 ) {
-    if !early_key_schedule.is_quic() {
-        // For middlebox compatibility
-        emit_fake_ccs(sent_tls13_fake_ccs, output);
-    }
+    // For middlebox compatibility
+    emit_fake_ccs(sent_tls13_fake_ccs, output);
 
     let client_hello_hash = transcript_buffer.hash_given(hash_alg, &[]);
     early_key_schedule.client_early_traffic_secret(
@@ -480,6 +476,12 @@ pub(super) fn derive_early_traffic_secret(
 }
 
 pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, output: &mut dyn Output<'_>) {
+    // RFC 9001 §8.4 prohibits TLS middlebox compatibility mode in QUIC:
+    // <https://www.rfc-editor.org/rfc/rfc9001.html#section-8.4>
+    if output.quic().is_some() {
+        return;
+    }
+
     if core::mem::replace(sent_tls13_fake_ccs, true) {
         return;
     }

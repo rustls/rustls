@@ -17,7 +17,8 @@ use rustls::server::Tls13Tickets;
 use rustls::{CipherSuiteCommon, HandshakeKind, SliceInput, Tls13CipherSuite, VecInput};
 use rustls_test::{
     ClientStorage, KeyType, MultiTest, do_handshake, encoding, make_client_config,
-    make_pair_for_arc_configs, make_server_config, server_name,
+    make_client_config_with_kx_groups, make_pair_for_arc_configs, make_server_config,
+    make_server_config_with_kx_groups, server_name,
 };
 
 use super::provider;
@@ -210,6 +211,56 @@ fn test_quic_handshake() {
         server_next.local.as_ref(),
         client_next.remote.as_ref()
     ));
+}
+
+#[test]
+fn test_quic_handshake_with_hello_retry_request() {
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let client_config = make_client_config_with_kx_groups(
+        KeyType::default(),
+        vec![provider::kx_group::SECP384R1, provider::kx_group::X25519],
+        &provider,
+    );
+    let server_config = make_server_config_with_kx_groups(
+        KeyType::default(),
+        vec![provider::kx_group::X25519],
+        &provider,
+    );
+
+    let mut client = quic::ClientConnection::new(
+        Arc::new(client_config),
+        quic::Version::V1,
+        server_name("localhost"),
+        b"client params".to_vec(),
+    )
+    .unwrap();
+    let mut server = quic::ServerConnection::new(
+        Arc::new(server_config),
+        quic::Version::V1,
+        b"server params".to_vec(),
+    )
+    .unwrap();
+
+    quic_transfer(&mut client, &mut server).unwrap();
+    quic_transfer(&mut server, &mut client).unwrap();
+
+    let client_retry_flight = client.events().collect::<Vec<_>>();
+    assert!(matches!(
+        client_retry_flight.as_slice(),
+        [QuicEvent::Message(_)]
+    ));
+    quic_insert(client_retry_flight, &mut server).unwrap();
+
+    do_quic_handshake(&mut client, &mut server);
+
+    assert_eq!(
+        client.handshake_kind(),
+        Some(HandshakeKind::FullWithHelloRetryRequest)
+    );
+    assert_eq!(
+        server.handshake_kind(),
+        Some(HandshakeKind::FullWithHelloRetryRequest)
+    );
 }
 
 #[test]
