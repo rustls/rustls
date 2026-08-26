@@ -144,6 +144,7 @@ impl ClientConnection {
     pub fn is_early_data_accepted(&self) -> bool {
         self.inner
             .common
+            .side
             .is_early_data_accepted()
     }
 

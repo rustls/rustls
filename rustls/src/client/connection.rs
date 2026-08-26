@@ -93,12 +93,12 @@ impl ClientConnection {
     /// handshake then the server will not process the data.  This
     /// is not an error, but you may wish to resend the data.
     pub fn is_early_data_accepted(&self) -> bool {
-        self.inner.is_early_data_accepted()
+        self.inner.side.is_early_data_accepted()
     }
 
     /// Return the connection's Encrypted Client Hello (ECH) status.
     pub fn ech_status(&self) -> EchStatus {
-        self.inner.side.ech_status
+        self.inner.side.ech_status()
     }
 
     /// Returns the number of TLS1.3 tickets that have been received.
@@ -354,16 +354,6 @@ impl ConnectionCommon<ClientSide> {
 
         Ok(Self::new(state, data, common_state))
     }
-
-    pub(crate) fn is_early_data_accepted(&self) -> bool {
-        matches!(
-            &self.side.early_data,
-            Some(EarlyData {
-                state: EarlyDataState::Accepted | EarlyDataState::AcceptedFinished,
-                ..
-            })
-        )
-    }
 }
 
 /// State associated with a client connection.
@@ -416,10 +406,33 @@ impl SideOutput for ClientConnectionData {
     }
 }
 
+/// TLS client-specific information determined during a connection.
 #[derive(Default)]
-pub(crate) struct ClientConnectionData {
+pub struct ClientConnectionData {
     early_data: Option<EarlyData>,
     ech_status: EchStatus,
+}
+
+impl ClientConnectionData {
+    /// Return the connection's Encrypted Client Hello (ECH) status.
+    pub fn ech_status(&self) -> EchStatus {
+        self.ech_status
+    }
+
+    /// Returns True if the server signalled it will process early data.
+    ///
+    /// If you sent early data and this returns false at the end of the
+    /// handshake then the server will not process the data.  This
+    /// is not an error, but you may wish to resend the data.
+    pub fn is_early_data_accepted(&self) -> bool {
+        matches!(
+            &self.early_data,
+            Some(EarlyData {
+                state: EarlyDataState::Accepted | EarlyDataState::AcceptedFinished,
+                ..
+            })
+        )
+    }
 }
 
 pub(super) struct EarlyData {
