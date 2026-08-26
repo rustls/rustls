@@ -781,6 +781,25 @@ impl Codec<'_> for ChangeCipherSpecPayload {
     }
 }
 
+#[derive(Debug)]
+pub(crate) struct Ack {
+    record_numbers: Vec<AckRecordSequenceNumber>,
+}
+
+impl Codec<'_> for Ack {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.record_numbers.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        r.all("Ack", |r| {
+            let record_numbers = Vec::<AckRecordSequenceNumber>::read(r)?;
+
+            Ok(Self { record_numbers })
+        })
+    }
+}
+
 /// Cryptographic epoch used in [Datagram TLS 1.2][1] and [1.3][2].
 ///
 /// Epoch 0 is used for early, unencrypted handshake messages.
@@ -1218,6 +1237,9 @@ impl HandshakeSequence {
 ///
 /// This is distinct from [`HandshakeSequence`] to avoid confusing a handshake's position in the
 /// sequence with a particular number encoded into a message.
+///
+/// Also not to be confused with [`RecordSequenceNumber`], which is the sequence number at the
+/// record layer.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
 pub(crate) struct HandshakeSequenceNumber(u16);
 
@@ -1247,6 +1269,68 @@ impl From<HandshakeSequenceNumber> for u16 {
     fn from(value: HandshakeSequenceNumber) -> Self {
         value.0
     }
+}
+
+/// Sequence number of a DTLS record, possibly encrypted.
+///
+/// Not to be confused with a [`HandshakeSequenceNumber`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub(crate) enum RecordSequenceNumber {
+    /// Encrypted, truncated sequence number in a unified header ([DTLS 1.3 section 4.2.3][1]).
+    ///
+    /// [1]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4.2.3
+    Encrypted([u8; 2]),
+    /// Decrypted sequence number.
+    Decrypted(u64),
+}
+
+impl RecordSequenceNumber {
+    /// Encode the sequence number into `into`.
+    ///
+    /// `into` must be the correct size for the sequence number.
+    fn encode(&self, into: &mut [u8]) {
+        match self {
+            // If encrypted, we must be doing DTLS 1.3 and thus write out the two bytes of truncated
+            // and encrypted sequence number.
+            Self::Encrypted(ciphertext) => into.copy_from_slice(ciphertext),
+            // If unencrypted, we must be doing DTLS 1.2 and thus write out the sequence as U48.
+            Self::Decrypted(plaintext) => into.copy_from_slice(&plaintext.to_be_bytes()[2..]),
+        }
+    }
+}
+
+/// `RecordNumber` structure defined in [DTLS 1.3 section 4][1].
+///
+/// This is a 128 bit value consisting of the record epoch and sequence numbers. It is used
+/// exclusively in [`Ack`] messages ([2]). Epoch and sequence numbers in record headers are
+/// represented differently based on protocol version.
+///
+/// [1]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4
+/// [2]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-7
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct AckRecordSequenceNumber {
+    epoch: u64,
+    seq: u64,
+}
+
+impl Codec<'_> for AckRecordSequenceNumber {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.epoch.encode(bytes);
+        self.seq.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        r.all("AckRecordSequenceNumber", |r| {
+            let epoch = u64::read(r)?;
+            let seq = u64::read(r)?;
+
+            Ok(Self { epoch, seq })
+        })
+    }
+}
+
+impl TlsListElement for AckRecordSequenceNumber {
+    const SIZE_LEN: ListLength = ListLength::U16;
 }
 
 /// Length of the header on a TLS record.

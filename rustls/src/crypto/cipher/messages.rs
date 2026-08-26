@@ -7,8 +7,8 @@ use crate::crypto::cipher::EncryptionState;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::{
-    Codec, Epoch, HEADER_SIZE, MAX_FRAGMENT_LEN, MessageHeader, Reader, UnifiedHeader, hex,
-    read_opaque_message_header,
+    Codec, Epoch, HEADER_SIZE, MAX_FRAGMENT_LEN, MessageHeader, Reader, RecordSequenceNumber,
+    UnifiedHeader, hex, read_opaque_message_header,
 };
 
 /// A TLS message with encoded (but not necessarily encrypted) payload.

@@ -172,6 +172,10 @@ enum_builder! {
         Handshake => 0x16,
         ApplicationData => 0x17,
         Heartbeat => 0x18,
+        /// ACK for DTLS 1.3 handshakes.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-7>
+        Ack => 0x1a,
     }
 }
 
