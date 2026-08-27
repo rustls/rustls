@@ -17,11 +17,11 @@ use crate::crypto::cipher::{
     Decrypted, DecryptionState, EncodableVersion, EncodedMessage, Payload,
 };
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, Error, PeerMisbehaved};
+use crate::error::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::{
-    AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, Delocator, Epoch,
-    FullRecordSequenceNumber, HandshakeAlignedProof, Locator, Message, MessagePayload,
-    RecordSequenceNumber,
+    AckPayload, AckRecordSequenceNumber, AlertLevel, AlertLevelName, AlertMessagePayload, Deframed,
+    Deframer, Delocator, Epoch, FullRecordSequenceNumber, HandshakeAlignedProof, Locator, Message,
+    MessagePayload, RecordSequenceNumber,
 };
 use crate::quic::QuicOutput;
 use crate::tracing::{trace, warn};
@@ -123,7 +123,6 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
             let Decrypted {
                 plaintext: msg,
                 want_close_before_decrypt,
-                ..
             } = msg;
 
             if want_close_before_decrypt {
@@ -152,7 +151,19 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
                     .recv
                     .receive_message(msg, hs_aligned, output.tls, output.other.send)
                 {
-                    Ok(Some(input)) => st.handle(input, &mut output),
+                    Ok(Some(input)) => {
+                        let handshake_type = input.message.handshake_type();
+                        let res = st.handle(input, &mut output);
+                        if res.is_ok() {
+                            // Only send ack after messages are *successfully* processed
+                            output.recv.process_unacked_list(
+                                handshake_type,
+                                output.other.send,
+                                output.tls,
+                            );
+                        }
+                        res
+                    }
                     Ok(None) => Ok(st),
                     Err(e) => Err(e),
                 };
@@ -223,6 +234,17 @@ pub(crate) struct ReceivePath {
     seen_consecutive_empty_fragments: u8,
 
     pub(crate) tls13_tickets_received: u32,
+
+    /// Unacknowledged record seq nos in the flight currently being received.
+    ///
+    /// Only relevant for DTLS 1.3.
+    // TODO(DTLS): we could make this a smallish array to avoid allocations. Flights are highly
+    // unlikely to ever exceed 10 or so messages.
+    unacked_from_peer: Vec<AckRecordSequenceNumber>,
+
+    /// Sequence numbers in the current epoch which have been acked by the peer.
+    // TODO(DTLS): as with current_flight_record_seqs, this could be a smallish array.
+    acked_by_peer: Vec<AckRecordSequenceNumber>,
 }
 
 impl ReceivePath {
@@ -238,6 +260,8 @@ impl ReceivePath {
             deframer: Deframer::default(),
             seen_consecutive_empty_fragments: 0,
             tls13_tickets_received: 0,
+            unacked_from_peer: Vec::new(),
+            acked_by_peer: Vec::new(),
         }
     }
 
@@ -298,6 +322,14 @@ impl ReceivePath {
                     .anti_replay()
                     .observe(record_seq)
                     .map_err(|e| Error::DtlsRecordAntiReplay(e))?;
+
+                // Records come out of the deframer ordered by record sequence number. Keep track of
+                // which ones are in the current flight so they can be acked as needed.
+                self.unacked_from_peer
+                    .push(AckRecordSequenceNumber {
+                        epoch,
+                        seq: record_seq,
+                    });
             }
 
             match message.payload.len() {
@@ -382,11 +414,19 @@ impl ReceivePath {
             {
                 true
             }
+            // Handshake ACK occurs only in DTLS 1.3 and is unencrypted regardless of epoch or
+            // handshake state.
+            ContentType::Ack if self.negotiated_version() == ProtocolVersion::DTLSv1_3 => true,
             // In other circumstances, we expect all messages to be encrypted.
             _ => false,
         };
 
         if allowed_plaintext && !self.deframer.is_active() {
+            assert_eq!(
+                RecordSequenceNumber::Full(self.decrypt_state.increment_sequence()),
+                record_seq
+            );
+
             return Ok(DeframeResult::Decrypted {
                 decrypted: Decrypted {
                     plaintext: message.into_plain_message(),
@@ -455,6 +495,11 @@ impl ReceivePath {
         // For alerts, we have separate logic.
         if let MessagePayload::Alert(alert) = &message.payload {
             self.process_alert(alert)?;
+            return Ok(None);
+        }
+
+        if let MessagePayload::Ack(ack) = &message.payload {
+            self.process_ack(ack)?;
             return Ok(None);
         }
 
@@ -556,6 +601,26 @@ impl ReceivePath {
         Err(err)
     }
 
+    fn process_ack(&mut self, ack: &AckPayload) -> Result<(), Error> {
+        if !self.protocol.is_dtls() {
+            // ACKs are not allowed in stream TLS
+            return Err(Error::InvalidMessage(InvalidMessage::InvalidContentType));
+        }
+        // For compatibility with DTLS 1.2 endpoints, ignore ACKs until 1.3 has been established.
+        // <https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-7>
+        if self.decrypt_state.epoch() == Epoch::Unencrypted {
+            return Ok(());
+        }
+
+        for num in &ack.record_numbers {
+            if !self.acked_by_peer.contains(num) {
+                self.acked_by_peer.push(*num);
+            }
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn negotiated_version(&self) -> ProtocolVersion {
         if let Some(version) = self.negotiated_version {
             version
@@ -566,6 +631,48 @@ impl ReceivePath {
             ProtocolVersion::DTLSv1_2
         } else {
             ProtocolVersion::TLSv1_2
+        }
+    }
+
+    /// Process the contents of the unacked list based on most recently received handshake message.
+    fn process_unacked_list(
+        &mut self,
+        typ: Option<HandshakeType>,
+        send: &mut dyn SendOutput,
+        tls: &mut Vec<u8>,
+    ) {
+        // ACKs are DTLS 1.3 only.
+        if self.negotiated_version() != ProtocolVersion::DTLSv1_3 {
+            return;
+        }
+
+        // ACKs are only for handshake messages.
+        let Some(typ) = typ else {
+            return;
+        };
+
+        // Empty the unacked list when a new flight is received:
+        //
+        // "ACKs only cover the current outstanding flight ... In particular, receiving a message
+        // from a handshake flight implicitly acknowledges all messages from the previous
+        // flight(s)."
+        if typ.first_in_flight() {
+            self.unacked_from_peer = Vec::new();
+            // We do not send an ACK on start of a new flight, just reset the unacked list!
+            return;
+        }
+
+        // Send an ACK and reset the unacked list when:
+        if matches!(
+            (self.side, typ),
+            // - Server receives "the client's final flight of the main handshake", which ends with
+            //   Finished
+            (Side::Server, HandshakeType::Finished)
+            // - Either side receives a KeyUpdate
+            | (_, HandshakeType::KeyUpdate)
+        ) {
+            let unacked_from_peer = mem::take(&mut self.unacked_from_peer);
+            send.ack_flight(&unacked_from_peer, tls);
         }
     }
 }

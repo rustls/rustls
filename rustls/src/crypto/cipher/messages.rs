@@ -8,7 +8,7 @@ use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::{
     Codec, Epoch, FullRecordSequenceNumber, HEADER_SIZE, MAX_FRAGMENT_LEN, MessageHeader, Reader,
-    RecordSequenceNumber, UnifiedHeader, hex, read_opaque_message_header,
+    UnifiedHeader, hex, read_opaque_message_header,
 };
 
 /// A TLS message with encoded (but not necessarily encrypted) payload.
@@ -208,7 +208,9 @@ pub(crate) fn encode_record_header(
 
     let encoded_len = len.to_be_bytes();
     if version.version().is_datagram_tls() {
-        into[3..5].copy_from_slice(&cx.epoch.number().to_be_bytes());
+        // Encode only the low 16 bits of epoch number into plaintext record header.
+        let epoch_16 = (cx.epoch.number() & 0xffff) as u16;
+        into[3..5].copy_from_slice(&epoch_16.to_be_bytes());
         cx.record_seq.encode(&mut into[5..11]);
         into[11..13].copy_from_slice(&len.to_be_bytes());
     } else {
@@ -651,6 +653,11 @@ impl EncodableVersion {
             Self::InitialClientHello(Protocol::Tcp | Protocol::Quic(_)) => ProtocolVersion::TLSv1_2,
         }
     }
+
+    /// Whether the protocol in use is Datagram TLS.
+    pub fn is_datagram_tls(&self) -> bool {
+        self.version().is_datagram_tls()
+    }
 }
 
 /// Context used to encode a record.
@@ -951,7 +958,7 @@ mod tests {
             };
 
             let mut cx = EncodingContext::new().with_payload_encryption(false);
-            if version.version().is_datagram_tls() {
+            if version.is_datagram_tls() {
                 cx = cx
                     .with_epoch(Epoch::ApplicationData(17))
                     .with_record_seq(156.into());

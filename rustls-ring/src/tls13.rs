@@ -244,7 +244,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         let typ = ContentType::ApplicationData;
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
         let tls13_aad = make_tls13_aad(typ, msg.version.encode(), total_len);
-        let aad = if msg.version.version().is_datagram_tls() {
+        let aad = if msg.version.is_datagram_tls() {
             // For DTLS 1.3, the AAD is the record's unified header, verbatim
             aead::Aad::from(header)
         } else {
@@ -286,7 +286,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
         let tls13_aad = make_tls13_aad(msg.typ, msg.version.version(), msg.payload.len());
-        let aad = if msg.version.version().is_datagram_tls() {
+        let aad = if msg.version.is_datagram_tls() {
             // For DTLS 1.3, the AAD is the record's unified header, verbatim
             aead::Aad::from(msg.payload.0.to_vec())
         } else {

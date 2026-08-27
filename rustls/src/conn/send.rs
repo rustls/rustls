@@ -9,7 +9,7 @@ use crate::crypto::cipher::{
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
 use crate::msgs::{
-    AlertLevel, Codec, EncrypterDecrypterPurpose, Epoch, Fragmenter, FullRecordSequenceNumber,
+    AckRecordSequenceNumber, AlertLevel, Codec, EncrypterDecrypterPurpose, Fragmenter,
     HandshakeSequence, HandshakeSequenceNumber, Message, MessagePayload,
 };
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
@@ -30,7 +30,6 @@ pub(crate) struct SendPath {
     negotiated_version: Option<ProtocolVersion>,
     pub(crate) tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
     handshake_sequence: HandshakeSequence,
-    unencrypted_record_seq: u64,
     side: Side,
 }
 
@@ -49,7 +48,6 @@ impl SendPath {
             negotiated_version: None,
             tls13_key_schedule: None,
             handshake_sequence: HandshakeSequence::default(),
-            unencrypted_record_seq: 0,
             side,
         }
     }
@@ -179,8 +177,10 @@ impl SendPath {
                     tls,
                     EncodingContext {
                         payload_is_encrypted: false,
-                        epoch: Epoch::Unencrypted,
-                        record_seq: self.outbound_unencrypted_record_seq(),
+                        // Despite the message being unencrypted, we still indicate the current
+                        // epoch
+                        epoch: self.encrypt_state.epoch(),
+                        record_seq: self.encrypt_state.increment_sequence(),
                     },
                 ),
             }
@@ -286,12 +286,6 @@ impl SendPath {
                 tls,
             ),
         };
-    }
-
-    fn outbound_unencrypted_record_seq(&mut self) -> FullRecordSequenceNumber {
-        let old = self.unencrypted_record_seq;
-        self.unencrypted_record_seq += 1;
-        old.into()
     }
 }
 
@@ -438,6 +432,10 @@ impl SendOutput for SendPath {
     fn outbound_handshake_seq(&mut self) -> HandshakeSequenceNumber {
         self.handshake_sequence.increment()
     }
+
+    fn ack_flight(&mut self, record_seqs: &[AckRecordSequenceNumber], tls: &mut Vec<u8>) {
+        self.send_msg(Message::build_ack(record_seqs), false, tls);
+    }
 }
 
 /// State machine for TLS1.3 key updates triggered by us.
@@ -493,4 +491,6 @@ pub(crate) trait SendOutput {
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, tls: &mut Vec<u8>);
 
     fn outbound_handshake_seq(&mut self) -> HandshakeSequenceNumber;
+
+    fn ack_flight(&mut self, record_seqs: &[AckRecordSequenceNumber], tls: &mut Vec<u8>);
 }

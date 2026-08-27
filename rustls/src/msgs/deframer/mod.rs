@@ -299,7 +299,7 @@ impl Deframer {
         bounds: Range<usize>,
     ) -> Result<(), Error> {
         debug_assert!(msg.typ == ContentType::Handshake);
-        debug_assert!(msg.version.version().is_datagram_tls());
+        debug_assert!(msg.version.is_datagram_tls());
 
         // Using DissectHandshakeIter wouldn't be appropriate here because parsing DTLS handshake
         // fragments is fallible: if there isn't enough room for a handshake fragment header, we

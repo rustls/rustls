@@ -207,6 +207,16 @@ impl<'a> Message<'a> {
         }
     }
 
+    pub(crate) fn build_ack(seqs: &[AckRecordSequenceNumber]) -> Self {
+        Self {
+            // ACKs are DTLS 1.3 only
+            version: EncodableVersion::Legacy(ProtocolVersion::DTLSv1_3),
+            payload: MessagePayload::Ack(AckPayload {
+                record_numbers: seqs.to_vec(),
+            }),
+        }
+    }
+
     pub(crate) fn into_owned(self) -> Message<'static> {
         let Self { version, payload } = self;
         Message {
@@ -280,7 +290,12 @@ pub(crate) fn read_opaque_message_header(
     }
 
     let epoch_and_sequence = if version.is_datagram_tls() {
-        let epoch = Epoch::read(r, version).map_err(|_| MessageError::TooShortForHeader)?;
+        // Epoch numbers are encoded as 16 bits in plaintext record headers, but the values are 64
+        // bits wide.
+        let epoch = Epoch::new(
+            u16::read(r).map_err(|_| MessageError::TooShortForHeader)? as u64,
+            version,
+        );
         let record_seq = FullRecordSequenceNumber::from(
             U48::read(r)
                 .map_err(|_| MessageError::TooShortForHeader)?
@@ -328,6 +343,7 @@ pub(crate) enum MessagePayload<'a> {
     HandshakeFlight(Vec<(HandshakeType, HandshakeSequenceNumber, Vec<u8>)>),
     ChangeCipherSpec(ChangeCipherSpecPayload),
     ApplicationData(Payload<'a>),
+    Ack(AckPayload),
 }
 
 impl<'a> MessagePayload<'a> {
@@ -342,6 +358,7 @@ impl<'a> MessagePayload<'a> {
             }
             Self::ChangeCipherSpec(x) => x.encode(bytes),
             Self::ApplicationData(x) => x.encode(bytes),
+            Self::Ack(x) => x.encode(bytes),
         }
     }
 
@@ -395,6 +412,7 @@ impl<'a> MessagePayload<'a> {
             ContentType::ChangeCipherSpec => {
                 ChangeCipherSpecPayload::read(&mut r).map(MessagePayload::ChangeCipherSpec)
             }
+            ContentType::Ack => AckPayload::read(&mut r).map(MessagePayload::Ack),
             _ => Err(InvalidMessage::InvalidContentType),
         }
     }
@@ -405,6 +423,7 @@ impl<'a> MessagePayload<'a> {
             Self::Handshake { .. } | Self::HandshakeFlight { .. } => ContentType::Handshake,
             Self::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
             Self::ApplicationData(_) => ContentType::ApplicationData,
+            Self::Ack(_) => ContentType::Ack,
         }
     }
 
@@ -424,6 +443,7 @@ impl<'a> MessagePayload<'a> {
             HandshakeFlight(x) => HandshakeFlight(x),
             ChangeCipherSpec(x) => ChangeCipherSpec(x),
             ApplicationData(x) => ApplicationData(x.into_owned()),
+            Ack(x) => Ack(x),
         }
     }
 }
@@ -787,11 +807,11 @@ impl Codec<'_> for ChangeCipherSpecPayload {
 }
 
 #[derive(Debug)]
-pub(crate) struct Ack {
-    record_numbers: Vec<AckRecordSequenceNumber>,
+pub(crate) struct AckPayload {
+    pub(crate) record_numbers: Vec<AckRecordSequenceNumber>,
 }
 
-impl Codec<'_> for Ack {
+impl Codec<'_> for AckPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.record_numbers.encode(bytes);
     }
@@ -803,6 +823,41 @@ impl Codec<'_> for Ack {
             Ok(Self { record_numbers })
         })
     }
+}
+
+/// `RecordNumber` structure defined in [DTLS 1.3 section 4][1].
+///
+/// This is a 128 bit value consisting of the record epoch and sequence numbers. It is used
+/// exclusively in [`Ack`] messages ([2]). Epoch and sequence numbers in record headers are
+/// represented differently based on protocol version.
+///
+/// [1]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4
+/// [2]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-7
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct AckRecordSequenceNumber {
+    pub(crate) epoch: Epoch,
+    pub(crate) seq: FullRecordSequenceNumber,
+}
+
+impl Codec<'_> for AckRecordSequenceNumber {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        // Be careful to encode epoch number as 64 bits, not 16 bits as in plaintext record header.
+        self.epoch.number().encode(bytes);
+        u64::from(self.seq).encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        // Epoch is serialized as 64 bits in struct RecordNumber, though it is 16 bits elsewhere.
+        // ACKs are only sent in DTLS 1.3, so we can interpret the epoch in that context.
+        let epoch = Epoch::new(u64::read(r)?, ProtocolVersion::DTLSv1_3);
+        let seq = FullRecordSequenceNumber::from(u64::read(r)?);
+
+        Ok(Self { epoch, seq })
+    }
+}
+
+impl TlsListElement for AckRecordSequenceNumber {
+    const SIZE_LEN: ListLength = ListLength::U16;
 }
 
 /// Cryptographic epoch used in [Datagram TLS 1.2][1] and [1.3][2].
@@ -857,12 +912,12 @@ pub(crate) enum Epoch {
     ///
     /// [1]: https://www.rfc-editor.org/info/rfc9147/#section-6.1
     /// [2]: https://datatracker.ietf.org/doc/html/rfc6347#section-4.1
-    ApplicationData(u16),
+    ApplicationData(u64),
 }
 
 impl Epoch {
     /// Create a new `Epoch`.
-    pub(crate) fn new(epoch: u16, version: ProtocolVersion) -> Self {
+    pub(crate) fn new(epoch: u64, version: ProtocolVersion) -> Self {
         match (epoch, version) {
             (0, _) => Self::Unencrypted,
             (1, ProtocolVersion::DTLSv1_3) => Self::EarlyData,
@@ -872,7 +927,7 @@ impl Epoch {
     }
 
     /// Epoch number.
-    pub(crate) fn number(&self) -> u16 {
+    pub(crate) fn number(&self) -> u64 {
         match self {
             Epoch::Unencrypted => 0,
             Epoch::EarlyData => 1,
@@ -979,17 +1034,6 @@ impl Epoch {
             ) => panic!("rustls does not support rekey in (D)TLS 1.2"),
             (..) => panic!("illegal epoch transition from {self:?} for {purpose:?}"),
         }
-    }
-
-    /// Read an `Epoch` value from a wire message.
-    pub(crate) fn read(
-        r: &mut Reader<'_>,
-        version: ProtocolVersion,
-    ) -> Result<Self, InvalidMessage> {
-        // This can't be a `Codec` implementation because we need to know the protocol version in use
-        // in order to interpret the value. Epoch 1 is Epoch::ApplicationData(1) for DTLS 1.2, but
-        // it's EarlyData for 1.3.
-        Ok(Self::new(u16::read(r)?, version))
     }
 }
 
@@ -1129,7 +1173,7 @@ impl UnifiedHeader<TruncatedRecordSequenceNumber> {
             bytes[3..5].copy_from_slice(&length);
         }
 
-        debug_assert!(self.epoch.number() <= UNIFIED_HEADER_EE_BITS_MASK as u16);
+        debug_assert!(self.epoch.number() <= UNIFIED_HEADER_EE_BITS_MASK as u64);
         bytes[0] |= self.epoch.number() as u8;
     }
 }
@@ -1177,7 +1221,7 @@ impl UnifiedHeader<ProtectedRecordSequenceNumber> {
             connection_id: Vec::new(),
             length,
             epoch: Epoch::new(
-                current_epoch.number() | (epoch_low_bits as u16),
+                current_epoch.number() | (epoch_low_bits as u64),
                 ProtocolVersion::DTLSv1_3,
             ),
             sequence: ProtectedRecordSequenceNumber {
@@ -1434,40 +1478,6 @@ pub(crate) enum RecordSequenceNumber {
     /// [1]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4.2.3
     Protected(ProtectedRecordSequenceNumber),
     Full(FullRecordSequenceNumber),
-}
-
-/// `RecordNumber` structure defined in [DTLS 1.3 section 4][1].
-///
-/// This is a 128 bit value consisting of the record epoch and sequence numbers. It is used
-/// exclusively in [`Ack`] messages ([2]). Epoch and sequence numbers in record headers are
-/// represented differently based on protocol version.
-///
-/// [1]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4
-/// [2]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-7
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct AckRecordSequenceNumber {
-    epoch: u64,
-    seq: u64,
-}
-
-impl Codec<'_> for AckRecordSequenceNumber {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.epoch.encode(bytes);
-        self.seq.encode(bytes);
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        r.all("AckRecordSequenceNumber", |r| {
-            let epoch = u64::read(r)?;
-            let seq = u64::read(r)?;
-
-            Ok(Self { epoch, seq })
-        })
-    }
-}
-
-impl TlsListElement for AckRecordSequenceNumber {
-    const SIZE_LEN: ListLength = ListLength::U16;
 }
 
 /// Length of the header on a TLS record.

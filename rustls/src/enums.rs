@@ -161,6 +161,22 @@ enum_builder! {
     }
 }
 
+impl HandshakeType {
+    /// Whether the handshake type can be first message in a flight per [1].
+    ///
+    /// [1]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-5.7
+    pub(crate) fn first_in_flight(&self) -> bool {
+        match *self {
+            Self::ClientHello
+            | Self::HelloRetryRequest
+            | Self::ServerHello
+            | Self::Certificate
+            | Self::NewSessionTicket => true,
+            _ => false,
+        }
+    }
+}
+
 enum_builder! {
     /// The `ContentType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.

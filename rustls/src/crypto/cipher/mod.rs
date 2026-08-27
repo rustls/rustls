@@ -478,12 +478,6 @@ impl From<[u8; 16]> for AeadKey {
 /// A key for a single-block cipher (like AES-ECB).
 pub struct BlockCipherKey(AeadKey);
 
-impl BlockCipherKey {
-    pub(crate) fn new(buf: &[u8]) -> Self {
-        Self(AeadKey::new(buf))
-    }
-}
-
 impl AsRef<[u8]> for BlockCipherKey {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()

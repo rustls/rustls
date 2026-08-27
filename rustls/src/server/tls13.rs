@@ -1523,11 +1523,7 @@ impl ExpectFinished {
 
         let mut flight = HandshakeFlightTls13::new(
             &mut self.hs.transcript,
-            input
-                .message
-                .version
-                .version()
-                .is_datagram_tls(),
+            input.message.version.is_datagram_tls(),
         );
         for _ in 0..self.hs.send_tickets {
             Self::emit_ticket(

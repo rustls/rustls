@@ -150,7 +150,7 @@ impl Fragmenter {
         encryption_overhead: usize,
     ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> + use<'a> {
         assert!(
-            !version.version().is_datagram_tls(),
+            !version.is_datagram_tls(),
             "To fragment a DTLS handshake message, use fragment_dtls_handshake_message. \
             Other DTLS messages may not be fragmented.",
         );

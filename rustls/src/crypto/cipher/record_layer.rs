@@ -25,7 +25,7 @@ pub(crate) struct EncryptionState {
     ///
     /// This value is tracked for all protocol versions, but only used for DTLS.
     epoch: Epoch,
-    write_seq: u64,
+    write_seq: FullRecordSequenceNumber,
     side: Side,
 }
 
@@ -37,7 +37,7 @@ impl EncryptionState {
             record_sequence_number_encrypter: None,
             write_seq_max: 0,
             epoch: Epoch::Unencrypted,
-            write_seq: 0,
+            write_seq: 0.into(),
             side,
         }
     }
@@ -92,9 +92,9 @@ impl EncryptionState {
 
         let record_seq = self
             .epoch
-            .per_record_additional_data(self.write_seq, plain.version.version());
+            .per_record_additional_data(self.write_seq.into(), plain.version.version());
         std::println!("encrypting with record seq {record_seq}");
-        self.write_seq += 1;
+        self.write_seq.increment();
 
         let (header, payload) = out.split_at_mut(header_size);
 
@@ -168,7 +168,7 @@ impl EncryptionState {
         self.message_encrypter = Some(cipher);
         self.write_seq_max = min(SEQ_SOFT_LIMIT, max_messages);
         self.epoch = self.epoch.increment(purpose, version);
-        self.write_seq = 0;
+        self.write_seq = 0.into();
     }
 
     pub(crate) fn set_record_sequence_number_encrypter(
@@ -183,7 +183,7 @@ impl EncryptionState {
     /// `add` is added to the current sequence number.  `add` as `0` means
     /// "the next message processed by `encrypt_outgoing`"
     pub(crate) fn pre_encrypt_action(&self, add: u64) -> Option<PreEncryptAction> {
-        match self.write_seq.saturating_add(add) {
+        match u64::from(self.write_seq).saturating_add(add) {
             v if v == self.write_seq_max => Some(PreEncryptAction::RefreshOrClose),
             SEQ_HARD_LIMIT.. => Some(PreEncryptAction::Refuse),
             _ => None,
@@ -207,12 +207,22 @@ impl EncryptionState {
     }
 
     pub(crate) fn write_seq(&self) -> u64 {
-        self.write_seq
+        self.write_seq.into()
     }
 
     /// Current epoch.
     pub(crate) fn epoch(&self) -> Epoch {
         self.epoch
+    }
+
+    /// Increment the sequence number.
+    ///
+    /// Should be used only when sending unencrypted messages (e.g., DTLS 1.3 ACK) as the sequence
+    /// is otherwise incremented in [`Self::encrypt_outgoing`].
+    pub(crate) fn increment_sequence(&mut self) -> FullRecordSequenceNumber {
+        let old = self.write_seq;
+        self.write_seq.increment();
+        old
     }
 }
 
@@ -382,6 +392,16 @@ impl DecryptionState {
 
     pub(crate) fn epoch(&self) -> Epoch {
         self.epoch
+    }
+
+    /// Increment the sequence number.
+    ///
+    /// Should be used only when receiving unencrypted messages (e.g., DTLS 1.3 ACK) as the sequence
+    /// is otherwise incremented in [`Self::decrypt_incoming`].
+    pub(crate) fn increment_sequence(&mut self) -> FullRecordSequenceNumber {
+        let old = self.read_seq;
+        self.read_seq.increment();
+        old
     }
 
     pub(crate) fn read_seq(&self) -> FullRecordSequenceNumber {

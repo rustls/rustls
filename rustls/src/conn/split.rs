@@ -16,7 +16,8 @@ use crate::enums::ProtocolVersion;
 use crate::error::{AlertDescription, ErrorWithAlert};
 use crate::lock::Mutex;
 use crate::msgs::{
-    AlertLevel, Delocator, EncrypterDecrypterPurpose, HandshakeSequenceNumber, Message,
+    AckRecordSequenceNumber, AlertLevel, Delocator, EncrypterDecrypterPurpose,
+    HandshakeSequenceNumber, Message,
 };
 use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
@@ -536,6 +537,11 @@ impl SendOutput for SendAdapter<'_> {
     fn outbound_handshake_seq(&mut self) -> HandshakeSequenceNumber {
         self.as_locked(false)
             .outbound_handshake_seq()
+    }
+
+    fn ack_flight(&mut self, seqs: &[AckRecordSequenceNumber], tls: &mut Vec<u8>) {
+        self.as_locked(true)
+            .ack_flight(seqs, tls);
     }
 }
 
