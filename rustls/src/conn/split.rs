@@ -13,7 +13,7 @@ use crate::conn::{
 };
 use crate::crypto::cipher::{OutboundPlain, RecordEncrypter};
 use crate::enums::ProtocolVersion;
-use crate::error::AlertDescription;
+use crate::error::{AlertDescription, ApiMisuse};
 use crate::lock::Mutex;
 use crate::msgs::{AlertLevel, Delocator, Message};
 use crate::sync::Arc;
@@ -41,12 +41,18 @@ impl<Side: SideData> SplitConnection<Side> {
     ///
     /// Should be used with care as it exposes secret key material.
     ///
+    /// All TLS data previously written into caller-provided buffers must be sent to the peer before
+    /// calling this function.
+    ///
     /// The returned [`KernelConnection`] continues to own the connection's
     /// secrets, so it can compute new traffic secrets on key update and (for
     /// client connections) accept session tickets.  See the [`kernel`] module
     /// documentation for the details.
     ///
-    /// This fails if the connection was not made with [`enable_secret_extraction`] set.
+    /// This fails if the connection was not made with [`enable_secret_extraction`] set,
+    /// or if the send half has pending data queued by the receive half (see
+    /// [`ReceiveTrafficState::FlushSender`]). Flush any pending data with
+    /// [`SendTraffic::write()`] before calling this.
     ///
     /// [`kernel`]: crate::kernel
     /// [`enable_secret_extraction`]: crate::ClientConfig::enable_secret_extraction
@@ -66,8 +72,16 @@ impl<Side: SideData> SplitConnection<Side> {
             state, recv, send, ..
         } = receive;
 
+        let mut send = send.lock().unwrap();
+
+        // pending data has consumed send sequence numbers so discarding it here
+        // would leave the extracted secrets ahead of what the peer receives.
+        if send.pending_send_data() {
+            return Err(ApiMisuse::KernelConnectionWithPendingSendData.into());
+        }
+
         ConnectionCommon::<Side>::from_parts_into_kernel_connection(
-            &mut send.lock().unwrap().send,
+            &mut send.send,
             recv,
             outputs,
             state,
@@ -179,6 +193,10 @@ impl SendInner {
     fn pump(&mut self, tls: &mut Vec<u8>) {
         tls.extend_from_slice(&self.aside_buffer);
         self.aside_buffer.clear();
+    }
+
+    fn pending_send_data(&self) -> bool {
+        !self.aside_buffer.is_empty() || self.send.has_queued_key_update()
     }
 
     fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
@@ -580,6 +598,37 @@ mod tests {
             false,
             &mut tls,
         )));
+    }
+
+    #[test]
+    fn pending_send_data() {
+        let mut send = SendPath::default();
+        send.set_encrypter(Box::new(Tls13Cipher), 1234);
+
+        let mut inner = SendInner {
+            send,
+            aside_buffer: Vec::new(),
+        };
+        assert!(!inner.pending_send_data());
+
+        // an aside alert is pending until pumped
+        inner.send_alert(AlertLevel::Fatal, AlertDescription::DecodeError);
+        assert!(inner.pending_send_data());
+
+        let mut tls = Vec::new();
+        inner.pump(&mut tls);
+        assert!(!tls.is_empty());
+        assert!(!inner.pending_send_data());
+
+        // a queued key-update response is pending until the next send
+        inner.send.queue_requested_key_update();
+        assert!(inner.pending_send_data());
+
+        tls.clear();
+        inner
+            .send
+            .send_appdata_encrypt(b"x".as_slice().into(), &mut tls);
+        assert!(!inner.pending_send_data());
     }
 
     fn send_flag_for(f: impl FnOnce(&mut SendAdapter<'_>)) -> bool {
