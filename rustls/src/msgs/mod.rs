@@ -38,6 +38,7 @@ use alloc::vec::Vec;
 
 use crate::crypto::cipher::{
     EncodableVersion, EncodedMessage, EncodingContext, MessageError, Payload,
+    RecordSequenceNumberEncrypter,
 };
 use crate::enums::{ContentType, ContentTypeName, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, InvalidMessage};
@@ -258,7 +259,7 @@ impl<'a> TryFrom<&'a EncodedMessage<Payload<'a>>> for Message<'a> {
 pub(crate) struct MessageHeader {
     pub(crate) typ: ContentType,
     pub(crate) version: ProtocolVersion,
-    pub(crate) epoch_and_sequence: Option<(Epoch, u64)>,
+    pub(crate) epoch_and_sequence: Option<(Epoch, FullRecordSequenceNumber)>,
     pub(crate) len: u16,
 }
 
@@ -280,8 +281,12 @@ pub(crate) fn read_opaque_message_header(
 
     let epoch_and_sequence = if version.is_datagram_tls() {
         let epoch = Epoch::read(r, version).map_err(|_| MessageError::TooShortForHeader)?;
-        let record_seq = U48::read(r).map_err(|_| MessageError::TooShortForHeader)?;
-        Some((epoch, record_seq.0))
+        let record_seq = FullRecordSequenceNumber::from(
+            U48::read(r)
+                .map_err(|_| MessageError::TooShortForHeader)?
+                .0,
+        );
+        Some((epoch, record_seq))
     } else {
         None
     };
@@ -1073,45 +1078,42 @@ impl<'a> Codec<'a> for DtlsHandshakeFragment<'a> {
 /// "EE" bits are low two bits of the epoch of the encrypted message.
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/rfc9147#section-4
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct UnifiedHeader {
+#[derive(Debug, Clone)]
+pub(crate) struct UnifiedHeader<S> {
     /// An absent connection ID is represented by an empty `Vec`.
     // TODO: implement connection IDs. We assume them to be 0 length/absent for now.
     connection_id: Vec<u8>,
     epoch: Epoch,
-    long_seq: bool,
-    sequence: u64,
+    sequence: S,
     length: Option<u16>,
 }
 
-impl UnifiedHeader {
-    const FIXED_BITS: u8 = 0b0010_0000;
-    const FIXED_BITS_MASK: u8 = 0b1110_0000;
-    const C_BIT_MASK: u8 = 0b0001_0000;
-    const S_BIT_MASK: u8 = 0b0000_1000;
-    const L_BIT_MASK: u8 = 0b0000_0100;
-    const EE_BITS_MASK: u8 = 0b0000_0011;
-
-    pub(crate) fn is_unified_header(byte: u8) -> bool {
-        byte & Self::FIXED_BITS_MASK == Self::FIXED_BITS
+impl<S> UnifiedHeader<S> {
+    pub(crate) fn encoded_len(&self) -> Option<[u8; 2]> {
+        self.length.map(|l| l.to_be_bytes())
     }
+}
 
+impl<S: Copy> UnifiedHeader<S> {
+    pub(crate) fn sequence(&self) -> S {
+        self.sequence
+    }
+}
+
+impl UnifiedHeader<TruncatedRecordSequenceNumber> {
     pub(crate) fn new(len: u16, cx: EncodingContext) -> Self {
         // truncate epoch to 2 bits
         let epoch_low_bits = Epoch::new(cx.epoch.number() & 0b11, ProtocolVersion::DTLSv1_3);
-        // truncate sequence number to 16 bits
-        let sequence = cx.record_seq & 0xffff;
         Self {
             connection_id: Vec::new(),
             epoch: epoch_low_bits,
-            long_seq: true,
-            sequence,
+            sequence: cx.record_seq.truncate(),
             length: Some(len),
         }
     }
 
     pub(crate) fn encode(&self, bytes: &mut [u8]) {
-        bytes[0] = Self::FIXED_BITS;
+        bytes[0] = UNIFIED_HEADER_FIXED_BITS;
 
         if self.connection_id.len() > 0 {
             panic!("connection ID should always be empty for now");
@@ -1120,17 +1122,19 @@ impl UnifiedHeader {
         }
 
         // Always encode sequence number as 2 bytes for simplicity
-        bytes[0] |= Self::S_BIT_MASK;
-        bytes[1..3].copy_from_slice(&(self.sequence as u16).to_be_bytes());
+        bytes[0] |= UNIFIED_HEADER_S_BIT_MASK;
+        self.sequence.encode(&mut bytes[1..3]);
         if let Some(length) = self.encoded_len() {
-            bytes[0] |= Self::L_BIT_MASK;
+            bytes[0] |= UNIFIED_HEADER_L_BIT_MASK;
             bytes[3..5].copy_from_slice(&length);
         }
 
-        debug_assert!(self.epoch.number() <= Self::EE_BITS_MASK as u16);
+        debug_assert!(self.epoch.number() <= UNIFIED_HEADER_EE_BITS_MASK as u16);
         bytes[0] |= self.epoch.number() as u8;
     }
+}
 
+impl UnifiedHeader<ProtectedRecordSequenceNumber> {
     /// Read a unified header from `r`.
     ///
     /// `current_epoch` is the epoch messages are expected to be in. `highest_seq` is the highest
@@ -1141,33 +1145,33 @@ impl UnifiedHeader {
     pub(crate) fn read(r: &mut Reader<'_>, current_epoch: Epoch) -> Result<Self, InvalidMessage> {
         let bitfield = u8::read(r)?;
 
-        if bitfield & Self::FIXED_BITS_MASK != Self::FIXED_BITS {
+        if bitfield & UNIFIED_HEADER_FIXED_BITS_MASK != UNIFIED_HEADER_FIXED_BITS {
             return Err(InvalidMessage::InvalidDtls13UnifiedHeader);
         }
 
-        if bitfield & Self::C_BIT_MASK > 0 {
+        if bitfield & UNIFIED_HEADER_C_BIT_MASK > 0 {
             panic!("connection ID should never be set for now");
             // TODO: handle connection ID properly. How do we figure out how long it should be, and
             // how do we smuggle that information into a call to `Codec::read`?
         }
 
-        let long_seq = bitfield & Self::S_BIT_MASK > 0;
-        let truncated_sequence_number = if long_seq {
+        let long_encoding = bitfield & UNIFIED_HEADER_S_BIT_MASK > 0;
+        let protected_sequence_number = if long_encoding {
             // bit set: 2 byte seq
-            u16::read(r)?
+            [u8::read(r)?, u8::read(r)?]
         } else {
             // bit clear: 1 byte seq
-            u8::read(r)? as u16
+            [u8::read(r)?, 0]
         };
 
-        let length = if bitfield & Self::L_BIT_MASK > 0 {
+        let length = if bitfield & UNIFIED_HEADER_L_BIT_MASK > 0 {
             Some(u16::read(r)?)
         } else {
             None
         };
 
         // Infer the 16 bit epoch based on the low bits in the header and most recently seen epoch.
-        let epoch_low_bits = bitfield & Self::EE_BITS_MASK;
+        let epoch_low_bits = bitfield & UNIFIED_HEADER_EE_BITS_MASK;
 
         Ok(Self {
             connection_id: Vec::new(),
@@ -1176,46 +1180,24 @@ impl UnifiedHeader {
                 current_epoch.number() | (epoch_low_bits as u16),
                 ProtocolVersion::DTLSv1_3,
             ),
-            long_seq,
-            sequence: truncated_sequence_number as u64,
+            sequence: ProtectedRecordSequenceNumber {
+                protected: protected_sequence_number,
+                long_encoding,
+            },
         })
     }
-
-    /// Reconstruct the sequence number based on the truncated sequence number in a DTLS 1.3
-    /// unified header, per [RFC 9147, section 4.2.2][1]:
-    ///
-    /// > [I]mplementations SHOULD reconstruct the sequence number by computing the full
-    /// > sequence number which is numerically closest to one plus the sequence number of
-    /// > the highest successfully deprotected record in the current epoch.
-    ///
-    /// [1]: https://datatracker.ietf.org/doc/html/rfc9147#section-4.2.2
-    pub(crate) fn reconstruct_sequence_number(&mut self, highest_seq: u64) {
-        // First candidate: clear low bits of highest sequence we've seen and OR in the truncated
-        // sequence number
-        let reconstructed_seq_0: u64 = highest_seq
-            & if self.long_seq {
-                0xffff_ffff_ffff_0000
-            } else {
-                0xffff_ffff_ffff_ff00
-            }
-            | self.sequence;
-        // Second candidate: flip the first bit to the left of the truncated portion
-        let reconstructed_seq_1 =
-            reconstructed_seq_0 ^ if self.long_seq { 0x1_ffff } else { 0x0100 };
-        // Use whichever is closest to latest_seq+1
-        self.sequence = min_by_key(reconstructed_seq_0, reconstructed_seq_1, |v| {
-            v.abs_diff(highest_seq + 1)
-        });
-    }
-
-    pub(crate) fn encoded_len(&self) -> Option<[u8; 2]> {
-        self.length.map(|l| l.to_be_bytes())
-    }
-
-    pub(crate) fn sequence(&self) -> u64 {
-        self.sequence
-    }
 }
+
+pub(crate) fn is_unified_header(byte: u8) -> bool {
+    byte & UNIFIED_HEADER_FIXED_BITS_MASK == UNIFIED_HEADER_FIXED_BITS
+}
+
+const UNIFIED_HEADER_FIXED_BITS: u8 = 0b0010_0000;
+const UNIFIED_HEADER_FIXED_BITS_MASK: u8 = 0b1110_0000;
+const UNIFIED_HEADER_C_BIT_MASK: u8 = 0b0001_0000;
+const UNIFIED_HEADER_S_BIT_MASK: u8 = 0b0000_1000;
+const UNIFIED_HEADER_L_BIT_MASK: u8 = 0b0000_0100;
+const UNIFIED_HEADER_EE_BITS_MASK: u8 = 0b0000_0011;
 
 /// Sequence numbers of TLS handshake messages.
 ///
@@ -1271,32 +1253,187 @@ impl From<HandshakeSequenceNumber> for u16 {
     }
 }
 
+/// Protected DTLS record sequence number.
+///
+/// Exclusively appears in the unified header on a DTLS 1.3 encrypted message.
+///
+/// <https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4.2.3>
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ProtectedRecordSequenceNumber {
+    /// The encrypted, truncated sequence number.
+    ///
+    /// Padded with a single 0 if the original encoded number was 1 byte long.
+    pub(crate) protected: [u8; 2],
+    /// Whether the sequence number was encoded in the long form.
+    ///
+    /// The long form is 2 bytes, the short form is 1. DTLS 1.3 unified headers allow either
+    /// encoding.
+    ///
+    /// <https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4>
+    pub(crate) long_encoding: bool,
+}
+
+impl ProtectedRecordSequenceNumber {
+    /// Deprotect a record sequence number into a truncated sequence number.
+    ///
+    /// <https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4.2.3>
+    pub(crate) fn deprotect(
+        &self,
+        encrypter: &Box<dyn RecordSequenceNumberEncrypter>,
+        ciphertext: &[u8],
+    ) -> TruncatedRecordSequenceNumber {
+        let mut truncated = self.protected;
+        encrypter
+            .transform(&mut truncated, ciphertext)
+            .unwrap();
+
+        TruncatedRecordSequenceNumber {
+            truncated,
+            long_encoding: self.long_encoding,
+        }
+    }
+
+    pub(crate) fn encode(&self, into: &mut [u8]) {
+        let len = if self.long_encoding { 2 } else { 1 };
+        into[..len].copy_from_slice(&self.protected[..len]);
+    }
+}
+
+/// Deprotected, truncated DTLS record sequence number.
+///
+/// This is the result of deprotecting a [`ProtectedRecordSequenceNumber`] from a DTLS 1.3 unified
+/// header and never appears in an encoded message.
+///
+/// <https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4.2.3>
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct TruncatedRecordSequenceNumber {
+    /// The truncated sequence number.
+    ///
+    /// Padded with a single 0 if the original encoded number was 1 byte long.
+    pub(crate) truncated: [u8; 2],
+    /// Whether the sequence number was encoded in the long form.
+    ///
+    /// The long form is 2 bytes, the short form is 1. DTLS 1.3 unified headers allow either
+    /// encoding.
+    ///
+    /// <https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4>
+    long_encoding: bool,
+}
+
+impl TruncatedRecordSequenceNumber {
+    /// Encode the truncated sequence number into the provided slice.
+    pub(crate) fn encode(&self, into: &mut [u8]) {
+        let len = if self.long_encoding { 2 } else { 1 };
+        into[..len].copy_from_slice(&self.truncated[..len]);
+    }
+
+    /// Reconstruct the truncated sequence number into [`FullRecordSequenceNumber`].
+    ///
+    /// RFC 9147, section 4.2.2][1]:
+    ///
+    /// > [I]mplementations SHOULD reconstruct the sequence number by computing the full
+    /// > sequence number which is numerically closest to one plus the sequence number of
+    /// > the highest successfully deprotected record in the current epoch.
+    ///
+    /// [1]: https://datatracker.ietf.org/doc/html/rfc9147#section-4.2.2
+    pub(crate) fn reconstruct(
+        &self,
+        highest_seq: FullRecordSequenceNumber,
+    ) -> FullRecordSequenceNumber {
+        let truncated = u16::from_be_bytes(self.truncated) as u64;
+        // First candidate: clear low bits of highest sequence we've seen and OR in the truncated
+        // sequence number
+        let reconstructed_seq_0: u64 = highest_seq.0
+            & if self.long_encoding {
+                0xffff_ffff_ffff_0000
+            } else {
+                0xffff_ffff_ffff_ff00
+            }
+            | truncated;
+        // Second candidate: flip the first bit to the left of the truncated portion
+        let reconstructed_seq_1 =
+            reconstructed_seq_0 ^ if self.long_encoding { 0x1_ffff } else { 0x0100 };
+        // Use whichever is closest to latest_seq+1
+        FullRecordSequenceNumber(min_by_key(reconstructed_seq_0, reconstructed_seq_1, |v| {
+            v.abs_diff(highest_seq.0 + 1)
+        }))
+    }
+
+    /// Protect (encrypt) a truncated sequence number.
+    pub(crate) fn protect(
+        &self,
+        encrypter: &Box<dyn RecordSequenceNumberEncrypter>,
+        ciphertext: &[u8],
+    ) -> ProtectedRecordSequenceNumber {
+        let mut protected = self.truncated;
+        encrypter
+            .transform(&mut protected, ciphertext)
+            .unwrap();
+
+        ProtectedRecordSequenceNumber {
+            protected,
+            long_encoding: self.long_encoding,
+        }
+    }
+}
+
+/// Full DTLS record sequence number.
+///
+/// Appears in record headers for DTLS 1.2 ([1]) and unencrypted DTLS 1.3 (e.g., early handshake
+/// messages or ACK).
+///
+/// This can also be obtained by reconstructing a sequence number from the encrypted, truncated
+/// sequence number in a DTLS 1.3 unified header ([3]).
+///
+/// [1]: https://www.rfc-editor.org/info/rfc6347/#section-4.1
+/// [2]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4
+/// [3]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4.2.2
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct FullRecordSequenceNumber(u64);
+
+impl FullRecordSequenceNumber {
+    pub(crate) fn increment(&mut self) {
+        self.0 += 1;
+    }
+}
+
+impl FullRecordSequenceNumber {
+    pub(crate) fn truncate(&self) -> TruncatedRecordSequenceNumber {
+        TruncatedRecordSequenceNumber {
+            // truncate sequence number to 16 bits
+            truncated: ((self.0 & 0xffff) as u16).to_be_bytes(),
+            // for now, rustls always uses the long encoding of sequence number
+            long_encoding: true,
+        }
+    }
+
+    pub(crate) fn encode(&self, into: &mut [u8]) {
+        into.copy_from_slice(&self.0.to_be_bytes()[2..]);
+    }
+}
+
+impl From<FullRecordSequenceNumber> for u64 {
+    fn from(value: FullRecordSequenceNumber) -> Self {
+        value.0
+    }
+}
+
+impl From<u64> for FullRecordSequenceNumber {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
 /// Sequence number of a DTLS record, possibly encrypted.
 ///
 /// Not to be confused with a [`HandshakeSequenceNumber`].
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RecordSequenceNumber {
     /// Encrypted, truncated sequence number in a unified header ([DTLS 1.3 section 4.2.3][1]).
     ///
     /// [1]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4.2.3
-    Encrypted([u8; 2]),
-    /// Decrypted sequence number.
-    Decrypted(u64),
-}
-
-impl RecordSequenceNumber {
-    /// Encode the sequence number into `into`.
-    ///
-    /// `into` must be the correct size for the sequence number.
-    fn encode(&self, into: &mut [u8]) {
-        match self {
-            // If encrypted, we must be doing DTLS 1.3 and thus write out the two bytes of truncated
-            // and encrypted sequence number.
-            Self::Encrypted(ciphertext) => into.copy_from_slice(ciphertext),
-            // If unencrypted, we must be doing DTLS 1.2 and thus write out the sequence as U48.
-            Self::Decrypted(plaintext) => into.copy_from_slice(&plaintext.to_be_bytes()[2..]),
-        }
-    }
+    Protected(ProtectedRecordSequenceNumber),
+    Full(FullRecordSequenceNumber),
 }
 
 /// `RecordNumber` structure defined in [DTLS 1.3 section 4][1].

@@ -9,8 +9,8 @@ use crate::crypto::cipher::{
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
 use crate::msgs::{
-    AlertLevel, Codec, EncrypterDecrypterPurpose, Epoch, Fragmenter, HandshakeSequence,
-    HandshakeSequenceNumber, Message, MessagePayload,
+    AlertLevel, Codec, EncrypterDecrypterPurpose, Epoch, Fragmenter, FullRecordSequenceNumber,
+    HandshakeSequence, HandshakeSequenceNumber, Message, MessagePayload,
 };
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::tracing::{debug, error};
@@ -288,10 +288,10 @@ impl SendPath {
         };
     }
 
-    fn outbound_unencrypted_record_seq(&mut self) -> u64 {
+    fn outbound_unencrypted_record_seq(&mut self) -> FullRecordSequenceNumber {
         let old = self.unencrypted_record_seq;
         self.unencrypted_record_seq += 1;
-        old
+        old.into()
     }
 }
 

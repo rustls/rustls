@@ -326,7 +326,7 @@ impl Tls13AeadAlgorithm for Aead {
 
     fn record_sequence_encrypter(
         &self,
-        key: BlockCipherKey,
+        _key: BlockCipherKey,
     ) -> Box<dyn RecordSequenceNumberEncrypter> {
         Box::new(Tls13Cipher)
     }

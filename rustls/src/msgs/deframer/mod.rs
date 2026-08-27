@@ -8,8 +8,9 @@ use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader, U24};
 use crate::msgs::{
     DTLS_12_HEADER_SIZE, DTLS_13_UNIFIED_HEADER_SIZE, DTLS_HANDSHAKE_HEADER_SIZE,
-    DtlsHandshakeFragment, Epoch, HEADER_SIZE, HandshakeSequenceNumber, MessageHeader,
-    UnifiedHeader, read_opaque_message_header,
+    DtlsHandshakeFragment, Epoch, FullRecordSequenceNumber, HEADER_SIZE, HandshakeSequenceNumber,
+    MessageHeader, RecordSequenceNumber, UnifiedHeader, is_unified_header,
+    read_opaque_message_header,
 };
 
 mod buffers;
@@ -21,7 +22,7 @@ pub(crate) use buffers::{Delocator, Locator};
 pub fn fuzz_deframer(data: &[u8]) {
     let mut buf = data.to_vec();
     let mut deframer = Deframer::default();
-    while let Some(result) = deframer.deframe(&mut buf, Epoch::Unencrypted, 0) {
+    while let Some(result) = deframer.deframe(&mut buf, Epoch::Unencrypted, 0.into()) {
         if result.is_err() {
             break;
         }
@@ -62,7 +63,7 @@ impl Deframer {
         &mut self,
         buf: &'a mut [u8],
         current_epoch: Epoch,
-        highest_record_seq: u64,
+        highest_record_seq: FullRecordSequenceNumber,
     ) -> Option<Result<Deframed<'a>, Error>> {
         // Check whether any previously buffered future epoch records are now from an older epoch
         // and toss 'em.
@@ -83,7 +84,7 @@ impl Deframer {
 
         let mut reader = Reader::new(unprocessed_buf);
         let (typ, version, msg_epoch, record_seq, len, header_size) = if unprocessed_buf.len() > 0
-            && UnifiedHeader::is_unified_header(unprocessed_buf[0])
+            && is_unified_header(unprocessed_buf[0])
         {
             let UnifiedHeader {
                 connection_id: _,
@@ -109,7 +110,7 @@ impl Deframer {
                 ContentType::ApplicationData,
                 ProtocolVersion::DTLSv1_3,
                 epoch,
-                sequence,
+                RecordSequenceNumber::Protected(sequence),
                 length,
                 DTLS_13_UNIFIED_HEADER_SIZE,
             )
@@ -148,7 +149,7 @@ impl Deframer {
                 typ,
                 version,
                 epoch,
-                sequence,
+                RecordSequenceNumber::Full(sequence),
                 len,
                 // If we're here, then there wasn't a unified header on the record, and so DTLS 1.2
                 // and 1.3 records have the same header size.
@@ -800,7 +801,7 @@ pub(crate) struct Deframed<'a> {
     pub(crate) message: EncodedMessage<InboundOpaque<'a>>,
     pub(crate) bounds: Range<usize>,
     pub(crate) epoch: Epoch,
-    pub(crate) record_seq: u64,
+    pub(crate) record_seq: RecordSequenceNumber,
 }
 
 /// A deframed message from a future epoch.
@@ -933,7 +934,7 @@ mod tests {
         let mut input = include_bytes!("../../testdata/handshake-test.1.bin").to_vec();
 
         let mut deframer = Deframer::default();
-        while let Some(result) = deframer.deframe(&mut input, Epoch::Unencrypted, 0) {
+        while let Some(result) = deframer.deframe(&mut input, Epoch::Unencrypted, 0.into()) {
             let Deframed {
                 message, bounds, ..
             } = result.unwrap();
@@ -983,32 +984,36 @@ mod tests {
     fn iterator_empty_before_header_received() {
         assert!(
             Deframer::default()
-                .deframe(&mut [], Epoch::Unencrypted, 0)
+                .deframe(&mut [], Epoch::Unencrypted, 0.into())
                 .is_none()
         );
         assert!(
             Deframer::default()
-                .deframe(&mut [0x16], Epoch::Unencrypted, 0)
+                .deframe(&mut [0x16], Epoch::Unencrypted, 0.into())
                 .is_none()
         );
         assert!(
             Deframer::default()
-                .deframe(&mut [0x16, 0x03], Epoch::Unencrypted, 0)
+                .deframe(&mut [0x16, 0x03], Epoch::Unencrypted, 0.into())
                 .is_none()
         );
         assert!(
             Deframer::default()
-                .deframe(&mut [0x16, 0x03, 0x03], Epoch::Unencrypted, 0)
+                .deframe(&mut [0x16, 0x03, 0x03], Epoch::Unencrypted, 0.into())
                 .is_none()
         );
         assert!(
             Deframer::default()
-                .deframe(&mut [0x16, 0x03, 0x03, 0x00], Epoch::Unencrypted, 0)
+                .deframe(&mut [0x16, 0x03, 0x03, 0x00], Epoch::Unencrypted, 0.into())
                 .is_none()
         );
         assert!(
             Deframer::default()
-                .deframe(&mut [0x16, 0x03, 0x03, 0x00, 0x01], Epoch::Unencrypted, 0)
+                .deframe(
+                    &mut [0x16, 0x03, 0x03, 0x00, 0x01],
+                    Epoch::Unencrypted,
+                    0.into()
+                )
                 .is_none()
         );
     }
@@ -1021,7 +1026,7 @@ mod tests {
         let Deframed {
             message, bounds, ..
         } = deframer
-            .deframe(&mut buffer, Epoch::Unencrypted, 0)
+            .deframe(&mut buffer, Epoch::Unencrypted, 0.into())
             .unwrap()
             .unwrap();
 
@@ -1029,7 +1034,7 @@ mod tests {
         assert_eq!(bounds.end, 6);
         assert!(
             deframer
-                .deframe(&mut buffer, Epoch::Unencrypted, 0)
+                .deframe(&mut buffer, Epoch::Unencrypted, 0.into())
                 .is_none()
         );
     }
@@ -1044,7 +1049,7 @@ mod tests {
         let Deframed {
             message, bounds, ..
         } = deframer
-            .deframe(&mut buffer, Epoch::Unencrypted, 0)
+            .deframe(&mut buffer, Epoch::Unencrypted, 0.into())
             .unwrap()
             .unwrap();
 
@@ -1054,7 +1059,7 @@ mod tests {
         let Deframed {
             message, bounds, ..
         } = deframer
-            .deframe(&mut buffer, Epoch::Unencrypted, 0)
+            .deframe(&mut buffer, Epoch::Unencrypted, 0.into())
             .unwrap()
             .unwrap();
 
@@ -1062,7 +1067,7 @@ mod tests {
         assert_eq!(bounds.end, 12);
         assert!(
             deframer
-                .deframe(&mut buffer, Epoch::Unencrypted, 0)
+                .deframe(&mut buffer, Epoch::Unencrypted, 0.into())
                 .is_none()
         );
     }
@@ -1072,7 +1077,7 @@ mod tests {
         let mut buffer = include_bytes!("../../testdata/deframer-invalid-version.bin").to_vec();
         let mut deframer = Deframer::default();
         let result = deframer
-            .deframe(&mut buffer, Epoch::Unencrypted, 0)
+            .deframe(&mut buffer, Epoch::Unencrypted, 0.into())
             .unwrap();
         assert_eq!(
             result.err(),
@@ -1087,7 +1092,7 @@ mod tests {
         let mut buffer = include_bytes!("../../testdata/deframer-invalid-contenttype.bin").to_vec();
         let mut deframer = Deframer::default();
         let result = deframer
-            .deframe(&mut buffer, Epoch::Unencrypted, 0)
+            .deframe(&mut buffer, Epoch::Unencrypted, 0.into())
             .unwrap();
         assert_eq!(
             result.err(),
@@ -1100,7 +1105,7 @@ mod tests {
         let mut buffer = include_bytes!("../../testdata/deframer-invalid-length.bin").to_vec();
         let mut deframer = Deframer::default();
         let result = deframer
-            .deframe(&mut buffer, Epoch::Unencrypted, 0)
+            .deframe(&mut buffer, Epoch::Unencrypted, 0.into())
             .unwrap();
         assert_eq!(
             result.err(),
@@ -1113,7 +1118,7 @@ mod tests {
         let mut buffer = include_bytes!("../../testdata/deframer-invalid-empty.bin").to_vec();
         let mut deframer = Deframer::default();
         let result = deframer
-            .deframe(&mut buffer, Epoch::Unencrypted, 0)
+            .deframe(&mut buffer, Epoch::Unencrypted, 0.into())
             .unwrap();
         assert_eq!(
             result.err(),
@@ -1132,7 +1137,7 @@ mod tests {
         let mut count = 0;
         let mut end = 0;
 
-        while let Some(result) = deframer.deframe(&mut buffer, Epoch::Unencrypted, 0) {
+        while let Some(result) = deframer.deframe(&mut buffer, Epoch::Unencrypted, 0.into()) {
             let Deframed {
                 message, bounds, ..
             } = result.unwrap();

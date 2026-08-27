@@ -240,7 +240,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         let (secrets, state) = state.into_external_state(&tls13_key_schedule)?;
         let secrets = ExtractedSecrets {
             tx: (write_seq, secrets.tx),
-            rx: (read_seq, secrets.rx),
+            rx: (read_seq.into(), secrets.rx),
         };
         let external = KernelConnection::new(state, outputs, tls13_key_schedule)?;
 

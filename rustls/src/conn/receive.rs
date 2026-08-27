@@ -20,7 +20,8 @@ use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::msgs::{
     AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, Delocator, Epoch,
-    HandshakeAlignedProof, Locator, Message, MessagePayload,
+    FullRecordSequenceNumber, HandshakeAlignedProof, Locator, Message, MessagePayload,
+    RecordSequenceNumber,
 };
 use crate::quic::QuicOutput;
 use crate::tracing::{trace, warn};
@@ -122,6 +123,7 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
             let Decrypted {
                 plaintext: msg,
                 want_close_before_decrypt,
+                ..
             } = msg;
 
             if want_close_before_decrypt {
@@ -392,7 +394,10 @@ impl ReceivePath {
                 },
                 bounds,
                 epoch,
-                record_seq,
+                record_seq: match record_seq {
+                    RecordSequenceNumber::Full(full) => full,
+                    _ => panic!("plaintext message must contain full sequence number"),
+                },
             });
         }
 
@@ -400,7 +405,7 @@ impl ReceivePath {
             .decrypt_state
             .decrypt_incoming(message, record_seq)?
         {
-            Some(decrypted) => {
+            Some((decrypted, record_seq)) => {
                 // After decryption, the payload is shorter
                 let bounds = locator.locate(decrypted.plaintext.payload);
                 Ok(DeframeResult::Decrypted {
@@ -570,7 +575,7 @@ enum DeframeResult<'b> {
         decrypted: Decrypted<'b>,
         bounds: Range<usize>,
         epoch: Epoch,
-        record_seq: u64,
+        record_seq: FullRecordSequenceNumber,
     },
     DecryptionFailed,
     None,

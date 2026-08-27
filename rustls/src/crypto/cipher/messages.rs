@@ -7,8 +7,8 @@ use crate::crypto::cipher::EncryptionState;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::{
-    Codec, Epoch, HEADER_SIZE, MAX_FRAGMENT_LEN, MessageHeader, Reader, RecordSequenceNumber,
-    UnifiedHeader, hex, read_opaque_message_header,
+    Codec, Epoch, FullRecordSequenceNumber, HEADER_SIZE, MAX_FRAGMENT_LEN, MessageHeader, Reader,
+    RecordSequenceNumber, UnifiedHeader, hex, read_opaque_message_header,
 };
 
 /// A TLS message with encoded (but not necessarily encrypted) payload.
@@ -209,7 +209,7 @@ pub(crate) fn encode_record_header(
     let encoded_len = len.to_be_bytes();
     if version.version().is_datagram_tls() {
         into[3..5].copy_from_slice(&cx.epoch.number().to_be_bytes());
-        into[5..11].copy_from_slice(&(cx.record_seq).to_be_bytes()[2..]);
+        cx.record_seq.encode(&mut into[5..11]);
         into[11..13].copy_from_slice(&len.to_be_bytes());
     } else {
         into[3..5].copy_from_slice(&encoded_len);
@@ -664,7 +664,7 @@ pub struct EncodingContext {
     /// Record layer sequence number.
     ///
     /// Ignored unless message protocol version is DTLS.
-    pub(crate) record_seq: u64,
+    pub(crate) record_seq: FullRecordSequenceNumber,
 }
 
 impl EncodingContext {
@@ -673,7 +673,7 @@ impl EncodingContext {
         Self {
             payload_is_encrypted: false,
             epoch: Epoch::Unencrypted,
-            record_seq: 0,
+            record_seq: 0.into(),
         }
     }
 
@@ -684,7 +684,7 @@ impl EncodingContext {
     }
 
     /// Set record sequence number.
-    pub fn with_record_seq(mut self, seq: u64) -> Self {
+    pub fn with_record_seq(mut self, seq: FullRecordSequenceNumber) -> Self {
         self.record_seq = seq;
         self
     }
@@ -954,7 +954,7 @@ mod tests {
             if version.version().is_datagram_tls() {
                 cx = cx
                     .with_epoch(Epoch::ApplicationData(17))
-                    .with_record_seq(156);
+                    .with_record_seq(156.into());
             }
 
             let encoded = encoded_message

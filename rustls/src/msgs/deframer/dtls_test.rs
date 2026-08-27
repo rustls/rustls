@@ -5,7 +5,8 @@ use crate::enums::HandshakeType;
 use crate::msgs::{
     ClientExtensions, ClientHelloPayload, Codec, Compression, DTLS_HANDSHAKE_HEADER_EXTRA,
     DTLS_HANDSHAKE_HEADER_SIZE, Fragmenter, HANDSHAKE_HEADER_SIZE, HandshakeMessagePayload,
-    HandshakePayload, Message, MessagePayload, Payload, Random, ServerNamePayload, SessionId,
+    HandshakePayload, Message, MessagePayload, Payload, ProtectedRecordSequenceNumber, Random,
+    ServerNamePayload, SessionId,
 };
 
 use pki_types::DnsName;
@@ -15,64 +16,26 @@ use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
 
-fn test_handshake_message<'a>(version: ProtocolVersion) -> Message<'a> {
-    Message {
-        version: EncodableVersion::Legacy(version),
-        payload: MessagePayload::handshake(
-            HandshakeMessagePayload(HandshakePayload::ClientHello(ClientHelloPayload {
-                client_version: version,
-                random: Random::from([1; 32]),
-                session_id: SessionId::from([2; 32]),
-                cipher_suites: vec![CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256],
-                compression_methods: vec![Compression::Null],
-                extensions: Box::new(ClientExtensions {
-                    server_name: Some(ServerNamePayload::from(
-                        &DnsName::try_from("hello").unwrap(),
-                    )),
-                    ..Default::default()
-                }),
-            })),
-            0.into(),
-        ),
-    }
+#[test]
+fn single_handshake_fragment_dtls_12_unencrypted() {
+    single_handshake_fragment(ProtocolVersion::DTLSv1_2, false);
 }
 
-fn check_reassembled_message(
-    idx: usize,
-    original_message: &EncodedMessage<Payload<'_>>,
-    reassembled_message: &EncodedMessage<&[u8]>,
-    encrypted_dtls13: bool,
-) {
-    assert_eq!(reassembled_message.typ, original_message.typ, "idx: {idx}");
-    // Encrypted DTLS 1.3 messages will have a unified header on the wire and
-    // will be interpreted as having ProtocolVersion::DTLSv1_3. For other
-    // messages, regardless of the original message's protocol version, the
-    // message on the wire will have version 1.2.
-    assert_eq!(
-        reassembled_message.version.version(),
-        if encrypted_dtls13 {
-            ProtocolVersion::DTLSv1_3
-        } else {
-            ProtocolVersion::DTLSv1_2
-        },
-        "idx: {idx}"
-    );
-    assert_eq!(
-        reassembled_message.payload.len(),
-        original_message.payload.bytes().len() + DTLS_HANDSHAKE_HEADER_EXTRA,
-        "idx: {idx}",
-    );
-    // The record we encoded had a TLS handshake header on it, but the one we get back has a *DTLS*
-    // handshake header. Check that the payloads are equal.
-    assert_eq!(
-        &original_message.payload.bytes()[HANDSHAKE_HEADER_SIZE..],
-        &reassembled_message.payload[DTLS_HANDSHAKE_HEADER_SIZE..],
-        "idx: {idx}",
-    );
+#[test]
+fn single_handshake_fragment_dtls_12_encrypted() {
+    single_handshake_fragment(ProtocolVersion::DTLSv1_2, true);
+}
 
-    // Make sure we can parse the handshake message, but we already checked that the bytes are as
-    // expected so no need to examine the fields of the message.
-    Message::try_from(reassembled_message.clone()).unwrap();
+#[test]
+fn single_handshake_fragment_dtls_13_unencrypted() {
+    // Sending unencrypted handshake messages means no unified header
+    single_handshake_fragment(ProtocolVersion::DTLSv1_3, false);
+}
+
+#[test]
+fn single_handshake_fragment_dtls_13_encrypted() {
+    // Encrypted handshake messages means a unified header
+    single_handshake_fragment(ProtocolVersion::DTLSv1_3, true);
 }
 
 fn single_handshake_fragment(version: ProtocolVersion, encrypted: bool) {
@@ -100,7 +63,7 @@ fn single_handshake_fragment(version: ProtocolVersion, encrypted: bool) {
     .to_unencrypted_bytes(EncodingContext {
         payload_is_encrypted: encrypted,
         epoch: Epoch::Unencrypted,
-        record_seq: 6,
+        record_seq: 6.into(),
     });
     let record_wire_bytes_len = record_wire_bytes.len();
 
@@ -113,7 +76,7 @@ fn single_handshake_fragment(version: ProtocolVersion, encrypted: bool) {
         epoch,
         record_seq,
     } = deframer
-        .deframe(&mut record_wire_bytes, Epoch::Unencrypted, 5)
+        .deframe(&mut record_wire_bytes, Epoch::Unencrypted, 5.into())
         .unwrap()
         .unwrap();
 
@@ -122,7 +85,7 @@ fn single_handshake_fragment(version: ProtocolVersion, encrypted: bool) {
     assert_eq!(bounds.end, record_wire_bytes_len);
 
     assert_eq!(epoch, Epoch::Unencrypted);
-    assert_eq!(record_seq, 6);
+    check_record_sequence(version, encrypted, 6, record_seq);
 
     // Simulate decryption
     let mut message = message.into_plain_message();
@@ -146,119 +109,6 @@ fn single_handshake_fragment(version: ProtocolVersion, encrypted: bool) {
         &reassembled_message,
         encrypted && version == ProtocolVersion::DTLSv1_3,
     );
-}
-
-#[test]
-fn single_handshake_fragment_dtls_12_unencrypted() {
-    single_handshake_fragment(ProtocolVersion::DTLSv1_2, false);
-}
-
-#[test]
-fn single_handshake_fragment_dtls_12_encrypted() {
-    single_handshake_fragment(ProtocolVersion::DTLSv1_2, true);
-}
-
-#[test]
-fn single_handshake_fragment_dtls_13_unencrypted() {
-    // Sending unencrypted handshake messages means no unified header
-    single_handshake_fragment(ProtocolVersion::DTLSv1_3, false);
-}
-
-#[test]
-fn single_handshake_fragment_dtls_13_encrypted() {
-    // Encrypted handshake messages means a unified header
-    single_handshake_fragment(ProtocolVersion::DTLSv1_3, true);
-}
-
-fn multiple_handshake_fragment_in_order(
-    version: ProtocolVersion,
-    start_epoch: Epoch,
-    start_seq: u64,
-    encrypted: bool,
-) {
-    let header_size = if encrypted {
-        version.encrypted_header_len()
-    } else {
-        version.unencrypted_header_len()
-    };
-    let record = EncodedMessage::from(test_handshake_message(version));
-
-    let mut message_fragmenter = Fragmenter::default();
-    message_fragmenter
-        .set_max_fragment_size(
-            Some(32 + DTLS_12_HEADER_SIZE + DTLS_HANDSHAKE_HEADER_SIZE),
-            Protocol::Udp,
-        )
-        .unwrap();
-    let flight = [(HandshakeType::ClientHello, 0.into(), record.payload.bytes())];
-    let records = message_fragmenter
-        .fragment_dtls_handshake_message_flight(EncodableVersion::Legacy(version), &flight);
-    assert_eq!(records.len(), 3);
-
-    let mut encoded_records = Vec::new();
-
-    for (seq, record) in records.iter().enumerate() {
-        encoded_records.extend_from_slice(
-            EncodedMessage {
-                typ: record.typ,
-                version: record.version,
-                payload: record.payload.bytes().into(),
-            }
-            .to_unencrypted_bytes(EncodingContext {
-                payload_is_encrypted: encrypted,
-                epoch: start_epoch,
-                record_seq: start_seq + seq as u64,
-            })
-            .as_slice(),
-        );
-    }
-
-    let mut deframer = Deframer::default();
-
-    // Deframe records and feed messages into the deframer to be coalesced. We should not
-    // get a complete span until all records are fed in.
-    for record_idx in 0..records.len() {
-        std::println!("record {record_idx}");
-        let Deframed {
-            message,
-            bounds,
-            epoch,
-            record_seq,
-        } = deframer
-            .deframe(&mut encoded_records, start_epoch, start_seq)
-            .unwrap()
-            .unwrap();
-
-        // For DTLS 1.3, the unified header carries only the truncated epoch and sequence so check
-        // that we reassembled them properly.
-        assert_eq!(epoch, start_epoch);
-        assert_eq!(record_seq, start_seq + record_idx as u64);
-
-        // Simulate in-place decryption
-        let mut message = message.into_plain_message();
-        message.typ = ContentType::Handshake;
-        let bounds = bounds.start + header_size..bounds.end;
-
-        deframer
-            .input_message_dtls(message, bounds)
-            .unwrap();
-        deframer.coalesce_dtls(&mut encoded_records);
-
-        if record_idx < records.len() - 1 {
-            assert!(deframer.complete_span().is_none());
-        } else {
-            let message_span = deframer.complete_span().unwrap();
-
-            // We should get the whole handshake message out of the deframer
-            let reassembled_handshake_message = deframer.message(message_span, &encoded_records);
-            check_reassembled_message(
-                record_idx,
-                &record,
-                &reassembled_handshake_message,
-                version == ProtocolVersion::DTLSv1_3 && encrypted,
-            );
-        }
-    }
 }
 
 #[test]
@@ -331,6 +181,108 @@ fn multiple_handshake_fragment_in_order_large_epoch_and_sequence_dtls_13() {
     );
 }
 
+fn multiple_handshake_fragment_in_order(
+    version: ProtocolVersion,
+    start_epoch: Epoch,
+    start_seq: u64,
+    encrypted: bool,
+) {
+    let header_size = if encrypted {
+        version.encrypted_header_len()
+    } else {
+        version.unencrypted_header_len()
+    };
+    let record = EncodedMessage::from(test_handshake_message(version));
+
+    let mut message_fragmenter = Fragmenter::default();
+    message_fragmenter
+        .set_max_fragment_size(
+            Some(32 + DTLS_12_HEADER_SIZE + DTLS_HANDSHAKE_HEADER_SIZE),
+            Protocol::Udp,
+        )
+        .unwrap();
+    let flight = [(HandshakeType::ClientHello, 0.into(), record.payload.bytes())];
+    let records = message_fragmenter
+        .fragment_dtls_handshake_message_flight(EncodableVersion::Legacy(version), &flight);
+    assert_eq!(records.len(), 3);
+
+    let mut encoded_records = Vec::new();
+
+    for (seq, record) in records.iter().enumerate() {
+        encoded_records.extend_from_slice(
+            EncodedMessage {
+                typ: record.typ,
+                version: record.version,
+                payload: record.payload.bytes().into(),
+            }
+            .to_unencrypted_bytes(EncodingContext {
+                payload_is_encrypted: encrypted,
+                epoch: start_epoch,
+                record_seq: (start_seq + seq as u64).into(),
+            })
+            .as_slice(),
+        );
+    }
+
+    let mut deframer = Deframer::default();
+
+    // Deframe records and feed messages into the deframer to be coalesced. We should not
+    // get a complete span until all records are fed in.
+    for record_idx in 0..records.len() {
+        std::println!("record {record_idx}");
+        let Deframed {
+            message,
+            bounds,
+            epoch,
+            record_seq,
+        } = deframer
+            .deframe(&mut encoded_records, start_epoch, start_seq.into())
+            .unwrap()
+            .unwrap();
+
+        // For DTLS 1.3, the unified header carries only the truncated epoch and sequence so check
+        // that we reassembled them properly.
+        assert_eq!(epoch, start_epoch);
+        let expect_record_seq = start_seq + record_idx as u64;
+        check_record_sequence(version, encrypted, expect_record_seq, record_seq);
+
+        // Simulate in-place decryption
+        let mut message = message.into_plain_message();
+        message.typ = ContentType::Handshake;
+        let bounds = bounds.start + header_size..bounds.end;
+
+        deframer
+            .input_message_dtls(message, bounds)
+            .unwrap();
+        deframer.coalesce_dtls(&mut encoded_records);
+
+        if record_idx < records.len() - 1 {
+            assert!(deframer.complete_span().is_none());
+        } else {
+            let message_span = deframer.complete_span().unwrap();
+
+            // We should get the whole handshake message out of the deframer
+            let reassembled_handshake_message = deframer.message(message_span, &encoded_records);
+            check_reassembled_message(
+                record_idx,
+                &record,
+                &reassembled_handshake_message,
+                version == ProtocolVersion::DTLSv1_3 && encrypted,
+            );
+        }
+    }
+}
+
+#[test]
+fn multiple_handshake_fragment_overlapping_dtls_12() {
+    multiple_handshake_fragment_overlapping(ProtocolVersion::DTLSv1_2);
+}
+
+#[test]
+fn multiple_handshake_fragment_overlapping_dtls_13() {
+    multiple_handshake_fragment_overlapping(ProtocolVersion::DTLSv1_3);
+}
+
 fn multiple_handshake_fragment_overlapping(version: ProtocolVersion) {
     let header_size = version.encrypted_header_len();
     let record = EncodedMessage::from(test_handshake_message(version));
@@ -398,7 +350,7 @@ fn multiple_handshake_fragment_overlapping(version: ProtocolVersion) {
             .to_unencrypted_bytes(EncodingContext {
                 payload_is_encrypted: true,
                 epoch: Epoch::ApplicationData(5),
-                record_seq: 222 + idx as u64,
+                record_seq: (222 + idx as u64).into(),
             })
             .as_slice(),
         );
@@ -419,13 +371,13 @@ fn multiple_handshake_fragment_overlapping(version: ProtocolVersion) {
             .deframe(
                 &mut encoded_records,
                 Epoch::ApplicationData(5),
-                221 + record_idx as u64,
+                (221 + record_idx as u64).into(),
             )
             .unwrap()
             .unwrap();
 
         assert_eq!(epoch, Epoch::ApplicationData(5));
-        assert_eq!(record_seq, 222 + record_idx as u64);
+        check_record_sequence(version, true, 222 + record_idx as u64, record_seq);
 
         // Simulate in-place decryption
         let mut message = message.into_plain_message();
@@ -458,13 +410,13 @@ fn multiple_handshake_fragment_overlapping(version: ProtocolVersion) {
 }
 
 #[test]
-fn multiple_handshake_fragment_overlapping_dtls_12() {
-    multiple_handshake_fragment_overlapping(ProtocolVersion::DTLSv1_2);
+fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_1_dtls_12() {
+    multiple_handshake_fragment_out_of_order_and_more_than_one_seq_1(ProtocolVersion::DTLSv1_2);
 }
 
 #[test]
-fn multiple_handshake_fragment_overlapping_dtls_13() {
-    multiple_handshake_fragment_overlapping(ProtocolVersion::DTLSv1_3);
+fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_1_dtls_13() {
+    multiple_handshake_fragment_out_of_order_and_more_than_one_seq_1(ProtocolVersion::DTLSv1_3);
 }
 
 fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_1(version: ProtocolVersion) {
@@ -514,7 +466,7 @@ fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_1(version: Pro
             .to_unencrypted_bytes(EncodingContext {
                 payload_is_encrypted: true,
                 epoch: Epoch::ApplicationData(5),
-                record_seq: 222 + index as u64,
+                record_seq: (222 + index as u64).into(),
             })
             .as_slice(),
         );
@@ -536,16 +488,18 @@ fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_1(version: Pro
             .deframe(
                 &mut encoded_records,
                 Epoch::ApplicationData(5),
-                highest_observed_seq,
+                highest_observed_seq.into(),
             )
             .unwrap()
             .unwrap();
 
         assert_eq!(epoch, Epoch::ApplicationData(5));
-        assert_eq!(record_seq, 222 + records_order[record_idx] as u64);
 
-        if record_seq > highest_observed_seq {
-            highest_observed_seq = record_seq;
+        let expect_record_seq = 222 + records_order[record_idx] as u64;
+        check_record_sequence(version, true, expect_record_seq, record_seq);
+
+        if expect_record_seq > highest_observed_seq {
+            highest_observed_seq = expect_record_seq;
         }
 
         // Simulate in-place decryption
@@ -587,13 +541,13 @@ fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_1(version: Pro
 }
 
 #[test]
-fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_1_dtls_12() {
-    multiple_handshake_fragment_out_of_order_and_more_than_one_seq_1(ProtocolVersion::DTLSv1_2);
+fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_2_dtls_12() {
+    multiple_handshake_fragment_out_of_order_and_more_than_one_seq_2(ProtocolVersion::DTLSv1_2);
 }
 
 #[test]
-fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_1_dtls_13() {
-    multiple_handshake_fragment_out_of_order_and_more_than_one_seq_1(ProtocolVersion::DTLSv1_3);
+fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_2_dtls_13() {
+    multiple_handshake_fragment_out_of_order_and_more_than_one_seq_2(ProtocolVersion::DTLSv1_3);
 }
 
 fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_2(version: ProtocolVersion) {
@@ -643,7 +597,7 @@ fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_2(version: Pro
             .to_unencrypted_bytes(EncodingContext {
                 payload_is_encrypted: true,
                 epoch: Epoch::ApplicationData(5),
-                record_seq: 222 + index as u64,
+                record_seq: (222 + index as u64).into(),
             })
             .as_slice(),
         );
@@ -666,16 +620,17 @@ fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_2(version: Pro
             .deframe(
                 &mut encoded_records,
                 Epoch::ApplicationData(5),
-                221 + record_idx as u64,
+                (221 + record_idx as u64).into(),
             )
             .unwrap()
             .unwrap();
 
         assert_eq!(epoch, Epoch::ApplicationData(5));
-        assert_eq!(record_seq, 222 + records_order[record_idx] as u64);
+        let expect_record_seq = 222 + records_order[record_idx] as u64;
+        check_record_sequence(version, true, expect_record_seq, record_seq);
 
-        if record_seq > highest_observed_seq {
-            highest_observed_seq = record_seq;
+        if expect_record_seq > highest_observed_seq {
+            highest_observed_seq = expect_record_seq;
         }
 
         // Simulate in-place decryption
@@ -715,36 +670,13 @@ fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_2(version: Pro
 }
 
 #[test]
-fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_2_dtls_12() {
-    multiple_handshake_fragment_out_of_order_and_more_than_one_seq_2(ProtocolVersion::DTLSv1_2);
+fn single_record_multiple_handshake_messages_dtls_12() {
+    single_record_multiple_handshake_messages(ProtocolVersion::DTLSv1_2);
 }
 
 #[test]
-fn multiple_handshake_fragment_out_of_order_and_more_than_one_seq_2_dtls_13() {
-    multiple_handshake_fragment_out_of_order_and_more_than_one_seq_2(ProtocolVersion::DTLSv1_3);
-}
-
-fn check_reassembled_handshake(
-    record_idx: usize,
-    version: ProtocolVersion,
-    original_message: &[u8],
-    reassembled_message: &EncodedMessage<&[u8]>,
-) {
-    assert_eq!(
-        reassembled_message.typ,
-        ContentType::Handshake,
-        "record_idx: {record_idx}",
-    );
-    assert_eq!(
-        reassembled_message.version.version(),
-        version,
-        "record_idx: {record_idx}",
-    );
-    assert_eq!(
-        &reassembled_message.payload[DTLS_HANDSHAKE_HEADER_SIZE..],
-        original_message,
-        "record_idx: {record_idx}",
-    );
+fn single_record_multiple_handshake_messages_dtls_13() {
+    single_record_multiple_handshake_messages(ProtocolVersion::DTLSv1_3);
 }
 
 fn single_record_multiple_handshake_messages(version: ProtocolVersion) {
@@ -795,7 +727,7 @@ fn single_record_multiple_handshake_messages(version: ProtocolVersion) {
     .to_unencrypted_bytes(EncodingContext {
         payload_is_encrypted: true,
         epoch: Epoch::ApplicationData(11),
-        record_seq: 255,
+        record_seq: 255.into(),
     });
 
     let mut deframer = Deframer::default();
@@ -807,12 +739,12 @@ fn single_record_multiple_handshake_messages(version: ProtocolVersion) {
         epoch,
         record_seq,
     } = deframer
-        .deframe(&mut encoded_record, Epoch::ApplicationData(11), 254)
+        .deframe(&mut encoded_record, Epoch::ApplicationData(11), 254.into())
         .unwrap()
         .unwrap();
 
     assert_eq!(epoch, Epoch::ApplicationData(11));
-    assert_eq!(record_seq, 255);
+    check_record_sequence(version, true, 255, record_seq);
 
     // Simulate in-place decryption
     let mut message = message.into_plain_message();
@@ -855,13 +787,13 @@ fn single_record_multiple_handshake_messages(version: ProtocolVersion) {
 }
 
 #[test]
-fn single_record_multiple_handshake_messages_dtls_12() {
-    single_record_multiple_handshake_messages(ProtocolVersion::DTLSv1_2);
+fn handshake_messages_span_records_dtls_12() {
+    handshake_messages_span_records(ProtocolVersion::DTLSv1_2);
 }
 
 #[test]
-fn single_record_multiple_handshake_messages_dtls_13() {
-    single_record_multiple_handshake_messages(ProtocolVersion::DTLSv1_3);
+fn handshake_messages_span_records_dtls_13() {
+    handshake_messages_span_records(ProtocolVersion::DTLSv1_3);
 }
 
 fn handshake_messages_span_records(version: ProtocolVersion) {
@@ -919,7 +851,7 @@ fn handshake_messages_span_records(version: ProtocolVersion) {
             epoch: Epoch::ApplicationData(11),
             // It's important that the sequence number be 255 or more here: we want the sequence
             // number to be big enough to require 2 bytes to be encoded in the unified header.
-            record_seq: 255 + idx as u64,
+            record_seq: (255 + idx as u64).into(),
         });
         encoded_records.extend_from_slice(&encoded_record.as_slice());
     }
@@ -938,13 +870,13 @@ fn handshake_messages_span_records(version: ProtocolVersion) {
             .deframe(
                 &mut encoded_records,
                 Epoch::ApplicationData(11),
-                254 + record_idx as u64,
+                (254 + record_idx as u64).into(),
             )
             .unwrap()
             .unwrap();
 
         assert_eq!(epoch, Epoch::ApplicationData(11));
-        assert_eq!(record_seq, 255 + record_idx as u64);
+        check_record_sequence(version, true, 255 + record_idx as u64, record_seq);
 
         // Simulate in-place decryption
         let mut message = message.into_plain_message();
@@ -1003,13 +935,13 @@ fn handshake_messages_span_records(version: ProtocolVersion) {
 }
 
 #[test]
-fn handshake_messages_span_records_dtls_12() {
-    handshake_messages_span_records(ProtocolVersion::DTLSv1_2);
+fn multiple_fragments_application_data_dtls_12() {
+    multiple_fragments_application_data(ProtocolVersion::DTLSv1_2);
 }
 
 #[test]
-fn handshake_messages_span_records_dtls_13() {
-    handshake_messages_span_records(ProtocolVersion::DTLSv1_3);
+fn multiple_fragments_application_data_dtls_13() {
+    multiple_fragments_application_data(ProtocolVersion::DTLSv1_3);
 }
 
 fn multiple_fragments_application_data(version: ProtocolVersion) {
@@ -1021,7 +953,7 @@ fn multiple_fragments_application_data(version: ProtocolVersion) {
     .to_unencrypted_bytes(EncodingContext {
         payload_is_encrypted: true,
         epoch: Epoch::ApplicationData(3),
-        record_seq: 11,
+        record_seq: 11.into(),
     });
 
     let encoded_first_record_len = encoded_first_record.len();
@@ -1034,7 +966,7 @@ fn multiple_fragments_application_data(version: ProtocolVersion) {
     .to_unencrypted_bytes(EncodingContext {
         payload_is_encrypted: true,
         epoch: Epoch::ApplicationData(3),
-        record_seq: 12,
+        record_seq: 12.into(),
     });
 
     let encoded_second_record_len = encoded_second_record.len();
@@ -1067,7 +999,11 @@ fn multiple_fragments_application_data(version: ProtocolVersion) {
             epoch,
             record_seq,
         } = deframer
-            .deframe(&mut wire_bytes, expect_epoch, expect_record_seq - 1)
+            .deframe(
+                &mut wire_bytes,
+                expect_epoch,
+                (expect_record_seq - 1).into(),
+            )
             .unwrap()
             .unwrap();
 
@@ -1078,7 +1014,7 @@ fn multiple_fragments_application_data(version: ProtocolVersion) {
         assert_eq!(message.typ, ContentType::ApplicationData);
         assert_eq!(message.version.version(), version);
         assert_eq!(epoch, expect_epoch);
-        assert_eq!(record_seq, expect_record_seq);
+        check_record_sequence(version, true, expect_record_seq, record_seq);
         assert_eq!(
             message.payload,
             &encoded_record[version.encrypted_header_len()..]
@@ -1087,13 +1023,13 @@ fn multiple_fragments_application_data(version: ProtocolVersion) {
 }
 
 #[test]
-fn multiple_fragments_application_data_dtls_12() {
-    multiple_fragments_application_data(ProtocolVersion::DTLSv1_2);
+fn multiple_epochs_interleave_application_data_and_handshakes_dtls_12() {
+    multiple_epochs_interleave_application_data_and_handshakes(ProtocolVersion::DTLSv1_2);
 }
 
 #[test]
-fn multiple_fragments_application_data_dtls_13() {
-    multiple_fragments_application_data(ProtocolVersion::DTLSv1_3);
+fn multiple_epochs_interleave_application_data_and_handshakes_dtls_13() {
+    multiple_epochs_interleave_application_data_and_handshakes(ProtocolVersion::DTLSv1_3);
 }
 
 fn multiple_epochs_interleave_application_data_and_handshakes(version: ProtocolVersion) {
@@ -1181,7 +1117,7 @@ fn multiple_epochs_interleave_application_data_and_handshakes(version: ProtocolV
             .to_unencrypted_bytes(EncodingContext {
                 payload_is_encrypted: true,
                 epoch,
-                record_seq,
+                record_seq: record_seq.into(),
             });
 
         wire_bytes.extend(encoded);
@@ -1197,7 +1133,7 @@ fn multiple_epochs_interleave_application_data_and_handshakes(version: ProtocolV
     for (record_idx, (expect_epoch, expect_record, expect_record_seq)) in
         records.clone().into_iter().enumerate()
     {
-        let deframed = deframer.deframe(&mut wire_bytes, curr_epoch, highest_record_seq);
+        let deframed = deframer.deframe(&mut wire_bytes, curr_epoch, highest_record_seq.into());
 
         if expect_epoch != curr_epoch {
             assert!(deframed.is_none());
@@ -1212,9 +1148,9 @@ fn multiple_epochs_interleave_application_data_and_handshakes(version: ProtocolV
         } = deframed.unwrap().unwrap();
 
         assert_eq!(deframed_epoch, curr_epoch);
-        assert_eq!(record_seq, expect_record_seq);
-        if record_seq > highest_record_seq {
-            highest_record_seq = record_seq;
+        check_record_sequence(version, true, expect_record_seq, record_seq);
+        if expect_record_seq > highest_record_seq {
+            highest_record_seq = expect_record_seq;
         }
 
         // Simulate in-place decryption
@@ -1263,14 +1199,14 @@ fn multiple_epochs_interleave_application_data_and_handshakes(version: ProtocolV
             epoch: deframed_epoch,
             record_seq,
         } = deframer
-            .deframe(&mut wire_bytes, next_epoch, highest_record_seq)
+            .deframe(&mut wire_bytes, next_epoch, highest_record_seq.into())
             .unwrap()
             .unwrap();
 
         assert_eq!(deframed_epoch, next_epoch);
-        assert_eq!(record_seq, expect_record_seq);
-        if record_seq > highest_record_seq {
-            highest_record_seq = record_seq;
+        check_record_sequence(version, true, expect_record_seq, record_seq);
+        if expect_record_seq > highest_record_seq {
+            highest_record_seq = expect_record_seq;
         }
 
         // Simulate in-place decryption
@@ -1307,22 +1243,122 @@ fn multiple_epochs_interleave_application_data_and_handshakes(version: ProtocolV
     // Try to deframe a message from the other two epochs. We should get nothing.
     assert!(
         deframer
-            .deframe(&mut wire_bytes, prev_epoch, 0)
+            .deframe(&mut wire_bytes, prev_epoch, 0.into())
             .is_none()
     );
     assert!(
         deframer
-            .deframe(&mut wire_bytes, future_epoch, 0)
+            .deframe(&mut wire_bytes, future_epoch, 0.into())
             .is_none()
     );
 }
 
-#[test]
-fn multiple_epochs_interleave_application_data_and_handshakes_dtls_12() {
-    multiple_epochs_interleave_application_data_and_handshakes(ProtocolVersion::DTLSv1_2);
+fn test_handshake_message<'a>(version: ProtocolVersion) -> Message<'a> {
+    Message {
+        version: EncodableVersion::Legacy(version),
+        payload: MessagePayload::handshake(
+            HandshakeMessagePayload(HandshakePayload::ClientHello(ClientHelloPayload {
+                client_version: version,
+                random: Random::from([1; 32]),
+                session_id: SessionId::from([2; 32]),
+                cipher_suites: vec![CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256],
+                compression_methods: vec![Compression::Null],
+                extensions: Box::new(ClientExtensions {
+                    server_name: Some(ServerNamePayload::from(
+                        &DnsName::try_from("hello").unwrap(),
+                    )),
+                    ..Default::default()
+                }),
+            })),
+            0.into(),
+        ),
+    }
 }
 
-#[test]
-fn multiple_epochs_interleave_application_data_and_handshakes_dtls_13() {
-    multiple_epochs_interleave_application_data_and_handshakes(ProtocolVersion::DTLSv1_3);
+#[track_caller]
+fn check_reassembled_message(
+    idx: usize,
+    original_message: &EncodedMessage<Payload<'_>>,
+    reassembled_message: &EncodedMessage<&[u8]>,
+    encrypted_dtls13: bool,
+) {
+    assert_eq!(reassembled_message.typ, original_message.typ, "idx: {idx}");
+    // Encrypted DTLS 1.3 messages will have a unified header on the wire and
+    // will be interpreted as having ProtocolVersion::DTLSv1_3. For other
+    // messages, regardless of the original message's protocol version, the
+    // message on the wire will have version 1.2.
+    assert_eq!(
+        reassembled_message.version.version(),
+        if encrypted_dtls13 {
+            ProtocolVersion::DTLSv1_3
+        } else {
+            ProtocolVersion::DTLSv1_2
+        },
+        "idx: {idx}"
+    );
+    assert_eq!(
+        reassembled_message.payload.len(),
+        original_message.payload.bytes().len() + DTLS_HANDSHAKE_HEADER_EXTRA,
+        "idx: {idx}",
+    );
+    // The record we encoded had a TLS handshake header on it, but the one we get back has a *DTLS*
+    // handshake header. Check that the payloads are equal.
+    assert_eq!(
+        &original_message.payload.bytes()[HANDSHAKE_HEADER_SIZE..],
+        &reassembled_message.payload[DTLS_HANDSHAKE_HEADER_SIZE..],
+        "idx: {idx}",
+    );
+
+    // Make sure we can parse the handshake message, but we already checked that the bytes are as
+    // expected so no need to examine the fields of the message.
+    Message::try_from(reassembled_message.clone()).unwrap();
+}
+
+/// Validate a record sequence number against an expected value, accounting for protocol version and
+/// record number protection.
+#[track_caller]
+fn check_record_sequence(
+    version: ProtocolVersion,
+    encrypted: bool,
+    expected_full: u64,
+    got: RecordSequenceNumber,
+) {
+    if version == ProtocolVersion::DTLSv1_3 && encrypted {
+        assert_eq!(
+            got,
+            RecordSequenceNumber::Protected(ProtectedRecordSequenceNumber {
+                protected: (expected_full as u16).to_be_bytes(),
+                long_encoding: true
+            })
+        );
+    } else {
+        assert_eq!(
+            got,
+            RecordSequenceNumber::Full(FullRecordSequenceNumber(expected_full)),
+        );
+    }
+}
+
+#[track_caller]
+fn check_reassembled_handshake(
+    record_idx: usize,
+    version: ProtocolVersion,
+    original_message: &[u8],
+    reassembled_message: &EncodedMessage<&[u8]>,
+) {
+    assert_eq!(
+        reassembled_message.typ,
+        ContentType::Handshake,
+        "record_idx: {record_idx}",
+    );
+    assert_eq!(
+        reassembled_message.version.version(),
+        version,
+        "record_idx: {record_idx}",
+    );
+    assert_eq!(
+        &reassembled_message.payload[DTLS_HANDSHAKE_HEADER_SIZE..],
+        original_message,
+        "record_idx: {record_idx}",
+    );
 }
