@@ -138,6 +138,10 @@ impl SendPath {
         self.key_update_remote = KeyUpdateRemote::Idle;
     }
 
+    pub(super) fn has_queued_key_update(&self) -> bool {
+        matches!(self.key_update_remote, KeyUpdateRemote::Queued(_))
+    }
+
     pub(crate) fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
         self.fragmenter
             .set_max_fragment_size(new)

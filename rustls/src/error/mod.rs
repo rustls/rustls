@@ -1704,6 +1704,9 @@ pub enum ApiMisuse {
 
     /// Plaintext cannot be encrypted after the send path has been closed.
     WriteTlsAfterSendPathClosed,
+
+    /// Secret extraction attempted while send data was pending.
+    KernelConnectionWithPendingSendData,
 }
 
 impl fmt::Display for ApiMisuse {

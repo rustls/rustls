@@ -6,10 +6,14 @@
 
 use std::io::Cursor;
 
+use rustls::crypto::cipher::OutboundPlain;
 use rustls::error::{AlertDescription, ApiMisuse, InvalidMessage};
+use rustls::server::ServerSide;
 use rustls::split::{ReceiveTraffic, ReceiveTrafficState, SplitConnection};
 use rustls::{Connection, Error, SideData, SliceInput, VecInput};
-use rustls_test::{KeyType, do_handshake, make_pair};
+use rustls_test::{
+    KeyType, do_handshake, make_client_config, make_pair, make_pair_for_configs, make_server_config,
+};
 
 #[test]
 fn split_pairwise() {
@@ -399,6 +403,91 @@ fn read_invalid_data_and_send_alert() {
             .err(),
         Some(Error::AlertReceived(AlertDescription::DecodeError))
     );
+}
+
+#[test]
+fn kernel_conversion_fails_with_pending_send_data() {
+    // converting with a queued key-update response is refused: it would be
+    // discarded, having already consumed a send sequence number
+    let conn = split_server_with_queued_key_update();
+    assert_eq!(
+        conn.dangerous_into_kernel_connection()
+            .err(),
+        Some(ApiMisuse::KernelConnectionWithPendingSendData.into())
+    );
+
+    // flushing the send half first makes conversion possible
+    let SplitConnection {
+        send: mut server_send,
+        receive: server_recv,
+        outputs: server_outputs,
+    } = split_server_with_queued_key_update();
+    let mut flight = Vec::new();
+    server_send.write(OutboundPlain::new_empty(), &mut flight);
+    assert!(!flight.is_empty());
+    SplitConnection {
+        send: server_send,
+        receive: server_recv,
+        outputs: server_outputs,
+    }
+    .dangerous_into_kernel_connection()
+    .unwrap();
+}
+
+/// Handshake a pair, then deliver a `key_update` request to the server's
+/// receive half.
+///
+/// This queues an encrypted response on the server's send half, awaiting the
+/// next send-side operation.
+fn split_server_with_queued_key_update() -> SplitConnection<ServerSide> {
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let mut server_config =
+        make_server_config(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
+    server_config.enable_secret_extraction = true;
+    let (mut client, mut server) = make_pair_for_configs(
+        make_client_config(KeyType::default(), &super::provider::DEFAULT_PROVIDER),
+        server_config,
+        &mut client_output,
+    );
+    let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+
+    let SplitConnection {
+        send: mut client_send,
+        ..
+    } = client.split().unwrap();
+    let SplitConnection {
+        send: server_send,
+        receive: server_recv,
+        outputs: server_outputs,
+    } = server.split().unwrap();
+
+    let mut flight = Vec::new();
+    client_send
+        .refresh_traffic_keys(&mut flight)
+        .unwrap();
+    let server_recv = check_receive_all(
+        server_recv,
+        flight,
+        ExpectFlushSender {
+            then: ExpectReadMore,
+        },
+    )
+    .unwrap();
+
+    SplitConnection {
+        send: server_send,
+        receive: server_recv,
+        outputs: server_outputs,
+    }
 }
 
 #[track_caller]

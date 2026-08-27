@@ -72,6 +72,13 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     /// Extract secrets, so they can be used when configuring kTLS, for example.
     ///
     /// Should be used with care as it exposes secret key material.
+    ///
+    /// All TLS data previously written into caller-provided buffers must be sent to the peer before
+    /// calling this function.
+    ///
+    /// This fails with [`ApiMisuse::KernelConnectionWithPendingSendData`] if the
+    /// connection has pending data to send, which would otherwise be lost.
+    /// Write out that pending data before calling this function.
     fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error>;
 
     /// Sends a TLS1.3 `key_update` message into `tls` to refresh a connection's keys.
@@ -232,6 +239,13 @@ impl<Side: SideData> ConnectionCommon<Side> {
         outputs: ConnectionOutputs,
         state: Side::State,
     ) -> Result<(ExtractedSecrets, KernelConnection<Side>), Error> {
+        // a queued key_update response has consumed a send sequence number so
+        // discarding it would leave the extracted secrets ahead of what the
+        // peer receives.
+        if send.has_queued_key_update() {
+            return Err(ApiMisuse::KernelConnectionWithPendingSendData.into());
+        }
+
         let read_seq = recv.decrypt_state.read_seq();
         let write_seq = send.encrypt_state.write_seq();
 

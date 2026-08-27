@@ -6,6 +6,7 @@ use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
 
 use rustls::crypto::{Credentials, CryptoProvider};
+use rustls::error::ApiMisuse;
 use rustls::{
     ClientConfig, ClientConnection, Connection, ConnectionTrafficSecrets, Error, KeyLog,
     ServerConfig, ServerConnection, SupportedCipherSuite, VecInput,
@@ -446,6 +447,63 @@ fn test_secret_extraction_disabled_or_too_early() {
                 .is_ok()
         );
     }
+}
+
+#[test]
+fn test_secret_extraction_fails_with_pending_send_data() {
+    fn server_with_queued_key_update() -> ServerConnection {
+        let mut server_config = make_server_config(KeyType::default(), &provider::DEFAULT_PROVIDER);
+        server_config.enable_secret_extraction = true;
+
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) = make_pair_for_configs(
+            make_client_config(KeyType::default(), &provider::DEFAULT_PROVIDER),
+            server_config,
+            &mut client_output,
+        );
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake(
+            &mut client_input,
+            &mut client_output,
+            &mut client,
+            &mut server_input,
+            &mut server_output,
+            &mut server,
+        );
+
+        // receiving the key-update request queues an encrypted response on the
+        // server's send path, awaiting the next write
+        client
+            .refresh_traffic_keys(&mut client_output)
+            .unwrap();
+        transfer(&mut client_output, &mut server_input);
+        server
+            .process_new_packets(&mut server_input, &mut server_output)
+            .handle_all(&mut Vec::new())
+            .unwrap();
+        server
+    }
+
+    // extracting now is refused: the queued response would be discarded,
+    // having already consumed a send sequence number
+    assert_eq!(
+        server_with_queued_key_update()
+            .dangerous_extract_secrets()
+            .err(),
+        Some(ApiMisuse::KernelConnectionWithPendingSendData.into())
+    );
+
+    // writing out the pending data first makes extraction possible
+    let mut server = server_with_queued_key_update();
+    let mut server_output = Vec::new();
+    server
+        .write_tls(b"flush".into(), &mut server_output)
+        .unwrap();
+    server
+        .dangerous_extract_secrets()
+        .unwrap();
 }
 
 #[test]
