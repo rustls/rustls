@@ -195,15 +195,21 @@ fn exec(
                 println!("now ready for early data");
             }
 
+            let (message, repeat) = opts.initial_write(count);
+
             if count > 0 && opts.enable_early_data {
-                let len = client(&mut sess)
-                    .early_data()
-                    .expect("0rtt not available")
-                    .write_tls(b"hello".into(), &mut output);
-                write_or_queue(&mut sess, &b"hello"[len..], &mut pending, &mut output).unwrap();
+                for _ in 0..repeat {
+                    let len = client(&mut sess)
+                        .early_data()
+                        .expect("0rtt not available")
+                        .write_tls(message.into(), &mut output);
+                    write_or_queue(&mut sess, &message[len..], &mut pending, &mut output).unwrap();
+                }
                 sent_message = true;
             } else if !opts.only_write_one_byte_after_handshake {
-                let _ = write_or_queue(&mut sess, b"hello", &mut pending, &mut output);
+                for _ in 0..repeat {
+                    let _ = write_or_queue(&mut sess, message, &mut pending, &mut output);
+                }
                 sent_message = true;
             }
         }
@@ -574,6 +580,8 @@ struct Options {
     resume_with_tickets_disabled: bool,
     queue_data: bool,
     queue_data_on_resume: bool,
+    initial_write_on_resume: Option<Vec<u8>>,
+    repeat_initial_write_on_resume: usize,
     only_write_one_byte_after_handshake: bool,
     only_write_one_byte_after_handshake_on_resume: bool,
     shut_down_after_handshake: bool,
@@ -644,6 +652,8 @@ impl Options {
             use_sni: false,
             queue_data: false,
             queue_data_on_resume: false,
+            initial_write_on_resume: None,
+            repeat_initial_write_on_resume: 1,
             only_write_one_byte_after_handshake: false,
             only_write_one_byte_after_handshake_on_resume: false,
             shut_down_after_handshake: false,
@@ -698,6 +708,14 @@ impl Options {
             on_resume_expect_curve_id: None,
             wait_for_debugger: false,
             ocsp: OcspValidation::default(),
+        }
+    }
+
+    /// The message the shim writes first, and how many times it writes it.
+    fn initial_write(&self, count: usize) -> (&[u8], usize) {
+        match (count > 0, &self.initial_write_on_resume) {
+            (true, Some(message)) => (message, self.repeat_initial_write_on_resume),
+            _ => (b"hello", 1),
         }
     }
 
@@ -975,6 +993,12 @@ impl Options {
             }
             "-on-resume-shim-writes-first" => {
                 self.queue_data_on_resume = true;
+            }
+            "-on-resume-shim-initial-write" => {
+                self.initial_write_on_resume = Some(args.remove(0).into_bytes());
+            }
+            "-on-resume-repeat-shim-initial-write" => {
+                self.repeat_initial_write_on_resume = args.remove(0).parse().unwrap();
             }
             "-on-resume-read-with-unfinished-write" => {
                 self.queue_data_on_resume = true;
