@@ -173,16 +173,18 @@ impl SendPath {
                 true => self
                     .encrypt_state
                     .encrypt_outgoing(m, tls),
-                false => m.encode_unencrypted(
-                    tls,
-                    EncodingContext {
-                        payload_is_encrypted: false,
-                        // Despite the message being unencrypted, we still indicate the current
-                        // epoch
-                        epoch: self.encrypt_state.epoch(),
-                        record_seq: self.encrypt_state.increment_sequence(),
-                    },
-                ),
+                false => {
+                    m.encode_unencrypted(
+                        tls,
+                        EncodingContext {
+                            payload_is_encrypted: false,
+                            // Despite the message being unencrypted, we still indicate the current
+                            // epoch
+                            epoch: self.encrypt_state.epoch(),
+                            record_seq: self.encrypt_state.increment_sequence(),
+                        },
+                    )
+                }
             }
         }
     }

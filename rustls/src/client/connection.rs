@@ -20,7 +20,7 @@ use crate::crypto;
 use crate::crypto::cipher::OutboundPlain;
 use crate::enums::ApplicationProtocol;
 use crate::error::Error;
-use crate::msgs::ClientExtensionsInput;
+use crate::msgs::{AckRecordSequenceNumber, ClientExtensionsInput};
 use crate::quic::QuicOutput;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -106,6 +106,10 @@ impl ClientConnection {
             .common
             .recv
             .tls13_tickets_received
+    }
+
+    pub fn records_acked_by_peer(&self) -> &[AckRecordSequenceNumber] {
+        self.inner.common.recv.acked_by_peer()
     }
 }
 

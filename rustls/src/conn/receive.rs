@@ -675,6 +675,10 @@ impl ReceivePath {
             send.ack_flight(&unacked_from_peer, tls);
         }
     }
+
+    pub(crate) fn acked_by_peer(&self) -> &[AckRecordSequenceNumber] {
+        &self.acked_by_peer
+    }
 }
 
 enum DeframeResult<'b> {

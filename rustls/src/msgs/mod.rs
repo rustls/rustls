@@ -834,9 +834,9 @@ impl Codec<'_> for AckPayload {
 /// [1]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4
 /// [2]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-7
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct AckRecordSequenceNumber {
-    pub(crate) epoch: Epoch,
-    pub(crate) seq: FullRecordSequenceNumber,
+pub struct AckRecordSequenceNumber {
+    pub epoch: Epoch,
+    pub seq: FullRecordSequenceNumber,
 }
 
 impl Codec<'_> for AckRecordSequenceNumber {
@@ -878,7 +878,7 @@ impl TlsListElement for AckRecordSequenceNumber {
 /// [4]: https://www.rfc-editor.org/info/rfc9846/#section-4.7
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub(crate) enum Epoch {
+pub enum Epoch {
     /// Unencrypted messages.
     ///
     /// Epoch 0, used for messages before any encryption keys are negotiated, meaning all handshake
@@ -1433,7 +1433,7 @@ impl TruncatedRecordSequenceNumber {
 /// [2]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4
 /// [3]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4.2.2
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct FullRecordSequenceNumber(u64);
+pub struct FullRecordSequenceNumber(u64);
 
 impl FullRecordSequenceNumber {
     pub(crate) fn increment(&mut self) {

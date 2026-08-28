@@ -20,7 +20,7 @@ use crate::conn::{
 use crate::crypto;
 use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::error::Error;
-use crate::msgs::ServerExtensionsInput;
+use crate::msgs::{AckRecordSequenceNumber, ServerExtensionsInput};
 use crate::server::hs::{self, ChooseConfig, ExpectClientHello, ReadClientHello, ServerState};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -139,6 +139,10 @@ impl ServerConnection {
         } else {
             None
         }
+    }
+
+    pub fn records_acked_by_peer(&self) -> &[AckRecordSequenceNumber] {
+        self.inner.common.recv.acked_by_peer()
     }
 }
 

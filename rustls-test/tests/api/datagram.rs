@@ -41,6 +41,7 @@ fn setup_test(desired_version: ProtocolVersion) -> TestCase {
 
     assert_eq!(client.protocol_version(), None);
     assert_eq!(server.protocol_version(), None);
+
     do_handshake(
         &mut client_input,
         &mut client_output,
@@ -117,4 +118,72 @@ fn anti_replay_dtls_12() {
 #[test]
 fn anti_replay_dtls_13() {
     anti_replay_test(ProtocolVersion::DTLSv1_3);
+}
+
+#[test]
+fn handshake_flight_acks() {
+    // Force DTLS 1.3 as 1.2 has no ACKs
+    let provider = CryptoProvider {
+        tls12_cipher_suites: Cow::Borrowed(&[]),
+        ..provider::DEFAULT_PROVIDER
+    };
+
+    let client_config = make_client_config(KeyType::default(), &provider);
+    let server_config = make_server_config(KeyType::default(), &provider);
+
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair_for_configs_with_protocol(
+        Protocol::Udp,
+        client_config,
+        server_config,
+        &mut client_output,
+    );
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+
+    assert_eq!(client.protocol_version(), None);
+    assert_eq!(server.protocol_version(), None);
+
+    assert!(
+        client
+            .records_acked_by_peer()
+            .is_empty()
+    );
+    assert!(
+        server
+            .records_acked_by_peer()
+            .is_empty()
+    );
+
+    let mut server_received = Vec::new();
+    let mut client_received = Vec::new();
+    while server.is_handshaking() || client.is_handshaking() {
+        transfer(&mut client_output, &mut server_input);
+        server
+            .process_new_packets(&mut server_input, &mut server_output)
+            .handle_all(&mut server_received)
+            .unwrap();
+        transfer(&mut server_output, &mut client_input);
+        client
+            .process_new_packets(&mut client_input, &mut client_output)
+            .handle_all(&mut client_received)
+            .unwrap();
+        std::println!(
+            "client acked by peer: {:?}\nserver acked by peer: {:?}",
+            client.records_acked_by_peer(),
+            server.records_acked_by_peer()
+        );
+    }
+
+    assert!(
+        client
+            .records_acked_by_peer()
+            .is_empty()
+    );
+    assert!(
+        server
+            .records_acked_by_peer()
+            .is_empty()
+    );
 }

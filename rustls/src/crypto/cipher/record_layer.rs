@@ -90,12 +90,6 @@ impl EncryptionState {
         let header_size = version_in_use.encrypted_header_len();
         let encrypter = self.message_encrypter.as_mut().unwrap();
 
-        let record_seq = self
-            .epoch
-            .per_record_additional_data(self.write_seq.into(), plain.version.version());
-        std::println!("encrypting with record seq {record_seq}");
-        self.write_seq.increment();
-
         let (header, payload) = out.split_at_mut(header_size);
 
         // First, encode the header, because DTLS 1.3 needs to use it as the AAD.
@@ -112,16 +106,21 @@ impl EncryptionState {
             EncodingContext {
                 payload_is_encrypted: true,
                 epoch: self.epoch,
-                record_seq: record_seq.into(),
+                record_seq: self.write_seq.into(),
             },
             header,
         );
+
+        let aad_seq = self
+            .epoch
+            .per_record_additional_data(self.write_seq.into(), plain.version.version());
+        self.write_seq.increment();
 
         #[cfg(debug_assertions)]
         let (out_ptr, out_len) = (payload.as_ptr(), payload.len());
         let encrypted_len = {
             let encrypted = encrypter
-                .encrypt(plain, record_seq, header, payload)
+                .encrypt(plain, aad_seq, header, payload)
                 .unwrap();
 
             #[cfg(debug_assertions)]
@@ -142,7 +141,7 @@ impl EncryptionState {
         if version_in_use == ProtocolVersion::DTLSv1_3 {
             // Now that we have encrypted the record payload, we can use that ciphertext to protect
             // the record number and overwrite the previously encoded header.
-            FullRecordSequenceNumber::from(record_seq)
+            FullRecordSequenceNumber::from(aad_seq)
                 .truncate()
                 .protect(
                     self.record_sequence_number_encrypter
@@ -289,11 +288,17 @@ impl DecryptionState {
                 // as AAD later.
                 truncated.encode(&mut encr.payload.0[1..3]);
 
+                // Reconstruct full sequence number to be used in replay protection, ACKs, etc.
                 truncated.reconstruct(self.read_seq.into())
             }
         };
 
         let Some(decrypter) = &mut self.message_decrypter else {
+            if encr.version.is_datagram_tls() {
+                // Gross: for DTLS, we need record seq to increment even with unencrypted messages,
+                // but for stream TLS it should only increment when actual decryption occurs.
+                self.read_seq.increment();
+            }
             return Ok(Some((
                 Decrypted {
                     want_close_before_decrypt: false,
