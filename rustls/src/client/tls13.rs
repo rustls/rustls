@@ -1270,6 +1270,10 @@ fn emit_finished_tls13(
 }
 
 fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn Output<'_>) {
+    if output.quic().is_some() {
+        return;
+    }
+
     let m = Message {
         version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(
@@ -1326,9 +1330,7 @@ impl ExpectFinished {
         /* The EndOfEarlyData message to server is still encrypted with early data keys,
          * but appears in the transcript after the server Finished. */
         if st.in_early_traffic {
-            if !st.hs.key_schedule.is_quic() {
-                emit_end_of_early_data_tls13(&mut st.hs.transcript, output);
-            }
+            emit_end_of_early_data_tls13(&mut st.hs.transcript, output);
             output.emit(Event::EarlyData(EarlyDataEvent::Finished));
             st.hs
                 .key_schedule
