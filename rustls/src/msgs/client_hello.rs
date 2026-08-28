@@ -412,6 +412,13 @@ impl<'a> Codec<'a> for ClientExtensions<'a> {
             }
         }
 
+        if let Some([]) = out
+            .certificate_authority_names
+            .as_deref()
+        {
+            return Err(InvalidMessage::IllegalEmptyCertificateAuthoritiesExtension);
+        }
+
         Ok(out)
     }
 }

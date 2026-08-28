@@ -86,7 +86,6 @@
     "RSA-PSS-Large": "no support for 1024-bit RSA keys",
     "RSAEphemeralKey": "no rsa kem",
     "RSAKeyUsage-*": "no rsa kem",
-    "RejectEmptyCertificateAuthorities-*": "TODO: we do not reject an empty certificate_authorities extension",
     "Renegotiate-Client-*": "no renegotiation",
     "Renegotiate-ForbidAfterHandshake": "no renegotiation",
     "Renegotiate-Server-*": "no renegotiation",

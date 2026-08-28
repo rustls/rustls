@@ -2034,6 +2034,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::InvalidMessage(InvalidMessage::PreSharedKeyIsNotFinalExtension) => {
             quit(":PRE_SHARED_KEY_MUST_BE_LAST:")
         }
+        Error::InvalidMessage(InvalidMessage::IllegalEmptyCertificateAuthoritiesExtension) => {
+            quit(":ERROR_PARSING_EXTENSION:")
+        }
         Error::DecryptError if opts.ech_config_list.is_some() => {
             quit(":INCONSISTENT_ECH_NEGOTIATION:")
         }

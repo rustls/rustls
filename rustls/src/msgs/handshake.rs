@@ -1160,6 +1160,10 @@ impl Codec<'_> for CertificateRequestExtensions {
             return Err(InvalidMessage::NoSignatureSchemes);
         }
 
+        if let Some([]) = out.authority_names.as_deref() {
+            return Err(InvalidMessage::IllegalEmptyCertificateAuthoritiesExtension);
+        }
+
         Ok(out)
     }
 }
