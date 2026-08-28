@@ -1088,6 +1088,7 @@ impl Options {
             "-forbid-renegotiation-after-handshake" |
             "-handoff" |
             "-ipv6" |
+            "-no-legacy-server-connect" |
             "-no-ssl3" |
             "-no-tls1" |
             "-no-tls11" |
@@ -1107,6 +1108,8 @@ impl Options {
             "-allow-unknown-alpn-protos" |
             "-cipher" |
             "-cnsa-202407" |
+            "-cnsa1-202603" |
+            "-cnsa2-202603" |
             "-digest-prefs" |
             "-dtls" |
             "-enable-channel-id" |
