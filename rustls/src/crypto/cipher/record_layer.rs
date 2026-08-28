@@ -319,10 +319,10 @@ impl DecryptionState {
         let want_close_before_decrypt = u64::from(self.read_seq) == SEQ_SOFT_LIMIT;
 
         let encrypted_len = encr.payload.len();
-        let seq = self
+        let aad_seq = self
             .epoch
             .per_record_additional_data(record_seq.into(), encr.version.version());
-        match decrypter.decrypt(encr, seq.into()) {
+        match decrypter.decrypt(encr, aad_seq.into()) {
             Ok(plaintext) => {
                 self.read_seq.increment();
                 if !self.has_decrypted {

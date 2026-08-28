@@ -422,10 +422,12 @@ impl ReceivePath {
         };
 
         if allowed_plaintext && !self.deframer.is_active() {
-            assert_eq!(
-                RecordSequenceNumber::Full(self.decrypt_state.increment_sequence()),
-                record_seq
-            );
+            let read_seq = if message.version.is_datagram_tls() {
+                self.decrypt_state.increment_sequence()
+            } else {
+                self.decrypt_state.read_seq()
+            };
+            assert_eq!(RecordSequenceNumber::Full(read_seq), record_seq);
 
             return Ok(DeframeResult::Decrypted {
                 decrypted: Decrypted {

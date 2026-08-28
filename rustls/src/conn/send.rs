@@ -181,7 +181,11 @@ impl SendPath {
                             // Despite the message being unencrypted, we still indicate the current
                             // epoch
                             epoch: self.encrypt_state.epoch(),
-                            record_seq: self.encrypt_state.increment_sequence(),
+                            record_seq: if m.version.is_datagram_tls() {
+                                self.encrypt_state.increment_sequence()
+                            } else {
+                                self.encrypt_state.write_seq().into()
+                            },
                         },
                     )
                 }
