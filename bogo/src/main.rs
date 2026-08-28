@@ -33,8 +33,8 @@ use rustls::enums::{
     ApplicationProtocol, CertificateCompressionAlgorithm, CertificateType, ProtocolVersion,
 };
 use rustls::error::{
-    AlertDescription, ApiMisuse, CertificateError, Error, InvalidMessage, PeerIncompatible,
-    PeerMisbehaved,
+    AlertDescription, ApiMisuse, CertificateError, EncryptedClientHelloError, Error,
+    InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{
@@ -619,6 +619,7 @@ struct Options {
     on_resume_expect_ech_accept: bool,
     on_initial_expect_ech_accept: bool,
     enable_ech_grease: bool,
+    reject_unusable_ech_config: bool,
     send_key_update: bool,
     expect_curve_id: Option<NamedGroup>,
     on_initial_expect_curve_id: Option<NamedGroup>,
@@ -690,6 +691,7 @@ impl Options {
             on_resume_expect_ech_accept: false,
             on_initial_expect_ech_accept: false,
             enable_ech_grease: false,
+            reject_unusable_ech_config: false,
             send_key_update: false,
             expect_curve_id: None,
             on_initial_expect_curve_id: None,
@@ -1093,6 +1095,9 @@ impl Options {
             }
             "-enable-ech-grease" => {
                 self.enable_ech_grease = true;
+            }
+            "-reject-unusable-ech-config" => {
+                self.reject_unusable_ech_config = true;
             }
             "-server-preference" => {
                 self.server_preference = true;
@@ -1902,11 +1907,18 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
         );
 
         if let Some(ech_config_list) = &opts.ech_config_list {
-            let ech_mode: EchMode = EchConfig::new(ech_config_list.clone(), ALL_HPKE_SUITES)
-                .unwrap_or_else(|_| quit(":INVALID_ECH_CONFIG_LIST:"))
-                .into();
+            let ech_mode = match EchConfig::new(ech_config_list.clone(), ALL_HPKE_SUITES) {
+                Ok(ech_config) => EchMode::from(ech_config),
+                Err(Error::InvalidEncryptedClientHello(
+                    EncryptedClientHelloError::NoCompatibleConfig,
+                )) if opts.reject_unusable_ech_config => quit(":UNUSABLE_ECH_CONFIG_LIST:"),
+                Err(_) => quit(":INVALID_ECH_CONFIG_LIST:"),
+            };
 
             ech_cfg.with_ech(ech_mode)
+        } else if opts.reject_unusable_ech_config {
+            // no ech_config_list is a trivial rejection (boringssl has a more complex API that is tested here)
+            quit(":UNUSABLE_ECH_CONFIG_LIST:");
         } else if opts.enable_ech_grease {
             let ech_mode = EchMode::Grease(EchGreaseConfig::new(
                 GREASE_HPKE_SUITE,
@@ -1947,7 +1959,15 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
             cfg.with_client_credential_resolver(Arc::new(resolver))
                 .unwrap()
         }
-        false => cfg.with_no_client_auth().unwrap(),
+        false => match cfg.with_no_client_auth() {
+            Ok(cfg) => cfg,
+            Err(Error::ApiMisuse(ApiMisuse::NoCipherSuitesConfigured))
+                if opts.reject_unusable_ech_config =>
+            {
+                quit(":UNUSABLE_ECH_CONFIG_LIST:")
+            }
+            Err(other) => panic!("unexpected error {other:?}"),
+        },
     };
 
     cfg.resumption = Resumption::store(ClientCacheWithSpecificKxHints::new(

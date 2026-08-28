@@ -135,7 +135,6 @@
     "TLS-ECH-Client-Reject-ResumeInnerSession-TLS12": "we disable TLS1.2 w/ ECH",
     "TLS-ECH-Client-Reject-ResumeInnerSession-TLS13": "assumes no outer GREASE PSK, we send GREASE PSK",
     "TLS-ECH-Client-Reject-TLS12": "we disable TLS1.2 w/ ECH",
-    "TLS-ECH-Client-RejectUnusableConfig-*": "TODO: no support for rejecting unusable ECH configs",
     "TLS-ECH-Client-SkipInvalidPublicName*": "we allow underscore names, don't fallback on no ECH configs",
     "TLS-ECH-Client-TLS12-RejectRetryConfigs": "we disable TLS1.2 w/ ECH",
     "TLS-ECH-GREASE-Client-TLS12-RejectRetryConfigs": "we disable TLS1.2 w/ ECH",
