@@ -115,7 +115,6 @@
     "SignedCertificateTimestampListEmpty-Client-*": "no sct stapling",
     "SignedCertificateTimestampListEmptySCT-Client-*": "no sct stapling",
     "TLS13-Client-*TicketFlags*": "no flags extension support (on tickets or elsewhere)",
-    "TLS13-EarlyData-TooMuchData-LargeLimit-Client-*": "TODO: no support for -on-resume-shim-initial-write",
     "TrustAnchorGroups-*": "no TrustAnchor draft support",
     "TrustAnchors-*": "no TrustAnchor draft support",
     "TwoMLKEMs": "we only include a share for the first configured group",
