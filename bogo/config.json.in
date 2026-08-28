@@ -233,7 +233,6 @@
     "MinimumVersion-Client2-TLS13-TLS12-TLS": ":INCOMPATIBLE:",
     "MinimumVersion-Server-TLS13-TLS12-TLS": ":INCOMPATIBLE:",
     "MinimumVersion-Server2-TLS13-TLS12-TLS": ":INCOMPATIBLE:",
-    "MissingKeyShare-Server-TLS13": ":INCOMPATIBLE:",
     "MissingSignatureAlgorithmsInCertificateRequest-TLS13": ":INCOMPATIBLE:",
     "NoNullCompression-TLS12": ":INCOMPATIBLE:",
     "NoNullCompression-TLS13": ":INCOMPATIBLE:",
@@ -252,7 +251,6 @@
     "RenegotiationInfo-Forbidden-TLS13": ":UNEXPECTED_EXTENSION:",
     "RequestContextInHandshake-TLS13": ":BAD_HANDSHAKE_MSG:",
     "Resume-Client-Mismatch-TLS13-TLS12-TLS": ":WRONG_CIPHER_RETURNED:",
-    "SecondClientHelloMissingKeyShare-TLS13": ":INCOMPATIBLE:",
     "SecondServerHelloNoVersion-TLS13": ":WRONG_CIPHER_RETURNED:",
     "SecondServerHelloWrongVersion-TLS13": ":INCOMPATIBLE:",
     "SendBogusAlertType": ":BAD_ALERT:",
@@ -332,7 +330,6 @@
     "GarbageCertificate-Client-TLS13": "remote error: bad certificate",
     "GarbageCertificate-Server-TLS12": "remote error: bad certificate",
     "GarbageCertificate-Server-TLS13": "remote error: bad certificate",
-    "MissingKeyShare-Server-TLS13": "remote error: handshake failure",
     "NoSupportedCurves-TLS13": "remote error: handshake failure",
     "SkipEarlyData-SecondClientHelloEarlyData-TLS13": "remote error: illegal parameter",
     "TLS13-HRR-InvalidCompressionMethod": "remote error: illegal parameter"

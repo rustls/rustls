@@ -1327,6 +1327,8 @@ impl From<PeerIncompatible> for AlertDescription {
             | PeerIncompatible::Tls12NotOfferedOrEnabled
             | PeerIncompatible::Tls13RequiredForQuic => Self::ProtocolVersion,
 
+            PeerIncompatible::KeyShareExtensionRequired => Self::MissingExtension,
+
             PeerIncompatible::UnknownCertificateType(_) => Self::UnsupportedCertificate,
 
             _ => Self::HandshakeFailure,
