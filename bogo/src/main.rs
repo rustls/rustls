@@ -2054,6 +2054,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerIncompatible(PeerIncompatible::NoCipherSuitesInCommon) => {
             quit(":NO_SHARED_CIPHER:")
         }
+        Error::PeerIncompatible(PeerIncompatible::KeyShareExtensionRequired) => {
+            quit(":MISSING_KEY_SHARE:")
+        }
         Error::PeerIncompatible(_) => quit(":INCOMPATIBLE:"),
         Error::PeerMisbehaved(PeerMisbehaved::MissingPskModesExtension) => {
             quit(":MISSING_EXTENSION:")
