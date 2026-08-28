@@ -213,7 +213,7 @@ pub(crate) struct ReceivePath {
     pub(crate) deframer: Deframer,
 
     /// We limit consecutive empty fragments to avoid a route for the peer to send
-    /// us significant but fruitless traffic.
+    /// us significant but fruitless traffic.  That includes other record types too.
     seen_consecutive_empty_fragments: u8,
 
     pub(crate) tls13_tickets_received: u32,
@@ -276,8 +276,8 @@ impl ReceivePath {
                 return Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
             }
 
-            match record.payload.len() {
-                0 => {
+            match (record.payload.len(), record.typ) {
+                (0, _) => {
                     if self.seen_consecutive_empty_fragments
                         == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
                     {
@@ -285,9 +285,10 @@ impl ReceivePath {
                     }
                     self.seen_consecutive_empty_fragments += 1;
                 }
-                _ => {
+                (_, ContentType::Handshake | ContentType::ApplicationData) => {
                     self.seen_consecutive_empty_fragments = 0;
                 }
+                (_, _) => {}
             };
 
             // do an end-run around the borrow checker, converting `record` (containing
