@@ -29,7 +29,6 @@
     "*_WITH_AES_256_CBC_*": "no cbc suites",
     "ALPN*SelectEmpty-*": "our API design does not allow for this",
     "ALPS-*": "no ALPS support yet",
-    "AlternateTooManyEmptyRecordsAndWarningAlerts": "TODO: we don't count interleaved empty records and warning alerts together",
     "BadRSAClientKeyExchange-*": "no rsa kem",
     "Basic-Server-RSA-*": "no rsa kem",
     "CBCRecordSplitting*": "no cbc suites",
