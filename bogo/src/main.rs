@@ -753,7 +753,9 @@ impl Options {
                 self.credentials.last_mut().key_file = args.remove(0);
             }
             "-new-x509-credential" => {
-                self.credentials.additional.push(Credential::default());
+                self.credentials
+                    .additional
+                    .push(Credential::default());
             }
             "-expect-selected-credential" => {
                 self.credentials.expect_selected = args.remove(0).parse::<isize>().ok();
@@ -805,66 +807,72 @@ impl Options {
             }
             "-signing-prefs" => {
                 let alg = args.remove(0).parse::<u16>().unwrap();
-                self.credentials.last_mut().use_signing_scheme = Some(alg);
+                self.credentials
+                    .last_mut()
+                    .use_signing_scheme = Some(alg);
             }
             "-must-match-issuer" => {
-                self.credentials.last_mut().must_match_issuer = true;
+                self.credentials
+                    .last_mut()
+                    .must_match_issuer = true;
             }
-            "-use-client-ca-list" => {
-                match args.remove(0).as_ref() {
-                    "<EMPTY>" | "<NULL>" => {
-                        self.root_hint_subjects = vec![];
-                    }
-                    list => {
-                        self.root_hint_subjects = list.split(',')
-                            .map(|entry| DistinguishedName::from(decode_hex(entry)))
-                            .collect();
-                    }
+            "-use-client-ca-list" => match args.remove(0).as_ref() {
+                "<EMPTY>" | "<NULL>" => {
+                    self.root_hint_subjects = vec![];
                 }
-            }
+                list => {
+                    self.root_hint_subjects = list
+                        .split(',')
+                        .map(|entry| DistinguishedName::from(decode_hex(entry)))
+                        .collect();
+                }
+            },
             "-verify-prefs" => {
                 lookup_scheme(args.remove(0).parse::<u16>().unwrap());
             }
             "-expect-curve-id" => {
-                self.expect_curve_id = Some(NamedGroup::from(args.remove(0).parse::<u16>().unwrap()));
+                self.expect_curve_id =
+                    Some(NamedGroup::from(args.remove(0).parse::<u16>().unwrap()));
             }
             "-on-initial-expect-curve-id" => {
-                self.on_initial_expect_curve_id = Some(NamedGroup::from(args.remove(0).parse::<u16>().unwrap()));
+                self.on_initial_expect_curve_id =
+                    Some(NamedGroup::from(args.remove(0).parse::<u16>().unwrap()));
             }
             "-on-resume-expect-curve-id" => {
-                self.on_resume_expect_curve_id = Some(NamedGroup::from(args.remove(0).parse::<u16>().unwrap()));
+                self.on_resume_expect_curve_id =
+                    Some(NamedGroup::from(args.remove(0).parse::<u16>().unwrap()));
             }
-            "-max-cert-list" |
-            "-expect-peer-signature-algorithm" |
-            "-expect-peer-verify-pref" |
-            "-expect-advertised-alpn" |
-            "-expect-alpn" |
-            "-on-initial-expect-alpn" |
-            "-on-resume-expect-alpn" |
-            "-on-retry-expect-alpn" |
-            "-expect-server-name" |
-            "-expect-ocsp-response" |
-            "-expect-signed-cert-timestamps" |
-            "-expect-certificate-types" |
-            "-expect-client-ca-list" |
-            "-on-initial-expect-early-data-reason" |
-            "-on-initial-expect-cipher" |
-            "-on-resume-expect-cipher" |
-            "-on-retry-expect-cipher" |
-            "-expect-ticket-age-skew" |
-            "-handshaker-path" |
-            "-application-settings" |
-            "-expect-msg-callback" => {
+            "-max-cert-list"
+            | "-expect-peer-signature-algorithm"
+            | "-expect-peer-verify-pref"
+            | "-expect-advertised-alpn"
+            | "-expect-alpn"
+            | "-on-initial-expect-alpn"
+            | "-on-resume-expect-alpn"
+            | "-on-retry-expect-alpn"
+            | "-expect-server-name"
+            | "-expect-ocsp-response"
+            | "-expect-signed-cert-timestamps"
+            | "-expect-certificate-types"
+            | "-expect-client-ca-list"
+            | "-on-initial-expect-early-data-reason"
+            | "-on-initial-expect-cipher"
+            | "-on-resume-expect-cipher"
+            | "-on-retry-expect-cipher"
+            | "-expect-ticket-age-skew"
+            | "-handshaker-path"
+            | "-application-settings"
+            | "-expect-msg-callback" => {
                 println!("not checking {} {}; NYI", arg, args.remove(0));
             }
 
-            "-expect-secure-renegotiation" |
-            "-expect-no-session-id" |
-            "-enable-ed25519" |
-            "-on-resume-expect-no-offer-early-data" |
-            "-expect-tls13-downgrade" |
-            "-enable-signed-cert-timestamps" |
-            "-expect-session-id" => {
+            "-expect-secure-renegotiation"
+            | "-expect-no-session-id"
+            | "-enable-ed25519"
+            | "-on-resume-expect-no-offer-early-data"
+            | "-expect-tls13-downgrade"
+            | "-enable-signed-cert-timestamps"
+            | "-expect-session-id" => {
                 println!("not checking {arg}; NYI");
             }
 
@@ -873,20 +881,22 @@ impl Options {
             }
             "-expect-hrr" => {
                 self.expect_handshake_kind = Some(vec![HandshakeKind::FullWithHelloRetryRequest]);
-                self.expect_handshake_kind_resumed = Some(vec![HandshakeKind::ResumedWithHelloRetryRequest]);
+                self.expect_handshake_kind_resumed =
+                    Some(vec![HandshakeKind::ResumedWithHelloRetryRequest]);
             }
             "-expect-no-hrr" => {
                 self.expect_handshake_kind = Some(vec![HandshakeKind::Full]);
             }
             "-on-retry-expect-early-data-reason" | "-on-resume-expect-early-data-reason" => {
                 if args.remove(0) == "hello_retry_request" {
-                    self.expect_handshake_kind_resumed = Some(vec![HandshakeKind::ResumedWithHelloRetryRequest]);
+                    self.expect_handshake_kind_resumed =
+                        Some(vec![HandshakeKind::ResumedWithHelloRetryRequest]);
                 }
             }
             "-expect-session-miss" => {
                 self.expect_handshake_kind_resumed = Some(vec![
                     HandshakeKind::Full,
-                    HandshakeKind::FullWithHelloRetryRequest
+                    HandshakeKind::FullWithHelloRetryRequest,
                 ]);
             }
             "-export-keying-material" => {
@@ -905,17 +915,22 @@ impl Options {
                 self.export_traffic_secrets = true;
             }
             "-quic-transport-params" => {
-                self.quic_transport_params = BASE64_STANDARD.decode(args.remove(0).as_bytes())
+                self.quic_transport_params = BASE64_STANDARD
+                    .decode(args.remove(0).as_bytes())
                     .expect("invalid base64");
             }
             "-expect-quic-transport-params" => {
-                self.expect_quic_transport_params = BASE64_STANDARD.decode(args.remove(0).as_bytes())
+                self.expect_quic_transport_params = BASE64_STANDARD
+                    .decode(args.remove(0).as_bytes())
                     .expect("invalid base64");
             }
 
             "-ocsp-response" => {
-                self.server_ocsp_response = Arc::from(BASE64_STANDARD.decode(args.remove(0).as_bytes())
-                    .expect("invalid base64"));
+                self.server_ocsp_response = Arc::from(
+                    BASE64_STANDARD
+                        .decode(args.remove(0).as_bytes())
+                        .expect("invalid base64"),
+                );
             }
             "-select-alpn" => {
                 self.protocols.push(args.remove(0));
@@ -964,25 +979,24 @@ impl Options {
                 self.only_write_one_byte_after_handshake_on_resume = true;
             }
             "-on-resume-early-write-after-message" => {
-                self.queue_early_data_after_received_messages = match args.remove(0).parse::<u8>().unwrap() {
-                    // estimate where these messages appear in the server's first flight.
-                    2 => vec![5 + 112 + 5 + 32],
-                    8 => vec![5 + 112 + 5 + 32, 5 + 64],
-                    _ => {
-                        panic!("unhandled -on-resume-early-write-after-message");
-                    }
-                };
+                self.queue_early_data_after_received_messages =
+                    match args.remove(0).parse::<u8>().unwrap() {
+                        // estimate where these messages appear in the server's first flight.
+                        2 => vec![5 + 112 + 5 + 32],
+                        8 => vec![5 + 112 + 5 + 32, 5 + 64],
+                        _ => {
+                            panic!("unhandled -on-resume-early-write-after-message");
+                        }
+                    };
                 self.queue_data_on_resume = true;
             }
             "-expect-ticket-supports-early-data" => {
                 self.expect_ticket_supports_early_data = true;
             }
-            "-expect-accept-early-data" |
-            "-on-resume-expect-accept-early-data" => {
+            "-expect-accept-early-data" | "-on-resume-expect-accept-early-data" => {
                 self.expect_accept_early_data = true;
             }
-            "-expect-early-data-reason" |
-            "-on-resume-expect-reject-early-data-reason" => {
+            "-expect-early-data-reason" | "-on-resume-expect-reject-early-data-reason" => {
                 let reason = args.remove(0);
                 match reason.as_str() {
                     "disabled" | "protocol_version" => {
@@ -994,8 +1008,7 @@ impl Options {
                     }
                 }
             }
-            "-expect-reject-early-data" |
-            "-on-resume-expect-reject-early-data" => {
+            "-expect-reject-early-data" | "-on-resume-expect-reject-early-data" => {
                 self.expect_reject_early_data = true;
             }
             "-expect-version" => {
@@ -1003,7 +1016,9 @@ impl Options {
             }
             "-curves" => {
                 let group = NamedGroup::from(args.remove(0).parse::<u16>().unwrap());
-                self.groups.get_or_insert(Vec::new()).push(group);
+                self.groups
+                    .get_or_insert(Vec::new())
+                    .push(group);
             }
             "-server-supported-groups-hint" => {
                 let group = NamedGroup::from(args.remove(0).parse::<u16>().unwrap());
@@ -1020,7 +1035,8 @@ impl Options {
                 self.install_cert_compression_algs = CompressionAlgs::All;
             }
             "-install-one-cert-compression-alg" => {
-                self.install_cert_compression_algs = CompressionAlgs::One(args.remove(0).parse::<u16>().unwrap());
+                self.install_cert_compression_algs =
+                    CompressionAlgs::One(args.remove(0).parse::<u16>().unwrap());
             }
             #[cfg(feature = "fips")]
             "-fips-202205" if self.selected_provider == SelectedProvider::AwsLcRsFips => {
@@ -1031,19 +1047,31 @@ impl Options {
                 process::exit(BOGO_NACK);
             }
             "-ech-config-list" => {
-                self.ech_config_list = Some(BASE64_STANDARD.decode(args.remove(0).as_bytes())
-                    .expect("invalid ECH config base64").into());
+                self.ech_config_list = Some(
+                    BASE64_STANDARD
+                        .decode(args.remove(0).as_bytes())
+                        .expect("invalid ECH config base64")
+                        .into(),
+                );
             }
             "-expect-ech-accept" => {
                 self.expect_ech_accept = true;
             }
             "-expect-ech-retry-configs" => {
-                self.expect_ech_retry_configs = Some(BASE64_STANDARD.decode(args.remove(0).as_bytes())
-                    .expect("invalid ECH config base64").into());
+                self.expect_ech_retry_configs = Some(
+                    BASE64_STANDARD
+                        .decode(args.remove(0).as_bytes())
+                        .expect("invalid ECH config base64")
+                        .into(),
+                );
             }
             "-on-resume-ech-config-list" => {
-                self.on_resume_ech_config_list = Some(BASE64_STANDARD.decode(args.remove(0).as_bytes())
-                    .expect("invalid on resume ECH config base64").into());
+                self.on_resume_ech_config_list = Some(
+                    BASE64_STANDARD
+                        .decode(args.remove(0).as_bytes())
+                        .expect("invalid on resume ECH config base64")
+                        .into(),
+                );
             }
             "-on-resume-expect-ech-accept" => {
                 self.on_resume_expect_ech_accept = true;
@@ -1056,8 +1084,12 @@ impl Options {
             }
             "-on-retry-expect-ech-retry-configs" => {
                 // Note: we treat this the same as -expect-ech-retry-configs
-                self.expect_ech_retry_configs = Some(BASE64_STANDARD.decode(args.remove(0).as_bytes())
-                    .expect("invalid retry ECH config base64").into());
+                self.expect_ech_retry_configs = Some(
+                    BASE64_STANDARD
+                        .decode(args.remove(0).as_bytes())
+                        .expect("invalid retry ECH config base64")
+                        .into(),
+                );
             }
             "-enable-ech-grease" => {
                 self.enable_ech_grease = true;
@@ -1080,88 +1112,87 @@ impl Options {
             }
 
             // defaults:
-            "-decline-alpn" |
-            "-enable-all-curves" |
-            "-enable-ocsp-stapling" |
-            "-expect-no-session" |
-            "-expect-ticket-renewal" |
-            "-forbid-renegotiation-after-handshake" |
-            "-handoff" |
-            "-ipv6" |
-            "-no-legacy-server-connect" |
-            "-no-ssl3" |
-            "-no-tls1" |
-            "-no-tls11" |
-            "-permute-extensions" |
-            "-renegotiate-ignore" |
-            "-use-ocsp-callback" |
-            // internal openssl details:
-            "-async" |
-            "-implicit-handshake" |
-            "-use-old-client-cert-callback" |
-            "-use-early-callback" => {}
+            "-decline-alpn"
+            | "-enable-all-curves"
+            | "-enable-ocsp-stapling"
+            | "-expect-no-session"
+            | "-expect-ticket-renewal"
+            | "-forbid-renegotiation-after-handshake"
+            | "-handoff"
+            | "-ipv6"
+            | "-no-legacy-server-connect"
+            | "-no-ssl3"
+            | "-no-tls1"
+            | "-no-tls11"
+            | "-permute-extensions"
+            | "-renegotiate-ignore"
+            | "-use-ocsp-callback"
+            | "-async"
+            | "-implicit-handshake"
+            | "-use-old-client-cert-callback"
+            | "-use-early-callback" => {}
 
             // Not implemented things
-            "-advertise-empty-npn" |
-            "-advertise-npn" |
-            "-allow-hint-mismatch" |
-            "-allow-unknown-alpn-protos" |
-            "-cipher" |
-            "-cnsa-202407" |
-            "-cnsa1-202603" |
-            "-cnsa2-202603" |
-            "-digest-prefs" |
-            "-dtls" |
-            "-enable-channel-id" |
-            "-enable-client-custom-extension" |
-            "-enable-grease" |
-            "-enable-server-custom-extension" |
-            "-expect-channel-id" |
-            "-expect-cipher-aes" |
-            "-expect-dhe-group-size" |
-            "-expect-draft-downgrade" |
-            "-expect-early-data-info" |
-            "-expect-not-resumable-across-names" |
-            "-expect-peer-cert-file" |
-            "-expect-resumable-across-names" |
-            "-expect-verify-result" |
-            "-export-early-keying-material" |
-            "-fail-cert-callback" |
-            "-fail-early-callback" |
-            "-fallback-scsv" |
-            "-false-start" |
-            "-handshake-twice" |
-            "-ignore-tls13-downgrade" |
-            "-install-ddos-callback" |
-            "-key-shares" |
-            "-no-op-extra-handshake" |
-            "-no-key-shares" |
-            "-no-server-name-ack" |
-            "-no-rsa-pss-rsae-certs" |
-            "-on-initial-expect-peer-cert-file" |
-            "-on-initial-tls13-variant" |
-            "-on-resume-enable-early-data" |
-            "-on-resume-export-early-keying-material" |
-            "-on-resume-verify-fail" |
-            "-psk" |
-            "-renegotiate-freely" |
-            "-resumption-across-names-enabled" |
-            "-retain-only-sha256-client-cert-initial" |
-            "-reverify-on-resume" |
-            "-select-empty-next-proto" |
-            "-select-next-proto" |
-            "-send-alert" |
-            "-send-channel-id" |
-            "-signed-cert-timestamps" |
-            "-srtp-profiles" |
-            "-ticket-key" |
-            "-tls-unique" |
-            "-use-custom-verify-callback" |
-            "-use-exporter-between-reads" |
-            "-use-ticket-aead-callback" |
-            "-use-ticket-callback" |
-            "-verify-fail" |
-            "-wpa-202304"  => {
+            "-advertise-empty-npn"
+            | "-advertise-npn"
+            | "-allow-hint-mismatch"
+            | "-allow-unknown-alpn-protos"
+            | "-cipher"
+            | "-cnsa-202407"
+            | "-cnsa1-202603"
+            | "-cnsa2-202603"
+            | "-digest-prefs"
+            | "-dtls"
+            | "-enable-channel-id"
+            | "-enable-client-custom-extension"
+            | "-enable-grease"
+            | "-enable-server-custom-extension"
+            | "-expect-channel-id"
+            | "-expect-cipher-aes"
+            | "-expect-dhe-group-size"
+            | "-expect-draft-downgrade"
+            | "-expect-early-data-info"
+            | "-expect-not-resumable-across-names"
+            | "-expect-peer-cert-file"
+            | "-expect-resumable-across-names"
+            | "-expect-verify-result"
+            | "-export-early-keying-material"
+            | "-fail-cert-callback"
+            | "-fail-early-callback"
+            | "-fallback-scsv"
+            | "-false-start"
+            | "-handshake-twice"
+            | "-ignore-tls13-downgrade"
+            | "-install-ddos-callback"
+            | "-key-shares"
+            | "-no-op-extra-handshake"
+            | "-no-key-shares"
+            | "-no-server-name-ack"
+            | "-no-rsa-pss-rsae-certs"
+            | "-on-initial-expect-peer-cert-file"
+            | "-on-initial-tls13-variant"
+            | "-on-resume-enable-early-data"
+            | "-on-resume-export-early-keying-material"
+            | "-on-resume-verify-fail"
+            | "-psk"
+            | "-renegotiate-freely"
+            | "-resumption-across-names-enabled"
+            | "-retain-only-sha256-client-cert-initial"
+            | "-reverify-on-resume"
+            | "-select-empty-next-proto"
+            | "-select-next-proto"
+            | "-send-alert"
+            | "-send-channel-id"
+            | "-signed-cert-timestamps"
+            | "-srtp-profiles"
+            | "-ticket-key"
+            | "-tls-unique"
+            | "-use-custom-verify-callback"
+            | "-use-exporter-between-reads"
+            | "-use-ticket-aead-callback"
+            | "-use-ticket-callback"
+            | "-verify-fail"
+            | "-wpa-202304" => {
                 println!("NYI option {arg:?}");
                 process::exit(BOGO_NACK);
             }
