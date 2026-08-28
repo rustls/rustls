@@ -3,7 +3,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::iter;
 
-use pki_types::{DnsName, EchConfigListBytes, FipsStatus, ServerName};
+use pki_types::{DnsName, EchConfigListBytes, ServerName};
 use subtle::ConstantTimeEq;
 
 use super::config::ClientConfig;
@@ -35,7 +35,7 @@ use crate::tracing::{debug, trace, warn};
 /// Controls how Encrypted Client Hello (ECH) is used in a client handshake.
 #[non_exhaustive]
 #[derive(Clone, Debug)]
-pub enum EchMode {
+pub(crate) enum EchMode {
     /// ECH is enabled and the ClientHello will be encrypted based on the provided
     /// configuration.
     Enable(EchConfig),
@@ -48,12 +48,45 @@ pub enum EchMode {
 }
 
 impl EchMode {
-    /// Returns true if the ECH mode will use a FIPS approved HPKE suite.
-    pub fn fips(&self) -> FipsStatus {
-        match self {
-            Self::Enable(ech_config) => ech_config.suite.fips(),
-            Self::Grease(grease_config) => grease_config.suite.fips(),
+    /// Create a new [`EchMode`] from a list of supported suites and a list of
+    /// ECH configurations to try.
+    ///
+    /// Each suite-configuration pair will be tried, beginning at the first
+    /// ECH configuration, until a valid [`EchConfig`] is constructed
+    ///
+    /// # Errors
+    ///
+    /// If all pairs have been exhausted, an [`EncryptedClientHelloError::NoCompatibleConfig`]
+    /// error will be raised
+    pub(crate) fn from_ech_config_list(
+        ech_config_list_slice: &[EchConfigListBytes<'_>],
+        suites: &[&'static dyn Hpke],
+    ) -> Result<Self, Error> {
+        for ech_config_list in ech_config_list_slice {
+            match EchConfig::new(ech_config_list, suites) {
+                Ok(ech_config) => return Ok(ech_config.into()),
+                Err(Error::InvalidEncryptedClientHello(
+                    EncryptedClientHelloError::NoCompatibleConfig,
+                )) => {
+                    // silently reject NoCompatibleConfig errors
+                }
+                Err(err) => return Err(err),
+            }
         }
+
+        // if we have yet to return, no compatible ECH config has been found
+        Err(Error::InvalidEncryptedClientHello(
+            EncryptedClientHelloError::NoCompatibleConfig,
+        ))
+    }
+
+    /// Create a new GREASE [`EchMode`] from a supported suite.
+    ///
+    /// # Errors
+    ///
+    /// This method will error if the HPKE provider fails to generate a placeholder public key.
+    pub(crate) fn grease_from_suite(suite: &'static dyn Hpke) -> Result<Self, Error> {
+        Ok(EchGreaseConfig::new(suite)?.into())
     }
 }
 
@@ -73,7 +106,7 @@ impl From<EchGreaseConfig> for EchMode {
 ///
 /// Note: differs from the protocol-encoded EchConfig (`EchConfigMsg`).
 #[derive(Clone, Debug)]
-pub struct EchConfig {
+pub(crate) struct EchConfig {
     /// The selected EchConfig.
     pub(crate) config: EchConfigPayload,
 
@@ -92,16 +125,16 @@ impl EchConfig {
     /// be base64 decoded to yield the `EchConfigListBytes` you provide to rustls.
     ///
     /// One of the provided ECH configurations must be compatible with the HPKE provider's supported
-    /// suites or an error will be returned.
+    /// suites or an [`EncryptedClientHelloError::InvalidConfigList`] error will be returned.
     ///
     /// See the [`ech-client.rs`] example for a complete example of fetching ECH configs from DNS.
     ///
     /// [`ech-client.rs`]: https://github.com/rustls/rustls/blob/main/examples/src/bin/ech-client.rs
-    pub fn new(
-        ech_config_list: EchConfigListBytes<'_>,
+    pub(crate) fn new(
+        ech_config_list: &EchConfigListBytes<'_>,
         hpke_suites: &[&'static dyn Hpke],
     ) -> Result<Self, Error> {
-        let ech_configs = Vec::<EchConfigPayload>::read_bytes(&ech_config_list).map_err(|_| {
+        let ech_configs = Vec::<EchConfigPayload>::read_bytes(ech_config_list).map_err(|_| {
             Error::InvalidEncryptedClientHello(EncryptedClientHelloError::InvalidConfigList)
         })?;
 
@@ -112,7 +145,7 @@ impl EchConfig {
     ///
     /// Returns an error if the server provided no retry configurations in `RejectedEch`, or if
     /// none of the retry configurations are compatible with the supported `hpke_suites`.
-    pub fn for_retry(
+    pub(crate) fn for_retry(
         rejection: RejectedEch,
         hpke_suites: &[&'static dyn Hpke],
     ) -> Result<Self, Error> {
@@ -201,7 +234,7 @@ impl EchConfig {
 
 /// Configuration for GREASE Encrypted Client Hello.
 #[derive(Clone, Debug)]
-pub struct EchGreaseConfig {
+pub(crate) struct EchGreaseConfig {
     pub(crate) suite: &'static dyn Hpke,
     pub(crate) placeholder_key: HpkePublicKey,
 }
@@ -213,14 +246,16 @@ impl EchGreaseConfig {
     /// but doesn't have a real ECH configuration to use for the remote server. In this case
     /// a placeholder or "GREASE"[^0] extension is used.
     ///
-    /// Returns an error if the HPKE provider does not support the given suite.
+    /// # Errors
+    ///
+    /// Returns an error if the HPKE provider fails to generate a placeholder public key.
     ///
     /// [^0]: <https://www.rfc-editor.org/rfc/rfc8701>
-    pub fn new(suite: &'static dyn Hpke, placeholder_key: HpkePublicKey) -> Self {
-        Self {
+    pub(crate) fn new(suite: &'static dyn Hpke) -> Result<Self, Error> {
+        Ok(Self {
             suite,
-            placeholder_key,
-        }
+            placeholder_key: suite.generate_key_pair()?.0,
+        })
     }
 
     /// Build a GREASE ECH extension based on the placeholder configuration.
@@ -996,20 +1031,7 @@ mod tests {
         provider.secure_random = &CountingRandom;
 
         let config = ClientConfig::builder(Arc::new(provider))
-            .with_ech(EchMode::Enable(EchConfig {
-                config: EchConfigPayload::V18(EchConfigContents {
-                    key_config: HpkeKeyConfig {
-                        config_id: 0,
-                        kem_id: MockHpke::SUITE.kem,
-                        public_key: vec![0; 32].into(),
-                        symmetric_cipher_suites: vec![MockHpke::SUITE.sym],
-                    },
-                    maximum_name_length: 255,
-                    public_name: DnsName::try_from("public.example.com").unwrap(),
-                    extensions: vec![],
-                }),
-                suite: &MockHpke,
-            }))
+            .with_ech_hpke_suites(&[&MockHpke])
             .with_root_certificates(roots)
             .with_no_client_auth()
             .unwrap();
@@ -1048,6 +1070,24 @@ mod tests {
         let mut first_flight = Vec::new();
         let mut conn = config
             .connect(server_name)
+            .with_ech(&[{
+                let mut bytes = Vec::new();
+                vec![EchConfigPayload::V18(EchConfigContents {
+                    key_config: HpkeKeyConfig {
+                        config_id: 0,
+                        kem_id: MockHpke::SUITE.kem,
+                        public_key: vec![0; 32].into(),
+                        symmetric_cipher_suites: vec![MockHpke::SUITE.sym],
+                    },
+                    maximum_name_length: 255,
+                    public_name: DnsName::try_from("public.example.com").unwrap(),
+                    extensions: vec![],
+                })]
+                .encode(&mut bytes);
+
+                EchConfigListBytes::from(bytes)
+            }])
+            .unwrap()
             .build(&mut first_flight)
             .unwrap();
 

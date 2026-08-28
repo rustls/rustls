@@ -17,18 +17,17 @@ use rustls::crypto::{
     SignatureScheme, Signer, SigningKey,
 };
 use rustls::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
+#[cfg(feature = "aws-lc-rs")]
+use rustls::error::EncryptedClientHelloError;
 use rustls::error::{AlertDescription, ApiMisuse, CertificateError, Error, PeerMisbehaved};
+#[cfg(feature = "aws-lc-rs")]
+use rustls::pki_types::EchConfigListBytes;
 use rustls::server::{
     ClientHello, ParsedCertificate, PreferServerOrder, ServerCredentialResolver, ServerHandshake,
 };
 use rustls::{
     ClientConfig, ClientConnection, Connection as _, HandshakeKind, KeyingMaterialExporter,
     ServerConfig, ServerConnection, SliceInput, SupportedCipherSuite, VecInput,
-};
-#[cfg(feature = "aws-lc-rs")]
-use rustls::{
-    client::{EchConfig, EchGreaseConfig, EchMode},
-    pki_types::EchConfigListBytes,
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
@@ -1746,25 +1745,36 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
             suite_id.kem, suite_id.sym.kdf_id, suite_id.sym.aead_id
         );
 
-        let ech_config = EchConfig::new(
-            EchConfigListBytes::from(std::fs::read(&config_path).unwrap()),
-            &[*suite],
-        )
-        .unwrap();
+        let ech_suites = &[*suite];
 
         // A ECH client configuration should only be considered FIPS approved if the
         // ECH HPKE suite is itself FIPS approved.
         let config = ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
-            .with_ech(EchMode::Enable(ech_config));
-        let config = config.finish(KeyType::default());
+            .with_ech_hpke_suites(ech_suites)
+            .finish(KeyType::default());
+        let config = Arc::new(config);
         assert_eq!(config.fips(), suite.fips());
 
-        // The same applies if an ECH GREASE client configuration is used.
-        let (public_key, _) = suite.generate_key_pair().unwrap();
-        let config = ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
-            .with_ech(EchMode::Grease(EchGreaseConfig::new(*suite, public_key)));
-        let config = Arc::new(config.finish(KeyType::default()));
-        assert_eq!(config.fips(), suite.fips());
+        // A connection with an ECH client configuration should only be considered
+        // FIPS approved if the ECH HPKE suite is itself FIPS approved.
+        let conn = config
+            .connect("example.com".try_into().unwrap())
+            .with_ech(&[EchConfigListBytes::from(
+                std::fs::read(&config_path).unwrap(),
+            )])
+            .unwrap()
+            .build(&mut Vec::new())
+            .unwrap();
+        assert_eq!(conn.fips(), suite.fips());
+
+        // The same applies if a connection with an ECH GREASE client configuration is used.
+        let conn = config
+            .connect("example.com".try_into().unwrap())
+            .with_ech_grease()
+            .unwrap()
+            .build(&mut Vec::new())
+            .unwrap();
+        assert_eq!(conn.fips(), suite.fips());
 
         // And a connection made from a client config should retain the fips status of the
         // config w.r.t the HPKE suite.
@@ -1774,6 +1784,82 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
             .unwrap();
         assert_eq!(conn.fips(), suite.fips());
     }
+}
+
+#[test]
+fn test_client_ech_without_hpke_suites() {
+    let configs = [
+        (
+            Arc::new(
+                ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
+                    .finish(KeyType::default()),
+            ),
+            "config where with_ech_hpke_suites hadn't been called",
+        ),
+        (
+            Arc::new(
+                ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
+                    .with_ech_hpke_suites(&[])
+                    .finish(KeyType::default()),
+            ),
+            "config where with_ech_hpke_suites had been called",
+        ),
+    ];
+
+    for (config, config_msg) in configs {
+        // If no ECH HPKE suites have been provided, calling any method to
+        // configure ECH should result in an ApiMisuse error
+        assert_eq!(
+            config
+                .connect("example.com".try_into().unwrap())
+                // anything we put here shouldn't be processed before erroring
+                .with_ech(&[EchConfigListBytes::from(&[] as &[u8])])
+                .expect_err("ECH shouldn't be successfully configured without any ECH HPKE suites"),
+            Error::ApiMisuse(ApiMisuse::NoEchHpkeSuites),
+            "ApiMisuse error not found while calling with_ech method on {config_msg}",
+        );
+
+        assert_eq!(
+            config
+                .connect("example.com".try_into().unwrap())
+                .with_ech_grease()
+                .expect_err(
+                    "ECH GREASE shouldn't be successfully configured without any ECH HPKE suites"
+                ),
+            Error::ApiMisuse(ApiMisuse::NoEchHpkeSuites),
+            "ApiMisuse error not found while calling with_ech_grease method on {config_msg}",
+        );
+    }
+}
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_client_ech_no_compatible_config() {
+    use rustls_aws_lc_rs::hpke::DH_KEM_P384_HKDF_SHA384_AES_256;
+
+    // One EchConfig, with cipher suite using ECDH X25519 for agreement,
+    // HKDF SHA-256 for key derivation, and AEAD AES-128-GCM for symmetric encryption.
+    static ECHCONFIG_LIST_LOCALHOST: &[u8] =
+        include_bytes!("../../../rustls/tests/data/localhost-echconfigs.bin");
+
+    let config = Arc::new(
+        ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
+            // we provide a suite that is not supported by the ECH configuration we will use
+            .with_ech_hpke_suites(&[DH_KEM_P384_HKDF_SHA384_AES_256])
+            .finish(KeyType::default()),
+    );
+
+    // If the provided ECH configuration isn't compatible with the HPKE provider's supported suites
+    // an EncryptedClientHelloError::NoCompatibleConfig error should be returned.
+    assert_eq!(
+        config
+            .connect("example.com".try_into().unwrap())
+            .with_ech(&[EchConfigListBytes::from(ECHCONFIG_LIST_LOCALHOST)])
+            .expect_err(
+                "ECH shouldn't be successfully configured with incompatible ECH HPKE suites"
+            ),
+        Error::InvalidEncryptedClientHello(EncryptedClientHelloError::NoCompatibleConfig),
+    );
 }
 
 #[test]

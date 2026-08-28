@@ -7,6 +7,7 @@
 use core::any::Any;
 use core::fmt::{Debug, Formatter};
 use core::hash::Hasher;
+use core::slice;
 use std::borrow::Cow;
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
@@ -19,11 +20,10 @@ use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use rustls::client::danger::{HandshakeSignatureValid, ServerIdentity, ServerVerifier};
 use rustls::client::{
-    self, ClientConfig, ClientConnection, ClientSessionKey, CredentialRequest, EchConfig,
-    EchGreaseConfig, EchMode, EchStatus, Resumption, Tls12Resumption, Tls13Session,
-    WebPkiServerVerifier,
+    self, ClientConfig, ClientConnection, ClientSessionKey, CredentialRequest, EchStatus,
+    Resumption, Tls12Resumption, Tls13Session, WebPkiServerVerifier,
 };
-use rustls::crypto::hpke::{Hpke, HpkePublicKey};
+use rustls::crypto::hpke::Hpke;
 use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{
     Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme, Signer, SigningKey,
@@ -112,10 +112,19 @@ pub fn main() {
                     .unwrap()
                     .to_owned();
                 let mut output = Vec::new();
-                let sess = config
-                    .connect(server_name)
-                    .build(&mut output)
-                    .unwrap();
+                let conn_cfg = config.connect(server_name);
+
+                let conn_cfg = if let Some(ech_config_list) = &opts.ech_config_list {
+                    conn_cfg
+                        .with_ech(slice::from_ref(ech_config_list))
+                        .unwrap_or_else(|_| quit(":INVALID_ECH_CONFIG_LIST:"))
+                } else if opts.enable_ech_grease {
+                    conn_cfg.with_ech_grease().unwrap()
+                } else {
+                    conn_cfg
+                };
+
+                let sess = conn_cfg.build(&mut output).unwrap();
                 exec(&opts, sess, output, &key_log, i);
             }
             SideConfig::Server(config) => {
@@ -1867,19 +1876,10 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
             .into(),
         );
 
-        if let Some(ech_config_list) = &opts.ech_config_list {
-            let ech_mode: EchMode = EchConfig::new(ech_config_list.clone(), ALL_HPKE_SUITES)
-                .unwrap_or_else(|_| quit(":INVALID_ECH_CONFIG_LIST:"))
-                .into();
-
-            ech_cfg.with_ech(ech_mode)
+        if opts.ech_config_list.is_some() {
+            ech_cfg.with_ech_hpke_suites(ALL_HPKE_SUITES)
         } else if opts.enable_ech_grease {
-            let ech_mode = EchMode::Grease(EchGreaseConfig::new(
-                GREASE_HPKE_SUITE,
-                HpkePublicKey(GREASE_25519_PUBKEY.to_vec()),
-            ));
-
-            ech_cfg.with_ech(ech_mode)
+            ech_cfg.with_ech_hpke_suites(&[GREASE_HPKE_SUITE])
         } else {
             cfg
         }
@@ -2400,11 +2400,6 @@ impl compress::CertCompressor for RandomAlgorithm {
 }
 
 static GREASE_HPKE_SUITE: &dyn Hpke = hpke::DH_KEM_X25519_HKDF_SHA256_AES_128;
-
-const GREASE_25519_PUBKEY: &[u8] = &[
-    0x67, 0x35, 0xCA, 0x50, 0x21, 0xFC, 0x4F, 0xE6, 0x29, 0x3B, 0x31, 0x2C, 0xB5, 0xE0, 0x97, 0xD8,
-    0xD0, 0x58, 0x97, 0xCF, 0x5C, 0x15, 0x12, 0x79, 0x4B, 0xEF, 0x1D, 0x98, 0x52, 0x74, 0xDC, 0x5E,
-];
 
 // nb. hpke::ALL_SUPPORTED_SUITES omits fips-incompatible options,
 // this includes them. bogo fips tests are activated by -fips-202205
