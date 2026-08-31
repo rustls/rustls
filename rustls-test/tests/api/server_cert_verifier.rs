@@ -9,22 +9,26 @@ use pki_types::UnixTime;
 use rustls::client::danger::{
     HandshakeSignatureValid, ServerIdentity, ServerVerifier, SignatureVerificationInput,
 };
-use rustls::client::{WebPkiServerVerifier, verify_identity_signed_by_trust_anchor};
+use rustls::client::{
+    ClientHandshake, ClientSide, WebPkiServerVerifier, verify_identity_signed_by_trust_anchor,
+};
 use rustls::crypto::{
     Credentials, Identity, SelectedCredential, SignatureScheme, VerifiedIdentity,
 };
-use rustls::enums::CertificateType;
+use rustls::enums::{CertificateType, ProtocolVersion};
 use rustls::error::{
     AlertDescription, CertificateError, Error, ExtendedKeyPurpose, InvalidMessage, PeerIncompatible,
 };
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{
-    ClientConfig, DistinguishedName, RootCertStore, ServerConfig, ServerConnection, VecInput,
+    ClientConfig, Connection, DistinguishedName, RootCertStore, ServerConfig, ServerConnection,
+    SliceInput, VecInput, VerifyPeerIdentity,
 };
 use rustls_test::{
     ErrorFromPeer, KeyType, MockServerVerifier, MultiTest, certificate_error_expecting_name,
-    do_handshake, do_handshake_until_both_error, do_handshake_until_error, make_client_config,
-    make_pair_for_arc_configs, make_server_config, server_name, webpki_server_verifier_builder,
+    do_handshake, do_handshake_until_both_error, do_handshake_until_error, encoding,
+    make_client_config, make_pair_for_arc_configs, make_server_config, server_name,
+    webpki_server_verifier_builder,
 };
 use webpki::anchor_from_trusted_cert;
 use x509_parser::prelude::FromDer;
@@ -196,6 +200,138 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
             ])
         );
     }
+}
+
+#[test]
+fn client_external_verifier_does_not_call_trait() {
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER)
+        .with_server_verifier(Box::new(|_, _| {
+            // if this is called, the handshake fails
+            Arc::new(MockServerVerifier::rejects_certificate(
+                CertificateError::ApplicationVerificationFailure.into(),
+            ))
+        }))
+    {
+        let (verify, mut client_output, mut server, mut server_output) =
+            client_external_verifier_test_setup(client_config, server_config);
+
+        let identity = verify.presented_identity().unwrap();
+        assert_eq!(identity.identity, expect.key_type.identity().as_ref());
+        let verified = VerifiedIdentity::assertion(identity.identity.clone());
+
+        let ClientHandshake::NeedsInput(mut client) = verify
+            .continue_with(Ok(verified), &mut client_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+
+        let client = loop {
+            server
+                .process_new_packets(&mut SliceInput::new(&mut client_output), &mut server_output)
+                .handle_all(&mut Vec::new())
+                .unwrap();
+            client_output.clear();
+
+            let mut client_input = SliceInput::new(&mut server_output);
+            let next = client
+                .process(&mut client_input, &mut client_output)
+                .unwrap();
+            let used = client_input.into_used();
+            server_output.drain(..used);
+
+            server
+                .process_new_packets(&mut SliceInput::new(&mut client_output), &mut server_output)
+                .handle_all(&mut Vec::new())
+                .unwrap();
+            client_output.clear();
+
+            match next {
+                ClientHandshake::NeedsInput(next) => client = next,
+                ClientHandshake::Complete(complete) => break complete,
+                _ => panic!("unexpected state"),
+            }
+        };
+
+        assert!(!server.is_handshaking());
+        assert!(client.outputs.peer_identity().is_some());
+    }
+}
+
+#[test]
+fn client_external_verifier_error_sends_alert() {
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let (verify, mut client_output, mut server, mut server_output) =
+            client_external_verifier_test_setup(client_config, server_config);
+
+        let mut alert_output = Vec::new();
+        let err = verify
+            .continue_with(Err(CertificateError::Expired.into()), &mut alert_output)
+            .unwrap_err();
+
+        assert_eq!(err, CertificateError::Expired.into());
+        if expect.version == ProtocolVersion::TLSv1_2 {
+            assert_eq!(
+                alert_output,
+                encoding::alert(AlertDescription::CertificateExpired, &[])
+            );
+        }
+
+        client_output.extend(alert_output);
+
+        let server_err = server
+            .process_new_packets(&mut SliceInput::new(&mut client_output), &mut server_output)
+            .handle_all(&mut Vec::new())
+            .unwrap_err();
+        assert_eq!(
+            server_err,
+            Error::AlertReceived(AlertDescription::CertificateExpired)
+        );
+    }
+}
+
+/// Drive a handshake up to the point the client must verify the server's identity.
+///
+/// Returns the [`VerifyPeerIdentity`] state, the client's output buffer, the server
+/// and its output buffer.
+fn client_external_verifier_test_setup(
+    client_config: Arc<ClientConfig>,
+    server_config: Arc<ServerConfig>,
+) -> (
+    VerifyPeerIdentity<ClientSide>,
+    Vec<u8>,
+    ServerConnection,
+    Vec<u8>,
+) {
+    let mut client_output = Vec::new();
+    let client = client_config
+        .connect(server_name("localhost"))
+        .start_handshake(&mut client_output)
+        .unwrap();
+
+    let mut server = ServerConnection::new(server_config).unwrap();
+    let mut server_output = Vec::new();
+
+    // server's first flight
+    server
+        .process_new_packets(&mut SliceInput::new(&mut client_output), &mut server_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    client_output.clear();
+
+    // client processes it, up to the server's certificate
+    let mut client_input = SliceInput::new(&mut server_output);
+    let ClientHandshake::VerifyServerIdentity(verify) = client
+        .process(&mut client_input, &mut client_output)
+        .unwrap()
+    else {
+        panic!("unexpected state");
+    };
+    let used = client_input.into_used();
+    server_output.drain(..used);
+
+    println!("{verify:?}");
+    (verify, client_output, server, server_output)
 }
 
 #[test]

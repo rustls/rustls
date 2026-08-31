@@ -9,12 +9,12 @@ use subtle::ConstantTimeEq;
 
 use super::config::{ClientConfig, ClientSessionKey};
 use super::hs::ClientState;
-use super::{ClientAuthDetails, ServerCertDetails, Tls12Session};
+use super::{ClientAuthDetails, ClientSide, ServerCertDetails, Tls12Session};
 use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
-use crate::conn::{ConnectionRandoms, Input};
+use crate::conn::{ConnectionRandoms, Input, VerifyPeerIdentityInternal};
 use crate::crypto::cipher::{EncodableVersion, Payload, RecordDecrypter, RecordEncrypter};
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{Identity, Signer};
@@ -604,7 +604,7 @@ impl ExpectServerDoneOrCertReq {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
-        output: &mut dyn Output<'_>,
+        _output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error> {
         if matches!(
             input.message.payload,
@@ -635,7 +635,7 @@ impl ExpectServerDoneOrCertReq {
                 client_auth: None,
                 must_issue_new_ticket: self.must_issue_new_ticket,
             }
-            .handle_input(input, output)
+            .handle_input(input)
         }
     }
 }
@@ -708,11 +708,7 @@ struct ExpectServerDone {
 }
 
 impl ExpectServerDone {
-    fn handle_input(
-        mut self,
-        input: Input<'_>,
-        output: &mut dyn Output<'_>,
-    ) -> Result<ClientState, Error> {
+    fn handle_input(mut self, input: Input<'_>) -> Result<ClientState, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerHelloDone),
@@ -736,6 +732,79 @@ impl ExpectServerDone {
         trace!("Server cert is {:?}", self.server_cert.cert_chain);
         debug!("Server DNS name is {:?}", self.hs.session_key.server_name);
 
+        let purported_identity =
+            Identity::from_peer(self.server_cert.cert_chain.0, CertificateType::X509)?
+                .ok_or(PeerMisbehaved::NoCertificatesPresented)?;
+
+        Ok(Box::new(AwaitServerIdentityVerification {
+            hs: self.hs,
+            randoms: self.randoms,
+            suite: self.suite,
+            ocsp_response: self.server_cert.ocsp_response,
+            server_kx: self.server_kx,
+            client_auth: self.client_auth,
+            must_issue_new_ticket: self.must_issue_new_ticket,
+            peer_identity: purported_identity.into_owned(),
+            proof,
+        })
+        .into())
+    }
+}
+
+impl ExpectServerDone {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        _output: &mut dyn Output<'_>,
+    ) -> Result<ClientState, Error> {
+        self.handle_input(input)
+    }
+}
+
+impl From<Box<ExpectServerDone>> for ClientState {
+    fn from(value: Box<ExpectServerDone>) -> Self {
+        Self::Tls12(Tls12State::ServerDone(value))
+    }
+}
+
+// --- Verify the server's identity
+struct AwaitServerIdentityVerification {
+    hs: HandshakeState,
+    randoms: ConnectionRandoms,
+    suite: &'static Tls12CipherSuite,
+    ocsp_response: Vec<u8>,
+    server_kx: ServerKxDetails,
+    client_auth: Option<ClientAuthDetails>,
+    must_issue_new_ticket: bool,
+    peer_identity: Identity<'static>,
+    proof: HandshakeAlignedProof,
+}
+
+impl VerifyPeerIdentityInternal<ClientSide> for AwaitServerIdentityVerification {
+    fn presented_identity(&self) -> Result<ServerIdentity<'static, '_>, Error> {
+        Ok(ServerIdentity {
+            identity: &self.peer_identity,
+            server_name: &self.hs.session_key.server_name,
+            ocsp_response: &self.ocsp_response,
+            now: self.hs.config.current_time()?,
+        })
+    }
+
+    fn with_config(self: Box<Self>, output: &mut dyn Output<'_>) -> Result<ClientState, Error> {
+        let peer_identity = self
+            .hs
+            .config
+            .verifier()
+            .verify_identity(&self.presented_identity()?)?;
+
+        self.continue_with(peer_identity, output)
+    }
+
+    fn continue_with(
+        mut self: Box<Self>,
+        peer_identity: VerifiedIdentity<'static>,
+        output: &mut dyn Output<'_>,
+    ) -> Result<ClientState, Error> {
         let suite = self.suite;
 
         // 1. Verify the cert chain.
@@ -750,21 +819,7 @@ impl ExpectServerDone {
         //    f) use the derived keys to start encryption
         // 5. emit a Finished, our first encrypted message under the new keys.
 
-        // 1.
-        let purported_identity =
-            Identity::from_peer(self.server_cert.cert_chain.0, CertificateType::X509)?
-                .ok_or(PeerMisbehaved::NoCertificatesPresented)?;
-
-        let peer_identity = self
-            .hs
-            .config
-            .verifier()
-            .verify_identity(&ServerIdentity {
-                identity: &purported_identity,
-                server_name: &self.hs.session_key.server_name,
-                ocsp_response: &self.server_cert.ocsp_response,
-                now: self.hs.config.current_time()?,
-            })?;
+        // 1. was done by the caller and is recorded as the type of `peer_identity`.
 
         // 2.
         // Build up the contents of the signed message.
@@ -880,7 +935,7 @@ impl ExpectServerDone {
         );
 
         // 5.
-        emit_finished(&secrets, &mut self.hs.transcript, output, &proof);
+        emit_finished(&secrets, &mut self.hs.transcript, output, &self.proof);
 
         if self.must_issue_new_ticket {
             Ok(Box::new(ExpectNewTicket {
@@ -907,19 +962,9 @@ impl ExpectServerDone {
     }
 }
 
-impl ExpectServerDone {
-    fn handle(
-        self: Box<Self>,
-        input: Input<'_>,
-        output: &mut dyn Output<'_>,
-    ) -> Result<ClientState, Error> {
-        self.handle_input(input, output)
-    }
-}
-
-impl From<Box<ExpectServerDone>> for ClientState {
-    fn from(value: Box<ExpectServerDone>) -> Self {
-        Self::Tls12(Tls12State::ServerDone(value))
+impl From<Box<AwaitServerIdentityVerification>> for ClientState {
+    fn from(value: Box<AwaitServerIdentityVerification>) -> Self {
+        Self::VerifyServerIdentity(value as Box<dyn VerifyPeerIdentityInternal<ClientSide>>)
     }
 }
 
