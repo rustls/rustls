@@ -122,6 +122,8 @@ struct Options {
     on_resume_expect_ech_accept: bool,
     on_initial_expect_ech_accept: bool,
     enable_ech_grease: bool,
+    expect_ech_name_override: Option<String>,
+    expect_no_ech_name_override: bool,
     send_key_update: bool,
     expect_curve_id: Option<NamedGroup>,
     on_initial_expect_curve_id: Option<NamedGroup>,
@@ -193,6 +195,8 @@ impl Options {
             on_resume_expect_ech_accept: false,
             on_initial_expect_ech_accept: false,
             enable_ech_grease: false,
+            expect_ech_name_override: None,
+            expect_no_ech_name_override: false,
             send_key_update: false,
             expect_curve_id: None,
             on_initial_expect_curve_id: None,
@@ -214,6 +218,23 @@ impl Options {
 
     fn tls12_supported(&self) -> bool {
         self.support_tls12 && self.version_allowed(ProtocolVersion::TLSv1_2)
+    }
+
+    fn expected_server_name(&self) -> Option<ServerName<'static>> {
+        let name = match (
+            &self.expect_ech_name_override,
+            self.expect_no_ech_name_override,
+        ) {
+            (Some(override_name), _) => override_name,
+            (None, true) => &self.host_name,
+            (None, false) => return None,
+        };
+
+        Some(
+            ServerName::try_from(name.as_str())
+                .expect("invalid expected server name")
+                .to_owned(),
+        )
     }
 
     fn supported_versions(&self) -> Vec<&'static SupportedProtocolVersion> {
@@ -461,10 +482,15 @@ impl ClientCertVerifier for DummyClientAuth {
 struct DummyServerAuth {
     parent: Arc<dyn ServerCertVerifier>,
     ocsp: OcspValidation,
+    expect_server_name: Option<ServerName<'static>>,
 }
 
 impl DummyServerAuth {
-    fn new(trusted_cert_file: &str, ocsp: OcspValidation) -> Self {
+    fn new(
+        trusted_cert_file: &str,
+        ocsp: OcspValidation,
+        expect_server_name: Option<ServerName<'static>>,
+    ) -> Self {
         Self {
             parent: WebPkiServerVerifier::builder_with_provider(
                 load_root_certs(trusted_cert_file),
@@ -475,6 +501,7 @@ impl DummyServerAuth {
             .build()
             .unwrap(),
             ocsp,
+            expect_server_name,
         }
     }
 }
@@ -484,10 +511,13 @@ impl ServerCertVerifier for DummyServerAuth {
         &self,
         _end_entity: &CertificateDer<'_>,
         _certs: &[CertificateDer<'_>],
-        _hostname: &ServerName<'_>,
+        hostname: &ServerName<'_>,
         _ocsp: &[u8],
         _now: UnixTime,
     ) -> Result<ServerCertVerified, Error> {
+        if let Some(expect_server_name) = &self.expect_server_name {
+            assert_eq!(hostname, expect_server_name);
+        }
         if let OcspValidation::Reject = self.ocsp {
             return Err(CertificateError::InvalidOcspResponse.into());
         }
@@ -957,6 +987,7 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
         .with_custom_certificate_verifier(Arc::new(DummyServerAuth::new(
             &opts.trusted_cert_file,
             opts.ocsp,
+            opts.expected_server_name(),
         )));
 
     let mut cfg = match opts.credentials.configured() {
@@ -1898,6 +1929,12 @@ pub fn main() {
                         .into(),
                 );
             }
+            "-expect-ech-name-override" => {
+                opts.expect_ech_name_override = Some(args.remove(0));
+            }
+            "-expect-no-ech-name-override" => {
+                opts.expect_no_ech_name_override = true;
+            }
             "-enable-ech-grease" => {
                 opts.enable_ech_grease = true;
             }
@@ -1936,7 +1973,8 @@ pub fn main() {
             | "-async"
             | "-implicit-handshake"
             | "-use-old-client-cert-callback"
-            | "-use-early-callback" => {}
+            | "-use-early-callback"
+            | "-use-custom-verify-callback" => {}
 
             // Not implemented things
             "-dtls"
@@ -1993,7 +2031,8 @@ pub fn main() {
             | "-resumption-across-names-enabled"
             | "-expect-resumable-across-names"
             | "-expect-not-resumable-across-names"
-            | "-use-custom-verify-callback" => {
+            | "-on-retry-expect-ech-name-override"
+            | "-on-resume-expect-no-ech-name-override" => {
                 println!("NYI option {arg:?}");
                 process::exit(BOGO_NACK);
             }

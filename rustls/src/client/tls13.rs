@@ -96,7 +96,7 @@ pub(super) fn handle_server_hello(
         resuming,
         mut sent_tls13_fake_ccs,
         mut hello,
-        server_name,
+        mut server_name,
         ..
     } = input;
 
@@ -196,6 +196,7 @@ pub(super) fn handle_server_hello(
             server_hello,
             server_hello_encoded,
             suite.common.hash_provider,
+            &mut server_name,
         )? {
             // The server accepted our ECH offer, so complete the inner transcript with the
             // server hello message, and switch the relevant state to the copies for the
