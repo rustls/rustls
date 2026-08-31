@@ -1778,13 +1778,18 @@ version = "0.1.0-dev.1"
 dependencies = [
  "aws-lc-rs",
  "bencher",
+ "criterion",
  "hex",
+ "rcgen",
  "rustls 0.24.0-dev.1",
  "rustls-pki-types",
  "rustls-test",
+ "rustls-util",
  "serde",
  "serde_json",
  "subtle",
+ "tracing-subscriber",
+ "webpki-roots",
  "zeroize",
 ]
 
@@ -1893,15 +1898,8 @@ dependencies = [
 name = "rustls-post-quantum"
 version = "0.3.0-dev.2"
 dependencies = [
- "aws-lc-rs",
- "criterion",
- "rcgen",
  "rustls 0.24.0-dev.1",
  "rustls-aws-lc-rs",
- "rustls-test",
- "rustls-util",
- "tracing-subscriber",
- "webpki-roots",
 ]
 
 [[package]]

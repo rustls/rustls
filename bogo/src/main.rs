@@ -28,7 +28,7 @@ use rustls::crypto::hpke::{Hpke, HpkePublicKey};
 use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{
     Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme, Signer, SigningKey,
-    SingleCredential, VerifiedIdentity,
+    SingleCredential, VerifiedIdentity, WebPkiSupportedAlgorithms,
 };
 use rustls::enums::{
     ApplicationProtocol, CertificateCompressionAlgorithm, CertificateType, ProtocolVersion,
@@ -50,7 +50,15 @@ use rustls::{
     Connection, DistinguishedName, HandshakeKind, IoState, RootCertStore, TlsInputBuffer, VecInput,
     compress,
 };
-use rustls_aws_lc_rs::hpke;
+use rustls_aws_lc_rs::{
+    ECDSA_P256_SHA256, ECDSA_P256_SHA384, ECDSA_P256_SHA512, ECDSA_P384_SHA256, ECDSA_P384_SHA384,
+    ECDSA_P384_SHA512, ECDSA_P521_SHA256, ECDSA_P521_SHA384, ECDSA_P521_SHA512, ED25519,
+    RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS,
+    RSA_PKCS1_2048_8192_SHA384, RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS,
+    RSA_PKCS1_2048_8192_SHA512, RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS,
+    RSA_PSS_2048_8192_SHA256_LEGACY_KEY, RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+    RSA_PSS_2048_8192_SHA512_LEGACY_KEY, hpke,
+};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, fmt};
@@ -639,6 +647,7 @@ struct Options {
     on_resume_expect_curve_id: Option<NamedGroup>,
     wait_for_debugger: bool,
     ocsp: OcspValidation,
+    verify_prefs: Option<SignatureScheme>,
 }
 
 impl Options {
@@ -727,6 +736,7 @@ impl Options {
             on_resume_expect_curve_id: None,
             wait_for_debugger: false,
             ocsp: OcspValidation::default(),
+            verify_prefs: None,
         }
     }
 
@@ -783,6 +793,17 @@ impl Options {
 
     fn provider(&self) -> CryptoProvider {
         let mut provider = self.provider.clone();
+
+        if !matches!(self.selected_provider, SelectedProvider::Ring)
+            && let Some(
+                SignatureScheme::ML_DSA_44
+                | SignatureScheme::ML_DSA_65
+                | SignatureScheme::ML_DSA_87,
+            ) = self.verify_prefs
+        {
+            // ML-DSA is disabled by default, enable for preferred verification scheme
+            provider.signature_verification_algorithms = rustls_aws_lc_rs::SUPPORTED_SIG_ALGS;
+        }
 
         if let Some(groups) = &self.groups {
             provider
@@ -896,7 +917,7 @@ impl Options {
                 }
             },
             "-verify-prefs" => {
-                lookup_scheme(args.remove(0).parse::<u16>().unwrap());
+                self.verify_prefs = Some(lookup_scheme(args.remove(0).parse::<u16>().unwrap()));
             }
             "-expect-curve-id" => {
                 self.expect_curve_id =
@@ -1374,6 +1395,7 @@ impl SelectedProvider {
                     kx_groups: Cow::Borrowed(rustls_aws_lc_rs::ALL_KX_GROUPS),
                     tls12_cipher_suites: Cow::Borrowed(rustls_aws_lc_rs::ALL_TLS12_CIPHER_SUITES),
                     tls13_cipher_suites: Cow::Borrowed(rustls_aws_lc_rs::ALL_TLS13_CIPHER_SUITES),
+                    signature_verification_algorithms: SUPPORTED_SIG_ALGS,
                     ..rustls_aws_lc_rs::DEFAULT_PROVIDER
                 }
             }
@@ -1389,6 +1411,75 @@ impl SelectedProvider {
         }
     }
 }
+
+// aws-lc-rs signature algorithms, with ML-DSA disabled
+pub(crate) static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms =
+    match WebPkiSupportedAlgorithms::new(
+        &[
+            ECDSA_P256_SHA256,
+            ECDSA_P256_SHA384,
+            ECDSA_P256_SHA512,
+            ECDSA_P384_SHA256,
+            ECDSA_P384_SHA384,
+            ECDSA_P384_SHA512,
+            ECDSA_P521_SHA256,
+            ECDSA_P521_SHA384,
+            ECDSA_P521_SHA512,
+            ED25519,
+            RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+            RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+            RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+            RSA_PKCS1_2048_8192_SHA256,
+            RSA_PKCS1_2048_8192_SHA384,
+            RSA_PKCS1_2048_8192_SHA512,
+            RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS,
+            RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS,
+            RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS,
+        ],
+        &[
+            // Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
+            (
+                SignatureScheme::ECDSA_NISTP384_SHA384,
+                &[ECDSA_P384_SHA384, ECDSA_P256_SHA384, ECDSA_P521_SHA384],
+            ),
+            (
+                SignatureScheme::ECDSA_NISTP256_SHA256,
+                &[ECDSA_P256_SHA256, ECDSA_P384_SHA256, ECDSA_P521_SHA256],
+            ),
+            (
+                SignatureScheme::ECDSA_NISTP521_SHA512,
+                &[ECDSA_P521_SHA512, ECDSA_P384_SHA512, ECDSA_P256_SHA512],
+            ),
+            (SignatureScheme::ED25519, &[ED25519]),
+            (
+                SignatureScheme::RSA_PSS_SHA512,
+                &[RSA_PSS_2048_8192_SHA512_LEGACY_KEY],
+            ),
+            (
+                SignatureScheme::RSA_PSS_SHA384,
+                &[RSA_PSS_2048_8192_SHA384_LEGACY_KEY],
+            ),
+            (
+                SignatureScheme::RSA_PSS_SHA256,
+                &[RSA_PSS_2048_8192_SHA256_LEGACY_KEY],
+            ),
+            (
+                SignatureScheme::RSA_PKCS1_SHA512,
+                &[RSA_PKCS1_2048_8192_SHA512],
+            ),
+            (
+                SignatureScheme::RSA_PKCS1_SHA384,
+                &[RSA_PKCS1_2048_8192_SHA384],
+            ),
+            (
+                SignatureScheme::RSA_PKCS1_SHA256,
+                &[RSA_PKCS1_2048_8192_SHA256],
+            ),
+        ],
+    ) {
+        Ok(algs) => algs,
+        Err(_) => panic!("bad WebPkiSupportedAlgorithms"),
+    };
 
 fn load_root_certs(filename: &str) -> Arc<RootCertStore> {
     let mut roots = RootCertStore::empty();
@@ -1757,6 +1848,9 @@ fn lookup_scheme(scheme: u16) -> SignatureScheme {
         0x0805 => SignatureScheme::RSA_PSS_SHA384,
         0x0806 => SignatureScheme::RSA_PSS_SHA512,
         0x0807 => SignatureScheme::ED25519,
+        0x0904 => SignatureScheme::ML_DSA_44,
+        0x0905 => SignatureScheme::ML_DSA_65,
+        0x0906 => SignatureScheme::ML_DSA_87,
         // TODO: add support for Ed448
         // 0x0808 => SignatureScheme::ED448,
         _ => {

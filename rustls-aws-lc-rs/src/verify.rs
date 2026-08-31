@@ -9,73 +9,78 @@ use rustls::crypto::{SignatureScheme, WebPkiSupportedAlgorithms};
 
 /// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
 /// compiled against aws-lc-rs.
-pub(crate) static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms =
-    match WebPkiSupportedAlgorithms::new(
-        &[
-            ECDSA_P256_SHA256,
-            ECDSA_P256_SHA384,
-            ECDSA_P256_SHA512,
-            ECDSA_P384_SHA256,
-            ECDSA_P384_SHA384,
-            ECDSA_P384_SHA512,
-            ECDSA_P521_SHA256,
-            ECDSA_P521_SHA384,
-            ECDSA_P521_SHA512,
-            ED25519,
-            RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
-            RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
-            RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
-            RSA_PKCS1_2048_8192_SHA256,
-            RSA_PKCS1_2048_8192_SHA384,
-            RSA_PKCS1_2048_8192_SHA512,
-            RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS,
-            RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS,
-            RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS,
-        ],
-        &[
-            // Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
-            (
-                SignatureScheme::ECDSA_NISTP384_SHA384,
-                &[ECDSA_P384_SHA384, ECDSA_P256_SHA384, ECDSA_P521_SHA384],
-            ),
-            (
-                SignatureScheme::ECDSA_NISTP256_SHA256,
-                &[ECDSA_P256_SHA256, ECDSA_P384_SHA256, ECDSA_P521_SHA256],
-            ),
-            (
-                SignatureScheme::ECDSA_NISTP521_SHA512,
-                &[ECDSA_P521_SHA512, ECDSA_P384_SHA512, ECDSA_P256_SHA512],
-            ),
-            (SignatureScheme::ED25519, &[ED25519]),
-            (
-                SignatureScheme::RSA_PSS_SHA512,
-                &[RSA_PSS_2048_8192_SHA512_LEGACY_KEY],
-            ),
-            (
-                SignatureScheme::RSA_PSS_SHA384,
-                &[RSA_PSS_2048_8192_SHA384_LEGACY_KEY],
-            ),
-            (
-                SignatureScheme::RSA_PSS_SHA256,
-                &[RSA_PSS_2048_8192_SHA256_LEGACY_KEY],
-            ),
-            (
-                SignatureScheme::RSA_PKCS1_SHA512,
-                &[RSA_PKCS1_2048_8192_SHA512],
-            ),
-            (
-                SignatureScheme::RSA_PKCS1_SHA384,
-                &[RSA_PKCS1_2048_8192_SHA384],
-            ),
-            (
-                SignatureScheme::RSA_PKCS1_SHA256,
-                &[RSA_PKCS1_2048_8192_SHA256],
-            ),
-        ],
-    ) {
-        Ok(algs) => algs,
-        Err(_) => panic!("bad WebPkiSupportedAlgorithms"),
-    };
+pub static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = match WebPkiSupportedAlgorithms::new(
+    &[
+        ECDSA_P256_SHA256,
+        ECDSA_P256_SHA384,
+        ECDSA_P256_SHA512,
+        ECDSA_P384_SHA256,
+        ECDSA_P384_SHA384,
+        ECDSA_P384_SHA512,
+        ECDSA_P521_SHA256,
+        ECDSA_P521_SHA384,
+        ECDSA_P521_SHA512,
+        ED25519,
+        RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+        RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+        RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+        RSA_PKCS1_2048_8192_SHA256,
+        RSA_PKCS1_2048_8192_SHA384,
+        RSA_PKCS1_2048_8192_SHA512,
+        RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS,
+        RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS,
+        RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS,
+        ML_DSA_44,
+        ML_DSA_65,
+        ML_DSA_87,
+    ],
+    &[
+        // Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
+        (
+            SignatureScheme::ECDSA_NISTP384_SHA384,
+            &[ECDSA_P384_SHA384, ECDSA_P256_SHA384, ECDSA_P521_SHA384],
+        ),
+        (
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+            &[ECDSA_P256_SHA256, ECDSA_P384_SHA256, ECDSA_P521_SHA256],
+        ),
+        (
+            SignatureScheme::ECDSA_NISTP521_SHA512,
+            &[ECDSA_P521_SHA512, ECDSA_P384_SHA512, ECDSA_P256_SHA512],
+        ),
+        (SignatureScheme::ED25519, &[ED25519]),
+        (
+            SignatureScheme::RSA_PSS_SHA512,
+            &[RSA_PSS_2048_8192_SHA512_LEGACY_KEY],
+        ),
+        (
+            SignatureScheme::RSA_PSS_SHA384,
+            &[RSA_PSS_2048_8192_SHA384_LEGACY_KEY],
+        ),
+        (
+            SignatureScheme::RSA_PSS_SHA256,
+            &[RSA_PSS_2048_8192_SHA256_LEGACY_KEY],
+        ),
+        (
+            SignatureScheme::RSA_PKCS1_SHA512,
+            &[RSA_PKCS1_2048_8192_SHA512],
+        ),
+        (
+            SignatureScheme::RSA_PKCS1_SHA384,
+            &[RSA_PKCS1_2048_8192_SHA384],
+        ),
+        (
+            SignatureScheme::RSA_PKCS1_SHA256,
+            &[RSA_PKCS1_2048_8192_SHA256],
+        ),
+        (SignatureScheme::ML_DSA_44, &[ML_DSA_44]),
+        (SignatureScheme::ML_DSA_65, &[ML_DSA_65]),
+        (SignatureScheme::ML_DSA_87, &[ML_DSA_87]),
+    ],
+) {
+    Ok(algs) => algs,
+    Err(_) => panic!("bad WebPkiSupportedAlgorithms"),
+};
 
 /// An array of all the verification algorithms exported by this crate.
 ///
@@ -101,6 +106,9 @@ pub static ALL_VERIFICATION_ALGS: &[&dyn SignatureVerificationAlgorithm] = &[
     RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
     RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
     RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+    ML_DSA_44,
+    ML_DSA_65,
+    ML_DSA_87,
 ];
 
 /// A `SignatureVerificationAlgorithm` implemented using aws-lc-rs.
@@ -243,6 +251,27 @@ pub static RSA_PKCS1_2048_8192_SHA512: &dyn SignatureVerificationAlgorithm =
         signature_alg_id: alg_id::RSA_PKCS1_SHA512,
         verification_alg: &signature::RSA_PKCS1_2048_8192_SHA512,
     };
+
+/// ML-DSA signatures using the [4, 4] matrix (security strength category 2).
+pub static ML_DSA_44: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
+    public_key_alg_id: alg_id::ML_DSA_44,
+    signature_alg_id: alg_id::ML_DSA_44,
+    verification_alg: &signature::ML_DSA_44,
+};
+
+/// ML-DSA signatures using the [6, 5] matrix (security strength category 3).
+pub static ML_DSA_65: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
+    public_key_alg_id: alg_id::ML_DSA_65,
+    signature_alg_id: alg_id::ML_DSA_65,
+    verification_alg: &signature::ML_DSA_65,
+};
+
+/// ML-DSA signatures using the [8, 7] matrix (security strength category 5).
+pub static ML_DSA_87: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
+    public_key_alg_id: alg_id::ML_DSA_87,
+    signature_alg_id: alg_id::ML_DSA_87,
+    verification_alg: &signature::ML_DSA_87,
+};
 
 /// RSA PKCS#1 1.5 signatures using SHA-256 for keys of 2048-8192 bits,
 /// with illegally absent AlgorithmIdentifier parameters.

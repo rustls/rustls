@@ -1,4 +1,4 @@
-//! This is the simplest possible client using rustls-postquantum, based on
+//! This is the simplest possible client using post-quantum algorithms, based on
 //! `simpleclient.rs`.
 //!
 //! It sends a HTTP request to pq.cloudflareresearch.com and prints the response to
@@ -12,6 +12,7 @@ use std::net::TcpStream;
 use std::sync::Arc;
 
 use rustls::VecInput;
+use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 use rustls_util::Stream;
 
 fn main() {
@@ -21,7 +22,7 @@ fn main() {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     };
 
-    let config = rustls::ClientConfig::builder(Arc::new(rustls_post_quantum::DEFAULT_PROVIDER))
+    let config = rustls::ClientConfig::builder(Arc::new(DEFAULT_PROVIDER))
         .with_root_certificates(root_store)
         .with_no_client_auth()
         .unwrap();
