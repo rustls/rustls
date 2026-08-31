@@ -260,8 +260,6 @@ pub static ML_DSA_44: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerification
     public_key_alg_id: alg_id::ML_DSA_44,
     signature_alg_id: alg_id::ML_DSA_44,
     verification_alg: &aws_lc_rs::signature::ML_DSA_44,
-    // Not included in AWS-LC-FIPS 3.0 FIPS scope
-    in_fips_submission: false,
 };
 
 /// ML-DSA signatures using the [6, 5] matrix (security strength category 3).
@@ -269,8 +267,6 @@ pub static ML_DSA_65: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerification
     public_key_alg_id: alg_id::ML_DSA_65,
     signature_alg_id: alg_id::ML_DSA_65,
     verification_alg: &aws_lc_rs::signature::ML_DSA_65,
-    // Not included in AWS-LC-FIPS 3.0 FIPS scope
-    in_fips_submission: false,
 };
 
 /// ML-DSA signatures using the [8. 7] matrix (security strength category 5).
@@ -278,8 +274,6 @@ pub static ML_DSA_87: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerification
     public_key_alg_id: alg_id::ML_DSA_87,
     signature_alg_id: alg_id::ML_DSA_87,
     verification_alg: &aws_lc_rs::signature::ML_DSA_87,
-    // Not included in AWS-LC-FIPS 3.0 FIPS scope
-    in_fips_submission: false,
 };
 
 #[cfg(test)]
