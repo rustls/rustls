@@ -1175,6 +1175,7 @@ impl Options {
             | "-enable-all-curves"
             | "-enable-ocsp-stapling"
             | "-expect-no-session"
+            | "-on-retry-expect-no-session"
             | "-expect-ticket-renewal"
             | "-forbid-renegotiation-after-handshake"
             | "-handoff"
@@ -1190,7 +1191,8 @@ impl Options {
             | "-implicit-handshake"
             | "-use-old-client-cert-callback"
             | "-use-early-callback"
-            | "-use-custom-verify-callback" => {}
+            | "-use-custom-verify-callback"
+            | "-reverify-on-resume" => {}
 
             // Not implemented things
             "-advertise-empty-npn"
@@ -1236,11 +1238,11 @@ impl Options {
             | "-on-resume-export-early-keying-material"
             | "-on-resume-expect-no-ech-name-override"
             | "-on-resume-verify-fail"
+            | "-on-retry-verify-fail"
             | "-psk"
             | "-renegotiate-freely"
             | "-resumption-across-names-enabled"
             | "-retain-only-sha256-client-cert-initial"
-            | "-reverify-on-resume"
             | "-select-empty-next-proto"
             | "-select-next-proto"
             | "-send-alert"
