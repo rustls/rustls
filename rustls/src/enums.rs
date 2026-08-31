@@ -3,6 +3,7 @@
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 
+use crate::common_state::Side;
 use crate::crypto::cipher::Payload;
 use crate::error::InvalidMessage;
 use crate::msgs::{
@@ -165,13 +166,22 @@ impl HandshakeType {
     /// Whether the handshake type can be first message in a flight per [1].
     ///
     /// [1]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-5.7
-    pub(crate) fn first_in_flight(&self) -> bool {
-        match *self {
-            Self::ClientHello
-            | Self::HelloRetryRequest
-            | Self::ServerHello
-            | Self::Certificate
-            | Self::NewSessionTicket => true,
+    pub(crate) fn first_in_flight(&self, recipient: Side) -> bool {
+        match (*self, recipient) {
+            // Client initial flight is just ClientHello
+            (Self::ClientHello, Side::Server)
+            // If server sends HRR, it is a single-message flight
+            | (Self::HelloRetryRequest, Side::Client)
+            // Server's flight always starts with ServerHello
+            | (Self::ServerHello, Side::Client)
+            // Client's final flight starts with Certificate if client auth is in use, Finished
+            // otherwise
+            | (Self::Certificate, Side::Server)
+            | (Self::Finished, Side::Server)
+            // Post-handshake NewSessionTicket is a single-message flight
+            | (Self::NewSessionTicket, Side::Client) => true,
+            // KeyUpdate is a single-message flight regardless of recipient
+            | (Self::KeyUpdate, _) => true,
             _ => false,
         }
     }

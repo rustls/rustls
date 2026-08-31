@@ -833,7 +833,7 @@ impl Codec<'_> for AckPayload {
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4
 /// [2]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-7
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct AckRecordSequenceNumber {
     pub epoch: Epoch,
     pub seq: FullRecordSequenceNumber,
@@ -876,7 +876,7 @@ impl TlsListElement for AckRecordSequenceNumber {
 /// [2]: https://datatracker.ietf.org/doc/html/rfc9147#section-4
 /// [3]: https://www.rfc-editor.org/info/rfc9147/#section-6.1
 /// [4]: https://www.rfc-editor.org/info/rfc9846/#section-4.7
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Hash)]
 #[non_exhaustive]
 pub enum Epoch {
     /// Unencrypted messages.
@@ -1034,6 +1034,12 @@ impl Epoch {
             ) => panic!("rustls does not support rekey in (D)TLS 1.2"),
             (..) => panic!("illegal epoch transition from {self:?} for {purpose:?}"),
         }
+    }
+}
+
+impl Ord for Epoch {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.number().cmp(&other.number())
     }
 }
 
@@ -1266,7 +1272,7 @@ impl HandshakeSequence {
 ///
 /// Also not to be confused with [`RecordSequenceNumber`], which is the sequence number at the
 /// record layer.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub(crate) struct HandshakeSequenceNumber(u16);
 
 impl HandshakeSequenceNumber {
@@ -1432,7 +1438,7 @@ impl TruncatedRecordSequenceNumber {
 /// [1]: https://www.rfc-editor.org/info/rfc6347/#section-4.1
 /// [2]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4
 /// [3]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-rfc9147bis-02#section-4.2.2
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct FullRecordSequenceNumber(u64);
 
 impl FullRecordSequenceNumber {

@@ -32,6 +32,8 @@ pub(crate) use send::{SendOutput, SendPath};
 pub(crate) mod split;
 use split::SplitConnection;
 
+mod unacked_list;
+
 /// A trait generalizing over buffered client or server connections.
 pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     /// The side (client or server) that this type implements.

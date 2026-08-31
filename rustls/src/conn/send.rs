@@ -305,13 +305,43 @@ impl SendOutput for SendPath {
             return;
         }
 
-        let message = EncodedMessage::<Payload<'static>>::from(Message::build_key_update_notify(
-            self.negotiated_version(),
-            self.outbound_handshake_seq(),
-        ));
-        let mut queued = Vec::new();
-        self.encrypt_state
-            .encrypt_outgoing(message.borrow_outbound(), &mut queued);
+        let handshake_seq = self.outbound_handshake_seq();
+        let message = Message::build_key_update_notify(self.negotiated_version(), handshake_seq);
+        let queued = if self.negotiated_version() == ProtocolVersion::DTLSv1_3 {
+            let MessagePayload::Handshake {
+                seq,
+                parsed,
+                encoded,
+            } = message.payload
+            else {
+                unreachable!("it's a handshake i promise");
+            };
+
+            let slice = [(parsed.0.handshake_type(), seq, encoded.bytes())];
+            let messages: Vec<_> = self
+                .message_fragmenter
+                .fragment_dtls_handshake_message_flight(message.version, &slice)
+                .into_iter()
+                .map(|m| EncodedMessage {
+                    typ: m.typ,
+                    version: m.version,
+                    payload: m.payload,
+                })
+                .collect();
+
+            let mut queued = Vec::new();
+            for message in messages {
+                self.encrypt_state
+                    .encrypt_outgoing(message.borrow_outbound(), &mut queued);
+            }
+            queued
+        } else {
+            let message = EncodedMessage::<Payload<'static>>::from(message);
+            let mut queued = Vec::new();
+            self.encrypt_state
+                .encrypt_outgoing(message.borrow_outbound(), &mut queued);
+            queued
+        };
         self.key_update_remote = KeyUpdateRemote::Queued(queued);
 
         if let Some(mut ks) = self.tls13_key_schedule.take() {

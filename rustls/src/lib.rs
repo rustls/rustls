@@ -407,6 +407,7 @@ pub mod split {
 }
 pub use crate::error::Error;
 pub use crate::key_log::{KeyLog, NoKeyLog};
+pub use crate::msgs::{AckRecordSequenceNumber, Epoch, FullRecordSequenceNumber};
 pub use crate::suites::{
     CipherSuiteCommon, ConnectionTrafficSecrets, ExtractedSecrets, SupportedCipherSuite,
 };

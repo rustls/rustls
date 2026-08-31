@@ -1,7 +1,8 @@
 use std::borrow::Cow;
 
 use rustls::{
-    ClientConnection, Connection, Error, Protocol, ServerConnection, VecInput,
+    AckRecordSequenceNumber, ClientConnection, Connection, Epoch, Error, FullRecordSequenceNumber,
+    Protocol, ServerConnection, VecInput,
     crypto::{AntiReplay, CryptoProvider},
     enums::ProtocolVersion,
 };
@@ -158,23 +159,18 @@ fn handshake_flight_acks() {
 
     let mut server_received = Vec::new();
     let mut client_received = Vec::new();
-    while server.is_handshaking() || client.is_handshaking() {
-        transfer(&mut client_output, &mut server_input);
-        server
-            .process_new_packets(&mut server_input, &mut server_output)
-            .handle_all(&mut server_received)
-            .unwrap();
-        transfer(&mut server_output, &mut client_input);
-        client
-            .process_new_packets(&mut client_input, &mut client_output)
-            .handle_all(&mut client_received)
-            .unwrap();
-        std::println!(
-            "client acked by peer: {:?}\nserver acked by peer: {:?}",
-            client.records_acked_by_peer(),
-            server.records_acked_by_peer()
-        );
-    }
+
+    // Client sends ClientHello, server responds with ServerHello-Finished flight. We expect no ACKs.
+    transfer(&mut client_output, &mut server_input);
+    server
+        .process_new_packets(&mut server_input, &mut server_output)
+        .handle_all(&mut server_received)
+        .unwrap();
+    transfer(&mut server_output, &mut client_input);
+    client
+        .process_new_packets(&mut client_input, &mut client_output)
+        .handle_all(&mut client_received)
+        .unwrap();
 
     assert!(
         client
@@ -185,5 +181,153 @@ fn handshake_flight_acks() {
         server
             .records_acked_by_peer()
             .is_empty()
+    );
+
+    // Client sends Finished, server ACKs that flight.
+    transfer(&mut client_output, &mut server_input);
+    server
+        .process_new_packets(&mut server_input, &mut server_output)
+        .handle_all(&mut server_received)
+        .unwrap();
+    transfer(&mut server_output, &mut client_input);
+    client
+        .process_new_packets(&mut client_input, &mut client_output)
+        .handle_all(&mut client_received)
+        .unwrap();
+
+    assert_eq!(
+        client.records_acked_by_peer(),
+        &[AckRecordSequenceNumber {
+            epoch: Epoch::EncryptedHandshakeMessages,
+            seq: FullRecordSequenceNumber::from(0),
+        }]
+    );
+    assert!(
+        server
+            .records_acked_by_peer()
+            .is_empty()
+    );
+}
+
+#[test]
+fn key_update_ack_client() {
+    let TestCase {
+        mut client_input,
+        mut client_output,
+        mut client,
+        mut server_input,
+        mut server_output,
+        mut server,
+    } = setup_test(ProtocolVersion::DTLSv1_3);
+
+    // Force client to send KeyUpdate to server.
+    client
+        .refresh_traffic_keys(&mut client_output)
+        .unwrap();
+    transfer(&mut client_output, &mut server_input);
+
+    // Server will ACK the KeyUpdate and send a KeyUpdate of its own.
+    server
+        .process_new_packets(&mut server_input, &mut server_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    transfer(&mut server_output, &mut client_input);
+    // Client will ACK the server's KeyUpdate
+    client
+        .process_new_packets(&mut client_input, &mut client_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    assert_eq!(
+        client.records_acked_by_peer(),
+        &[
+            // Finished message from end of handshake
+            AckRecordSequenceNumber {
+                epoch: Epoch::EncryptedHandshakeMessages,
+                seq: FullRecordSequenceNumber::from(0)
+            },
+            // KeyUpdate
+            AckRecordSequenceNumber {
+                epoch: Epoch::ApplicationData(3),
+                seq: FullRecordSequenceNumber::from(0),
+            }
+        ]
+    );
+
+    // Server will receive client's ACK
+    transfer(&mut client_output, &mut server_input);
+    server
+        .process_new_packets(&mut server_input, &mut server_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    assert_eq!(
+        server.records_acked_by_peer(),
+        &[AckRecordSequenceNumber {
+            epoch: Epoch::ApplicationData(3),
+            seq: FullRecordSequenceNumber::from(1),
+        }]
+    );
+}
+
+#[test]
+fn key_update_ack_server() {
+    let TestCase {
+        mut client_input,
+        mut client_output,
+        mut client,
+        mut server_input,
+        mut server_output,
+        mut server,
+    } = setup_test(ProtocolVersion::DTLSv1_3);
+
+    std::println!(
+        "handshake done\nserver acked {:?}\nclient acked: {:?}\n\n\n",
+        server.records_acked_by_peer(),
+        client.records_acked_by_peer()
+    );
+
+    // Force server to send KeyUpdate to client.
+    server
+        .refresh_traffic_keys(&mut server_output)
+        .unwrap();
+    transfer(&mut server_output, &mut client_input);
+    // Client will ACK the KeyUpdate and send a KeyUpdate of its own.
+    client
+        .process_new_packets(&mut client_input, &mut client_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    transfer(&mut client_output, &mut server_input);
+    // Server will ACK the client's KeyUpdate
+    server
+        .process_new_packets(&mut server_input, &mut server_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    assert_eq!(
+        server.records_acked_by_peer(),
+        &[AckRecordSequenceNumber {
+            epoch: Epoch::ApplicationData(3),
+            seq: FullRecordSequenceNumber::from(1),
+        }]
+    );
+
+    // Client will receive server's ACK
+    transfer(&mut server_output, &mut client_input);
+    client
+        .process_new_packets(&mut client_input, &mut client_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    assert_eq!(
+        client.records_acked_by_peer(),
+        &[
+            // finished message from end of handshake
+            AckRecordSequenceNumber {
+                epoch: Epoch::EncryptedHandshakeMessages,
+                seq: FullRecordSequenceNumber::from(0),
+            },
+            // key update
+            AckRecordSequenceNumber {
+                epoch: Epoch::ApplicationData(3),
+                seq: FullRecordSequenceNumber::from(0)
+            }
+        ],
     );
 }

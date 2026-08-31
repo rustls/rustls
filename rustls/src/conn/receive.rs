@@ -12,6 +12,7 @@ use crate::common_state::{
     maybe_send_fatal_alert,
 };
 use crate::conn::private::SideOutput;
+use crate::conn::unacked_list::UnackedRecords;
 use crate::conn::{ConnectionCommon, StateMachine};
 use crate::crypto::cipher::{
     Decrypted, DecryptionState, EncodableVersion, EncodedMessage, Payload,
@@ -20,8 +21,9 @@ use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::{
     AckPayload, AckRecordSequenceNumber, AlertLevel, AlertLevelName, AlertMessagePayload, Deframed,
-    Deframer, Delocator, Epoch, FullRecordSequenceNumber, HandshakeAlignedProof, Locator, Message,
-    MessagePayload, RecordSequenceNumber,
+    Deframer, Delocator, Epoch, FullRecordSequenceNumber, HandshakeAlignedProof,
+    HandshakeMessagePayload, HandshakeSequenceNumber, Locator, Message, MessagePayload,
+    RecordSequenceNumber,
 };
 use crate::quic::QuicOutput;
 use crate::tracing::{trace, warn};
@@ -152,12 +154,19 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
                     .receive_message(msg, hs_aligned, output.tls, output.other.send)
                 {
                     Ok(Some(input)) => {
-                        let handshake_type = input.message.handshake_type();
+                        let accepted_handshake = match input.message.payload {
+                            MessagePayload::Handshake {
+                                seq,
+                                parsed: HandshakeMessagePayload(ref handshake_message),
+                                ..
+                            } => Some((seq, handshake_message.handshake_type())),
+                            _ => None,
+                        };
                         let res = st.handle(input, &mut output);
                         if res.is_ok() {
-                            // Only send ack after messages are *successfully* processed
+                            // Only ack messages that are *successfully* processed
                             output.recv.process_unacked_list(
-                                handshake_type,
+                                accepted_handshake,
                                 output.other.send,
                                 output.tls,
                             );
@@ -235,12 +244,8 @@ pub(crate) struct ReceivePath {
 
     pub(crate) tls13_tickets_received: u32,
 
-    /// Unacknowledged record seq nos in the flight currently being received.
-    ///
-    /// Only relevant for DTLS 1.3.
-    // TODO(DTLS): we could make this a smallish array to avoid allocations. Flights are highly
-    // unlikely to ever exceed 10 or so messages.
-    unacked_from_peer: Vec<AckRecordSequenceNumber>,
+    /// Handshake message acknowledgement.
+    handshake_acks: UnackedRecords,
 
     /// Sequence numbers in the current epoch which have been acked by the peer.
     // TODO(DTLS): as with current_flight_record_seqs, this could be a smallish array.
@@ -260,7 +265,8 @@ impl ReceivePath {
             deframer: Deframer::default(),
             seen_consecutive_empty_fragments: 0,
             tls13_tickets_received: 0,
-            unacked_from_peer: Vec::new(),
+
+            handshake_acks: UnackedRecords::new(side),
             acked_by_peer: Vec::new(),
         }
     }
@@ -322,14 +328,6 @@ impl ReceivePath {
                     .anti_replay()
                     .observe(record_seq)
                     .map_err(|e| Error::DtlsRecordAntiReplay(e))?;
-
-                // Records come out of the deframer ordered by record sequence number. Keep track of
-                // which ones are in the current flight so they can be acked as needed.
-                self.unacked_from_peer
-                    .push(AckRecordSequenceNumber {
-                        epoch,
-                        seq: record_seq,
-                    });
             }
 
             match message.payload.len() {
@@ -366,8 +364,11 @@ impl ReceivePath {
 
             let message = unborrowed.reborrow(&Delocator::new(buffer));
             if self.protocol.is_dtls() {
-                self.deframer
+                let handshake_seqs = self
+                    .deframer
                     .input_message_dtls(message, bounds)?;
+                self.handshake_acks
+                    .observe_record_seq(epoch, record_seq, handshake_seqs);
                 self.deframer.coalesce_dtls(buffer);
             } else {
                 self.deframer
@@ -636,50 +637,22 @@ impl ReceivePath {
         }
     }
 
-    /// Process the contents of the unacked list based on most recently received handshake message.
+    pub(crate) fn acked_by_peer(&self) -> &[AckRecordSequenceNumber] {
+        &self.acked_by_peer
+    }
+
     fn process_unacked_list(
         &mut self,
-        typ: Option<HandshakeType>,
+        accepted_message: Option<(HandshakeSequenceNumber, HandshakeType)>,
         send: &mut dyn SendOutput,
         tls: &mut Vec<u8>,
     ) {
-        // ACKs are DTLS 1.3 only.
-        if self.negotiated_version() != ProtocolVersion::DTLSv1_3 {
-            return;
+        if let Some(to_ack) = self
+            .handshake_acks
+            .observe_handshake_seq(self.negotiated_version(), accepted_message)
+        {
+            send.ack_flight(&to_ack, tls);
         }
-
-        // ACKs are only for handshake messages.
-        let Some(typ) = typ else {
-            return;
-        };
-
-        // Empty the unacked list when a new flight is received:
-        //
-        // "ACKs only cover the current outstanding flight ... In particular, receiving a message
-        // from a handshake flight implicitly acknowledges all messages from the previous
-        // flight(s)."
-        if typ.first_in_flight() {
-            self.unacked_from_peer = Vec::new();
-            // We do not send an ACK on start of a new flight, just reset the unacked list!
-            return;
-        }
-
-        // Send an ACK and reset the unacked list when:
-        if matches!(
-            (self.side, typ),
-            // - Server receives "the client's final flight of the main handshake", which ends with
-            //   Finished
-            (Side::Server, HandshakeType::Finished)
-            // - Either side receives a KeyUpdate
-            | (_, HandshakeType::KeyUpdate)
-        ) {
-            let unacked_from_peer = mem::take(&mut self.unacked_from_peer);
-            send.ack_flight(&unacked_from_peer, tls);
-        }
-    }
-
-    pub(crate) fn acked_by_peer(&self) -> &[AckRecordSequenceNumber] {
-        &self.acked_by_peer
     }
 }
 

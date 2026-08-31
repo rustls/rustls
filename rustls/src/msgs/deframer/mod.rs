@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use core::mem;
 use core::ops::Range;
 use std::collections::VecDeque;
@@ -293,13 +294,17 @@ impl Deframer {
     ///
     /// `bounds` is the position within the containing buffer of the record payload. That is, it
     /// begins at the start of the first handshake header.
+    ///
+    /// The handshake sequence numbers observed in the record are returned.
     pub(crate) fn input_message_dtls(
         &mut self,
         msg: EncodedMessage<&'_ [u8]>,
         bounds: Range<usize>,
-    ) -> Result<(), Error> {
+    ) -> Result<Vec<HandshakeSequenceNumber>, Error> {
         debug_assert!(msg.typ == ContentType::Handshake);
         debug_assert!(msg.version.is_datagram_tls());
+
+        let mut handshake_seqs = Vec::new();
 
         // Using DissectHandshakeIter wouldn't be appropriate here because parsing DTLS handshake
         // fragments is fallible: if there isn't enough room for a handshake fragment header, we
@@ -325,9 +330,12 @@ impl Deframer {
             if bound_start > bounds.end {
                 return Err(Error::InvalidMessage(InvalidMessage::MessageTooLarge));
             }
+            if !handshake_seqs.contains(&handshake_fragment.message_seq) {
+                handshake_seqs.push(handshake_fragment.message_seq);
+            }
         }
 
-        Ok(())
+        Ok(handshake_seqs)
     }
 
     /// Coalesce the handshake portions of the given buffer,
