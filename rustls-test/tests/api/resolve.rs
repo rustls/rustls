@@ -447,6 +447,12 @@ fn default_signature_schemes(version: ProtocolVersion) -> Vec<SignatureScheme> {
             SignatureScheme::RSA_PKCS1_SHA384,
             SignatureScheme::RSA_PKCS1_SHA256,
         ]);
+    } else if provider_is_aws_lc_rs() {
+        v.extend_from_slice(&[
+            SignatureScheme::ML_DSA_44,
+            SignatureScheme::ML_DSA_65,
+            SignatureScheme::ML_DSA_87,
+        ]);
     }
 
     v

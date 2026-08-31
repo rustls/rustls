@@ -25,10 +25,20 @@ zeroize = { workspace = true }
 
 [dev-dependencies]
 bencher = { workspace = true }
+criterion = { workspace = true }
 hex = { workspace = true }
+rcgen = { workspace = true, features = ["aws_lc_rs"] }
 rustls-test = { workspace = true }
+rustls-util = { version = "0.1.0-dev.1", path = "../rustls-util" }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tracing-subscriber = { workspace = true }
+webpki-roots = { workspace = true }
+
+[[bench]]
+name = "benchmarks"
+path = "benches/benchmarks.rs"
+harness = false
 
 [lints]
 workspace = true

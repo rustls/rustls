@@ -12,22 +12,8 @@ categories = ["network-programming", "cryptography"]
 autobenches = false
 
 [dependencies]
-aws-lc-rs = { workspace = true }
 rustls-aws-lc-rs = { version = "0.1.0-dev.1", path = "../rustls-aws-lc-rs" }
-rustls = { path = "../rustls", version = "0.24.0-dev.0", default-features = false }
-
-[dev-dependencies]
-criterion = { workspace = true }
-rcgen = { workspace = true, features = ["aws_lc_rs"] }
-rustls-test = { workspace = true, default-features = false }
-rustls-util = { workspace = true }
-tracing-subscriber = { workspace = true }
-webpki-roots = { workspace = true }
-
-[[bench]]
-name = "benchmarks"
-path = "benches/benchmarks.rs"
-harness = false
+rustls = { version = "0.24.0-dev.1", path = "../rustls", default-features = false }
 
 [lints]
 workspace = true

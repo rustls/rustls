@@ -9,6 +9,7 @@ use rustls::crypto::kx::{
     SupportedKxGroup,
 };
 use rustls::{ClientConfig, Error, RootCertStore};
+use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 use rustls_aws_lc_rs::kx_group::{MLKEM768, X25519, X25519MLKEM768};
 
 fn bench_client(c: &mut Criterion) {
@@ -76,14 +77,14 @@ fn bench_clienthello(c: &mut Criterion) {
     });
 
     let config_x25519 = Arc::new(
-        ClientConfig::builder(rustls_aws_lc_rs::DEFAULT_PROVIDER.into())
+        ClientConfig::builder(DEFAULT_PROVIDER.into())
             .with_root_certificates(anchors.clone())
             .with_no_client_auth()
             .unwrap(),
     );
 
     let config_x25519mlkem768 = Arc::new(
-        ClientConfig::builder(rustls_post_quantum::DEFAULT_PROVIDER.into())
+        ClientConfig::builder(DEFAULT_PROVIDER.into())
             .with_root_certificates(anchors.clone())
             .with_no_client_auth()
             .unwrap(),
@@ -140,7 +141,7 @@ fn separate_provider() -> CryptoProvider {
     ];
     CryptoProvider {
         kx_groups: Cow::Borrowed(KX_GROUPS),
-        ..rustls_aws_lc_rs::DEFAULT_PROVIDER
+        ..DEFAULT_PROVIDER
     }
 }
 

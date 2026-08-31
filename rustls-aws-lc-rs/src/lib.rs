@@ -54,7 +54,7 @@ pub mod hpke;
 
 /// Using software keys for authentication.
 pub mod sign;
-use sign::{EcdsaSigner, Ed25519Signer, RsaSigningKey};
+use sign::{EcdsaSigner, Ed25519Signer, PqdsaSigningKey, RsaSigningKey};
 
 pub(crate) mod hash;
 
@@ -77,16 +77,15 @@ pub(crate) mod tls13;
 pub use tls13::{ALL_TLS13_CIPHER_SUITES, DEFAULT_TLS13_CIPHER_SUITES};
 
 pub(crate) mod verify;
-use verify::SUPPORTED_SIG_ALGS;
 pub use verify::{
     ALL_VERIFICATION_ALGS, AwsLcRsVerificationAlgorithm, ECDSA_P256_SHA256, ECDSA_P256_SHA384,
     ECDSA_P256_SHA512, ECDSA_P384_SHA256, ECDSA_P384_SHA384, ECDSA_P384_SHA512, ECDSA_P521_SHA256,
-    ECDSA_P521_SHA384, ECDSA_P521_SHA512, ED25519, RSA_PKCS1_2048_8192_SHA256,
-    RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS, RSA_PKCS1_2048_8192_SHA384,
-    RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS, RSA_PKCS1_2048_8192_SHA512,
-    RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS, RSA_PKCS1_3072_8192_SHA384,
-    RSA_PSS_2048_8192_SHA256_LEGACY_KEY, RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
-    RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+    ECDSA_P521_SHA384, ECDSA_P521_SHA512, ED25519, ML_DSA_44, ML_DSA_65, ML_DSA_87,
+    RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS,
+    RSA_PKCS1_2048_8192_SHA384, RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS,
+    RSA_PKCS1_2048_8192_SHA512, RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS,
+    RSA_PKCS1_3072_8192_SHA384, RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+    RSA_PSS_2048_8192_SHA384_LEGACY_KEY, RSA_PSS_2048_8192_SHA512_LEGACY_KEY, SUPPORTED_SIG_ALGS,
 };
 
 /// A `CryptoProvider` backed by aws-lc-rs that uses FIPS140-3-approved cryptography.
@@ -164,6 +163,10 @@ impl KeyProvider for AwsLcRs {
         if let PrivateKeyDer::Pkcs8(pkcs8) = key_der {
             if let Ok(eddsa) = Ed25519Signer::try_from(&pkcs8) {
                 return Ok(Box::new(eddsa));
+            }
+
+            if let Ok(pqdsa) = PqdsaSigningKey::from_pkcs8(&pkcs8) {
+                return Ok(Box::new(pqdsa));
             }
         }
 

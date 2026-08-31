@@ -6,8 +6,12 @@ use alloc::{format, vec};
 use core::fmt::{self, Debug, Formatter};
 
 use aws_lc_rs::rand::SystemRandom;
-use aws_lc_rs::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
-use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer, alg_id};
+use aws_lc_rs::signature::{
+    self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, PqdsaKeyPair, PqdsaSigningAlgorithm, RsaKeyPair,
+};
+use pki_types::{
+    AlgorithmIdentifier, PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer, alg_id,
+};
 #[cfg(test)]
 use rustls::crypto::CryptoProvider;
 use rustls::crypto::{SignatureScheme, Signer, SigningKey, public_key_to_spki};
@@ -252,6 +256,130 @@ impl Debug for EcdsaSigner {
     }
 }
 
+pub(crate) struct PqdsaSigningKey {
+    kind: PqdsaKeyKind,
+    inner: Arc<PqdsaKeyPair>,
+}
+
+impl PqdsaSigningKey {
+    pub(crate) fn from_pkcs8(pkcs8: &PrivatePkcs8KeyDer<'_>) -> Result<Self, Error> {
+        for kind in PqdsaKeyKind::iter() {
+            let Ok(key_pair) = PqdsaKeyPair::from_pkcs8(kind.to_alg(), pkcs8.secret_pkcs8_der())
+            else {
+                continue;
+            };
+
+            return Ok(Self {
+                kind,
+                inner: Arc::new(key_pair),
+            });
+        }
+
+        Err(Error::General(
+            "failed to parse private key as ML-DSA".into(),
+        ))
+    }
+}
+
+impl SigningKey for PqdsaSigningKey {
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
+        if !offered.contains(&self.kind.scheme()) {
+            return None;
+        }
+
+        Some(Box::new(PqdsaSigner {
+            key: self.inner.clone(),
+            kind: self.kind,
+        }))
+    }
+
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+        Some(public_key_to_spki(
+            &self.kind.alg_id(),
+            self.inner.public_key(),
+        ))
+    }
+}
+
+impl Debug for PqdsaSigningKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PqdsaSigningKey")
+            .field("scheme", &self.kind.scheme())
+            .finish_non_exhaustive()
+    }
+}
+
+struct PqdsaSigner {
+    key: Arc<PqdsaKeyPair>,
+    kind: PqdsaKeyKind,
+}
+
+impl Signer for PqdsaSigner {
+    fn sign(self: Box<Self>, message: &[u8]) -> Result<Vec<u8>, Error> {
+        let expected_sig_len = self.key.algorithm().signature_len();
+        let mut sig = vec![0; expected_sig_len];
+        let actual_sig_len = self
+            .key
+            .sign(message, &mut sig)
+            .map_err(|_| Error::General("signing failed".into()))?;
+
+        if actual_sig_len != expected_sig_len {
+            return Err(Error::General("unexpected signature length".into()));
+        }
+
+        Ok(sig)
+    }
+
+    fn scheme(&self) -> SignatureScheme {
+        self.kind.scheme()
+    }
+}
+
+impl Debug for PqdsaSigner {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PqdsaSigner")
+            .field("scheme", &self.kind.scheme())
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Copy)]
+enum PqdsaKeyKind {
+    MlDsa44,
+    MlDsa65,
+    MlDsa87,
+}
+
+impl PqdsaKeyKind {
+    fn iter() -> impl Iterator<Item = Self> {
+        [Self::MlDsa44, Self::MlDsa65, Self::MlDsa87].into_iter()
+    }
+
+    fn to_alg(self) -> &'static PqdsaSigningAlgorithm {
+        match self {
+            Self::MlDsa44 => &signature::ML_DSA_44_SIGNING,
+            Self::MlDsa65 => &signature::ML_DSA_65_SIGNING,
+            Self::MlDsa87 => &signature::ML_DSA_87_SIGNING,
+        }
+    }
+
+    fn scheme(&self) -> SignatureScheme {
+        match self {
+            Self::MlDsa44 => SignatureScheme::ML_DSA_44,
+            Self::MlDsa65 => SignatureScheme::ML_DSA_65,
+            Self::MlDsa87 => SignatureScheme::ML_DSA_87,
+        }
+    }
+
+    fn alg_id(&self) -> AlgorithmIdentifier {
+        match self {
+            Self::MlDsa44 => alg_id::ML_DSA_44,
+            Self::MlDsa65 => alg_id::ML_DSA_65,
+            Self::MlDsa87 => alg_id::ML_DSA_87,
+        }
+    }
+}
+
 /// A [`SigningKey`] and [`Signer`] implementation for ED25519.
 ///
 /// Unlike [`RsaSigningKey`]/[`RsaSigner`], where we have one key that supports
@@ -337,6 +465,12 @@ mod tests {
     use alloc::format;
 
     use pki_types::{PrivatePkcs1KeyDer, PrivateSec1KeyDer};
+    use rcgen::{
+        CertificateParams, CertifiedIssuer, ExtendedKeyUsagePurpose, IsCa, KeyPair, KeyUsagePurpose,
+    };
+    use rustls::crypto::Identity;
+    use rustls::{ClientConfig, RootCertStore, ServerConfig, ServerConnection, VecInput};
+    use rustls_test::do_handshake;
 
     use super::*;
     use crate::DEFAULT_PROVIDER;
@@ -624,6 +758,60 @@ mod tests {
             Some(Error::General(
                 "failed to parse RSA private key: InvalidEncoding".into()
             ))
+        );
+    }
+
+    #[test]
+    fn ml_dsa() {
+        let ca_key = KeyPair::generate_for(&rcgen::PKCS_ML_DSA_44).unwrap();
+        let mut ca_params = CertificateParams::new(vec!["Test CA".into()]).unwrap();
+        ca_params.is_ca = IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        ca_params.key_usages = vec![
+            KeyUsagePurpose::DigitalSignature,
+            KeyUsagePurpose::KeyCertSign,
+        ];
+        ca_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+        let issuer = CertifiedIssuer::self_signed(ca_params, ca_key).unwrap();
+
+        let ee_key = KeyPair::generate_for(&rcgen::PKCS_ML_DSA_87).unwrap();
+        let ee_params = CertificateParams::new(vec!["localhost".into()]).unwrap();
+        let ee_cert = ee_params
+            .signed_by(&ee_key, &issuer)
+            .unwrap();
+
+        let provider = Arc::new(DEFAULT_PROVIDER);
+        let server_config = ServerConfig::builder(provider.clone())
+            .with_no_client_auth()
+            .with_single_cert(
+                Arc::new(Identity::from_cert_chain(vec![ee_cert.der().clone()]).unwrap()),
+                PrivateKeyDer::try_from(ee_key.serialize_der()).unwrap(),
+            )
+            .unwrap();
+
+        let mut roots = RootCertStore::empty();
+        roots.add(issuer.der().clone()).unwrap();
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let mut client = Arc::new(
+            ClientConfig::builder(provider)
+                .with_root_certificates(roots)
+                .with_no_client_auth()
+                .unwrap(),
+        )
+        .connect("localhost".try_into().unwrap())
+        .build(&mut client_output)
+        .unwrap();
+
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+        do_handshake(
+            &mut client_input,
+            &mut client_output,
+            &mut client,
+            &mut server_input,
+            &mut server_output,
+            &mut server,
         );
     }
 }
