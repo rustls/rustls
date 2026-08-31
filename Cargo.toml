@@ -74,7 +74,7 @@ once_cell = { version = "1.16", default-features = false, features = ["alloc", "
 openssl = "0.10"
 pki-types = { package = "rustls-pki-types", version = "1.15", features = ["alloc"] }
 rayon = "1.7"
-rcgen = { version = "0.14.4", features = ["pem", "aws_lc_rs"], default-features = false }
+rcgen = { version = "0.14.10", features = ["pem", "aws_lc_rs"], default-features = false }
 regex = "1"
 ring = "0.17"
 rustc-hash = "2"

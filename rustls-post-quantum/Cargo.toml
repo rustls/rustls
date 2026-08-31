@@ -18,7 +18,7 @@ rustls = { path = "../rustls", version = "0.24.0-dev.0", default-features = fals
 
 [dev-dependencies]
 criterion = { workspace = true }
-rcgen = { workspace = true, features = ["aws_lc_rs_unstable"] }
+rcgen = { workspace = true, features = ["aws_lc_rs"] }
 rustls-test = { workspace = true, default-features = false }
 rustls-util = { workspace = true }
 tracing-subscriber = { workspace = true }
