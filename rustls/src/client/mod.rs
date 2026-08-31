@@ -42,7 +42,7 @@ mod handy;
 pub use handy::ClientSessionMemoryCache;
 
 mod hs;
-pub(crate) use hs::ClientHandler;
+pub(crate) use hs::{ClientHandler, ClientState};
 
 mod tls12;
 pub(crate) use tls12::TLS12_HANDLER;

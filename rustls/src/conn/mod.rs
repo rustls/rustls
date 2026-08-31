@@ -8,7 +8,6 @@ use pki_types::FipsStatus;
 
 use crate::common_state::{
     CommonState, ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent,
-    maybe_send_fatal_alert,
 };
 use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::{OutboundPlain, Payload};
@@ -23,6 +22,11 @@ use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 
 // pub so that it can be re-exported from the crate root
 pub mod kernel;
+
+mod handshake;
+pub(crate) use handshake::{
+    AcceptedCore, ClientNext, Core, NeedsInputCore, ServerNext, TcpTransport, Transport, VerifyCore,
+};
 
 mod receive;
 pub(crate) use receive::{Input, MessageIter, MessageIterMode, ReceivePath, TrafficTemperCounters};
@@ -128,16 +132,22 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
 /// More data needs to be supplied to make progress.
 ///
 /// Provide the data to [`Self::process()`].
-pub struct NeedsInput<Side: SideData> {
-    pub(crate) inner: ConnectionCommon<Side>,
-}
+pub struct NeedsInput<Side: SideData>(NeedsInputCore<Side, TcpTransport>);
 
 impl<Side: SideData> NeedsInput<Side> {
+    pub(crate) fn new(inner: ConnectionCommon<Side>) -> Self {
+        Self(NeedsInputCore::new(Core::new(inner, ())))
+    }
+
+    pub(crate) fn from_core(core: NeedsInputCore<Side, TcpTransport>) -> Self {
+        Self(core)
+    }
+
     /// Progress the handshake by receiving further data.
     ///
-    /// The data is obtained via `input`.  Any output produced is appended to `output` and
+    /// The data is obtained via `input`.  Any output produced is appended to `tls` and
     /// should be sent to the peer (including if this function returns an error, because
-    /// the `output` may contain an alert.)
+    /// `tls` may contain an alert.)
     ///
     /// An error from this function is otherwise fatal to the connection, as it consumes
     /// the [`NeedsInput`] object.
@@ -146,35 +156,11 @@ impl<Side: SideData> NeedsInput<Side> {
     /// the connection.  If this contains another [`NeedsInput`] object then obtaining more
     /// input (eg, from a socket or other source) is certainly necessary.
     pub fn process(
-        mut self,
+        self,
         input: &mut dyn TlsInputBuffer,
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
-        let mut iter = MessageIter::new(
-            input,
-            tls,
-            None,
-            &mut self.inner,
-            MessageIterMode::Handshake,
-        );
-        let r = loop {
-            match iter.next() {
-                Some(Ok(_)) => {}
-                Some(Err(e)) => break Err(e),
-                None => break Ok(()),
-            };
-        };
-
-        input.discard(
-            self.inner
-                .common
-                .recv
-                .deframer
-                .take_discard(),
-        );
-
-        r?;
-        Side::handshake_from_inner(self.inner)
+        Side::handshake_from_core(self.0.process(input, tls)?)
     }
 }
 
@@ -207,21 +193,16 @@ impl<S: SideData> fmt::Debug for NeedsInput<S> {
 ///
 /// [`ClientVerifier::verify_identity()`]: crate::verify::ClientVerifier::verify_identity
 /// [`ServerVerifier::verify_identity()`]: crate::verify::ServerVerifier::verify_identity
-pub struct VerifyPeerIdentity<Side: SideData> {
-    // invariant: `inner.state` is `Err(_)` and requires restoring
-    pub(crate) inner: ConnectionCommon<Side>,
-    pub(crate) verify_identity: Box<dyn VerifyPeerIdentityInternal<Side>>,
-}
+pub struct VerifyPeerIdentity<Side: SideData>(VerifyCore<Side, TcpTransport>);
 
 impl<Side: SideData> VerifyPeerIdentity<Side> {
+    pub(crate) fn from_core(core: VerifyCore<Side, TcpTransport>) -> Self {
+        Self(core)
+    }
+
     /// Progress the handshake by calling the pre-configured certificate verification trait.
     pub fn with_config(self, tls: &mut Vec<u8>) -> Result<Side::Handshake, Error> {
-        let Self {
-            inner,
-            verify_identity,
-        } = self;
-
-        Self::next(inner, |output| verify_identity.with_config(output), tls)
+        Side::handshake_from_core(self.0.with_config(tls)?)
     }
 
     /// Progress the handshake by incorporating the result of an external verification.
@@ -235,45 +216,15 @@ impl<Side: SideData> VerifyPeerIdentity<Side> {
         verification_result: Result<VerifiedIdentity<'static>, Error>,
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
-        let Self {
-            inner,
-            verify_identity,
-        } = self;
-
-        Self::next(
-            inner,
-            |output| {
-                verification_result
-                    .and_then(|verified| verify_identity.continue_with(verified, output))
-            },
-            tls,
+        Side::handshake_from_core(
+            self.0
+                .continue_with(verification_result, tls)?,
         )
     }
 
     /// Inspect the identity that the peer has provided.
     pub fn presented_identity(&self) -> Result<Side::PeerIdentity<'_>, Error> {
-        self.verify_identity
-            .presented_identity()
-    }
-
-    fn next(
-        mut inner: ConnectionCommon<Side>,
-        advance: impl FnOnce(&mut dyn Output<'_>) -> Result<Side::State, Error>,
-        tls: &mut Vec<u8>,
-    ) -> Result<Side::Handshake, Error> {
-        let result = advance(&mut SideCommonOutput {
-            side: &mut inner.side,
-            quic: None,
-            common: &mut inner.common,
-            tls,
-        });
-
-        if let Err(err) = &result {
-            maybe_send_fatal_alert(&mut inner.common.send, err, tls);
-        }
-
-        inner.state = result;
-        Side::handshake_from_inner(inner)
+        self.0.presented_identity()
     }
 }
 
@@ -734,7 +685,7 @@ pub trait SideData: private::Side + Sized {
 
     #[doc(hidden)]
     #[expect(private_interfaces)]
-    fn handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error>;
+    fn handshake_from_core(core: Core<Self, TcpTransport>) -> Result<Self::Handshake, Error>;
 }
 
 pub(crate) mod private {

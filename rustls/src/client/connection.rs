@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
+use core::fmt;
 use core::ops::Deref;
-use core::{fmt, mem};
 
 use pki_types::{FipsStatus, ServerName};
 
@@ -11,8 +11,8 @@ use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event,
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Connection, ConnectionCommon, KeyingMaterialExporter, MessageHandler, SideCommonOutput,
-    SideData, StateMachine, VerifyPeerIdentity,
+    ClientNext, Connection, ConnectionCommon, Core, KeyingMaterialExporter, MessageHandler,
+    SideCommonOutput, SideData, TcpTransport, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -218,16 +218,14 @@ impl ClientConnectionBuilder {
         } = self;
 
         let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
-        Ok(NeedsInput {
-            inner: ConnectionCommon::for_client(
-                config,
-                name,
-                ClientExtensionsInput::from_alpn(alpn_protocols),
-                None,
-                Protocol::Tcp,
-                tls,
-            )?,
-        })
+        Ok(NeedsInput::new(ConnectionCommon::for_client(
+            config,
+            name,
+            ClientExtensionsInput::from_alpn(alpn_protocols),
+            None,
+            Protocol::Tcp,
+            tls,
+        )?))
     }
 }
 
@@ -251,29 +249,18 @@ pub enum ClientHandshake {
     Complete(SplitConnection<ClientSide>),
 }
 
-impl TryFrom<ConnectionCommon<ClientSide>> for ClientHandshake {
+impl TryFrom<Core<ClientSide, TcpTransport>> for ClientHandshake {
     type Error = Error;
 
-    fn try_from(mut inner: ConnectionCommon<ClientSide>) -> Result<Self, Error> {
-        const MISUSED: Error = Error::Unreachable("forgot to restore state");
+    fn try_from(core: Core<ClientSide, TcpTransport>) -> Result<Self, Error> {
+        Ok(match ClientNext::try_from(core)? {
+            ClientNext::NeedsInput(core) => Self::NeedsInput(NeedsInput::from_core(core)),
 
-        Ok(match mem::replace(&mut inner.state, Err(MISUSED))? {
-            ClientState::VerifyServerIdentity(verify_identity) => {
-                Self::VerifyServerIdentity(VerifyPeerIdentity {
-                    inner,
-                    verify_identity,
-                })
+            ClientNext::VerifyServerIdentity(core) => {
+                Self::VerifyServerIdentity(VerifyPeerIdentity::from_core(core))
             }
 
-            state if state.is_traffic() => {
-                inner.state = Ok(state);
-                Self::Complete(SplitConnection::try_from(inner)?)
-            }
-
-            state => {
-                inner.state = Ok(state);
-                Self::NeedsInput(NeedsInput { inner })
-            }
+            ClientNext::Complete(core) => Self::Complete(SplitConnection::try_from(core.inner)?),
         })
     }
 }
@@ -389,8 +376,8 @@ impl SideData for ClientSide {
     type PeerIdentity<'a> = ServerIdentity<'static, 'a>;
 
     #[expect(private_interfaces)]
-    fn handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error> {
-        ClientHandshake::try_from(common)
+    fn handshake_from_core(core: Core<Self, TcpTransport>) -> Result<Self::Handshake, Error> {
+        ClientHandshake::try_from(core)
     }
 }
 
