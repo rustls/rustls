@@ -65,36 +65,6 @@ impl ServerConnection {
         self.inner.split()
     }
 
-    /// Retrieves the server name, if any, used to select the certificate and
-    /// private key.
-    ///
-    /// This returns `None` until some time after the client's server name indication
-    /// (SNI) extension value is processed during the handshake. It will never be
-    /// `None` when the connection is ready to send or process application data,
-    /// unless the client does not support SNI.
-    ///
-    /// This is useful for application protocols that need to enforce that the
-    /// server name matches an application layer protocol hostname. For
-    /// example, HTTP/1.1 servers commonly expect the `Host:` header field of
-    /// every request on a connection to match the hostname in the SNI extension
-    /// when the client provides the SNI extension.
-    ///
-    /// The server name is also used to match sessions during session resumption.
-    pub fn server_name(&self) -> Option<&DnsName<'_>> {
-        self.inner.side.server_name()
-    }
-
-    /// Application-controlled portion of the resumption ticket supplied by the client, if any.
-    ///
-    /// Recovered from the prior session's `set_resumption_data`. Integrity is guaranteed by rustls.
-    ///
-    /// Returns `Some` if and only if a valid resumption ticket has been received from the client.
-    pub fn received_resumption_data(&self) -> Option<&[u8]> {
-        self.inner
-            .side
-            .received_resumption_data()
-    }
-
     /// Set the resumption data to embed in future resumption tickets supplied to the client.
     ///
     /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other
@@ -132,6 +102,11 @@ impl ServerConnection {
         } else {
             None
         }
+    }
+
+    /// Returns data learned during the connection, specific to being a server.
+    pub fn server_data(&self) -> &ServerConnectionData {
+        &self.inner.side
     }
 }
 
@@ -388,6 +363,17 @@ impl EarlyDataState {
     }
 }
 
+impl fmt::Debug for EarlyDataState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::New => write!(f, "New"),
+            Self::Accepted { .. } => f
+                .debug_struct("Accepted")
+                .finish_non_exhaustive(),
+        }
+    }
+}
+
 impl ConnectionCommon<ServerSide> {
     pub(crate) fn for_server(
         config: Arc<ServerConfig>,
@@ -421,19 +407,37 @@ impl ConnectionCommon<ServerSide> {
 }
 
 /// State associated with a server connection.
-#[derive(Default)]
-pub(crate) struct ServerConnectionData {
+#[derive(Debug, Default)]
+pub struct ServerConnectionData {
     sni: Option<DnsName<'static>>,
     received_resumption_data: Option<Vec<u8>>,
     early_data: EarlyDataState,
 }
 
 impl ServerConnectionData {
-    pub(crate) fn received_resumption_data(&self) -> Option<&[u8]> {
+    /// Retrieves the resumption data supplied by the client, if any.
+    ///
+    /// Returns `Some` if and only if a valid resumption ticket has been received from the client.
+    pub fn received_resumption_data(&self) -> Option<&[u8]> {
         self.received_resumption_data.as_deref()
     }
 
-    pub(crate) fn server_name(&self) -> Option<&DnsName<'static>> {
+    /// Retrieves the server name, if any, used to select the certificate and
+    /// private key.
+    ///
+    /// This returns `None` until some time after the client's server name indication
+    /// (SNI) extension value is processed during the handshake. It will never be
+    /// `None` when the connection is ready to send or process application data,
+    /// unless the client does not support SNI.
+    ///
+    /// This is useful for application protocols that need to enforce that the
+    /// server name matches an application layer protocol hostname. For
+    /// example, HTTP/1.1 servers commonly expect the `Host:` header field of
+    /// every request on a connection to match the hostname in the SNI extension
+    /// when the client provides the SNI extension.
+    ///
+    /// The server name is also used to match sessions during session resumption.
+    pub fn server_name(&self) -> Option<&DnsName<'static>> {
         self.sni.as_ref()
     }
 }
@@ -458,6 +462,7 @@ impl SideOutput for ServerConnectionData {
 pub struct ServerSide;
 
 impl SideData for ServerSide {
+    type Data = ServerConnectionData;
     type Handshake = ServerHandshake;
 
     type PeerIdentity<'a> = ClientIdentity<'static, 'a>;
@@ -469,7 +474,6 @@ impl SideData for ServerSide {
 }
 
 impl crate::conn::private::Side for ServerSide {
-    type Data = ServerConnectionData;
     type State = ServerState;
 }
 

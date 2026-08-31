@@ -150,7 +150,11 @@ fn test_quic_handshake() {
     quic_transfer(&mut server, &mut client).unwrap();
     quic_transfer(&mut client, &mut server).unwrap();
     quic_transfer(&mut server, &mut client).unwrap();
-    assert!(client.is_early_data_accepted());
+    assert!(
+        client
+            .client_data()
+            .is_early_data_accepted()
+    );
 
     // failed handshake
     let mut client = quic::ClientConnection::new(
@@ -332,7 +336,13 @@ fn test_quic_acceptor() {
         };
         assert_eq!(server.quic_transport_parameters(), Some(client_params));
         assert!(server.zero_rtt_keys().is_none());
-        assert_eq!(server.server_name().map(AsRef::as_ref), Some("localhost"));
+        assert_eq!(
+            server
+                .server_data()
+                .server_name()
+                .map(AsRef::as_ref),
+            Some("localhost")
+        );
         assert_eq!(
             server
                 .alpn_protocol()
@@ -974,7 +984,12 @@ fn test_quic_resumption_data_basic() {
             .unwrap();
 
     // Initially, no resumption data should be received
-    assert_eq!(server.received_resumption_data(), None);
+    assert_eq!(
+        server
+            .server_data()
+            .received_resumption_data(),
+        None
+    );
 
     // Set resumption data
     let test_data1 = b"test resumption data 1";
@@ -982,7 +997,12 @@ fn test_quic_resumption_data_basic() {
         .set_resumption_data(test_data1)
         .unwrap();
     // Still no received data (server has set data, but hasn't received any from client)
-    assert_eq!(server.received_resumption_data(), None);
+    assert_eq!(
+        server
+            .server_data()
+            .received_resumption_data(),
+        None
+    );
 
     // Update resumption data with different content
     let test_data2 = b"test resumption data 2";
@@ -990,11 +1010,21 @@ fn test_quic_resumption_data_basic() {
         .set_resumption_data(test_data2)
         .unwrap();
     // Still no received data
-    assert_eq!(server.received_resumption_data(), None);
+    assert_eq!(
+        server
+            .server_data()
+            .received_resumption_data(),
+        None
+    );
 
     // Test empty resumption data
     server.set_resumption_data(b"").unwrap();
-    assert_eq!(server.received_resumption_data(), None);
+    assert_eq!(
+        server
+            .server_data()
+            .received_resumption_data(),
+        None
+    );
 }
 
 #[test]
@@ -1036,7 +1066,12 @@ fn test_quic_resumption_data_0rtt() {
     server1
         .set_resumption_data(quic_0rtt_params)
         .unwrap();
-    assert_eq!(server1.received_resumption_data(), None);
+    assert_eq!(
+        server1
+            .server_data()
+            .received_resumption_data(),
+        None
+    );
 
     let mut client1 = quic::ClientConnection::new(
         client_config.clone(),
@@ -1051,7 +1086,12 @@ fn test_quic_resumption_data_0rtt() {
     // Verify initial connection
     assert_eq!(client1.handshake_kind(), Some(HandshakeKind::Full));
     assert_eq!(server1.handshake_kind(), Some(HandshakeKind::Full));
-    assert_eq!(server1.received_resumption_data(), None);
+    assert_eq!(
+        server1
+            .server_data()
+            .received_resumption_data(),
+        None
+    );
 
     // Second connection: attempt 0-RTT resumption
     let mut server2 =
@@ -1087,13 +1127,18 @@ fn test_quic_resumption_data_0rtt() {
     assert_eq!(client2.handshake_kind(), Some(HandshakeKind::Resumed));
     assert_eq!(server2.handshake_kind(), Some(HandshakeKind::Resumed));
     assert_eq!(
-        server2.received_resumption_data(),
+        server2
+            .server_data()
+            .received_resumption_data(),
         Some(quic_0rtt_params.as_slice()),
         "Server should receive QUIC 0-RTT parameters from resumption data"
     );
 
     // Verify server can parse and use the received 0-RTT parameters
-    if let Some(received_params) = server2.received_resumption_data() {
+    if let Some(received_params) = server2
+        .server_data()
+        .received_resumption_data()
+    {
         let params_str = core::str::from_utf8(received_params).unwrap();
         assert!(params_str.contains("active_connection_id_limit=2"));
         assert!(params_str.contains("initial_max_data=1048576"));

@@ -198,7 +198,9 @@ fn resumption_combinations() {
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
         assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
         assert_eq!(
-            server.received_resumption_data(),
+            server
+                .server_data()
+                .received_resumption_data(),
             Some(resumption_data.as_bytes())
         );
         if expect.version == ProtocolVersion::TLSv1_2 {

@@ -3,9 +3,8 @@ use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
 
-use pki_types::{DnsName, FipsStatus, ServerName};
+use pki_types::{FipsStatus, ServerName};
 
-use crate::TlsInputBuffer;
 use crate::client::{ClientConfig, ClientSide};
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
@@ -29,6 +28,7 @@ use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
 };
 use crate::verify::ClientIdentity;
+use crate::{ClientConnectionData, ServerConnectionData, TlsInputBuffer};
 
 /// A QUIC client or server connection.
 pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
@@ -136,17 +136,6 @@ impl ClientConnection {
         self.inner.fips
     }
 
-    /// Returns True if the server signalled it will process early data.
-    ///
-    /// If you sent early data and this returns false at the end of the
-    /// handshake then the server will not process the data.  This
-    /// is not an error, but you may wish to resend the data.
-    pub fn is_early_data_accepted(&self) -> bool {
-        self.inner
-            .common
-            .is_early_data_accepted()
-    }
-
     /// Returns the number of TLS1.3 tickets that have been received.
     pub fn tls13_tickets_received(&self) -> u32 {
         self.inner
@@ -171,6 +160,11 @@ impl ClientConnection {
     /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         self.inner.common.exporter()
+    }
+
+    /// Returns data learned during the connection, specific to being a client.
+    pub fn client_data(&self) -> &ClientConnectionData {
+        &self.inner.common.side
     }
 }
 
@@ -250,25 +244,6 @@ impl ServerConnection {
         self.inner.fips
     }
 
-    /// Retrieves the server name, if any, used to select the certificate and
-    /// private key.
-    ///
-    /// This returns `None` until some time after the client's server name indication
-    /// (SNI) extension value is processed during the handshake. It will never be
-    /// `None` when the connection is ready to send or process application data,
-    /// unless the client does not support SNI.
-    ///
-    /// This is useful for application protocols that need to enforce that the
-    /// server name matches an application layer protocol hostname. For
-    /// example, HTTP/1.1 servers commonly expect the `Host:` header field of
-    /// every request on a connection to match the hostname in the SNI extension
-    /// when the client provides the SNI extension.
-    ///
-    /// The server name is also used to match sessions during session resumption.
-    pub fn server_name(&self) -> Option<&DnsName<'_>> {
-        self.inner.common.side.server_name()
-    }
-
     /// Set the resumption data to embed in future resumption tickets supplied to the client.
     ///
     /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other
@@ -283,16 +258,6 @@ impl ServerConnection {
             Ok(st) => st.set_resumption_data(resumption_data),
             Err(e) => Err(e.clone()),
         }
-    }
-
-    /// Retrieves the resumption data supplied by the client, if any.
-    ///
-    /// Returns `Some` if and only if a valid resumption ticket has been received from the client.
-    pub fn received_resumption_data(&self) -> Option<&[u8]> {
-        self.inner
-            .common
-            .side
-            .received_resumption_data()
     }
 
     /// Returns an object that can derive key material from the agreed connection secrets.
@@ -310,6 +275,11 @@ impl ServerConnection {
     /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         self.inner.common.exporter()
+    }
+
+    /// Returns data learned during the connection, specific to being a server.
+    pub fn server_data(&self) -> &ServerConnectionData {
+        &self.inner.common.side
     }
 }
 
@@ -446,11 +416,6 @@ impl NeedsInput {
         zero_rtt_keys(&self.0.0.inner, &self.0.0.transport)
     }
 
-    /// Retrieves the server name supplied by the client, if any.
-    pub fn server_name(&self) -> Option<&DnsName<'_>> {
-        self.0.0.inner.side.server_name()
-    }
-
     /// Progress the handshake by receiving further unencrypted TLS handshake data.
     ///
     /// The input should be ordered QUIC CRYPTO stream data for one encryption level.
@@ -484,6 +449,11 @@ impl NeedsInput {
             .input_quic(input.slice_mut())?;
 
         ServerHandshake::from_core(self.0.process(input, &mut Vec::new())?, output)
+    }
+
+    /// Returns data learned during the connection, specific to being a server.
+    pub fn server_data(&self) -> &ServerConnectionData {
+        &self.0.0.inner.side
     }
 }
 
