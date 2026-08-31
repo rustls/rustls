@@ -7,6 +7,7 @@
 use core::any::Any;
 use core::fmt::{Debug, Formatter};
 use core::hash::Hasher;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use std::borrow::Cow;
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
@@ -631,6 +632,7 @@ struct Options {
     reject_unusable_ech_config: bool,
     expect_ech_name_override: Option<String>,
     expect_no_ech_name_override: bool,
+    on_retry_expect_ech_name_override: Option<String>,
     send_key_update: bool,
     expect_curve_id: Option<NamedGroup>,
     on_initial_expect_curve_id: Option<NamedGroup>,
@@ -708,6 +710,7 @@ impl Options {
             reject_unusable_ech_config: false,
             expect_ech_name_override: None,
             expect_no_ech_name_override: false,
+            on_retry_expect_ech_name_override: None,
             send_key_update: false,
             expect_curve_id: None,
             on_initial_expect_curve_id: None,
@@ -739,21 +742,33 @@ impl Options {
         self.support_tls12 && self.version_allowed(ProtocolVersion::TLSv1_2)
     }
 
-    fn expected_server_name(&self) -> Option<ServerName<'static>> {
+    fn expected_server_names(&self) -> Vec<ServerName<'static>> {
+        let mut names = vec![];
+
         let name = match (
             &self.expect_ech_name_override,
             self.expect_no_ech_name_override,
         ) {
             (Some(override_name), _) => override_name,
             (None, true) => &self.host_name,
-            (None, false) => return None,
+            (None, false) => return names,
         };
 
-        Some(
+        names.push(
             ServerName::try_from(name.as_str())
                 .expect("invalid expected server name")
                 .to_owned(),
-        )
+        );
+
+        if let Some(on_retry) = &self.on_retry_expect_ech_name_override {
+            names.push(
+                ServerName::try_from(on_retry.as_str())
+                    .expect("invalid expected server name")
+                    .to_owned(),
+            );
+        }
+
+        names
     }
 
     fn provider(&self) -> CryptoProvider {
@@ -1147,6 +1162,9 @@ impl Options {
             "-expect-no-ech-name-override" => {
                 self.expect_no_ech_name_override = true;
             }
+            "-on-retry-expect-ech-name-override" => {
+                self.on_retry_expect_ech_name_override = Some(args.remove(0));
+            }
             "-enable-ech-grease" => {
                 self.enable_ech_grease = true;
             }
@@ -1175,7 +1193,6 @@ impl Options {
             | "-enable-all-curves"
             | "-enable-ocsp-stapling"
             | "-expect-no-session"
-            | "-on-retry-expect-no-session"
             | "-expect-ticket-renewal"
             | "-forbid-renegotiation-after-handshake"
             | "-handoff"
@@ -1184,6 +1201,8 @@ impl Options {
             | "-no-ssl3"
             | "-no-tls1"
             | "-no-tls11"
+            | "-on-resume-expect-no-ech-name-override"
+            | "-on-retry-expect-no-session"
             | "-permute-extensions"
             | "-renegotiate-ignore"
             | "-use-ocsp-callback"
@@ -1233,10 +1252,8 @@ impl Options {
             | "-no-rsa-pss-rsae-certs"
             | "-on-initial-expect-peer-cert-file"
             | "-on-initial-tls13-variant"
-            | "-on-retry-expect-ech-name-override"
             | "-on-resume-enable-early-data"
             | "-on-resume-export-early-keying-material"
-            | "-on-resume-expect-no-ech-name-override"
             | "-on-resume-verify-fail"
             | "-on-retry-verify-fail"
             | "-psk"
@@ -1493,14 +1510,15 @@ impl ClientVerifier for DummyClientAuth {
 struct DummyServerAuth {
     parent: Arc<dyn ServerVerifier>,
     ocsp: OcspValidation,
-    expect_server_name: Option<ServerName<'static>>,
+    expect_server_names: Vec<ServerName<'static>>,
+    server_name_index: AtomicUsize,
 }
 
 impl DummyServerAuth {
     fn new(
         trusted_cert_file: &str,
         ocsp: OcspValidation,
-        expect_server_name: Option<ServerName<'static>>,
+        expect_server_names: Vec<ServerName<'static>>,
     ) -> Self {
         Self {
             parent: Arc::new(
@@ -1512,7 +1530,8 @@ impl DummyServerAuth {
                 .unwrap(),
             ),
             ocsp,
-            expect_server_name,
+            expect_server_names,
+            server_name_index: AtomicUsize::new(0),
         }
     }
 }
@@ -1522,7 +1541,10 @@ impl ServerVerifier for DummyServerAuth {
         &self,
         identity: &ServerIdentity<'a, '_>,
     ) -> Result<VerifiedIdentity<'a>, Error> {
-        if let Some(expect_server_name) = &self.expect_server_name {
+        if !self.expect_server_names.is_empty() {
+            let expect_server_name = &self.expect_server_names[self
+                .server_name_index
+                .fetch_add(1, Ordering::SeqCst)];
             assert_eq!(identity.server_name, expect_server_name);
         }
         if let OcspValidation::Reject = self.ocsp {
@@ -2005,7 +2027,7 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
         .with_custom_certificate_verifier(Arc::new(DummyServerAuth::new(
             &opts.trusted_cert_file,
             opts.ocsp,
-            opts.expected_server_name(),
+            opts.expected_server_names(),
         )));
 
     let mut cfg = match opts.credentials.configured() {
