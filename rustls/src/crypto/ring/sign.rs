@@ -304,7 +304,9 @@ impl SigningKey for EcdsaSigningKey {
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
-        self.scheme.algorithm()
+        self.scheme
+            .algorithm()
+            .unwrap_or(SignatureAlgorithm::Unknown(0))
     }
 }
 
@@ -392,7 +394,9 @@ impl SigningKey for Ed25519SigningKey {
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
-        self.scheme.algorithm()
+        self.scheme
+            .algorithm()
+            .unwrap_or(SignatureAlgorithm::Unknown(0))
     }
 }
 
