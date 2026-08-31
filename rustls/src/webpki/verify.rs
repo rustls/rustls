@@ -83,6 +83,15 @@ pub fn verify_tls12_signature(
     input: &SignatureVerificationInput<'_>,
     supported_schemes: &WebPkiSupportedAlgorithms,
 ) -> Result<HandshakeSignatureValid, Error> {
+    if input
+        .signature
+        .scheme
+        .algorithm()
+        .is_none()
+    {
+        return Err(PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into());
+    }
+
     let possible_algs = supported_schemes.convert_scheme(input.signature.scheme)?;
     let cert = match input.signer {
         SignerPublicKey::X509(cert_der) => {

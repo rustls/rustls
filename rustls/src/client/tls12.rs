@@ -672,6 +672,15 @@ impl ExpectCertificateRequest {
         // We ignore certreq.certtypes as a result, since the information it contains
         // is entirely duplicated in certreq.sigschemes.
 
+        // Filter out signature schemes that don't have an associated `SignatureAlgorithm`;
+        // we use this to select only signature schemes that are allowed on 1.2.
+        let signature_schemes = certreq
+            .sigschemes
+            .iter()
+            .copied()
+            .filter(|scheme| scheme.algorithm().is_some())
+            .collect::<Vec<_>>();
+
         const NO_CONTEXT: Option<Vec<u8>> = None; // TLS 1.2 doesn't use a context.
         let no_compression = None; // or compression
         let client_auth = ClientAuthDetails::resolve(
@@ -679,7 +688,7 @@ impl ExpectCertificateRequest {
                 .unwrap_or(CertificateType::X509),
             self.hs.config.resolver().as_ref(),
             Some(&certreq.canames),
-            &certreq.sigschemes,
+            &signature_schemes,
             NO_CONTEXT,
             no_compression,
         );
