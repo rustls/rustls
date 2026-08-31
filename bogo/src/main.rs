@@ -623,6 +623,7 @@ struct Options {
     ech_config_list: Option<EchConfigListBytes<'static>>,
     expect_ech_accept: bool,
     expect_ech_retry_configs: Option<EchConfigListBytes<'static>>,
+    expect_no_ech_retry_configs: bool,
     on_resume_ech_config_list: Option<EchConfigListBytes<'static>>,
     on_resume_expect_ech_accept: bool,
     on_initial_expect_ech_accept: bool,
@@ -697,6 +698,7 @@ impl Options {
             ech_config_list: None,
             expect_ech_accept: false,
             expect_ech_retry_configs: None,
+            expect_no_ech_retry_configs: false,
             on_resume_ech_config_list: None,
             on_resume_expect_ech_accept: false,
             on_initial_expect_ech_accept: false,
@@ -1104,6 +1106,7 @@ impl Options {
             }
             "-expect-no-ech-retry-configs" => {
                 self.expect_ech_retry_configs = None;
+                self.expect_no_ech_retry_configs = true;
             }
             "-on-initial-expect-ech-accept" => {
                 self.on_initial_expect_ech_accept = true;
@@ -2121,6 +2124,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             PeerIncompatible::ServerSentHelloRetryRequestWithUnknownExtension,
         ) => quit(":UNEXPECTED_EXTENSION:"),
         Error::RejectedEch(rejected_err) => {
+            if opts.expect_no_ech_retry_configs {
+                assert_eq!(rejected_err.retry_configs(), None);
+            }
             if let Some(expected_configs) = &opts.expect_ech_retry_configs {
                 assert_eq!(
                     rejected_err.retry_configs().as_ref(),
