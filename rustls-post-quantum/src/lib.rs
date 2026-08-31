@@ -19,8 +19,8 @@ use rustls::crypto::{
     public_key_to_spki,
 };
 use rustls::pki_types::{
-    AlgorithmIdentifier, FipsStatus, PrivateKeyDer, SignatureVerificationAlgorithm,
-    SubjectPublicKeyInfoDer, alg_id,
+    AlgorithmIdentifier, FipsStatus, PrivateKeyDer, PrivatePkcs8KeyDer,
+    SignatureVerificationAlgorithm, SubjectPublicKeyInfoDer, alg_id,
 };
 use rustls_aws_lc_rs::AwsLcRsVerificationAlgorithm;
 
@@ -41,16 +41,8 @@ impl KeyProvider for PqAwsLcRs {
     ) -> Result<Box<dyn SigningKey>, Error> {
         // TODO: support `PqdsaKeyPair::from_raw_private_key()`?
         if let PrivateKeyDer::Pkcs8(pkcs8) = &key_der {
-            for kind in PqdsaKeyKind::iter() {
-                match PqdsaKeyPair::from_pkcs8(kind.to_alg(), pkcs8.secret_pkcs8_der()) {
-                    Ok(key_pair) => {
-                        return Ok(Box::new(PqdsaSigningKey {
-                            kind,
-                            inner: Arc::new(key_pair),
-                        }));
-                    }
-                    Err(_) => continue,
-                }
+            if let Ok(key) = PqdsaSigningKey::from_pkcs8(pkcs8) {
+                return Ok(Box::new(key));
             }
         }
 
@@ -70,6 +62,26 @@ impl KeyProvider for PqAwsLcRs {
 struct PqdsaSigningKey {
     kind: PqdsaKeyKind,
     inner: Arc<PqdsaKeyPair>,
+}
+
+impl PqdsaSigningKey {
+    fn from_pkcs8(pkcs8: &PrivatePkcs8KeyDer<'_>) -> Result<Self, Error> {
+        for kind in PqdsaKeyKind::iter() {
+            let Ok(key_pair) = PqdsaKeyPair::from_pkcs8(kind.to_alg(), pkcs8.secret_pkcs8_der())
+            else {
+                continue;
+            };
+
+            return Ok(Self {
+                kind,
+                inner: Arc::new(key_pair),
+            });
+        }
+
+        Err(Error::General(
+            "failed to parse private key as ML-DSA".into(),
+        ))
+    }
 }
 
 impl SigningKey for PqdsaSigningKey {
