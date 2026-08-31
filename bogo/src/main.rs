@@ -20,6 +20,7 @@
 )]
 
 use core::fmt::{Debug, Formatter};
+use core::sync::atomic::{AtomicUsize, Ordering};
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
 use std::{env, net, process, thread, time};
@@ -124,6 +125,7 @@ struct Options {
     enable_ech_grease: bool,
     expect_ech_name_override: Option<String>,
     expect_no_ech_name_override: bool,
+    on_retry_expect_ech_name_override: Option<String>,
     send_key_update: bool,
     expect_curve_id: Option<NamedGroup>,
     on_initial_expect_curve_id: Option<NamedGroup>,
@@ -197,6 +199,7 @@ impl Options {
             enable_ech_grease: false,
             expect_ech_name_override: None,
             expect_no_ech_name_override: false,
+            on_retry_expect_ech_name_override: None,
             send_key_update: false,
             expect_curve_id: None,
             on_initial_expect_curve_id: None,
@@ -220,21 +223,33 @@ impl Options {
         self.support_tls12 && self.version_allowed(ProtocolVersion::TLSv1_2)
     }
 
-    fn expected_server_name(&self) -> Option<ServerName<'static>> {
+    fn expected_server_names(&self) -> Vec<ServerName<'static>> {
+        let mut names = vec![];
+
         let name = match (
             &self.expect_ech_name_override,
             self.expect_no_ech_name_override,
         ) {
             (Some(override_name), _) => override_name,
             (None, true) => &self.host_name,
-            (None, false) => return None,
+            (None, false) => return names,
         };
 
-        Some(
+        names.push(
             ServerName::try_from(name.as_str())
                 .expect("invalid expected server name")
                 .to_owned(),
-        )
+        );
+
+        if let Some(on_retry) = &self.on_retry_expect_ech_name_override {
+            names.push(
+                ServerName::try_from(on_retry.as_str())
+                    .expect("invalid expected server name")
+                    .to_owned(),
+            );
+        }
+
+        names
     }
 
     fn supported_versions(&self) -> Vec<&'static SupportedProtocolVersion> {
@@ -482,14 +497,15 @@ impl ClientCertVerifier for DummyClientAuth {
 struct DummyServerAuth {
     parent: Arc<dyn ServerCertVerifier>,
     ocsp: OcspValidation,
-    expect_server_name: Option<ServerName<'static>>,
+    expect_server_names: Vec<ServerName<'static>>,
+    server_name_index: AtomicUsize,
 }
 
 impl DummyServerAuth {
     fn new(
         trusted_cert_file: &str,
         ocsp: OcspValidation,
-        expect_server_name: Option<ServerName<'static>>,
+        expect_server_names: Vec<ServerName<'static>>,
     ) -> Self {
         Self {
             parent: WebPkiServerVerifier::builder_with_provider(
@@ -501,7 +517,8 @@ impl DummyServerAuth {
             .build()
             .unwrap(),
             ocsp,
-            expect_server_name,
+            expect_server_names,
+            server_name_index: AtomicUsize::new(0),
         }
     }
 }
@@ -515,7 +532,10 @@ impl ServerCertVerifier for DummyServerAuth {
         _ocsp: &[u8],
         _now: UnixTime,
     ) -> Result<ServerCertVerified, Error> {
-        if let Some(expect_server_name) = &self.expect_server_name {
+        if !self.expect_server_names.is_empty() {
+            let expect_server_name = &self.expect_server_names[self
+                .server_name_index
+                .fetch_add(1, Ordering::SeqCst)];
             assert_eq!(hostname, expect_server_name);
         }
         if let OcspValidation::Reject = self.ocsp {
@@ -987,7 +1007,7 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
         .with_custom_certificate_verifier(Arc::new(DummyServerAuth::new(
             &opts.trusted_cert_file,
             opts.ocsp,
-            opts.expected_server_name(),
+            opts.expected_server_names(),
         )));
 
     let mut cfg = match opts.credentials.configured() {
@@ -1935,6 +1955,9 @@ pub fn main() {
             "-expect-no-ech-name-override" => {
                 opts.expect_no_ech_name_override = true;
             }
+            "-on-retry-expect-ech-name-override" => {
+                opts.on_retry_expect_ech_name_override = Some(args.remove(0));
+            }
             "-enable-ech-grease" => {
                 opts.enable_ech_grease = true;
             }
@@ -1976,7 +1999,8 @@ pub fn main() {
             | "-use-old-client-cert-callback"
             | "-use-early-callback"
             | "-use-custom-verify-callback"
-            | "-reverify-on-resume" => {}
+            | "-reverify-on-resume"
+            | "-on-resume-expect-no-ech-name-override" => {}
 
             // Not implemented things
             "-dtls"
@@ -2032,9 +2056,7 @@ pub fn main() {
             | "-on-initial-expect-peer-cert-file"
             | "-resumption-across-names-enabled"
             | "-expect-resumable-across-names"
-            | "-expect-not-resumable-across-names"
-            | "-on-retry-expect-ech-name-override"
-            | "-on-resume-expect-no-ech-name-override" => {
+            | "-expect-not-resumable-across-names" => {
                 println!("NYI option {arg:?}");
                 process::exit(BOGO_NACK);
             }
