@@ -117,6 +117,7 @@ struct Options {
     ech_config_list: Option<EchConfigListBytes<'static>>,
     expect_ech_accept: bool,
     expect_ech_retry_configs: Option<EchConfigListBytes<'static>>,
+    expect_no_ech_retry_configs: bool,
     on_resume_ech_config_list: Option<EchConfigListBytes<'static>>,
     on_resume_expect_ech_accept: bool,
     on_initial_expect_ech_accept: bool,
@@ -187,6 +188,7 @@ impl Options {
             ech_config_list: None,
             expect_ech_accept: false,
             expect_ech_retry_configs: None,
+            expect_no_ech_retry_configs: false,
             on_resume_ech_config_list: None,
             on_resume_expect_ech_accept: false,
             on_initial_expect_ech_accept: false,
@@ -1109,6 +1111,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerIncompatible(PeerIncompatible::ServerRejectedEncryptedClientHello(
             _retry_configs,
         )) => {
+            if opts.expect_no_ech_retry_configs {
+                assert_eq!(_retry_configs, None);
+            }
             if let Some(expected_configs) = &opts.expect_ech_retry_configs {
                 let expected_configs =
                     Vec::<EchConfigPayload>::read(&mut Reader::init(expected_configs)).unwrap();
@@ -1879,6 +1884,7 @@ pub fn main() {
             }
             "-expect-no-ech-retry-configs" => {
                 opts.expect_ech_retry_configs = None;
+                opts.expect_no_ech_retry_configs = true;
             }
             "-on-initial-expect-ech-accept" => {
                 opts.on_initial_expect_ech_accept = true;
