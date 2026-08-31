@@ -133,7 +133,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             resuming,
             mut sent_tls13_fake_ccs,
             mut hello,
-            session_key,
+            mut session_key,
             protocol,
             ..
         } = st.input;
@@ -225,6 +225,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 server_hello,
                 server_hello_encoded,
                 suite.suite().common.hash_provider,
+                &mut session_key.server_name,
             )? {
                 // The server accepted our ECH offer, so complete the inner transcript with the
                 // server hello message, and switch the relevant state to the copies for the
