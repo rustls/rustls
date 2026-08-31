@@ -643,7 +643,17 @@ struct Options {
 
 impl Options {
     fn new() -> Self {
-        let selected_provider = SelectedProvider::from_env();
+        let selected_provider = match env::var("BOGO_SHIM_PROVIDER")
+            .ok()
+            .as_deref()
+        {
+            None | Some("aws-lc-rs") => SelectedProvider::AwsLcRs,
+            #[cfg(feature = "fips")]
+            Some("aws-lc-rs-fips") => SelectedProvider::AwsLcRsFips,
+            Some("ring") => SelectedProvider::Ring,
+            Some(other) => panic!("unrecognized value for BOGO_SHIM_PROVIDER: {other:?}"),
+        };
+
         Self {
             port: 0,
             shim_id: 0,
@@ -1353,19 +1363,6 @@ enum SelectedProvider {
 }
 
 impl SelectedProvider {
-    fn from_env() -> Self {
-        match env::var("BOGO_SHIM_PROVIDER")
-            .ok()
-            .as_deref()
-        {
-            None | Some("aws-lc-rs") => Self::AwsLcRs,
-            #[cfg(feature = "fips")]
-            Some("aws-lc-rs-fips") => Self::AwsLcRsFips,
-            Some("ring") => Self::Ring,
-            Some(other) => panic!("unrecognized value for BOGO_SHIM_PROVIDER: {other:?}"),
-        }
-    }
-
     fn provider(&self) -> CryptoProvider {
         match self {
             Self::AwsLcRs | Self::AwsLcRsFips => {
@@ -1449,17 +1446,15 @@ impl DummyClientAuth {
         trusted_cert_file: &str,
         mandatory: bool,
         root_hint_subjects: Arc<[DistinguishedName]>,
+        provider: &CryptoProvider,
     ) -> Self {
         Self {
             mandatory,
             root_hint_subjects,
             parent: Arc::new(
-                WebPkiClientVerifier::builder(
-                    load_root_certs(trusted_cert_file),
-                    &SelectedProvider::from_env().provider(),
-                )
-                .build()
-                .unwrap(),
+                WebPkiClientVerifier::builder(load_root_certs(trusted_cert_file), provider)
+                    .build()
+                    .unwrap(),
             ),
         }
     }
@@ -1519,15 +1514,13 @@ impl DummyServerAuth {
         trusted_cert_file: &str,
         ocsp: OcspValidation,
         expect_server_names: Vec<ServerName<'static>>,
+        provider: &CryptoProvider,
     ) -> Self {
         Self {
             parent: Arc::new(
-                WebPkiServerVerifier::builder(
-                    load_root_certs(trusted_cert_file),
-                    &SelectedProvider::from_env().provider(),
-                )
-                .build()
-                .unwrap(),
+                WebPkiServerVerifier::builder(load_root_certs(trusted_cert_file), provider)
+                    .build()
+                    .unwrap(),
             ),
             ocsp,
             expect_server_names,
@@ -1834,12 +1827,14 @@ impl server::StoresServerSessions for ServerCacheWithResumptionDelay {
 }
 
 fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfig> {
+    let provider = opts.provider();
     let client_auth =
         if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
             Arc::new(DummyClientAuth::new(
                 &opts.trusted_cert_file,
                 opts.require_any_client_cert,
                 Arc::from(opts.root_hint_subjects.clone()),
+                &provider,
             ))
         } else {
             WebPkiClientVerifier::no_client_auth()
@@ -1850,7 +1845,6 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
         "TODO: server certificate switching not implemented yet"
     );
     let cred = &opts.credentials.default;
-    let provider = opts.provider();
     let mut credentials = cred.load_from_file(&provider);
     credentials.ocsp = Some(opts.server_ocsp_response.clone());
 
@@ -2028,6 +2022,7 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
             &opts.trusted_cert_file,
             opts.ocsp,
             opts.expected_server_names(),
+            &provider,
         )));
 
     let mut cfg = match opts.credentials.configured() {
