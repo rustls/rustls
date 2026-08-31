@@ -111,9 +111,13 @@ impl Suite for Tls12CipherSuite {
     /// Return true if this suite is usable for a key only offering `sig_alg`
     /// signatures.
     fn usable_for_signature_scheme(&self, scheme: SignatureScheme) -> bool {
+        let Some(alg) = scheme.algorithm() else {
+            return false;
+        };
+
         self.sign
             .iter()
-            .any(|s| s.algorithm() == scheme.algorithm())
+            .any(|s| s.algorithm() == Some(alg))
     }
 
     fn common(&self) -> &CipherSuiteCommon {
