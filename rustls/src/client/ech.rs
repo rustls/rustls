@@ -471,6 +471,7 @@ impl EchState {
         server_hello: &ServerHelloPayload,
         server_hello_encoded: &Payload<'_>,
         hash: &'static dyn Hash,
+        server_name: &mut ServerName<'static>,
     ) -> Result<Option<EchAccepted>, Error> {
         // Start the inner transcript hash now that we know the hash algorithm to use.
         let inner_transcript = self
@@ -507,6 +508,12 @@ impl EchState {
             }
             false => {
                 trace!("ECH rejected by server");
+
+                // "If the server rejects ECH, the client proceeds with the handshake, authenticating
+                // for ECHConfig.contents.public_name"
+                // -- <https://www.rfc-editor.org/info/rfc9849/#section-6.1.6>
+                *server_name = self.outer_name.into();
+
                 Ok(None)
             }
         }

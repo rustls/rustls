@@ -629,6 +629,8 @@ struct Options {
     on_initial_expect_ech_accept: bool,
     enable_ech_grease: bool,
     reject_unusable_ech_config: bool,
+    expect_ech_name_override: Option<String>,
+    expect_no_ech_name_override: bool,
     send_key_update: bool,
     expect_curve_id: Option<NamedGroup>,
     on_initial_expect_curve_id: Option<NamedGroup>,
@@ -704,6 +706,8 @@ impl Options {
             on_initial_expect_ech_accept: false,
             enable_ech_grease: false,
             reject_unusable_ech_config: false,
+            expect_ech_name_override: None,
+            expect_no_ech_name_override: false,
             send_key_update: false,
             expect_curve_id: None,
             on_initial_expect_curve_id: None,
@@ -733,6 +737,23 @@ impl Options {
 
     fn tls12_supported(&self) -> bool {
         self.support_tls12 && self.version_allowed(ProtocolVersion::TLSv1_2)
+    }
+
+    fn expected_server_name(&self) -> Option<ServerName<'static>> {
+        let name = match (
+            &self.expect_ech_name_override,
+            self.expect_no_ech_name_override,
+        ) {
+            (Some(override_name), _) => override_name,
+            (None, true) => &self.host_name,
+            (None, false) => return None,
+        };
+
+        Some(
+            ServerName::try_from(name.as_str())
+                .expect("invalid expected server name")
+                .to_owned(),
+        )
     }
 
     fn provider(&self) -> CryptoProvider {
@@ -1120,6 +1141,12 @@ impl Options {
                         .into(),
                 );
             }
+            "-expect-ech-name-override" => {
+                self.expect_ech_name_override = Some(args.remove(0));
+            }
+            "-expect-no-ech-name-override" => {
+                self.expect_no_ech_name_override = true;
+            }
             "-enable-ech-grease" => {
                 self.enable_ech_grease = true;
             }
@@ -1162,7 +1189,8 @@ impl Options {
             | "-async"
             | "-implicit-handshake"
             | "-use-old-client-cert-callback"
-            | "-use-early-callback" => {}
+            | "-use-early-callback"
+            | "-use-custom-verify-callback" => {}
 
             // Not implemented things
             "-advertise-empty-npn"
@@ -1203,8 +1231,10 @@ impl Options {
             | "-no-rsa-pss-rsae-certs"
             | "-on-initial-expect-peer-cert-file"
             | "-on-initial-tls13-variant"
+            | "-on-retry-expect-ech-name-override"
             | "-on-resume-enable-early-data"
             | "-on-resume-export-early-keying-material"
+            | "-on-resume-expect-no-ech-name-override"
             | "-on-resume-verify-fail"
             | "-psk"
             | "-renegotiate-freely"
@@ -1219,7 +1249,6 @@ impl Options {
             | "-srtp-profiles"
             | "-ticket-key"
             | "-tls-unique"
-            | "-use-custom-verify-callback"
             | "-use-exporter-between-reads"
             | "-use-ticket-aead-callback"
             | "-use-ticket-callback"
@@ -1462,10 +1491,15 @@ impl ClientVerifier for DummyClientAuth {
 struct DummyServerAuth {
     parent: Arc<dyn ServerVerifier>,
     ocsp: OcspValidation,
+    expect_server_name: Option<ServerName<'static>>,
 }
 
 impl DummyServerAuth {
-    fn new(trusted_cert_file: &str, ocsp: OcspValidation) -> Self {
+    fn new(
+        trusted_cert_file: &str,
+        ocsp: OcspValidation,
+        expect_server_name: Option<ServerName<'static>>,
+    ) -> Self {
         Self {
             parent: Arc::new(
                 WebPkiServerVerifier::builder(
@@ -1476,6 +1510,7 @@ impl DummyServerAuth {
                 .unwrap(),
             ),
             ocsp,
+            expect_server_name,
         }
     }
 }
@@ -1485,6 +1520,9 @@ impl ServerVerifier for DummyServerAuth {
         &self,
         identity: &ServerIdentity<'a, '_>,
     ) -> Result<VerifiedIdentity<'a>, Error> {
+        if let Some(expect_server_name) = &self.expect_server_name {
+            assert_eq!(identity.server_name, expect_server_name);
+        }
         if let OcspValidation::Reject = self.ocsp {
             return Err(CertificateError::InvalidOcspResponse.into());
         }
@@ -1965,6 +2003,7 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
         .with_custom_certificate_verifier(Arc::new(DummyServerAuth::new(
             &opts.trusted_cert_file,
             opts.ocsp,
+            opts.expected_server_name(),
         )));
 
     let mut cfg = match opts.credentials.configured() {
