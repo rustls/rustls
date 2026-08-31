@@ -522,7 +522,7 @@ enum_builder! {
 }
 
 impl SignatureScheme {
-    pub(crate) fn algorithm(&self) -> SignatureAlgorithm {
+    pub(crate) fn algorithm(&self) -> Option<SignatureAlgorithm> {
         match *self {
             Self::RSA_PKCS1_SHA1
             | Self::RSA_PKCS1_SHA256
@@ -530,14 +530,14 @@ impl SignatureScheme {
             | Self::RSA_PKCS1_SHA512
             | Self::RSA_PSS_SHA256
             | Self::RSA_PSS_SHA384
-            | Self::RSA_PSS_SHA512 => SignatureAlgorithm::RSA,
+            | Self::RSA_PSS_SHA512 => Some(SignatureAlgorithm::RSA),
             Self::ECDSA_SHA1_Legacy
             | Self::ECDSA_NISTP256_SHA256
             | Self::ECDSA_NISTP384_SHA384
-            | Self::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ECDSA,
-            Self::ED25519 => SignatureAlgorithm::ED25519,
-            Self::ED448 => SignatureAlgorithm::ED448,
-            _ => SignatureAlgorithm::Unknown(0),
+            | Self::ECDSA_NISTP521_SHA512 => Some(SignatureAlgorithm::ECDSA),
+            Self::ED25519 => Some(SignatureAlgorithm::ED25519),
+            Self::ED448 => Some(SignatureAlgorithm::ED448),
+            _ => None,
         }
     }
 

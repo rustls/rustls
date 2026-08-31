@@ -158,6 +158,10 @@ pub fn verify_tls12_signature(
     dss: &DigitallySignedStruct,
     supported_schemes: &WebPkiSupportedAlgorithms,
 ) -> Result<HandshakeSignatureValid, Error> {
+    if dss.scheme.algorithm().is_none() {
+        return Err(PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into());
+    }
+
     let possible_algs = supported_schemes.convert_scheme(dss.scheme)?;
     let cert = webpki::EndEntityCert::try_from(cert).map_err(pki_error)?;
 

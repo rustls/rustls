@@ -118,7 +118,7 @@ impl SupportedCipherSuite {
             Self::Tls12(inner) => inner
                 .sign
                 .iter()
-                .any(|scheme| scheme.algorithm() == _sig_alg),
+                .any(|scheme| scheme.algorithm() == Some(_sig_alg)),
         }
     }
 
@@ -181,10 +181,12 @@ pub(crate) fn compatible_sigscheme_for_suites(
     sigscheme: SignatureScheme,
     common_suites: &[SupportedCipherSuite],
 ) -> bool {
-    let sigalg = sigscheme.algorithm();
     common_suites
         .iter()
-        .any(|&suite| suite.usable_for_signature_algorithm(sigalg))
+        .any(|&suite| match sigscheme.algorithm() {
+            Some(sigalg) => suite.usable_for_signature_algorithm(sigalg),
+            None => suite.tls13().is_some(),
+        })
 }
 
 /// Secrets for transmitting/receiving data over a TLS session.
