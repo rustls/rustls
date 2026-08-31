@@ -10,6 +10,8 @@
     "CertificateSelection-*ClientCertificateTypes-*": "no support for CertificateRequest::certificate_types",
     "CertificateSelection-Client-SignatureAlgorithmECDSACurve-TLS-TLS12": "ResolvesClientCert does not receive protocol version",
     "CertificateSelection-Server-*": "TODO certificate selection for servers",
+    "CertificateVerificationPassesOnResume-*": "we do not reverify certificates on resumption, so this passes without exercising anything",
+    "EarlyData-*-Client-Reverify-*": "we do not reverify certificates on resumption, so this passes without exercising anything",
     "ConflictingVersionNegotiation": "expects to negotiate TLS1.1",
     "SendFallbackSCSV": "fallback scsv not implemented",
     "ECDSAKeyUsage-*": "TODO: we don't do anything with key usages",

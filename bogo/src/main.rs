@@ -1966,6 +1966,7 @@ pub fn main() {
             | "-decline-alpn"
             | "-permute-extensions"
             | "-expect-no-session"
+            | "-on-retry-expect-no-session"
             | "-expect-ticket-renewal"
             | "-enable-ocsp-stapling"
             | "-use-ocsp-callback"
@@ -1974,7 +1975,8 @@ pub fn main() {
             | "-implicit-handshake"
             | "-use-old-client-cert-callback"
             | "-use-early-callback"
-            | "-use-custom-verify-callback" => {}
+            | "-use-custom-verify-callback"
+            | "-reverify-on-resume" => {}
 
             // Not implemented things
             "-dtls"
@@ -2016,7 +2018,7 @@ pub fn main() {
             | "-export-early-keying-material"
             | "-handshake-twice"
             | "-on-resume-verify-fail"
-            | "-reverify-on-resume"
+            | "-on-retry-verify-fail"
             | "-no-op-extra-handshake"
             | "-expect-peer-cert-file"
             | "-no-rsa-pss-rsae-certs"
