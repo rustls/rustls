@@ -543,7 +543,7 @@ mod tests {
         )));
         assert!(!send_flag_for(|adapter| adapter.start_traffic()));
         assert!(send_flag_for(|adapter| adapter.send_msg(
-            Message::build_key_update_notify(),
+            Message::build_key_update_notify(ProtocolVersion::TLSv1_3),
             false,
             &mut tls,
         )));

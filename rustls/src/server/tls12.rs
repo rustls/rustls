@@ -151,6 +151,7 @@ mod client_hello {
                     suite,
                     st.using_ems,
                     output,
+                    ProtocolVersion::TLSv1_2,
                     input,
                     st.sni,
                     st.resumption_data,
@@ -180,6 +181,7 @@ mod client_hello {
                 alpn_protocol,
                 send_ticket,
             } = emit_server_hello(
+                ProtocolVersion::TLSv1_2,
                 &mut flight,
                 &st.config,
                 output,
@@ -301,6 +303,7 @@ mod client_hello {
         suite: &'static Tls12CipherSuite,
         using_ems: bool,
         output: &mut dyn Output<'_>,
+        version: ProtocolVersion,
         input: ClientHelloInput<'_>,
         sni: Option<DnsName<'static>>,
         resumption_data: Vec<u8>,
@@ -323,6 +326,7 @@ mod client_hello {
             alpn_protocol,
             send_ticket,
         } = emit_server_hello(
+            version,
             &mut flight,
             &config,
             output,
@@ -370,6 +374,7 @@ mod client_hello {
 
             if let Some(ticketer) = hs.config.ticketer.as_deref() {
                 emit_ticket(
+                    version,
                     &secrets,
                     &mut hs.transcript,
                     using_ems,
@@ -383,7 +388,7 @@ mod client_hello {
                 )?;
             }
         }
-        emit_ccs(output);
+        emit_ccs(version, output);
 
         let (dec, encrypter) = secrets.make_cipher_pair(Side::Server);
         output.send().set_encrypter(
@@ -393,7 +398,7 @@ mod client_hello {
                 .common
                 .confidentiality_limit,
         );
-        emit_finished(&secrets, &mut hs.transcript, output, &proof);
+        emit_finished(version, &secrets, &mut hs.transcript, output, &proof);
 
         Ok(Box::new(ExpectCcs {
             hs,
@@ -405,6 +410,7 @@ mod client_hello {
     }
 
     fn emit_server_hello(
+        version: ProtocolVersion,
         flight: &mut HandshakeFlightTls12<'_>,
         config: &ServerConfig,
         output: &mut dyn Output<'_>,
@@ -428,7 +434,7 @@ mod client_hello {
         )?;
 
         let sh = HandshakeMessagePayload(HandshakePayload::ServerHello(ServerHelloPayload {
-            legacy_version: ProtocolVersion::TLSv1_2,
+            legacy_version: version,
             random: Random::from(randoms.server),
             session_id,
             cipher_suite: suite.common.suite,
@@ -900,6 +906,7 @@ impl<const N: usize> Drop for ZeroizingCow<'_, N> {
 }
 
 fn emit_ticket(
+    version: ProtocolVersion,
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
     using_ems: bool,
@@ -933,7 +940,7 @@ fn emit_ticket(
     let ticket_lifetime = ticketer.lifetime();
 
     let m = Message {
-        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        version: EncodableVersion::Legacy(version),
         payload: MessagePayload::handshake(HandshakeMessagePayload(
             HandshakePayload::NewSessionTicket(NewSessionTicketPayload::new(
                 ticket_lifetime,
@@ -947,10 +954,10 @@ fn emit_ticket(
     Ok(())
 }
 
-fn emit_ccs(output: &mut dyn Output<'_>) {
+fn emit_ccs(version: ProtocolVersion, output: &mut dyn Output<'_>) {
     output.send_msg(
         Message {
-            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+            version: EncodableVersion::Legacy(version),
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         },
         false,
@@ -958,6 +965,7 @@ fn emit_ccs(output: &mut dyn Output<'_>) {
 }
 
 fn emit_finished(
+    version: ProtocolVersion,
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
     output: &mut dyn Output<'_>,
@@ -968,7 +976,7 @@ fn emit_finished(
     let verify_data_payload = Payload::Borrowed(&verify_data);
 
     let f = Message {
-        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        version: EncodableVersion::Legacy(version),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Finished(
             verify_data_payload,
         ))),
@@ -1049,6 +1057,7 @@ impl ExpectFinished {
                 let now = self.hs.config.current_time()?;
                 if let Some(ticketer) = self.hs.config.ticketer.as_deref() {
                     emit_ticket(
+                        ProtocolVersion::TLSv1_2,
                         &self.secrets,
                         &mut self.hs.transcript,
                         self.hs.using_ems,
@@ -1062,7 +1071,7 @@ impl ExpectFinished {
                     )?;
                 }
             }
-            emit_ccs(output);
+            emit_ccs(ProtocolVersion::TLSv1_2, output);
             output.send().set_encrypter(
                 encrypter,
                 self.secrets
@@ -1070,7 +1079,13 @@ impl ExpectFinished {
                     .common
                     .confidentiality_limit,
             );
-            emit_finished(&self.secrets, &mut self.hs.transcript, output, &proof);
+            emit_finished(
+                ProtocolVersion::TLSv1_2,
+                &self.secrets,
+                &mut self.hs.transcript,
+                output,
+                &proof,
+            );
         }
 
         if let Some(identity) = self.peer_identity {

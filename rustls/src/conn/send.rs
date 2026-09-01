@@ -164,7 +164,7 @@ impl SendPath {
             return Err(Error::HandshakeNotComplete);
         };
 
-        self.send_msg(Message::build_key_update_request(), true, tls);
+        self.send_msg(Message::build_key_update_request(self.version()), true, tls);
         ks.update_encrypter(self);
         self.key_update_local = KeyUpdateLocal::Outstanding;
         self.tls13_key_schedule = Some(ks);
@@ -192,7 +192,8 @@ impl SendOutput for SendPath {
             return;
         }
 
-        let record = Record::<Payload<'static>>::from(Message::build_key_update_notify());
+        let record =
+            Record::<Payload<'static>>::from(Message::build_key_update_notify(self.version()));
         let mut queued = Vec::new();
         self.encrypt_state
             .encrypt_outgoing(record.borrow_outbound(), &mut queued);
@@ -227,7 +228,7 @@ impl SendOutput for SendPath {
         };
 
         self.send_msg(
-            Message::build_alert(level, desc),
+            Message::build_alert(level, desc, self.version()),
             self.encrypt_state.is_encrypting(),
             tls,
         );
