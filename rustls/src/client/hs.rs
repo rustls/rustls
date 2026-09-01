@@ -612,6 +612,16 @@ fn emit_client_hello_for_retry(
         ..Default::default()
     });
 
+    if config
+        .provider()
+        .tls13_cipher_suites
+        .is_empty()
+    {
+        if let Some(schemes) = &mut exts.signature_schemes {
+            schemes.retain(|scheme| scheme.algorithm().is_some());
+        }
+    }
+
     if let Some(TransportParameters::Quic(v)) = &extra_exts.transport_parameters {
         exts.transport_parameters = Some(v.clone());
     }
