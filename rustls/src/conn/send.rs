@@ -45,9 +45,9 @@ impl SendPath {
 
             // Close connection once we start to run out of sequence space.
             Some(PreEncryptAction::RefreshOrClose) => {
-                match self.negotiated_version {
+                match self.version() {
                     // driven by caller, as we don't have the `State` here
-                    Some(ProtocolVersion::TLSv1_3) => {
+                    ProtocolVersion::TLSv1_3 => {
                         self.key_update_local = KeyUpdateLocal::Requested;
                         Ok(())
                     }
@@ -169,6 +169,16 @@ impl SendPath {
         self.key_update_local = KeyUpdateLocal::Outstanding;
         self.tls13_key_schedule = Some(ks);
         Ok(())
+    }
+
+    fn version(&self) -> ProtocolVersion {
+        if let Some(version) = self.negotiated_version {
+            version
+        } else {
+            // If the negotiated version has not been set yet, then we are early in the handshake
+            // and will behave as though doing TLS 1.2 for backward compatibility
+            ProtocolVersion::TLSv1_2
+        }
     }
 }
 

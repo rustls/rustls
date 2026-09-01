@@ -552,6 +552,7 @@ mod tests {
     fn send_flag_for(f: impl FnOnce(&mut SendAdapter<'_>)) -> bool {
         let mut send = SendPath::default();
         send.set_encrypter(Box::new(Tls13Cipher), 1234);
+        send.negotiated_version(ProtocolVersion::TLSv1_3);
 
         let send = Mutex::new(send);
 
