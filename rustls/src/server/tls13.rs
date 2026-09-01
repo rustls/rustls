@@ -117,7 +117,7 @@ mod client_hello {
             let randoms = st.randoms(&input)?;
             let mut transcript = st
                 .transcript
-                .start(suite.common.hash_provider)?;
+                .start(suite.common.hash_provider, ProtocolVersion::TLSv1_3)?;
 
             if input
                 .client_hello

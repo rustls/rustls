@@ -895,10 +895,18 @@ pub(crate) enum HandshakeHashOrBuffer {
 }
 
 impl HandshakeHashOrBuffer {
-    pub(super) fn start(self, hash: &'static dyn Hash) -> Result<HandshakeHash, Error> {
+    pub(super) fn start(
+        self,
+        hash: &'static dyn Hash,
+        version: ProtocolVersion,
+    ) -> Result<HandshakeHash, Error> {
         match self {
-            Self::Buffer(inner) => Ok(inner.start_hash(hash)),
-            Self::Hash(inner) if inner.algorithm() == hash.algorithm() => Ok(inner),
+            Self::Buffer(inner) => Ok(inner.start_hash(hash, version)),
+            Self::Hash(inner)
+                if inner.algorithm() == hash.algorithm() && inner.version() == version =>
+            {
+                Ok(inner)
+            }
             _ => Err(PeerMisbehaved::HandshakeHashVariedAfterRetry.into()),
         }
     }

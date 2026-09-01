@@ -97,7 +97,7 @@ mod server_hello {
             // Start our handshake hash, and input the server-hello.
             let mut transcript = st
                 .transcript_buffer
-                .start_hash(suite.common.hash_provider);
+                .start_hash(suite.common.hash_provider, ProtocolVersion::TLSv1_2);
             transcript.add_message(message);
 
             let mut randoms = ConnectionRandoms::new(st.input.random, server_hello.random);

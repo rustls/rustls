@@ -372,7 +372,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         let transcript = self
             .next
             .transcript_buffer
-            .start_hash(cs.hash_provider());
+            .start_hash(cs.hash_provider(), negotiated_version);
         let mut transcript_buffer = transcript.into_hrr_buffer(&proof);
         transcript_buffer.add_message(&input.message);
 

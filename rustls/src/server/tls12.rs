@@ -97,7 +97,7 @@ mod client_hello {
             let mut randoms = st.randoms(&input)?;
             let mut transcript = st
                 .transcript
-                .start(suite.common.hash_provider)?;
+                .start(suite.common.hash_provider, ProtocolVersion::TLSv1_2)?;
 
             // -- TLS1.2 only from hereon in --
             transcript.add_message(input.message);
