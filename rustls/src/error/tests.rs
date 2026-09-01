@@ -1,4 +1,5 @@
 use alloc::string::ToString;
+use alloc::vec::Vec;
 use core::time::Duration;
 use std::{println, vec};
 
@@ -316,18 +317,15 @@ fn time_error_mapping() {
 
 #[test]
 fn error_with_alert() {
-    let mut e = ErrorWithAlert::new(Error::NoApplicationProtocol, &mut SendPath::default());
+    let mut tls = Vec::new();
+    let e = ErrorWithAlert::new(
+        Error::NoApplicationProtocol,
+        &mut SendPath::default(),
+        &mut tls,
+    );
     assert_eq!(
         std::format!("{e:?}"),
-        "ErrorWithAlert { error: NoApplicationProtocol, data: 7, .. }"
+        "ErrorWithAlert { error: NoApplicationProtocol, tls: 7, .. }"
     );
-    assert_eq!(e.take_tls_data(), Some(vec![21, 3, 3, 0, 2, 2, 120]));
-    assert_eq!(e.take_tls_data(), None);
-
-    let mut e = ErrorWithAlert::from(Error::NoApplicationProtocol);
-    assert_eq!(e.take_tls_data(), None);
-    assert_eq!(
-        std::format!("{e:?}"),
-        "ErrorWithAlert { error: NoApplicationProtocol, data: 0, .. }"
-    );
+    assert_eq!(e.tls(), &[21, 3, 3, 0, 2, 2, 120][..]);
 }

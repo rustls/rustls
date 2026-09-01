@@ -7,7 +7,7 @@ use openssl::ssl::{SslConnector, SslMethod, SslSession, SslStream};
 use rustls::crypto::Identity;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::{Connection, ServerConfig};
+use rustls::{Connection, ServerConfig, VecInput};
 use rustls_aws_lc_rs as provider;
 use rustls_util::complete_io;
 
@@ -34,15 +34,19 @@ fn test_early_exporter() {
         config.max_early_data_size = 8192;
         let config = Arc::new(config);
 
+        let mut received_plaintext = Vec::new();
         for _ in 0..ITERS {
             let mut server = rustls::ServerConnection::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
+            let mut input = VecInput::default();
+            let mut output = Vec::new();
 
             // read clienthello and then inspect early_data status
+            input.read(&mut tcp_stream).unwrap();
             server
-                .read_tls(&mut tcp_stream)
+                .process_new_packets(&mut input, &mut output)
+                .handle_all(&mut Vec::new())
                 .unwrap();
-            server.process_new_packets().unwrap();
 
             let message = if let Some(mut early) = server.early_data() {
                 let secret = early
@@ -63,12 +67,27 @@ fn test_early_exporter() {
                 b"no early data\n".to_vec()
             };
 
+            complete_io(
+                &mut tcp_stream,
+                &mut input,
+                &mut received_plaintext,
+                &mut output,
+                &mut server,
+            )
+            .unwrap();
+
             server
-                .writer()
-                .write_all(&message)
+                .write_tls((&message).into(), &mut output)
                 .unwrap();
 
-            complete_io(&mut tcp_stream, &mut server).unwrap();
+            complete_io(
+                &mut tcp_stream,
+                &mut input,
+                &mut received_plaintext,
+                &mut output,
+                &mut server,
+            )
+            .unwrap();
 
             tcp_stream.flush().unwrap();
         }

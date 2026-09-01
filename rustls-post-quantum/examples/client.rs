@@ -11,8 +11,11 @@ use std::io::{Read, Write, stdout};
 use std::net::TcpStream;
 use std::sync::Arc;
 
+use rustls::VecInput;
+use rustls_util::Stream;
+
 fn main() {
-    env_logger::init();
+    tracing_subscriber::fmt::init();
 
     let root_store = rustls::RootCertStore {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
@@ -27,12 +30,21 @@ fn main() {
         .try_into()
         .unwrap();
 
+    let mut output = Vec::new();
     let mut conn = Arc::new(config)
         .connect(server_name)
-        .build()
+        .build(&mut output)
         .unwrap();
     let mut sock = TcpStream::connect("pq.cloudflareresearch.com:443").unwrap();
-    let mut tls = rustls_util::Stream::new(&mut conn, &mut sock);
+    let mut input = VecInput::default();
+    let mut received_plaintext = Vec::new();
+    let mut tls = Stream::new(
+        &mut input,
+        &mut received_plaintext,
+        &mut output,
+        &mut conn,
+        &mut sock,
+    );
     tls.write_all(
         concat!(
             "GET /cdn-cgi/trace HTTP/1.0\r\n",

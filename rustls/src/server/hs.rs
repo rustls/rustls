@@ -11,6 +11,7 @@ use super::{ClientHello, CommonServerSessionValue, ServerConfig, tls12, tls13};
 use crate::SupportedCipherSuite;
 use crate::common_state::{Event, Output, OutputEvent, Protocol};
 use crate::conn::{ConnectionRandoms, Input};
+use crate::crypto::cipher::Payload;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme};
@@ -18,11 +19,10 @@ use crate::enums::{ApplicationProtocol, CertificateType, HandshakeType, Protocol
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::kernel::KernelState;
-use crate::log::{debug, trace};
 use crate::msgs::{
-    ClientHelloPayload, Compression, HandshakeAlignedProof, HandshakePayload, Message,
-    MessagePayload, Random, ServerExtensions, ServerExtensionsInput, ServerNamePayload, SessionId,
-    SingleProtocolName, TransportParameters,
+    ClientHelloPayload, Compression, EncryptedExtensions, HandshakeAlignedProof,
+    HandshakeMessagePayload, HandshakePayload, Message, MessagePayload, Random, ServerExtensions,
+    ServerExtensionsInput, ServerNamePayload, SessionId, SingleProtocolName, TransportParameters,
 };
 use crate::sealed::Sealed;
 use crate::suites::{PartiallyExtractedSecrets, Suite};
@@ -30,6 +30,8 @@ use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
+use crate::tracing::{debug, trace};
+use crate::verify::{ClientIdentity, VerifiedIdentity};
 
 pub(crate) enum ServerState {
     /// Reading an entire ClientHello
@@ -43,6 +45,10 @@ pub(crate) enum ServerState {
 
     /// Processing the received ClientHello.
     ClientHello(Box<ExpectClientHello>),
+
+    /// Verifying the client's present certificate chain.
+    VerifyClientIdentity(VerifyClientIdentity),
+
     Tls12(tls12::Tls12State),
     Tls13(tls13::Tls13State),
 }
@@ -62,8 +68,8 @@ impl crate::conn::StateMachine for ServerState {
     fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output<'m>) -> Result<Self, Error> {
         match self {
             Self::ReadClientHello(r) => r.handle(input, output),
-            Self::ChooseConfig(_) => {
-                Err(Error::Unreachable("ChooseConfig cannot process a message"))
+            Self::ChooseConfig(_) | Self::VerifyClientIdentity(_) => {
+                Err(Error::Unreachable("state cannot process a message"))
             }
             Self::ClientHello(e) => e.handle(input, output),
             Self::Tls12(sm) => sm.handle(input, output),
@@ -72,7 +78,22 @@ impl crate::conn::StateMachine for ServerState {
     }
 
     fn wants_input(&self) -> bool {
-        !matches!(self, Self::ChooseConfig(_))
+        !matches!(self, Self::ChooseConfig(_) | Self::VerifyClientIdentity(_))
+    }
+
+    fn handle_without_input(self) -> Result<Self, Error> {
+        match self {
+            Self::VerifyClientIdentity(vci) => vci.use_verifier_trait(),
+            _ => Ok(self),
+        }
+    }
+
+    fn is_traffic(&self) -> bool {
+        matches!(
+            self,
+            Self::Tls12(tls12::Tls12State::Traffic(..))
+                | Self::Tls13(tls13::Tls13State::Traffic(..) | tls13::Tls13State::QuicTraffic(..))
+        )
     }
 
     fn handle_decrypt_error(&mut self) {}
@@ -105,8 +126,15 @@ impl Tls12Extensions {
         config: &ServerConfig,
     ) -> Result<(Self, Box<ServerExtensions<'static>>), Error> {
         let ep = ExtensionProcessing::new(hello, config);
-        let (alpn_protocol, mut extensions) =
+        let (alpn_protocol, common) =
             ep.process_common(extra_exts, output, ocsp_response, resumedata)?;
+
+        let mut extensions = Box::new(ServerExtensions {
+            server_name_ack: common.server_name_ack,
+            selected_protocol: common.selected_protocol,
+            transport_parameters: common.transport_parameters,
+            ..ServerExtensions::default()
+        });
 
         // Renegotiation.
         // (We don't do reneg at all, but would support the secure version if we did.)
@@ -130,7 +158,7 @@ impl Tls12Extensions {
 
         // Confirm use of EMS if offered.
         if using_ems {
-            extensions.extended_master_secret_ack = Some(());
+            extensions.extended_main_secret_ack = Some(());
         }
 
         // Send confirmation of OCSP staple request if we will send one.
@@ -160,10 +188,17 @@ impl Tls13Extensions {
         hello: &ClientHelloPayload,
         output: &mut dyn Output<'_>,
         config: &ServerConfig,
-    ) -> Result<(Self, Box<ServerExtensions<'static>>), Error> {
+    ) -> Result<(Self, Box<EncryptedExtensions<'static>>), Error> {
         let ep = ExtensionProcessing::new(hello, config);
-        let (alpn_protocol, mut extensions) =
+        let (alpn_protocol, common) =
             ep.process_common(extra_exts, output, ocsp_response, resumedata)?;
+
+        let mut extensions = Box::new(EncryptedExtensions {
+            server_name_ack: common.server_name_ack,
+            selected_protocol: common.selected_protocol,
+            transport_parameters: common.transport_parameters,
+            ..EncryptedExtensions::default()
+        });
 
         let expected_client_type = select_cert_type(
             hello
@@ -220,15 +255,9 @@ impl<'a> ExtensionProcessing<'a> {
         output: &mut dyn Output<'_>,
         ocsp_response: &mut Option<&[u8]>,
         resumedata: Option<&CommonServerSessionValue<'_>>,
-    ) -> Result<
-        (
-            Option<ApplicationProtocol<'static>>,
-            Box<ServerExtensions<'static>>,
-        ),
-        Error,
-    > {
+    ) -> Result<(Option<ApplicationProtocol<'static>>, CommonExtensions), Error> {
         let Self { config, hello } = self;
-        let mut extensions = Box::new(ServerExtensions::default());
+        let mut extensions = CommonExtensions::default();
 
         let ServerExtensionsInput {
             transport_parameters,
@@ -302,6 +331,17 @@ impl<'a> ExtensionProcessing<'a> {
 
         Ok((chosen_protocol.map(|p| p.to_owned()), extensions))
     }
+}
+
+/// Extension values common to both TLS 1.2 ServerHello & TLS 1.3 EncryptedExtensions.
+///
+/// These are negotiated identically for both protocols prior to placement in the
+/// right message.
+#[derive(Default)]
+struct CommonExtensions {
+    server_name_ack: Option<()>,
+    selected_protocol: Option<SingleProtocolName>,
+    transport_parameters: Option<Payload<'static>>,
 }
 
 fn select_cert_type(
@@ -407,12 +447,12 @@ impl ChooseConfig {
     }
 
     pub(crate) fn client_hello(&self) -> ClientHello<'_> {
-        let client_hello = match &self.client_hello.message.payload {
-            MessagePayload::Handshake { parsed, .. } => match &parsed.0 {
-                HandshakePayload::ClientHello(ch) => ch,
-                _ => unreachable!(),
-            },
-            _ => unreachable!(),
+        let MessagePayload::Handshake {
+            parsed: HandshakeMessagePayload(HandshakePayload::ClientHello(client_hello)),
+            ..
+        } = &self.client_hello.message.payload
+        else {
+            unreachable!();
         };
 
         let server_name = client_hello
@@ -484,10 +524,10 @@ impl ExpectClientHello {
     ) -> Result<ServerState, Error> {
         let tls13_enabled = self
             .config
-            .supports_version(ProtocolVersion::TLSv1_3);
+            .supports_version(ProtocolVersion::TLSv1_3, self.protocol);
         let tls12_enabled = self
             .config
-            .supports_version(ProtocolVersion::TLSv1_2);
+            .supports_version(ProtocolVersion::TLSv1_2, self.protocol);
 
         // Are we doing TLS1.3?
         if let Some(versions) = &input.client_hello.supported_versions {
@@ -503,10 +543,10 @@ impl ExpectClientHello {
         } else if u16::from(input.client_hello.client_version) < u16::from(ProtocolVersion::TLSv1_2)
         {
             Err(PeerIncompatible::Tls12NotOffered.into())
-        } else if !tls12_enabled && tls13_enabled {
-            Err(PeerIncompatible::SupportedVersionsExtensionRequired.into())
         } else if self.protocol.is_quic() {
             Err(PeerIncompatible::Tls13RequiredForQuic.into())
+        } else if !tls12_enabled && tls13_enabled {
+            Err(PeerIncompatible::SupportedVersionsExtensionRequired.into())
         } else {
             self.with_version::<Tls12CipherSuite>(input, output)
         }
@@ -673,6 +713,8 @@ impl ExpectClientHello {
 
                 // Reduce our supported ciphersuites by the certified key's algorithm.
                 (suite.usable_for_signature_scheme(sig_scheme)
+                // And usable by the current protocol
+                && suite.usable_for_protocol(self.protocol)
                 // And support for one of the key exchange groups
                 && (ecdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::ECDHE)
                 || ffdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE)))
@@ -743,6 +785,46 @@ impl From<Box<ExpectClientHello>> for ServerState {
     fn from(value: Box<ExpectClientHello>) -> Self {
         Self::ClientHello(value)
     }
+}
+
+pub(crate) struct VerifyClientIdentity {
+    inner: Box<dyn VerifyClientIdentityInternal>,
+}
+
+impl VerifyClientIdentity {
+    /// Obtain the peer's asserted identity for external verification.
+    pub(crate) fn presented_identity(&self) -> Result<ClientIdentity<'static, '_>, Error> {
+        self.inner.presented_identity()
+    }
+
+    /// Progress the handshake by calling the verifier trait synchronously.
+    pub(crate) fn use_verifier_trait(self) -> Result<ServerState, Error> {
+        self.inner.with_config()
+    }
+
+    /// Progress the handshake by incorporating an external verification.
+    pub(crate) fn continue_with(
+        self,
+        verified: VerifiedIdentity<'static>,
+    ) -> Result<ServerState, Error> {
+        self.inner.continue_with(verified)
+    }
+}
+
+impl From<Box<dyn VerifyClientIdentityInternal>> for VerifyClientIdentity {
+    fn from(inner: Box<dyn VerifyClientIdentityInternal>) -> Self {
+        Self { inner }
+    }
+}
+
+/// Trait to maintain static unreachablity of per-protocol-version code.
+pub(crate) trait VerifyClientIdentityInternal: Send + Sync {
+    fn presented_identity(&self) -> Result<ClientIdentity<'static, '_>, Error>;
+    fn with_config(self: Box<Self>) -> Result<ServerState, Error>;
+    fn continue_with(
+        self: Box<Self>,
+        verified: VerifiedIdentity<'static>,
+    ) -> Result<ServerState, Error>;
 }
 
 pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {

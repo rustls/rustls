@@ -105,7 +105,7 @@ Delivered in 0.21:
   instead. This is common in Kubernetes deployments and service meshes.
   rustls/rustls#184
 
-* **Implement RFC 8446 Appendix C.4 in session cache**.
+* **Implement RFC 9846 Appendix C.4 in session cache**.
   TLS clients should use session tickets at most once for resumption. Without this,
   TLS clients may be tracked across connections through reuse of session tickets.
   Requires changes of the internal APIs to the session caching infrastructure.

@@ -17,6 +17,7 @@ use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible};
 use crate::msgs::{Codec, Reader};
 use crate::server::{ClientHello, ServerCredentialResolver};
 use crate::sync::Arc;
+pub use crate::verify::VerifiedIdentity;
 #[cfg(feature = "webpki")]
 use crate::webpki::ParsedCertificate;
 use crate::{DynHasher, SignerPublicKey, x509};
@@ -317,6 +318,12 @@ impl<'a> Codec<'a> for Identity<'a> {
                 "invalid PeerIdentity discriminant",
             )),
         }
+    }
+}
+
+impl<'a> From<VerifiedIdentity<'a>> for Identity<'a> {
+    fn from(val: VerifiedIdentity<'a>) -> Self {
+        val.into_inner()
     }
 }
 

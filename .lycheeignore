@@ -1,2 +1,5 @@
 ^file\:\/\/\/.*\/target\/doc\/index\.html$
 ^http:\/\/www\.adobe\.com/$
+
+# raw links added to our crate by tracing's inherent impls on T
+file\:\/\/\/.*\/dispatcher#setting-the-default-subscriber

@@ -13,7 +13,7 @@ use rustls::crypto::kx::{
 };
 use rustls::crypto::{CipherSuite, CipherSuiteCommon, CryptoProvider};
 use rustls::enums::ProtocolVersion;
-use rustls::{ClientConfig, ServerConfig, SupportedCipherSuite, Tls12CipherSuite};
+use rustls::{ClientConfig, ServerConfig, SupportedCipherSuite, Tls12CipherSuite, VecInput};
 use rustls_test::{
     ClientConfigExt, KeyType, ServerConfigExt, do_handshake, do_suite_and_kx_test,
     make_pair_for_arc_configs, make_pair_for_configs, provider_with_one_suite,
@@ -107,8 +107,20 @@ fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() 
     )
     .finish(KeyType::Rsa2048);
 
-    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-    do_handshake(&mut client, &mut server);
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
     assert_eq!(
         server
             .negotiated_cipher_suite()
@@ -232,8 +244,20 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
             .finish(KeyType::Rsa2048)
             .into();
 
-        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-        do_handshake(&mut client, &mut server);
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake(
+            &mut client_input,
+            &mut client_output,
+            &mut client,
+            &mut server_input,
+            &mut server_output,
+            &mut server,
+        );
         assert_eq!(
             server
                 .negotiated_cipher_suite()

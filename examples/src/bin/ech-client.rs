@@ -30,7 +30,7 @@
 
 use core::error::Error;
 use std::fs;
-use std::io::{BufReader, Read, Write, stdout};
+use std::io::{BufReader, IsTerminal, Read, Write, stderr, stdout};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 
@@ -41,14 +41,14 @@ use hickory_resolver::net::runtime::TokioRuntimeProvider;
 use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_resolver::proto::rr::{RData, RecordType};
 use hickory_resolver::{Resolver, TokioResolver};
-use log::trace;
 use rustls::client::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
 use rustls::crypto::hpke::Hpke;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
-use rustls::{ClientConfig, Connection, RootCertStore};
+use rustls::{ClientConfig, Connection, RootCertStore, VecInput};
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
-use rustls_util::{KeyLogFile, Stream};
+use rustls_util::Stream;
+use tracing::{Level, trace};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -76,11 +76,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    // NOTE: we defer setting up env_logger and setting the trace default filter level until
+    // NOTE: we defer installing the tracing subscriber (with a `trace` level filter) until
     //       after doing the DNS-over-HTTPS lookup above - we don't want to muddy the output
     //       with the rustls debug logs from the lookup.
-    env_logger::Builder::new()
-        .parse_filters("trace")
+    tracing_subscriber::fmt()
+        .with_max_level(Level::TRACE)
+        .with_writer(stderr)
+        .with_ansi(stderr().is_terminal())
         .init();
 
     let ech_mode = match server_ech_configs.is_empty() {
@@ -112,13 +114,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // Construct a rustls client config with a TLS1.3-only provider, and ECH enabled.
+    #[cfg_attr(not(debug_assertions), expect(unused_mut))]
     let mut config = ClientConfig::builder(rustls_aws_lc_rs::DEFAULT_TLS13_PROVIDER.into())
         .with_ech(ech_mode)
         .with_root_certificates(root_store)
         .with_no_client_auth()?;
 
-    // Allow using SSLKEYLOGFILE.
-    config.key_log = Arc::new(KeyLogFile::new());
+    // Allow using SSLKEYLOGFILE in debug builds.
+    #[cfg(debug_assertions)]
+    {
+        config.key_log = Arc::new(rustls_util::KeyLogFile::new());
+    }
     let config = Arc::new(config);
 
     // The "inner" SNI that we're really trying to reach.
@@ -126,16 +132,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     for i in 0..args.num_reqs {
         trace!("\nRequest {} of {}", i + 1, args.num_reqs);
+        let mut output = Vec::new();
         let mut conn = config
             .connect(server_name.clone())
-            .build()?;
+            .build(&mut output)?;
         // The "outer" server that we're connecting to.
         let sock_addr = (args.outer_hostname.as_str(), args.port)
             .to_socket_addrs()?
             .next()
             .ok_or("cannot resolve hostname")?;
         let mut sock = TcpStream::connect(sock_addr)?;
-        let mut tls = Stream::new(&mut conn, &mut sock);
+        let mut input = VecInput::default();
+        let mut received_plaintext = Vec::new();
+        let mut tls = Stream::new(
+            &mut input,
+            &mut received_plaintext,
+            &mut output,
+            &mut conn,
+            &mut sock,
+        );
 
         // Trim a leading '/' from the user-supplied path so we never emit a request line
         // like `GET //foo HTTP/1.1`.

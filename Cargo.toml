@@ -46,42 +46,40 @@ default-members = [
 ]
 resolver = "2"
 
+[workspace.package]
+edition = "2024"
+
 [workspace.dependencies]
 anyhow = "1.0.73"
 asn1 = "0.24"
 async-trait = "0.1.74"
-aws-lc-rs = { version = "1.14", default-features = false }
-base64 = "0.22"
+aws-lc-rs = { version = "1.18", default-features = false }
+base64 = "0.23"
 bencher = "0.1.5"
 brotli = { version = "8", default-features = false, features = ["std"] }
 brotli-decompressor = "5.0.0"
 byteorder = "1.4.3"
 clap = { version = "4.3.21", features = ["derive", "env"] }
-crabgrind = "0.2"
+crabgrind = "0.3"
 criterion = "0.8"
-env_logger = "0.11"
-graviola = "0.3"
+graviola = "0.4"
 hashbrown = { version = "0.17", default-features = false, features = ["default-hasher", "inline-more"] }
 hex = "0.4"
 hickory-resolver = { version = "0.26", features = ["https-aws-lc-rs", "webpki-roots"] }
-hpke-rs = "0.6"
-hpke-rs-crypto = "0.6"
-hpke-rs-rust-crypto = "0.6"
-itertools = "0.14"
-log = { version = "0.4.8" }
+itertools = "0.15"
 macro_rules_attribute = "0.2"
 mio = { version = "1", features = ["net", "os-poll"] }
-num-bigint = "0.4.4"
+num-bigint = "0.5.0"
 once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
 openssl = "0.10"
-pki-types = { package = "rustls-pki-types", version = "1.14", features = ["alloc"] }
+pki-types = { package = "rustls-pki-types", version = "1.15", features = ["alloc"] }
 rayon = "1.7"
 rcgen = { version = "0.14.4", features = ["pem", "aws_lc_rs"], default-features = false }
 regex = "1"
 ring = "0.17"
 rustc-hash = "2"
 rustls-fuzzing-provider = { path = "rustls-fuzzing-provider/" }
-rustls-graviola = { version = "0.3" }
+rustls-graviola = { version = "0.4" }
 rustls-test = { path = "rustls-test/", default-features = false }
 rustls-util = { path = "rustls-util/" }
 serde = { version = "1", features = ["derive"] }
@@ -90,6 +88,8 @@ subtle = { version = "2.5.0", default-features = false }
 time = { version = "0.3.6", default-features = false }
 tikv-jemallocator = "0.7"
 tokio = { version = "1.34", features = ["io-util", "macros", "net", "rt"] }
+tracing = { version = "0.1", default-features = false }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["ansi", "env-filter", "fmt", "std"] }
 webpki = { package = "rustls-webpki", version = "=0.104.0-alpha.7", features = [
   "alloc",
 ], default-features = false }
@@ -106,6 +106,7 @@ lto = true
 alloc_instead_of_core = "warn"
 cloned_instead_of_copied = "warn"
 manual_let_else = "warn"
+needless_bitwise_bool = "warn"
 needless_collect = "warn"
 needless_pass_by_ref_mut = "warn"
 or_fun_call = "warn"
@@ -122,6 +123,11 @@ too_many_arguments = "allow"
 # - new_without_default: for internal constructors, the indirection is not
 #   helpful
 new_without_default = "allow"
+
+# - double_must_use: async-trait expands async methods to Pin<Box<dyn Future>>,
+#   which is already must_use, and also emits a bare #[must_use]. Nightly
+#   clippy 1.99+ flags that combination; not actionable on our source.
+double_must_use = "allow"
 
 [workspace.lints.rust]
 elided_lifetimes_in_paths = "warn"

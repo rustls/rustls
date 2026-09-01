@@ -1,5 +1,6 @@
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use std::{error, vec};
 
 use pki_types::UnixTime;
@@ -9,31 +10,32 @@ use super::{
     CommonServerSessionValue, ServerConfig, ServerConnection, ServerSessionValue,
     Tls13ServerSessionValue,
 };
-use crate::conn::{Connection, Input};
-use crate::crypto::cipher::FakeAead;
+use crate::conn::{Connection, Input, VecInput};
+use crate::crypto::cipher::{EncodableVersion, FakeAead};
 use crate::crypto::kx::ffdhe::{FFDHE2048, FfdheGroup};
 use crate::crypto::kx::{
     ActiveKeyExchange, KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange,
     SupportedKxGroup,
 };
-use crate::crypto::test_provider::{FAKE_HASH, FAKE_HMAC};
+use crate::crypto::test_provider::{FAKE_HASH, FAKE_HMAC, KEY_EXCHANGE_GROUP, TLS_TEST_SUITE};
 use crate::crypto::{
     CertificateIdentity, CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme,
-    SingleCredential, TEST_PROVIDER, tls12, tls12_only,
+    SingleCredential, TEST_PROVIDER, TLS13_TEST_SUITE, tls12, tls12_only,
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible};
 use crate::msgs::{
     ClientExtensions, ClientHelloPayload, Codec, Compression, HEADER_SIZE, HandshakeMessagePayload,
     HandshakePayload, KeyShareEntry, Message, MessagePayload, Random, Reader, SessionId,
-    SizedPayload, SupportedProtocolVersions,
+    SupportedProtocolVersions,
 };
 use crate::pki_types::pem::PemObject;
 use crate::pki_types::{CertificateDer, FipsStatus, PrivateKeyDer};
-use crate::suites::CipherSuiteCommon;
+use crate::suites::{CipherSuiteCommon, Suite};
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
+use crate::verify::VerifiedIdentity;
 use crate::version::TLS12_VERSION;
 
 #[test]
@@ -74,10 +76,12 @@ fn serversessionvalue_with_cert() {
             CommonServerSessionValue::new(
                 None,
                 CipherSuite::TLS13_AES_128_GCM_SHA256,
-                Some(Identity::X509(CertificateIdentity {
-                    end_entity: CertificateDer::from(&[10, 11, 12][..]),
-                    intermediates: alloc::vec![],
-                })),
+                Some(VerifiedIdentity::assertion(Identity::X509(
+                    CertificateIdentity {
+                        end_entity: CertificateDer::from(&[10, 11, 12][..]),
+                        intermediates: alloc::vec![],
+                    }
+                ))),
                 None,
                 alloc::vec![4, 5, 6],
                 UnixTime::now(),
@@ -111,7 +115,7 @@ fn null_compression_required() {
 
 fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
     let m = Message {
-        version: ProtocolVersion::TLSv1_2,
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
             hello,
         ))),
@@ -162,17 +166,17 @@ fn select_cipher_suite(
     client_hello: ClientHelloPayload,
 ) -> Result<CipherSuite, Box<dyn error::Error>> {
     let ch = Message {
-        version: ProtocolVersion::TLSv1_3,
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
             client_hello,
         ))),
     };
-    conn.read_tls(&mut ch.into_wire_bytes().as_slice())?;
-    conn.process_new_packets()?;
 
+    let mut input = VecInput::default();
+    input.read(&mut ch.into_wire_bytes().as_slice())?;
     let mut flight = vec![];
-    conn.write_tls(&mut &mut flight)
-        .unwrap();
+    conn.process_new_packets(&mut input, &mut flight)
+        .handle_all(&mut Vec::new())?;
     let mut r = Reader::new(&flight[HEADER_SIZE..]);
     let HandshakeMessagePayload(HandshakePayload::ServerHello(server_hello)) =
         HandshakeMessagePayload::read(&mut r).unwrap()
@@ -183,7 +187,7 @@ fn select_cipher_suite(
 }
 
 #[test]
-fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
+fn test_server_rejects_no_extended_main_secret_extension_when_require_ems_or_fips() {
     let provider = tls12_only(TEST_PROVIDER.clone());
     let mut config = ServerConfig::builder(provider.into())
         .with_no_client_auth()
@@ -196,25 +200,25 @@ fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_f
         config.require_ems = true;
     }
     let mut conn = ServerConnection::new(config.into()).unwrap();
+    let mut input = VecInput::default();
 
     let mut ch = minimal_client_hello();
     ch.extensions
-        .extended_master_secret_request
+        .extended_main_secret_request
         .take();
     let ch = Message {
-        version: ProtocolVersion::TLSv1_3,
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
             ch,
         ))),
     };
-    conn.read_tls(&mut ch.into_wire_bytes().as_slice())
+    input
+        .read(&mut ch.into_wire_bytes().as_slice())
         .unwrap();
 
     assert_eq!(
-        conn.process_new_packets(),
-        Err(Error::PeerIncompatible(
-            PeerIncompatible::ExtendedMasterSecretExtensionRequired
-        ))
+        process(&mut input, &mut conn).unwrap_err(),
+        Error::PeerIncompatible(PeerIncompatible::ExtendedMainSecretExtensionRequired)
     );
 }
 
@@ -284,18 +288,19 @@ fn server_chooses_ffdhe_group_for_client_hello(
     mut conn: ServerConnection,
     client_hello: ClientHelloPayload,
 ) {
+    let mut input = VecInput::default();
     let ch = Message {
-        version: ProtocolVersion::TLSv1_3,
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
             client_hello,
         ))),
     };
-    conn.read_tls(&mut ch.into_wire_bytes().as_slice())
+    input
+        .read(&mut ch.into_wire_bytes().as_slice())
         .unwrap();
-    conn.process_new_packets().unwrap();
-
     let mut flight = vec![];
-    conn.write_tls(&mut &mut flight)
+    conn.process_new_packets(&mut input, &mut flight)
+        .handle_all(&mut Vec::new())
         .unwrap();
 
     let mut r = Reader::new(&flight[HEADER_SIZE..]);
@@ -320,68 +325,59 @@ fn server_chooses_ffdhe_group_for_client_hello(
 
 #[test]
 fn test_server_requiring_rpk_client_rejects_x509_client() {
-    let Some(server_config) = server_config_for_rpk(TEST_PROVIDER.clone()) else {
-        return;
-    };
+    let server_config = server_config_for_rpk(TEST_PROVIDER.clone());
 
     let mut ch = minimal_client_hello();
     ch.extensions.client_certificate_types = Some(vec![CertificateType::X509]);
     let ch = Message {
-        version: ProtocolVersion::TLSv1_3,
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
             ch,
         ))),
     };
 
     let mut conn = ServerConnection::new(Arc::new(server_config)).unwrap();
-    conn.read_tls(&mut ch.into_wire_bytes().as_slice())
+    let mut input = VecInput::default();
+    input
+        .read(&mut ch.into_wire_bytes().as_slice())
         .unwrap();
     assert_eq!(
-        conn.process_new_packets().unwrap_err(),
+        process(&mut input, &mut conn).unwrap_err(),
         PeerIncompatible::IncorrectCertificateTypeExtension.into(),
     );
 }
 
 #[test]
 fn test_rpk_only_server_rejects_x509_only_client() {
-    let Some(server_config) = server_config_for_rpk(TEST_PROVIDER.clone()) else {
-        return;
-    };
+    let server_config = server_config_for_rpk(TEST_PROVIDER.clone());
 
     let mut ch = minimal_client_hello();
     ch.extensions.server_certificate_types = Some(vec![CertificateType::X509]);
     let ch = Message {
-        version: ProtocolVersion::TLSv1_3,
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
             ch,
         ))),
     };
 
     let mut conn = ServerConnection::new(Arc::new(server_config)).unwrap();
-    conn.read_tls(&mut ch.into_wire_bytes().as_slice())
+    let mut input = VecInput::default();
+    input
+        .read(&mut ch.into_wire_bytes().as_slice())
         .unwrap();
 
     assert_eq!(
-        conn.process_new_packets().unwrap_err(),
+        process(&mut input, &mut conn).unwrap_err(),
         PeerIncompatible::IncorrectCertificateTypeExtension.into(),
     );
 }
 
-fn server_config_for_rpk(provider: CryptoProvider) -> Option<ServerConfig> {
-    let provider = CryptoProvider {
-        kx_groups: Cow::Owned(vec![
-            provider.find_kx_group(NamedGroup::X25519, ProtocolVersion::TLSv1_2)?,
-        ]),
-        ..provider
-    };
-
+fn server_config_for_rpk(provider: CryptoProvider) -> ServerConfig {
     let credentials = SingleCredential::from(server_credentials(&provider));
-    Some(
-        ServerConfig::builder(Arc::new(provider))
-            .with_no_client_auth()
-            .with_server_credential_resolver(Arc::new(credentials))
-            .unwrap(),
-    )
+    ServerConfig::builder(Arc::new(provider))
+        .with_no_client_auth()
+        .with_server_credential_resolver(Arc::new(credentials))
+        .unwrap()
 }
 
 fn server_credentials(provider: &CryptoProvider) -> Credentials {
@@ -492,7 +488,7 @@ fn minimal_client_hello() -> ClientHelloPayload {
         client_version: ProtocolVersion::TLSv1_3,
         random: Random::from([0u8; 32]),
         session_id: SessionId::empty(),
-        cipher_suites: vec![CipherSuite(0xff13), CipherSuite(0xff12)],
+        cipher_suites: vec![TLS13_TEST_SUITE.suite(), TLS_TEST_SUITE.suite()],
         compression_methods: vec![Compression::Null],
         extensions: Box::new(ClientExtensions {
             signature_schemes: Some(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
@@ -502,11 +498,22 @@ fn minimal_client_hello() -> ClientHelloPayload {
                 tls13: true,
             }),
             key_shares: Some(vec![KeyShareEntry {
-                group: NamedGroup::from(0xfe00),
-                payload: SizedPayload::from(vec![0xab; 32]),
+                group: KEY_EXCHANGE_GROUP.name(),
+                payload: KEY_EXCHANGE_GROUP
+                    .start()
+                    .unwrap()
+                    .pub_key()
+                    .to_vec()
+                    .into(),
             }]),
-            extended_master_secret_request: Some(()),
+            extended_main_secret_request: Some(()),
             ..ClientExtensions::default()
         }),
     }
+}
+
+fn process(input: &mut VecInput, conn: &mut ServerConnection) -> Result<(), Error> {
+    conn.process_new_packets(input, &mut Vec::new())
+        .handle_all(&mut Vec::new())?;
+    Ok(())
 }

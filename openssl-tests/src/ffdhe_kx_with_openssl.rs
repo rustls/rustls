@@ -8,7 +8,7 @@ use openssl::ssl::{SslAcceptor, SslConnector, SslFiletype, SslMethod};
 use rustls::crypto::{CryptoProvider, Identity};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
-use rustls::{ClientConfig, Connection, RootCertStore, ServerConfig, ServerConnection};
+use rustls::{ClientConfig, Connection, RootCertStore, ServerConfig, ServerConnection, VecInput};
 use rustls_aws_lc_rs as provider;
 use rustls_util::complete_io;
 
@@ -35,15 +35,34 @@ fn test_rustls_server_with_ffdhe_kx(provider: CryptoProvider, iters: usize) {
 
     let server_thread = thread::spawn(move || {
         let config = Arc::new(server_config_with_ffdhe_kx(provider));
+        let mut received_plaintext = Vec::new();
         for _ in 0..iters {
             let mut server = ServerConnection::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
+            let mut input = VecInput::default();
+            let mut output = Vec::new();
+            complete_io(
+                &mut tcp_stream,
+                &mut input,
+                &mut received_plaintext,
+                &mut output,
+                &mut server,
+            )
+            .unwrap();
+
             server
-                .writer()
-                .write_all(message.as_bytes())
+                .write_tls(message.as_bytes().into(), &mut output)
                 .unwrap();
 
-            complete_io(&mut tcp_stream, &mut server).unwrap();
+            complete_io(
+                &mut tcp_stream,
+                &mut input,
+                &mut received_plaintext,
+                &mut output,
+                &mut server,
+            )
+            .unwrap();
+
             tcp_stream.flush().unwrap();
         }
     });
@@ -130,22 +149,30 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
         .unwrap(),
     );
     let server_name = ServerName::try_from("localhost").unwrap();
+    let mut received_plaintext = Vec::new();
     for _ in 0..iters {
         let mut tcp_stream = TcpStream::connect(("localhost", port)).unwrap();
+        let mut output = Vec::new();
         let mut client = config
             .connect(server_name.clone())
-            .build()
+            .build(&mut output)
             .unwrap();
-        client
-            .writer()
-            .write_all(message.as_bytes())
-            .unwrap();
+        let mut input = VecInput::default();
 
-        complete_io(&mut tcp_stream, &mut client).unwrap();
-        client.send_close_notify();
+        complete_io(
+            &mut tcp_stream,
+            &mut input,
+            &mut received_plaintext,
+            &mut output,
+            &mut client,
+        )
+        .unwrap();
+
         client
-            .write_tls(&mut tcp_stream)
+            .write_tls(message.as_bytes().into(), &mut output)
             .unwrap();
+        client.send_close_notify(&mut output);
+        tcp_stream.write_all(&output).unwrap();
         tcp_stream.flush().unwrap();
     }
 

@@ -114,22 +114,22 @@
 //!
 //! ### Rustls provides encrypted pipes
 //! These are the [`ServerConnection`] and [`ClientConnection`] types.  You supply raw TLS traffic
-//! on the left (via the [`read_tls()`] and [`write_tls()`] methods) and then read/write the
-//! plaintext on the right:
+//! on the left (via the [`TlsInputBuffer`] supplied to [`process_new_packets()`], and [`write_tls()`] methods)
+//! and then read/write the plaintext on the right:
 //!
-//! [`read_tls()`]: Connection::read_tls
 //! [`write_tls()`]: Connection::write_tls
+//! [`process_new_packets()`]: Connection::process_new_packets
 //!
 //! ```text
 //!          TLS                                   Plaintext
 //!          ===                                   =========
-//!     read_tls()      +-----------------------+      reader() as io::Read
-//!                     |                       |
-//!           +--------->   ClientConnection    +--------->
-//!                     |          or           |
-//!           <---------+   ServerConnection    <---------+
-//!                     |                       |
-//!     write_tls()     +-----------------------+      writer() as io::Write
+//!  process_new_packets()  +-----------------------+      reader() as io::Read
+//!                         |                       |
+//!               +--------->   ClientConnection    +--------->
+//!                         |          or           |
+//!               <---------+   ServerConnection    <---------+
+//!                         |                       |
+//!         write_tls()     +-----------------------+      writer() as io::Write
 //! ```
 //!
 //! ### Rustls takes care of server certificate verification
@@ -184,36 +184,37 @@
 //! #     .unwrap());
 //!
 //! let example_com = "example.com".try_into().unwrap();
+//! let mut output = Vec::new();
 //! let mut client = client_config.connect(example_com)
-//!     .build()
+//!     .build(&mut output)
 //!     .unwrap();
 //! ```
 //!
-//! Now you should do appropriate IO for the `client` object.  If `client.wants_read()` yields
-//! true, you should call `client.read_tls()` when the underlying connection has data.
-//! Likewise, if `client.wants_write()` yields true, you should call `client.write_tls()`
-//! when the underlying connection is able to send data.  You should continue doing this
-//! as long as the connection is valid.
+//! Now you should do appropriate IO for the `client` object.  Operations that produce TLS
+//! data to send to the peer -- such as `build()` above and `client.process_new_packets()` --
+//! append it to the `Vec<u8>` you pass; write those bytes to the underlying connection
+//! whenever it is able to send data.  If `client.wants_read()` yields true, you should
+//! call `client.process_new_packets()` with the data from the underlying connection.
+//! You should continue doing this as long as the connection is valid.
 //!
-//! The return types of `read_tls()` and `write_tls()` only tell you if the IO worked.  No
-//! parsing or processing of the TLS messages is done.  After each `read_tls()` you should
-//! therefore call `client.process_new_packets()` which parses and processes the messages.
-//! Any error returned from `process_new_packets` is fatal to the connection, and will tell you
-//! why.  For example, if the server's certificate is expired `process_new_packets` will
-//! return `Err(InvalidCertificate(Expired))`.  From this point on,
-//! `process_new_packets` will not do any new work and will return that error continually.
+//! `process_new_packets()` will yield a [`MessageHandler`], which can be used to read all
+//! buffered messages at once (via [`MessageHandler::handle_all()`]) or one at a time (via
+//! [`MessageHandler::next_payload()`]). Any error returned from either of these methods is fatal
+//! to the connection, and will tell you why. For example, if the server's certificate is expired
+//! `process_new_packets()` will return `Err(InvalidCertificate(Expired))`. From this point on,
+//! future calls to `MessageHandler` methods will do nothing and yield the same error.
 //!
-//! You can extract newly received data by calling `client.reader()` (which implements the
-//! `io::Read` trait).  You can send data to the peer by calling `client.writer()` (which
-//! implements `io::Write` trait).  Note that `client.writer().write()` buffers data you
-//! send if the TLS connection is not yet established: this is useful for writing (say) a
-//! HTTP request, but this is buffered so avoid large amounts of data.
+//! Newly received data is available by copying from the `Payload` data returned by
+//! `next_payload()` or written into the given buffer by `handle_all()`.  You can send data
+//! to the peer by calling `client.write_tls()`, which encrypts it into TLS records appended
+//! to your output buffer.  Note that this is only possible once the handshake has completed.
 //!
 //! The following code uses a fictional socket IO API for illustration, and does not handle
 //! errors.
 //!
 //! ```rust,no_run
 //! # let mut client: rustls::ClientConnection = panic!();
+//! # let mut output: Vec<u8> = Vec::new();
 //! # struct Socket { }
 //! # impl Socket {
 //! #   fn ready_for_write(&self) -> bool { false }
@@ -234,22 +235,30 @@
 //! #   panic!();
 //! # }
 //! use std::io;
-//! use rustls::Connection;
+//! use rustls::{Connection, VecInput};
 //!
-//! client.writer().write(b"GET / HTTP/1.0\r\n\r\n").unwrap();
 //! let mut socket = connect("example.com", 443);
+//! let mut input = VecInput::default();
+//! let mut sent_request = false;
 //! loop {
 //!   if client.wants_read() && socket.ready_for_read() {
-//!     client.read_tls(&mut socket).unwrap();
-//!     client.process_new_packets().unwrap();
-//!
+//!     input.read(&mut socket).unwrap();
 //!     let mut plaintext = Vec::new();
-//!     client.reader().read_to_end(&mut plaintext).unwrap();
+//!     client
+//!       .process_new_packets(&mut input, &mut output)
+//!       .handle_all(&mut plaintext)
+//!       .unwrap();
 //!     io::stdout().write(&plaintext).unwrap();
 //!   }
 //!
-//!   if client.wants_write() && socket.ready_for_write() {
-//!     client.write_tls(&mut socket).unwrap();
+//!   if !sent_request && !client.is_handshaking() {
+//!     client.write_tls(b"GET / HTTP/1.0\r\n\r\n".into(), &mut output).unwrap();
+//!     sent_request = true;
+//!   }
+//!
+//!   if !output.is_empty() && socket.ready_for_write() {
+//!     let written = socket.write(&output).unwrap();
+//!     output.drain(..written);
 //!   }
 //!
 //!   socket.wait_for_something_to_happen();
@@ -273,21 +282,21 @@
 //! Here's a list of what features are exposed by the rustls crate and what
 //! they mean.
 //!
-//! - `std` (enabled by default): enable the high-level (buffered) Connection API and other functionality
-//!   which relies on the `std` library.
-//!
-//! - `log` (enabled by default): make the rustls crate depend on the `log` crate.
+//! - `tracing` (enabled by default): make the rustls crate depend on the `tracing` crate,
 //!   rustls outputs interesting protocol-level messages at `trace!` and `debug!` level,
 //!   and protocol-level errors at `warn!` and `error!` level.  The log messages do not
 //!   contain secret key data, and so are safe to archive without affecting session security.
+//!
+//!   To use this with the `log` crate (as used by rustls 0.23 and previous) you should take
+//!   a dependency on the `tracing` crate and activate its `log` or `log-always` feature.
 //!
 //! - `webpki` (enabled by default): make the rustls crate depend on the `rustls-webpki` crate, which
 //!   is used by default to provide built-in certificate verification.  Without this feature, users must
 //!   provide certificate verification themselves.
 //!
-//! - `brotli`: uses the `brotli` crate for RFC8879 certificate compression support.
+//! - `brotli`: uses the `brotli` crate for RFC 8879 certificate compression support.
 //!
-//! - `zlib`: uses the `zlib-rs` crate for RFC8879 certificate compression support.
+//! - `zlib`: uses the `zlib-rs` crate for RFC 8879 certificate compression support.
 //!
 //! [x25519mlkem768-manual]: manual::_05_defaults#about-the-post-quantum-secure-key-exchange-x25519mlkem768
 
@@ -320,17 +329,16 @@ use crate::crypto::CryptoProvider;
 #[allow(unused_extern_crates)]
 extern crate test;
 
-// log for logging (optional).
-#[cfg(feature = "log")]
+#[cfg(feature = "tracing")]
 #[expect(clippy::single_component_path_imports)]
-use log;
+use tracing;
 
-#[cfg(not(feature = "log"))]
-mod log {
-    macro_rules! trace    ( ($($tt:tt)*) => { crate::log::_used!($($tt)*) } );
-    macro_rules! debug    ( ($($tt:tt)*) => { crate::log::_used!($($tt)*) } );
-    macro_rules! error    ( ($($tt:tt)*) => { crate::log::_used!($($tt)*) } );
-    macro_rules! _warn    ( ($($tt:tt)*) => { crate::log::_used!($($tt)*) } );
+#[cfg(not(feature = "tracing"))]
+mod tracing {
+    macro_rules! trace    ( ($($tt:tt)*) => { crate::tracing::_used!($($tt)*) } );
+    macro_rules! debug    ( ($($tt:tt)*) => { crate::tracing::_used!($($tt)*) } );
+    macro_rules! error    ( ($($tt:tt)*) => { crate::tracing::_used!($($tt)*) } );
+    macro_rules! _warn    ( ($($tt:tt)*) => { crate::tracing::_used!($($tt)*) } );
     macro_rules! _used    ( ($($tt:tt)*) => { { let _ = format_args!($($tt)*); } } );
     pub(crate) use _used;
     pub(crate) use _warn as warn;
@@ -383,10 +391,20 @@ pub mod internal {
 
 // The public interface is:
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
-pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind};
+pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind, Protocol};
 pub use crate::conn::{
-    Connection, IoState, KeyingMaterialExporter, Reader, SideData, Writer, kernel,
+    Connection, IoState, KeyingMaterialExporter, MessageHandler, SideData, SliceInput,
+    TlsInputBuffer, VecInput, kernel,
 };
+/// Types related to "split" mode.
+///
+/// See [`split::SplitConnection`] for more information.
+pub mod split {
+    pub use crate::conn::split::{
+        FlushSender, ReceiveTraffic, ReceiveTrafficState, ReceivedApplicationData, SendTraffic,
+        SplitConnection,
+    };
+}
 pub use crate::error::Error;
 pub use crate::key_log::{KeyLog, NoKeyLog};
 pub use crate::suites::{

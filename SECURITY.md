@@ -130,9 +130,9 @@ Mitigations:
   compute for this effort.  Fuzzing is performed with a mock provider of cryptography, which is intended to make
   both pre-auth and post-auth code paths reachable to the fuzzer (at the cost of fuzzing not covering the actual
   cryptography implementations).
-- We have [studied and explained](https://rustls.dev/docs/manual/_01_impl_vulnerabilities/index.html#a-review-of-tls-implementation-vulnerabilities)
+- We have [studied and explained](https://rustls.dev/docs/rustls/manual/_01_impl_vulnerabilities/index.html#a-review-of-tls-implementation-vulnerabilities)
   issues encountered in other TLS implementations and discuss further mitigations there.
-- We implement the TLS 1.3 downgrade sentinel (a [standard and required protocol feature](https://datatracker.ietf.org/doc/html/rfc8446#section-4.1.3)
+- We implement the TLS 1.3 downgrade sentinel (a [standard and required protocol feature](https://datatracker.ietf.org/doc/html/rfc9846#section-4.2.3-8)
   which limits downgrade from TLS 1.3).
 
 ### Boundary: cryptography provider

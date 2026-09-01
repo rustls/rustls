@@ -1,5 +1,67 @@
 use pki_types::{AlgorithmIdentifier, InvalidSignature, SignatureVerificationAlgorithm, alg_id};
 use ring::signature;
+use rustls::crypto::{SignatureScheme, WebPkiSupportedAlgorithms};
+
+/// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
+/// compiled against *ring*.
+pub(crate) static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms =
+    match WebPkiSupportedAlgorithms::new(
+        &[
+            ECDSA_P256_SHA256,
+            ECDSA_P256_SHA384,
+            ECDSA_P384_SHA256,
+            ECDSA_P384_SHA384,
+            ED25519,
+            RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+            RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+            RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+            RSA_PKCS1_2048_8192_SHA256,
+            RSA_PKCS1_2048_8192_SHA384,
+            RSA_PKCS1_2048_8192_SHA512,
+            RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS,
+            RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS,
+            RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS,
+        ],
+        &[
+            // Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
+            (
+                SignatureScheme::ECDSA_NISTP384_SHA384,
+                &[ECDSA_P384_SHA384, ECDSA_P256_SHA384],
+            ),
+            (
+                SignatureScheme::ECDSA_NISTP256_SHA256,
+                &[ECDSA_P256_SHA256, ECDSA_P384_SHA256],
+            ),
+            (SignatureScheme::ED25519, &[ED25519]),
+            (
+                SignatureScheme::RSA_PSS_SHA512,
+                &[RSA_PSS_2048_8192_SHA512_LEGACY_KEY],
+            ),
+            (
+                SignatureScheme::RSA_PSS_SHA384,
+                &[RSA_PSS_2048_8192_SHA384_LEGACY_KEY],
+            ),
+            (
+                SignatureScheme::RSA_PSS_SHA256,
+                &[RSA_PSS_2048_8192_SHA256_LEGACY_KEY],
+            ),
+            (
+                SignatureScheme::RSA_PKCS1_SHA512,
+                &[RSA_PKCS1_2048_8192_SHA512],
+            ),
+            (
+                SignatureScheme::RSA_PKCS1_SHA384,
+                &[RSA_PKCS1_2048_8192_SHA384],
+            ),
+            (
+                SignatureScheme::RSA_PKCS1_SHA256,
+                &[RSA_PKCS1_2048_8192_SHA256],
+            ),
+        ],
+    ) {
+        Ok(algs) => algs,
+        Err(_) => panic!("bad WebPkiSupportedAlgorithms"),
+    };
 
 /// An array of all the verification algorithms exported by this crate.
 ///
@@ -103,7 +165,7 @@ pub static RSA_PKCS1_2048_8192_SHA512: &dyn SignatureVerificationAlgorithm = &Ri
 /// RSA PKCS#1 1.5 signatures using SHA-256 for keys of 2048-8192 bits,
 /// with illegally absent AlgorithmIdentifier parameters.
 ///
-/// RFC4055 says on sha256WithRSAEncryption and company:
+/// RFC 4055 says on sha256WithRSAEncryption and company:
 ///
 /// >   When any of these four object identifiers appears within an
 /// >   AlgorithmIdentifier, the parameters MUST be NULL.  Implementations
@@ -123,7 +185,7 @@ pub static RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS: &dyn SignatureVerificationA
 /// RSA PKCS#1 1.5 signatures using SHA-384 for keys of 2048-8192 bits,
 /// with illegally absent AlgorithmIdentifier parameters.
 ///
-/// RFC4055 says on sha256WithRSAEncryption and company:
+/// RFC 4055 says on sha256WithRSAEncryption and company:
 ///
 /// >   When any of these four object identifiers appears within an
 /// >   AlgorithmIdentifier, the parameters MUST be NULL.  Implementations
@@ -143,7 +205,7 @@ pub static RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS: &dyn SignatureVerificationA
 /// RSA PKCS#1 1.5 signatures using SHA-512 for keys of 2048-8192 bits,
 /// with illegally absent AlgorithmIdentifier parameters.
 ///
-/// RFC4055 says on sha256WithRSAEncryption and company:
+/// RFC 4055 says on sha256WithRSAEncryption and company:
 ///
 /// >   When any of these four object identifiers appears within an
 /// >   AlgorithmIdentifier, the parameters MUST be NULL.  Implementations

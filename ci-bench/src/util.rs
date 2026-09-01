@@ -363,10 +363,10 @@ pub(crate) mod transport {
     //! but that doesn't matter (we are measuring performance differences, and overhead is automatically
     //! ignored as long as it remains constant).
 
-    use std::io::{Cursor, Read, Write};
+    use std::io::Cursor;
 
     use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-    use rustls::{ClientConnection, Connection, ServerConnection};
+    use rustls::{ClientConnection, Connection, ServerConnection, VecInput};
 
     use super::async_io::{AsyncRead, AsyncWrite};
 
@@ -378,35 +378,20 @@ pub(crate) mod transport {
     ///
     /// The receiving end should use [`read_handshake_message`] to process the transmission.
     pub(crate) async fn send_handshake_message(
-        conn: &mut impl Connection,
+        output: &mut Vec<u8>,
         writer: &mut dyn AsyncWrite,
-        buf: &mut [u8],
     ) -> anyhow::Result<()> {
-        // Write all bytes the connection wants to send to an intermediate buffer
-        let mut written = 0;
-        while conn.wants_write() {
-            if written >= buf.len() {
-                anyhow::bail!(
-                    "Not enough space in buffer for outgoing message (buf len = {})",
-                    buf.len()
-                );
-            }
-
-            written += conn.write_tls(&mut &mut buf[written..])?;
-        }
-
-        if written == 0 {
+        if output.is_empty() {
             return Ok(());
         }
 
         // Write the whole buffer in one go, preceded by its length
         let mut length_buf = Vec::with_capacity(4);
-        length_buf.write_u32::<BigEndian>(written as u32)?;
+        length_buf.write_u32::<BigEndian>(output.len() as u32)?;
         writer.write_all(&length_buf).await?;
-        writer
-            .write_all(&buf[..written])
-            .await?;
+        writer.write_all(output).await?;
         writer.flush().await?;
+        output.clear();
 
         Ok(())
     }
@@ -416,6 +401,8 @@ pub(crate) mod transport {
     /// Used in combination with [`send_handshake_message`] (see that function's documentation for
     /// more details).
     pub(crate) async fn read_handshake_message(
+        input: &mut VecInput,
+        output: &mut Vec<u8>,
         conn: &mut impl Connection,
         reader: &mut dyn AsyncRead,
         buf: &mut [u8],
@@ -441,8 +428,11 @@ pub(crate) mod transport {
 
         // Feed the data to rustls
         let in_memory_reader = &mut &buf[..length];
-        while conn.read_tls(in_memory_reader)? != 0 {
-            conn.process_new_packets()?;
+        while input.read(in_memory_reader)? != 0 {
+            let mut iter = conn.process_new_packets(input, output);
+            while let Some(result) = iter.next_payload() {
+                result?;
+            }
         }
 
         Ok(length)
@@ -452,6 +442,8 @@ pub(crate) mod transport {
     ///
     /// Returns the amount of plaintext bytes received.
     pub(crate) async fn read_plaintext_to_end_bounded(
+        input: &mut VecInput,
+        output: &mut Vec<u8>,
         client: &mut ClientConnection,
         reader: &mut dyn AsyncRead,
     ) -> anyhow::Result<usize> {
@@ -482,17 +474,16 @@ pub(crate) mod transport {
             // Load the buffer's bytes into rustls
             let mut chunk_buf_offset = 0;
             while chunk_buf_offset < chunk_buf_end {
-                let read = client.read_tls(&mut &chunk_buf[chunk_buf_offset..chunk_buf_end])?;
+                let read = input.read(&mut &chunk_buf[chunk_buf_offset..chunk_buf_end])?;
                 chunk_buf_offset += read;
 
                 // Process packets to free space in the message buffer
-                let state = client.process_new_packets()?;
-                let available_plaintext_bytes = state.plaintext_bytes_to_read();
+                let mut iter = client.process_new_packets(input, output);
                 let mut plaintext_bytes_read = 0;
-                while plaintext_bytes_read < available_plaintext_bytes {
-                    plaintext_bytes_read += client
-                        .reader()
-                        .read(&mut plaintext_buf)?;
+                while let Some(result) = iter.next_payload() {
+                    let payload = result?;
+                    plaintext_bytes_read += payload.bytes().len();
+                    plaintext_buf[..payload.bytes().len()].copy_from_slice(payload.bytes());
                 }
 
                 total_plaintext_bytes_read += plaintext_bytes_read;
@@ -505,24 +496,21 @@ pub(crate) mod transport {
     /// Writes a plaintext of size `plaintext_size`, using a bounded amount of memory
     pub(crate) async fn write_all_plaintext_bounded(
         server: &mut ServerConnection,
+        output: &mut Vec<u8>,
         writer: &mut dyn AsyncWrite,
         plaintext_size: usize,
     ) -> anyhow::Result<()> {
-        let mut send_buf = [0u8; 262_144];
+        let send_buf = [0u8; 262_144];
         assert_eq!(plaintext_size % send_buf.len(), 0);
         let iterations = plaintext_size / send_buf.len();
 
         for _ in 0..iterations {
-            server.writer().write_all(&send_buf)?;
+            server.write_tls((&send_buf).into(), output)?;
 
-            // Empty the server's buffer, so we can re-fill it in the next iteration
-            while server.wants_write() {
-                let written = server.write_tls(&mut send_buf.as_mut())?;
-                writer
-                    .write_all(&send_buf[..written])
-                    .await?;
-                writer.flush().await?;
-            }
+            // Empty the output buffer, so we can re-fill it in the next iteration
+            writer.write_all(output).await?;
+            writer.flush().await?;
+            output.clear();
         }
 
         Ok(())

@@ -2,7 +2,8 @@
 
 use std::sync::Arc;
 
-use rustls::crypto::Identity;
+use rustls::VecInput;
+use rustls::crypto::{Identity, VerifiedIdentity};
 use rustls::enums::CertificateType;
 use rustls::error::{Error, PeerIncompatible};
 use rustls_test::{
@@ -20,11 +21,26 @@ fn successful_raw_key_connection_and_correct_peer_certificates() {
         let client_config = make_client_config_with_raw_key_support(*kt, &provider);
         let server_config = make_server_config_with_raw_key_support(*kt, &provider);
 
-        let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-        do_handshake(&mut client, &mut server);
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) =
+            make_pair_for_configs(client_config, server_config, &mut client_output);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        do_handshake(
+            &mut client_input,
+            &mut client_output,
+            &mut client,
+            &mut server_input,
+            &mut server_output,
+            &mut server,
+        );
 
         // Test that the client peer certificate is the server's public key
-        match client.peer_identity() {
+        match client
+            .peer_identity()
+            .map(VerifiedIdentity::identity)
+        {
             Some(Identity::X509(certificates)) => {
                 assert!(certificates.intermediates.is_empty());
                 assert_eq!(certificates.end_entity.as_ref(), kt.spki().as_ref());
@@ -38,7 +54,10 @@ fn successful_raw_key_connection_and_correct_peer_certificates() {
         }
 
         // Test that the server peer certificate is the client's public key
-        match server.peer_identity() {
+        match server
+            .peer_identity()
+            .map(VerifiedIdentity::identity)
+        {
             Some(Identity::X509(certificates)) => {
                 assert!(certificates.intermediates.is_empty());
                 assert_eq!(certificates.end_entity.as_ref(), kt.client_spki().as_ref());
@@ -66,8 +85,20 @@ fn correct_certificate_type_extensions_from_client_hello() {
             ..Default::default()
         });
 
-        let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-        let err = do_handshake_until_error(&mut client, &mut server);
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) =
+            make_pair_for_configs(client_config, server_config, &mut client_output);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client_output,
+            &mut client,
+            &mut server_input,
+            &mut server_output,
+            &mut server,
+        );
         assert_eq!(
             err.err(),
             Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
@@ -82,10 +113,22 @@ fn only_client_supports_raw_keys() {
         let client_config_rpk = make_client_config_with_raw_key_support(*kt, &provider);
         let server_config = make_server_config(*kt, &provider);
 
-        let (mut client_rpk, mut server) = make_pair_for_configs(client_config_rpk, server_config);
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client_rpk, mut server) =
+            make_pair_for_configs(client_config_rpk, server_config, &mut client_output);
 
         // The client
-        match do_handshake_until_error(&mut client_rpk, &mut server) {
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        match do_handshake_until_error(
+            &mut client_input,
+            &mut client_output,
+            &mut client_rpk,
+            &mut server_input,
+            &mut server_output,
+            &mut server,
+        ) {
             Err(err) => {
                 assert_eq!(
                     err,
@@ -108,9 +151,21 @@ fn only_server_supports_raw_keys() {
         let client_config = make_client_config(*kt, &provider);
         let server_config_rpk = make_server_config_with_raw_key_support(*kt, &provider);
 
-        let (mut client, mut server_rpk) = make_pair_for_configs(client_config, server_config_rpk);
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server_rpk) =
+            make_pair_for_configs(client_config, server_config_rpk, &mut client_output);
 
-        match do_handshake_until_error(&mut client, &mut server_rpk) {
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        match do_handshake_until_error(
+            &mut client_input,
+            &mut client_output,
+            &mut client,
+            &mut server_input,
+            &mut server_output,
+            &mut server_rpk,
+        ) {
             Err(err) => {
                 assert_eq!(
                     err,

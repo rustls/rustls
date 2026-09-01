@@ -1,52 +1,41 @@
+use core::num::NonZeroUsize;
+
 use crate::Error;
-use crate::crypto::cipher::{EncodedMessage, OutboundPlain, Payload};
-use crate::enums::{ContentType, ProtocolVersion};
+use crate::crypto::cipher::{EncodableVersion, OutboundPlain, Record};
+use crate::enums::ContentType;
 
-pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
+pub(crate) const MAX_FRAGMENT_LEN: NonZeroUsize = NonZeroUsize::new(16384).unwrap();
 pub(crate) const PACKET_OVERHEAD: usize = 1 + 2 + 2;
-pub(crate) const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + PACKET_OVERHEAD;
+pub(crate) const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN.get() + PACKET_OVERHEAD;
 
-pub(crate) struct MessageFragmenter {
-    max_frag: usize,
+pub(crate) struct Fragmenter {
+    max_frag: NonZeroUsize,
 }
 
-impl Default for MessageFragmenter {
-    fn default() -> Self {
-        Self {
-            max_frag: MAX_FRAGMENT_LEN,
-        }
-    }
-}
-
-impl MessageFragmenter {
-    /// Take `msg` and fragment it into new messages with the same type and version.
+impl Fragmenter {
+    /// Take `payload` and fragment it into new records with given type and version.
     ///
-    /// Each returned message size is no more than `max_frag`.
+    /// Each returned record size is no more than the most recently configured
+    /// `set_max_fragment_size()`, less an allowance for `encryption_overhead` which
+    /// should be zero if no encryption will be performed.
     ///
-    /// Return an iterator across those messages.
-    ///
-    /// Payloads are borrowed from `msg`.
-    pub(crate) fn fragment_message<'a>(
-        &self,
-        msg: &'a EncodedMessage<Payload<'_>>,
-    ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> + 'a {
-        self.fragment_payload(msg.typ, msg.version, msg.payload.bytes().into())
-    }
-
-    /// Take `payload` and fragment it into new messages with given type and version.
-    ///
-    /// Each returned message size is no more than `max_frag`.
-    ///
-    /// Return an iterator across those messages.
+    /// Return an iterator across those records.
     ///
     /// Payloads are borrowed from `payload`.
-    pub(crate) fn fragment_payload<'a>(
+    pub(crate) fn fragment<'a>(
         &self,
         typ: ContentType,
-        version: ProtocolVersion,
+        version: EncodableVersion,
         payload: OutboundPlain<'a>,
-    ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> {
-        Chunker::new(payload, self.max_frag).map(move |payload| EncodedMessage {
+        encryption_overhead: usize,
+    ) -> impl ExactSizeIterator<Item = Record<OutboundPlain<'a>>> + use<'a> {
+        let max_plaintext = NonZeroUsize::new(
+            self.max_frag
+                .get()
+                .saturating_sub(encryption_overhead),
+        )
+        .unwrap_or(NonZeroUsize::MIN);
+        Chunker::new(payload, max_plaintext).map(move |payload| Record {
             typ,
             version,
             payload,
@@ -55,8 +44,9 @@ impl MessageFragmenter {
 
     /// Set the maximum fragment size that will be produced.
     ///
-    /// This includes overhead. A `max_fragment_size` of 10 will produce TLS fragments
-    /// up to 10 bytes long.
+    /// This is the maximum size of each TLS record on the wire, including the
+    /// five-byte record header. When records are encrypted, plaintext is fragmented
+    /// more aggressively so the protected record still fits in this limit.
     ///
     /// A `max_fragment_size` of `None` sets the highest allowable fragment size.
     ///
@@ -66,7 +56,7 @@ impl MessageFragmenter {
         max_fragment_size: Option<usize>,
     ) -> Result<(), Error> {
         self.max_frag = match max_fragment_size {
-            Some(sz @ 32..=MAX_FRAGMENT_SIZE) => sz - PACKET_OVERHEAD,
+            Some(sz @ 32..=MAX_FRAGMENT_SIZE) => NonZeroUsize::new(sz - PACKET_OVERHEAD).unwrap(),
             None => MAX_FRAGMENT_LEN,
             _ => return Err(Error::BadMaxFragmentSize),
         };
@@ -74,14 +64,22 @@ impl MessageFragmenter {
     }
 }
 
+impl Default for Fragmenter {
+    fn default() -> Self {
+        Self {
+            max_frag: MAX_FRAGMENT_LEN,
+        }
+    }
+}
+
 /// An iterator over borrowed fragments of a payload
 struct Chunker<'a> {
     payload: OutboundPlain<'a>,
-    limit: usize,
+    limit: NonZeroUsize,
 }
 
 impl<'a> Chunker<'a> {
-    fn new(payload: OutboundPlain<'a>, limit: usize) -> Self {
+    fn new(payload: OutboundPlain<'a>, limit: NonZeroUsize) -> Self {
         Self { payload, limit }
     }
 }
@@ -94,7 +92,7 @@ impl<'a> Iterator for Chunker<'a> {
             return None;
         }
 
-        let (before, after) = self.payload.split_at(self.limit);
+        let (before, after) = self.payload.split_at(self.limit.get());
         self.payload = after;
         Some(before)
     }
@@ -102,7 +100,9 @@ impl<'a> Iterator for Chunker<'a> {
 
 impl ExactSizeIterator for Chunker<'_> {
     fn len(&self) -> usize {
-        self.payload.len().div_ceil(self.limit)
+        self.payload
+            .len()
+            .div_ceil(self.limit.get())
     }
 }
 
@@ -111,22 +111,22 @@ mod tests {
     use alloc::vec::Vec;
     use std::vec;
 
-    use super::{MessageFragmenter, PACKET_OVERHEAD};
-    use crate::crypto::cipher::{EncodedMessage, OutboundPlain, Payload};
+    use super::{Fragmenter, PACKET_OVERHEAD};
+    use crate::crypto::cipher::{EncodableVersion, OutboundPlain, Payload, Record};
     use crate::enums::{ContentType, ProtocolVersion};
 
-    fn msg_eq(
-        m: &EncodedMessage<OutboundPlain<'_>>,
+    fn record_eq(
+        record: &Record<OutboundPlain<'_>>,
         total_len: usize,
         typ: &ContentType,
-        version: &ProtocolVersion,
+        version: &EncodableVersion,
         bytes: &[u8],
     ) {
-        assert_eq!(&m.typ, typ);
-        assert_eq!(&m.version, version);
-        assert_eq!(m.payload.to_vec(), bytes);
+        assert_eq!(&record.typ, typ);
+        assert_eq!(&record.version, version);
+        assert_eq!(record.payload.to_vec(), bytes);
 
-        let buf = m.to_unencrypted_opaque().encode();
+        let buf = record.to_unencrypted_bytes();
 
         assert_eq!(total_len, buf.len());
     }
@@ -134,22 +134,22 @@ mod tests {
     #[test]
     fn smoke() {
         let typ = ContentType::Handshake;
-        let version = ProtocolVersion::TLSv1_2;
+        let version = EncodableVersion::Legacy(ProtocolVersion::TLSv1_2);
         let data: Vec<u8> = (1..70u8).collect();
-        let m = EncodedMessage {
+        let record = Record {
             typ,
             version,
             payload: Payload::new(data),
         };
 
-        let mut frag = MessageFragmenter::default();
+        let mut frag = Fragmenter::default();
         frag.set_max_fragment_size(Some(32))
             .unwrap();
         let q = frag
-            .fragment_message(&m)
+            .fragment(record.typ, record.version, record.payload.bytes().into(), 0)
             .collect::<Vec<_>>();
         assert_eq!(q.len(), 3);
-        msg_eq(
+        record_eq(
             &q[0],
             32,
             &typ,
@@ -159,7 +159,7 @@ mod tests {
                 24, 25, 26, 27,
             ],
         );
-        msg_eq(
+        record_eq(
             &q[1],
             32,
             &typ,
@@ -169,7 +169,7 @@ mod tests {
                 49, 50, 51, 52, 53, 54,
             ],
         );
-        msg_eq(
+        record_eq(
             &q[2],
             20,
             &typ,
@@ -180,24 +180,24 @@ mod tests {
 
     #[test]
     fn non_fragment() {
-        let m = EncodedMessage {
+        let record = Record {
             typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             payload: Payload::new(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
         };
 
-        let mut frag = MessageFragmenter::default();
+        let mut frag = Fragmenter::default();
         frag.set_max_fragment_size(Some(32))
             .unwrap();
         let q = frag
-            .fragment_message(&m)
+            .fragment(record.typ, record.version, record.payload.bytes().into(), 0)
             .collect::<Vec<_>>();
         assert_eq!(q.len(), 1);
-        msg_eq(
+        record_eq(
             &q[0],
             PACKET_OVERHEAD + 8,
             &ContentType::Handshake,
-            &ProtocolVersion::TLSv1_2,
+            &EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             b"\x01\x02\x03\x04\x05\x06\x07\x08",
         );
     }
@@ -205,31 +205,60 @@ mod tests {
     #[test]
     fn fragment_multiple_slices() {
         let typ = ContentType::Handshake;
-        let version = ProtocolVersion::TLSv1_2;
+        let version = EncodableVersion::Legacy(ProtocolVersion::TLSv1_2);
         let payload_owner: Vec<&[u8]> = vec![&[b'a'; 8], &[b'b'; 12], &[b'c'; 32], &[b'd'; 20]];
         let borrowed_payload = OutboundPlain::new(&payload_owner);
-        let mut frag = MessageFragmenter::default();
+        let mut frag = Fragmenter::default();
         frag.set_max_fragment_size(Some(37)) // 32 + packet overhead
             .unwrap();
 
         let fragments = frag
-            .fragment_payload(typ, version, borrowed_payload)
+            .fragment(typ, version, borrowed_payload, 0)
             .collect::<Vec<_>>();
         assert_eq!(fragments.len(), 3);
-        msg_eq(
+        record_eq(
             &fragments[0],
             37,
             &typ,
             &version,
             b"aaaaaaaabbbbbbbbbbbbcccccccccccc",
         );
-        msg_eq(
+        record_eq(
             &fragments[1],
             37,
             &typ,
             &version,
             b"ccccccccccccccccccccdddddddddddd",
         );
-        msg_eq(&fragments[2], 13, &typ, &version, b"dddddddd");
+        record_eq(&fragments[2], 13, &typ, &version, b"dddddddd");
+    }
+
+    #[test]
+    fn fragment_respects_overhead() {
+        let mut frag = Fragmenter::default();
+        frag.set_max_fragment_size(Some(32))
+            .unwrap();
+
+        let p = Payload::new((0..128).collect::<Vec<u8>>());
+        let q = frag
+            .fragment(
+                ContentType::Handshake,
+                EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+                p.bytes().into(),
+                13,
+            )
+            .collect::<Vec<_>>();
+
+        let each_len = 32 - PACKET_OVERHEAD - 13;
+
+        let mut expect = vec![each_len; 128usize.div_euclid(each_len)];
+        expect.push(128usize.rem_euclid(each_len));
+
+        assert_eq!(
+            q.iter()
+                .map(|record| record.payload.len())
+                .collect::<Vec<usize>>(),
+            expect
+        );
     }
 }

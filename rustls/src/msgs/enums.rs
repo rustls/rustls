@@ -60,7 +60,7 @@ enum_builder! {
         ClientCertificateType => 0x0013,
         ServerCertificateType => 0x0014,
         Padding => 0x0015,
-        ExtendedMasterSecret => 0x0017,
+        ExtendedMainSecret => 0x0017,
         CompressCertificate => 0x001b,
         SessionTicket => 0x0023,
         PreSharedKey => 0x0029,
@@ -75,6 +75,7 @@ enum_builder! {
         SignatureAlgorithmsCert => 0x0032,
         KeyShare => 0x0033,
         TransportParameters => 0x0039,
+        TicketRequest => 0x003a,
         NextProtocolNegotiation => 0x3374,
         ChannelId => 0x754f,
         RenegotiationInfo => 0xff01,
@@ -108,6 +109,15 @@ impl ExtensionType {
                 | Self::KeyShare
                 | Self::PSKKeyExchangeModes
         )
+    }
+
+    /// Returns true if this is a recognized extension type.
+    ///
+    /// rustls does not necessarily process every recognized extension
+    /// type, but it can distinguish these from unrecognized values,
+    /// which must be ignored wherever they appear.
+    pub(crate) fn is_recognized(&self) -> bool {
+        ExtensionTypeName::try_from(*self).is_ok()
     }
 }
 

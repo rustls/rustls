@@ -1,27 +1,28 @@
 use alloc::vec::Vec;
-use core::fmt;
 use core::ops::{Deref, DerefMut, Range};
+use core::{fmt, slice};
 
+use crate::Protocol;
 use crate::crypto::cipher::EncryptionState;
 use crate::enums::{ContentType, ProtocolVersion};
-use crate::error::{Error, InvalidMessage, PeerMisbehaved};
-use crate::msgs::{Codec, HEADER_SIZE, MAX_FRAGMENT_LEN, Reader, hex, read_opaque_message_header};
+use crate::error::{ApiMisuse, Error, InvalidMessage, PeerMisbehaved};
+use crate::msgs::{Codec, HEADER_SIZE, MAX_FRAGMENT_LEN, Reader, hex, read_record_header};
 
-/// A TLS message with encoded (but not necessarily encrypted) payload.
+/// A TLS record with encoded (but not necessarily encrypted) payload.
 #[expect(clippy::exhaustive_structs)]
 #[derive(Clone, Debug)]
-pub struct EncodedMessage<P> {
-    /// The content type of this message.
+pub struct Record<P> {
+    /// The content type of this record.
     pub typ: ContentType,
-    /// The protocol version of this message.
-    pub version: ProtocolVersion,
-    /// The payload of this message.
+    /// The protocol version of this record.
+    pub version: EncodableVersion,
+    /// The payload of this record.
     pub payload: P,
 }
 
-impl<P> EncodedMessage<P> {
-    /// Create a new `EncodedMessage` with the given fields.
-    pub fn new(typ: ContentType, version: ProtocolVersion, payload: P) -> Self {
+impl<P> Record<P> {
+    /// Create a new `Record` with the given fields.
+    pub fn new(typ: ContentType, version: EncodableVersion, payload: P) -> Self {
         Self {
             typ,
             version,
@@ -30,44 +31,35 @@ impl<P> EncodedMessage<P> {
     }
 }
 
-impl<'a> EncodedMessage<Payload<'a>> {
+impl<'a> Record<Payload<'a>> {
     /// Construct by decoding from a [`Reader`].
     ///
-    /// `MessageError` allows callers to distinguish between valid prefixes (might
+    /// `RecordError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
-    pub(crate) fn read(r: &mut Reader<'a>) -> Result<Self, MessageError> {
-        let (typ, version, len) = read_opaque_message_header(r)?;
+    pub(crate) fn read(r: &mut Reader<'a>) -> Result<Self, RecordError> {
+        let (typ, version, len) = read_record_header(r)?;
 
         let content = r
             .take(len as usize)
-            .ok_or(MessageError::TooShortForLength)?;
+            .ok_or(RecordError::TooShortForLength)?;
 
         Ok(Self {
             typ,
-            version,
+            version: EncodableVersion::Legacy(version),
             payload: Payload::Borrowed(content),
         })
     }
 
-    /// Convert into an unencrypted [`EncodedMessage<OutboundOpaque>`] (without decrypting).
-    pub fn into_unencrypted_opaque(self) -> EncodedMessage<OutboundOpaque> {
-        EncodedMessage {
-            typ: self.typ,
-            version: self.version,
-            payload: OutboundOpaque::from(self.payload.bytes()),
-        }
-    }
-
-    /// Borrow as an [`EncodedMessage<OutboundPlain<'a>>`].
-    pub fn borrow_outbound(&'a self) -> EncodedMessage<OutboundPlain<'a>> {
-        EncodedMessage {
+    /// Borrow as an [`Record<OutboundPlain<'a>>`].
+    pub fn borrow_outbound(&'a self) -> Record<OutboundPlain<'a>> {
+        Record {
             typ: self.typ,
             version: self.version,
             payload: self.payload.bytes().into(),
         }
     }
 
-    /// Convert into an owned `EncodedMessage<Plain<'static>>`.
+    /// Convert into an owned `Record<Plain<'static>>`.
     pub fn into_owned(self) -> Self {
         Self {
             typ: self.typ,
@@ -77,26 +69,30 @@ impl<'a> EncodedMessage<Payload<'a>> {
     }
 }
 
-impl EncodedMessage<&'_ [u8]> {
+impl Record<&'_ [u8]> {
     /// Returns true if the payload is a CCS message.
     ///
     /// We passthrough ChangeCipherSpec messages in the deframer without decrypting them.
     /// Note: this is prior to the record layer, so is unencrypted. See
-    /// third paragraph of section 5 in RFC8446.
+    /// third paragraph of section 5 in RFC 9846.
     pub(crate) fn is_valid_ccs(&self) -> bool {
         self.typ == ContentType::ChangeCipherSpec && self.payload == [0x01]
     }
 }
 
-impl<'a> EncodedMessage<InboundOpaque<'a>> {
-    /// For TLS1.3 (only), checks the length msg.payload is valid and removes the padding.
+impl<'a> Record<InboundOpaque<'a>> {
+    /// For TLS1.3 (only), checks the length record.payload is valid and removes the padding.
     ///
-    /// Returns an error if the message (pre-unpadding) is too long, or the padding is invalid,
-    /// or the message (post-unpadding) is too long.
-    pub fn into_tls13_unpadded_message(mut self) -> Result<EncodedMessage<&'a [u8]>, Error> {
+    /// Returns an error if the record payload (pre-unpadding) is too long, or the padding is invalid,
+    /// or the record payload (post-unpadding) is too long.
+    pub fn into_tls13_unpadded_record(mut self) -> Result<Record<&'a [u8]>, Error> {
         let payload = &mut self.payload;
 
-        if payload.len() > MAX_FRAGMENT_LEN + 1 {
+        if self.typ != ContentType::ApplicationData {
+            return Err(PeerMisbehaved::IllegalTls13ContentType.into());
+        }
+
+        if payload.len() > MAX_FRAGMENT_LEN.get() + 1 {
             return Err(Error::PeerSentOversizedRecord);
         }
 
@@ -105,37 +101,37 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
             return Err(PeerMisbehaved::IllegalTlsInnerPlaintext.into());
         }
 
-        if payload.len() > MAX_FRAGMENT_LEN {
+        if payload.len() > MAX_FRAGMENT_LEN.get() {
             return Err(Error::PeerSentOversizedRecord);
         }
 
-        self.version = ProtocolVersion::TLSv1_3;
-        Ok(self.into_plain_message())
+        self.version = EncodableVersion::Legacy(ProtocolVersion::TLSv1_3);
+        Ok(self.into_plain_record())
     }
 
-    /// Force conversion into a plaintext message.
+    /// Force conversion into a plaintext record.
     ///
-    /// `range` restricts the resulting message: this function panics if it is out of range for
-    /// the underlying message payload.
+    /// `range` restricts the resulting record: this function panics if it is out of range for
+    /// the underlying record payload.
     ///
-    /// This should only be used for messages that are known to be in plaintext. Otherwise, the
-    /// [`EncodedMessage<InboundOpaque<'_>>`] should be decrypted into an
-    /// `EncodedMessage<&'_ [u8]>` using a `MessageDecrypter`.
-    pub fn into_plain_message_range(self, range: Range<usize>) -> EncodedMessage<&'a [u8]> {
-        EncodedMessage {
+    /// This should only be used for records that are known to be in plaintext. Otherwise, the
+    /// [`Record<InboundOpaque<'_>>`] should be decrypted into an
+    /// `Record<&'_ [u8]>` using a `RecordDecrypter`.
+    pub fn into_plain_record_range(self, range: Range<usize>) -> Record<&'a [u8]> {
+        Record {
             typ: self.typ,
             version: self.version,
             payload: &self.payload.into_inner()[range],
         }
     }
 
-    /// Force conversion into a plaintext message.
+    /// Force conversion into a plaintext record.
     ///
-    /// This should only be used for messages that are known to be in plaintext. Otherwise, the
-    /// [`EncodedMessage<InboundOpaque<'a>>`] should be decrypted into a
-    /// `EncodedMessage<&'a [u8]>` using a `MessageDecrypter`.
-    pub fn into_plain_message(self) -> EncodedMessage<&'a [u8]> {
-        EncodedMessage {
+    /// This should only be used for records that are known to be in plaintext. Otherwise, the
+    /// [`Record<InboundOpaque<'a>>`] should be decrypted into a
+    /// `Record<&'a [u8]>` using a `RecordDecrypter`.
+    pub fn into_plain_record(self) -> Record<&'a [u8]> {
+        Record {
             typ: self.typ,
             version: self.version,
             payload: self.payload.into_inner(),
@@ -143,15 +139,22 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
     }
 }
 
-impl EncodedMessage<OutboundPlain<'_>> {
-    pub(crate) fn to_unencrypted_opaque(&self) -> EncodedMessage<OutboundOpaque> {
-        let mut payload = OutboundOpaque::with_capacity(self.payload.len());
-        payload.extend_from_chunks(&self.payload);
-        EncodedMessage {
-            typ: self.typ,
-            version: self.version,
-            payload,
-        }
+impl Record<OutboundPlain<'_>> {
+    /// Encode this record into its unencrypted wire representation, including
+    /// its record header.
+    pub(crate) fn to_unencrypted_bytes(&self) -> Vec<u8> {
+        let len = self.payload.len();
+        debug_assert!(len <= usize::from(u16::MAX));
+        let mut buf = Vec::with_capacity(HEADER_SIZE + len);
+        self.encode_unencrypted(&mut buf);
+        buf
+    }
+
+    pub(crate) fn encode_unencrypted(&self, buf: &mut Vec<u8>) {
+        let len = self.payload.len();
+        debug_assert!(len <= usize::from(u16::MAX));
+        buf.extend_from_slice(&encode_record_header(self.typ, self.version, len as u16));
+        self.payload.copy_to_vec(buf);
     }
 
     #[expect(dead_code)]
@@ -160,16 +163,17 @@ impl EncodedMessage<OutboundPlain<'_>> {
     }
 }
 
-impl EncodedMessage<OutboundOpaque> {
-    /// Encode this message to a vector of bytes.
-    pub fn encode(self) -> Vec<u8> {
-        let length = self.payload.len() as u16;
-        let mut encoded_payload = self.payload.0;
-        encoded_payload[0] = self.typ.into();
-        encoded_payload[1..3].copy_from_slice(&self.version.to_array());
-        encoded_payload[3..5].copy_from_slice(&(length).to_be_bytes());
-        encoded_payload
-    }
+/// Encode a TLS record header.
+///
+/// `typ`, `version` and `len` describe the record's payload.
+pub(crate) fn encode_record_header(
+    typ: ContentType,
+    version: EncodableVersion,
+    len: u16,
+) -> [u8; HEADER_SIZE] {
+    let [version_hi, version_lo] = version.encode().to_array();
+    let [len_hi, len_lo] = len.to_be_bytes();
+    [typ.into(), version_hi, version_lo, len_hi, len_lo]
 }
 
 /// A collection of borrowed plaintext slices.
@@ -187,9 +191,15 @@ pub enum OutboundPlain<'a> {
     Multiple {
         /// A collection of byte slices that hold the buffered data.
         chunks: &'a [&'a [u8]],
-        /// The start cursor into the first chunk.
+        /// Offset of the payload's first byte within the logical
+        /// concatenation of all `chunks`.
+        ///
+        /// This may point beyond the first chunk (for example, after
+        /// `split_at()`).
         start: usize,
-        /// The end cursor into the last chunk.
+        /// Offset one past the payload's last byte within the logical
+        /// concatenation of all `chunks`, so `end - start` is the payload's
+        /// length in bytes.
         end: usize,
     },
 }
@@ -226,22 +236,33 @@ impl<'a> OutboundPlain<'a> {
 
     /// Append all bytes to a vector
     pub fn copy_to_vec(&self, vec: &mut Vec<u8>) {
+        for chunk in self.chunks() {
+            vec.extend_from_slice(chunk);
+        }
+    }
+
+    /// Iterate over the payload's chunks of bytes, in order.
+    ///
+    /// Empty chunks are not yielded.
+    pub fn chunks(&self) -> impl Iterator<Item = &[u8]> + '_ {
+        match self {
+            Self::Single(chunk) => Chunks::Single((!chunk.is_empty()).then_some(*chunk)),
+            Self::Multiple { chunks, start, end } => Chunks::Multiple {
+                chunks: chunks.iter(),
+                skip: *start,
+                remaining: end - start,
+            },
+        }
+    }
+
+    /// The payload's single contiguous chunk, or `None` if it is fragmented.
+    ///
+    /// An empty payload is treated as a single empty chunk, and a [`Self::Multiple`]
+    /// payload yields `None` even when its chunks happen to form a contiguous whole.
+    pub fn single_chunk(&self) -> Option<&'a [u8]> {
         match *self {
-            Self::Single(chunk) => vec.extend_from_slice(chunk),
-            Self::Multiple { chunks, start, end } => {
-                let mut size = 0;
-                for chunk in chunks.iter() {
-                    let psize = size;
-                    let len = chunk.len();
-                    size += len;
-                    if size <= start || psize >= end {
-                        continue;
-                    }
-                    let start = start.saturating_sub(psize);
-                    let end = if end - psize < len { end - psize } else { len };
-                    vec.extend_from_slice(&chunk[start..end]);
-                }
-            }
+            Self::Single(chunk) => Some(chunk),
+            Self::Multiple { .. } => None,
         }
     }
 
@@ -286,89 +307,157 @@ impl<'a> OutboundPlain<'a> {
     }
 }
 
+/// Iterator over an [`OutboundPlain`]'s chunks, returned by [`OutboundPlain::chunks()`].
+enum Chunks<'a> {
+    Single(Option<&'a [u8]>),
+    Multiple {
+        /// Chunks not yet visited, including any leading ones `skip` covers.
+        chunks: slice::Iter<'a, &'a [u8]>,
+        /// How many leading bytes remain to be skipped.
+        skip: usize,
+        /// How many bytes remain to be yielded.
+        remaining: usize,
+    },
+}
+
+impl<'a> Iterator for Chunks<'a> {
+    type Item = &'a [u8];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (chunks, skip, remaining) = match self {
+            Self::Single(chunk) => return chunk.take(),
+            Self::Multiple {
+                chunks,
+                skip,
+                remaining,
+            } => (chunks, skip, remaining),
+        };
+
+        loop {
+            if *remaining == 0 {
+                return None;
+            }
+
+            let chunk = chunks.next()?;
+            let Some((_, chunk)) = chunk.split_at_checked(*skip) else {
+                *skip -= chunk.len();
+                continue;
+            };
+
+            *skip = 0;
+            if chunk.is_empty() {
+                continue;
+            }
+
+            let take = Ord::min(chunk.len(), *remaining);
+            *remaining -= take;
+            return Some(&chunk[..take]);
+        }
+    }
+}
+
 impl<'a> From<&'a [u8]> for OutboundPlain<'a> {
     fn from(payload: &'a [u8]) -> Self {
         Self::Single(payload)
     }
 }
 
-/// A payload buffer with space reserved at the front for a TLS message header.
-///
-/// `EncodedMessage<OutboundOpaque>` is named `TLSCiphertext` in the standard.
-///
-/// This outbound type owns all memory for its interior parts.
-/// It results from encryption and is used for io write.
-#[derive(Clone, Debug)]
-pub struct OutboundOpaque(Vec<u8>);
+impl<'a, const N: usize> From<&'a [u8; N]> for OutboundPlain<'a> {
+    fn from(payload: &'a [u8; N]) -> Self {
+        Self::Single(payload)
+    }
+}
 
-impl OutboundOpaque {
-    /// Create a new value with the given payload capacity.
+impl<'a> From<&'a Vec<u8>> for OutboundPlain<'a> {
+    fn from(payload: &'a Vec<u8>) -> Self {
+        Self::Single(payload)
+    }
+}
+
+/// A fixed-size buffer into which a [`RecordEncrypter`][] writes an encrypted record payload.
+///
+/// This wraps the output buffer passed to [`RecordEncrypter::encrypt()`][], tracking how
+/// much of it has been written as the append methods fill it front-to-back. It writes
+/// into caller-owned memory and cannot grow. [`Self::new()`] checks that the caller's
+/// buffer can hold the `len` bytes the encrypter declared, and the append methods then
+/// panic if the writes exceed that length.
+///
+/// Such a panic always indicates a bug in the `RecordEncrypter` implementation, not a
+/// runtime condition the caller can handle. The same implementation declares the total
+/// length up front (via [`RecordEncrypter::encrypted_payload_len()`]) and performs the
+/// writes, so overflowing the buffer means the two disagree. The record layer also
+/// relies on that declared length for framing, so there is no way to recover from the
+/// mismatch after the fact.
+///
+/// [`RecordEncrypter`]: crate::crypto::cipher::RecordEncrypter
+/// [`RecordEncrypter::encrypt()`]: crate::crypto::cipher::RecordEncrypter::encrypt()
+/// [`RecordEncrypter::encrypted_payload_len()`]: crate::crypto::cipher::RecordEncrypter::encrypted_payload_len()
+pub struct EncryptBuffer<'a> {
+    buf: &'a mut [u8],
+    used: usize,
+}
+
+impl<'a> EncryptBuffer<'a> {
+    /// Wrap the first `len` bytes of `out`, all of which are as yet unwritten.
     ///
-    /// (The actual capacity of the returned value will be at least `HEADER_SIZE + capacity`.)
-    pub fn with_capacity(capacity: usize) -> Self {
-        let mut prefixed_payload = Vec::with_capacity(HEADER_SIZE + capacity);
-        prefixed_payload.resize(HEADER_SIZE, 0);
-        Self(prefixed_payload)
+    /// Returns [`ApiMisuse::EncryptBufferTooSmall`] if `out` is shorter than `len` bytes.
+    pub fn new(out: &'a mut [u8], len: usize) -> Result<Self, Error> {
+        let provided = out.len();
+        match out.get_mut(..len) {
+            Some(buf) => Ok(Self { buf, used: 0 }),
+            None => Err(ApiMisuse::EncryptBufferTooSmall {
+                required: len,
+                provided,
+            }
+            .into()),
+        }
+    }
+
+    /// Append bytes from an `OutboundPlain`'s chunks.
+    ///
+    /// Panics if the write would extend beyond the `len` given to [`Self::new()`],
+    /// which indicates a bug in the calling `RecordEncrypter` implementation (see
+    /// the type-level documentation).
+    pub fn extend_from_chunks(&mut self, chunks: &OutboundPlain<'_>) {
+        match chunks {
+            // for the common case with a single chunk we want to avoid iteration overhead.
+            OutboundPlain::Single(chunk) => self.extend_from_slice(chunk),
+            chunks => {
+                for chunk in chunks.chunks() {
+                    self.extend_from_slice(chunk);
+                }
+            }
+        }
     }
 
     /// Append bytes from a slice.
+    ///
+    /// Panics if the write would extend beyond the `len` given to [`Self::new()`],
+    /// which indicates a bug in the calling `RecordEncrypter` implementation (see
+    /// the type-level documentation).
     pub fn extend_from_slice(&mut self, slice: &[u8]) {
-        self.0.extend_from_slice(slice)
+        self.buf[self.used..self.used + slice.len()].copy_from_slice(slice);
+        self.used += slice.len();
     }
 
-    /// Append bytes from an `OutboundPlain`.
-    pub fn extend_from_chunks(&mut self, chunks: &OutboundPlain<'_>) {
-        chunks.copy_to_vec(&mut self.0)
-    }
-
-    /// Truncate the payload to the given length (plus header).
-    pub fn truncate(&mut self, len: usize) {
-        self.0.truncate(len + HEADER_SIZE)
-    }
-
-    fn len(&self) -> usize {
-        self.0.len() - HEADER_SIZE
+    /// Consume this value, returning the written prefix of the wrapped buffer.
+    pub fn into_written(self) -> &'a [u8] {
+        &self.buf[..self.used]
     }
 }
 
-impl AsRef<[u8]> for OutboundOpaque {
-    fn as_ref(&self) -> &[u8] {
-        &self.0[HEADER_SIZE..]
-    }
-}
-
-impl AsMut<[u8]> for OutboundOpaque {
+impl AsMut<[u8]> for EncryptBuffer<'_> {
     fn as_mut(&mut self) -> &mut [u8] {
-        &mut self.0[HEADER_SIZE..]
-    }
-}
-
-impl<'a> Extend<&'a u8> for OutboundOpaque {
-    fn extend<T: IntoIterator<Item = &'a u8>>(&mut self, iter: T) {
-        self.0.extend(iter)
-    }
-}
-
-impl From<&[u8]> for OutboundOpaque {
-    fn from(content: &[u8]) -> Self {
-        let mut payload = Vec::with_capacity(HEADER_SIZE + content.len());
-        payload.extend(&[0u8; HEADER_SIZE]);
-        payload.extend(content);
-        Self(payload)
-    }
-}
-
-impl<const N: usize> From<&[u8; N]> for OutboundOpaque {
-    fn from(content: &[u8; N]) -> Self {
-        Self::from(&content[..])
+        &mut self.buf[..self.used]
     }
 }
 
 /// An externally length'd payload
 ///
-/// When encountered in an [`EncodedMessage`], it represents a plaintext payload. It can be
-/// decrypted from an [`InboundOpaque`] or encrypted into an [`OutboundOpaque`],
-/// and it is also used for joining and fragmenting.
+/// When encountered in an [`Record`], it represents a plaintext payload. It can be
+/// decrypted from an [`InboundOpaque`] or encrypted by a
+/// [`RecordEncrypter`](crate::crypto::cipher::RecordEncrypter), and it is also used for
+/// joining and fragmenting.
 #[non_exhaustive]
 #[derive(Clone, Eq, PartialEq)]
 pub enum Payload<'a> {
@@ -472,13 +561,51 @@ impl DerefMut for InboundOpaque<'_> {
     }
 }
 
+/// A protocol version that can be encoded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum EncodableVersion {
+    /// Encode the version in legacy, backward-compatible form.
+    ///
+    /// > MUST be set to 0x0303 for all records generated by a TLS 1.3
+    /// > implementation...
+    ///
+    /// <https://www.rfc-editor.org/info/rfc9846/#section-5.1>
+    Legacy(ProtocolVersion),
+    /// Encode the version as an initial client hello, not a retry.
+    ///
+    /// > ...other than an initial ClientHello (i.e., one not generated after a HelloRetryRequest),
+    /// > where it MAY also be 0x0301 for compatibility purposes.
+    ///
+    /// <https://www.rfc-editor.org/info/rfc9846/#section-5.1>
+    InitialClientHello(Protocol),
+}
+
+impl EncodableVersion {
+    /// Encode the protocol version.
+    pub fn encode(&self) -> ProtocolVersion {
+        match self {
+            Self::Legacy(_) => ProtocolVersion::TLSv1_2,
+            Self::InitialClientHello(Protocol::Tcp | Protocol::Quic(_)) => ProtocolVersion::TLSv1_0,
+        }
+    }
+
+    /// The actual protocol version in use.
+    pub fn version(&self) -> ProtocolVersion {
+        match self {
+            Self::Legacy(v) => *v,
+            Self::InitialClientHello(Protocol::Tcp | Protocol::Quic(_)) => ProtocolVersion::TLSv1_2,
+        }
+    }
+}
+
 /// Decode a TLS1.3 `TLSInnerPlaintext` encoding.
 ///
-/// `p` is a message payload, immediately post-decryption.  This function
+/// `p` is a record payload, immediately post-decryption.  This function
 /// removes zero padding bytes, until a non-zero byte is encountered which is
-/// the content type, which is returned.  See RFC8446 s5.2.
+/// the content type, which is returned.  See RFC 9846 s5.2.
 ///
-/// ContentType(0) is returned if the message payload is empty or all zeroes.
+/// ContentType(0) is returned if the record payload is empty or all zeroes.
 fn unpad_tls13_payload(p: &mut InboundOpaque<'_>) -> ContentType {
     loop {
         match p.pop() {
@@ -489,11 +616,11 @@ fn unpad_tls13_payload(p: &mut InboundOpaque<'_>) -> ContentType {
     }
 }
 
-/// Errors from trying to parse a TLS message.
+/// Errors from trying to parse a TLS record.
 #[expect(missing_docs)]
 #[non_exhaustive]
 #[derive(Debug)]
-pub enum MessageError {
+pub enum RecordError {
     TooShortForHeader,
     TooShortForLength,
     InvalidEmptyPayload,
@@ -507,6 +634,58 @@ mod tests {
     use std::{println, vec};
 
     use super::*;
+    use crate::quic;
+
+    #[test]
+    fn encrypt_buffer_appends() {
+        let mut space = [0u8; 8];
+        let mut buf = EncryptBuffer::new(&mut space[..], 6).unwrap();
+        buf.extend_from_slice(&[1, 2]);
+        buf.extend_from_chunks(&OutboundPlain::new(&[&[3u8, 4][..], &[5][..]]));
+        buf.extend_from_slice(&[6]);
+        assert_eq!(buf.as_mut(), &mut [1, 2, 3, 4, 5, 6]);
+        assert_eq!(buf.into_written(), &[1, 2, 3, 4, 5, 6]);
+        assert_eq!(space, [1, 2, 3, 4, 5, 6, 0, 0]);
+    }
+
+    #[test]
+    fn encrypt_buffer_rejects_short_buffer() {
+        let mut space = [0u8; 4];
+        assert!(matches!(
+            EncryptBuffer::new(&mut space[..], 5),
+            Err(Error::ApiMisuse(ApiMisuse::EncryptBufferTooSmall {
+                required: 5,
+                provided: 4,
+            }))
+        ));
+    }
+
+    #[test]
+    fn chunks_iteration() {
+        // `Single` yields its chunk, unless empty
+        assert_eq!(
+            OutboundPlain::Single(&[1, 2, 3])
+                .chunks()
+                .collect::<Vec<_>>(),
+            [&[1u8, 2, 3][..]],
+        );
+        assert_eq!(
+            OutboundPlain::new_empty()
+                .chunks()
+                .count(),
+            0
+        );
+
+        // `Multiple` yields the in-window part of each chunk, skipping
+        // empty chunks
+        let owner: Vec<&[u8]> = vec![&[], &[1, 2, 3], &[], &[4, 5], &[], &[6, 7], &[]];
+        let (_, tail) = OutboundPlain::new(&owner).split_at(1);
+        let (window, _) = tail.split_at(5);
+        assert_eq!(
+            window.chunks().collect::<Vec<_>>(),
+            [&[2u8, 3][..], &[4, 5][..], &[6][..]],
+        );
+    }
 
     #[test]
     fn split_at_with_single_slice() {
@@ -613,6 +792,37 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn record_encoding_version() {
+        for (version, expect) in [
+            (
+                EncodableVersion::InitialClientHello(Protocol::Tcp),
+                ProtocolVersion::TLSv1_0,
+            ),
+            (
+                EncodableVersion::InitialClientHello(Protocol::Quic(quic::Version::V2)),
+                ProtocolVersion::TLSv1_0,
+            ),
+            (
+                EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+                ProtocolVersion::TLSv1_2,
+            ),
+            (
+                EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+                ProtocolVersion::TLSv1_2,
+            ),
+        ] {
+            let record = Record {
+                typ: ContentType::Handshake,
+                version,
+                payload: OutboundPlain::Single(&[0, 1, 2, 3, 4]),
+            };
+            let encoded = record.to_unencrypted_bytes();
+            let decoded = Record::<Payload<'_>>::read(&mut Reader::new(&encoded)).unwrap();
+            assert_eq!(decoded.version.version(), expect);
         }
     }
 }

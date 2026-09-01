@@ -1,22 +1,19 @@
 [package]
 name = "rustls-util"
-version = "0.1.0"
-edition = "2021"
+version = "0.1.0-dev.1"
+edition.workspace = true
 license = "Apache-2.0 OR ISC OR MIT"
 description = "Utilities for use with rustls"
 homepage = "https://github.com/rustls/rustls"
 repository = "https://github.com/rustls/rustls"
 
 [features]
-default = ["log"]
-log = ["dep:log", "rustls/log"]
+default = ["tracing"]
+tracing = ["dep:tracing", "rustls/tracing"]
 
 [dependencies]
-log = { workspace = true, optional = true }
-rustls = { path = "../rustls", version = "0.24.0-dev.0", default-features = false }
-
-[dev-dependencies]
-env_logger = { workspace = true }
+rustls = { path = "../rustls", version = "0.24.0-dev.1", default-features = false }
+tracing = { workspace = true, optional = true }
 
 [lints]
 workspace = true

@@ -12,6 +12,29 @@ use rustls::crypto::kx::{
 };
 use rustls::error::{Error, PeerMisbehaved};
 
+/// A list of the default key exchange groups supported by this provider.
+///
+/// This does not contain MLKEM768; by default MLKEM768 is only offered
+/// in hybrid with X25519.
+pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
+    X25519MLKEM768,
+    #[cfg(not(feature = "fips"))]
+    X25519,
+    SECP256R1,
+    SECP384R1,
+];
+
+/// A list of all the key exchange groups supported by this provider.
+pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
+    X25519MLKEM768,
+    SECP256R1MLKEM768,
+    X25519,
+    SECP256R1,
+    SECP384R1,
+    MLKEM768,
+    MLKEM1024,
+];
+
 /// This is the [X25519MLKEM768] key exchange.
 ///
 /// [X25519MLKEM768]: <https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/>
@@ -216,7 +239,7 @@ impl fmt::Debug for KxGroup {
     }
 }
 
-/// Ephemeral ECDH on curve25519 (see RFC7748)
+/// Ephemeral ECDH on curve25519 (see RFC 7748)
 pub static X25519: &dyn SupportedKxGroup = &KxGroup {
     name: NamedGroup::X25519,
     agreement_algorithm: &agreement::X25519,
@@ -250,7 +273,7 @@ pub static SECP384R1: &dyn SupportedKxGroup = &KxGroup {
 fn uncompressed_point(point: &[u8]) -> bool {
     // See `UncompressedPointRepresentation`, which is a retelling of
     // SEC1 section 2.3.3 "Elliptic-Curve-Point-to-Octet-String Conversion"
-    // <https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.8.2>
+    // <https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.8.2>
     matches!(point.first(), Some(0x04))
 }
 

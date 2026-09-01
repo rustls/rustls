@@ -2,39 +2,26 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
-use rustls::HandshakeKind;
 use rustls::client::Resumption;
+use rustls::crypto::{CipherSuite, CryptoProvider};
+use rustls::enums::ProtocolVersion;
 use rustls::error::{
-    AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
+    AlertDescription, ApiMisuse, CertificateError, Error, InvalidMessage, PeerIncompatible,
+    PeerMisbehaved,
 };
-use rustls::quic::{self, Connection, Side};
+use rustls::quic::{self, Connection, QuicEvent, ServerHandshake, Side};
+use rustls::server::Tls13Tickets;
+use rustls::{CipherSuiteCommon, HandshakeKind, SliceInput, Tls13CipherSuite, VecInput};
 use rustls_test::{
-    ClientStorage, KeyType, encoding, make_client_config, make_server_config, server_name,
+    ClientStorage, KeyType, MultiTest, do_handshake, encoding, make_client_config,
+    make_client_config_with_kx_groups, make_pair_for_arc_configs, make_server_config,
+    make_server_config_with_kx_groups, server_name,
 };
 
 use super::provider;
-
-// Returns the sender's next secrets to use, or the receiver's error.
-fn step(
-    send: &mut impl Connection,
-    recv: &mut impl Connection,
-) -> Result<Option<quic::KeyChange>, Error> {
-    let mut buf = Vec::new();
-    let change = loop {
-        let prev = buf.len();
-        if let Some(x) = send.write_hs(&mut buf) {
-            break Some(x);
-        }
-        if prev == buf.len() {
-            break None;
-        }
-    };
-
-    recv.read_hs(&buf)?;
-    Ok(change)
-}
 
 #[test]
 fn test_quic_handshake() {
@@ -68,7 +55,7 @@ fn test_quic_handshake() {
             && equal_packet_keys(x.remote.packet.as_ref(), y.local.packet.as_ref())
     }
 
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let mut client_config = make_client_config(kt, &provider);
     client_config.enable_early_data = true;
@@ -97,42 +84,36 @@ fn test_quic_handshake() {
     .unwrap();
     assert_eq!(server.fips(), server_config.fips());
 
-    let client_initial = step(&mut client, &mut server).unwrap();
-    assert!(client_initial.is_none());
+    let client_keys = quic_transfer(&mut client, &mut server).unwrap();
+    assert!(client_keys.handshake.is_none() && client_keys.one_rtt.is_none());
     assert!(client.zero_rtt_keys().is_none());
+
     assert_eq!(server.quic_transport_parameters(), Some(client_params));
-    let server_hs = step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
+    let server_keys = quic_transfer(&mut server, &mut client).unwrap();
+    assert!(server_keys.handshake.is_some());
     assert!(server.zero_rtt_keys().is_none());
-    let client_hs = step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
-    assert!(compatible_keys(&server_hs, &client_hs));
-    assert!(client.is_handshaking());
-    let server_1rtt = step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
+
+    let client_keys = quic_transfer(&mut client, &mut server).unwrap();
+    assert!(compatible_keys(
+        server_keys.handshake.as_ref().unwrap(),
+        client_keys.handshake.as_ref().unwrap()
+    ));
+
     assert!(!client.is_handshaking());
     assert_eq!(client.quic_transport_parameters(), Some(server_params));
-    assert!(server.is_handshaking());
-    let client_1rtt = step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
-    assert!(!server.is_handshaking());
-    assert!(compatible_keys(&server_1rtt, &client_1rtt));
-    assert!(!compatible_keys(&server_hs, &server_1rtt));
 
-    assert!(
-        step(&mut client, &mut server)
-            .unwrap()
-            .is_none()
-    );
-    assert!(
-        step(&mut server, &mut client)
-            .unwrap()
-            .is_none()
-    );
+    assert!(!server.is_handshaking());
+    assert!(compatible_keys(
+        server_keys.one_rtt.as_ref().unwrap(),
+        client_keys.one_rtt.as_ref().unwrap()
+    ));
+    assert!(!compatible_keys(
+        server_keys.handshake.as_ref().unwrap(),
+        server_keys.one_rtt.as_ref().unwrap()
+    ));
+
+    quic_transfer(&mut client, &mut server).unwrap();
+    quic_transfer(&mut server, &mut client).unwrap();
     assert_eq!(client.tls13_tickets_received(), 2);
 
     // 0-RTT handshake
@@ -156,7 +137,7 @@ fn test_quic_handshake() {
     )
     .unwrap();
 
-    step(&mut client, &mut server).unwrap();
+    quic_transfer(&mut client, &mut server).unwrap();
     assert_eq!(client.quic_transport_parameters(), Some(server_params));
     {
         let client_early = client.zero_rtt_keys().unwrap();
@@ -166,15 +147,9 @@ fn test_quic_handshake() {
             server_early.packet.as_ref()
         ));
     }
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
-    step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
+    quic_transfer(&mut server, &mut client).unwrap();
+    quic_transfer(&mut client, &mut server).unwrap();
+    quic_transfer(&mut server, &mut client).unwrap();
     assert!(client.is_early_data_accepted());
 
     // failed handshake
@@ -190,11 +165,8 @@ fn test_quic_handshake() {
         quic::ServerConnection::new(server_config, quic::Version::V1, server_params.into())
             .unwrap();
 
-    step(&mut client, &mut server).unwrap();
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
-    let err = step(&mut server, &mut client)
+    quic_transfer(&mut client, &mut server).unwrap();
+    let err = quic_transfer(&mut server, &mut client)
         .err()
         .unwrap();
     assert_eq!(
@@ -205,15 +177,15 @@ fn test_quic_handshake() {
     // Key updates
 
     let (
-        quic::KeyChange::OneRtt {
+        Some(quic::KeyChange::OneRtt {
             next: mut client_secrets,
             ..
-        },
-        quic::KeyChange::OneRtt {
+        }),
+        Some(quic::KeyChange::OneRtt {
             next: mut server_secrets,
             ..
-        },
-    ) = (client_1rtt, server_1rtt)
+        }),
+    ) = (client_keys.one_rtt, server_keys.one_rtt)
     else {
         unreachable!();
     };
@@ -242,58 +214,100 @@ fn test_quic_handshake() {
 }
 
 #[test]
-fn test_quic_acceptor() {
-    let kt = KeyType::Rsa2048;
+fn test_quic_handshake_with_hello_retry_request() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
-    let mut client_config = make_client_config(kt, &provider);
-    client_config.alpn_protocols = vec![b"h3".into()];
-    let client_config = Arc::new(client_config);
-    let mut server_config = make_server_config(kt, &provider);
-    server_config.alpn_protocols = vec![b"h3".into()];
-    let server_config = Arc::new(server_config);
-    let client_fips = client_config.fips();
-    let server_fips = server_config.fips();
-    let client_params = &b"client params"[..];
-    let server_params = &b"server params"[..];
+    let client_config = make_client_config_with_kx_groups(
+        KeyType::default(),
+        vec![provider::kx_group::SECP384R1, provider::kx_group::X25519],
+        &provider,
+    );
+    let server_config = make_server_config_with_kx_groups(
+        KeyType::default(),
+        vec![provider::kx_group::X25519],
+        &provider,
+    );
 
     let mut client = quic::ClientConnection::new(
-        client_config,
+        Arc::new(client_config),
         quic::Version::V1,
         server_name("localhost"),
-        client_params.into(),
+        b"client params".to_vec(),
     )
     .unwrap();
-    assert_eq!(client.fips(), client_fips);
+    let mut server = quic::ServerConnection::new(
+        Arc::new(server_config),
+        quic::Version::V1,
+        b"server params".to_vec(),
+    )
+    .unwrap();
 
-    let mut acceptor = quic::Acceptor::new(quic::Version::V1);
-    assert!(acceptor.accept().unwrap().is_none());
+    quic_transfer(&mut client, &mut server).unwrap();
+    quic_transfer(&mut server, &mut client).unwrap();
 
-    let mut client_initial = Vec::new();
-    assert!(
-        client
-            .write_hs(&mut client_initial)
-            .is_none()
-    );
-    assert!(client_initial.len() > 8);
+    let client_retry_flight = client.events().collect::<Vec<_>>();
+    assert!(matches!(
+        client_retry_flight.as_slice(),
+        [QuicEvent::Message(_)]
+    ));
+    quic_insert(client_retry_flight, &mut server).unwrap();
 
-    acceptor
-        .read_hs(&client_initial[..8])
-        .unwrap();
-    assert!(acceptor.accept().unwrap().is_none());
+    do_quic_handshake(&mut client, &mut server);
 
-    acceptor
-        .read_hs(&client_initial[8..])
-        .unwrap();
-    let accepted = acceptor.accept().unwrap().unwrap();
     assert_eq!(
-        acceptor.accept().err(),
-        Some(ApiMisuse::AcceptorPolledAfterCompletion.into())
+        client.handshake_kind(),
+        Some(HandshakeKind::FullWithHelloRetryRequest)
     );
     assert_eq!(
-        acceptor.read_hs(&[]).err(),
-        Some(ApiMisuse::AcceptorPolledAfterCompletion.into())
+        server.handshake_kind(),
+        Some(HandshakeKind::FullWithHelloRetryRequest)
     );
-    {
+}
+
+#[test]
+fn test_quic_acceptor() {
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_TLS13_PROVIDER) {
+        let mut client_config = Arc::unwrap_or_clone(client_config);
+        client_config.alpn_protocols = vec![b"h3".into()];
+        let client_config = Arc::new(client_config);
+
+        let mut server_config = Arc::unwrap_or_clone(server_config);
+        server_config.alpn_protocols = vec![b"h3".into()];
+        let server_config = Arc::new(server_config);
+
+        let client_fips = client_config.fips();
+        let server_fips = server_config.fips();
+        let client_params = &b"client params"[..];
+        let server_params = &b"server params"[..];
+
+        let mut client = quic::ClientConnection::new(
+            client_config,
+            quic::Version::V1,
+            server_name("localhost"),
+            client_params.into(),
+        )
+        .unwrap();
+        assert_eq!(client.fips(), client_fips);
+
+        let needs_input = ServerHandshake::start(quic::Version::V1);
+
+        let mut client_initial = flatten_events(&mut client);
+        assert!(client_initial.len() > 8);
+        println!("client_initial: {client_initial:x?}");
+
+        let ServerHandshake::NeedsInput(needs_input) = needs_input
+            .process(&mut SliceInput::new(&mut client_initial[..8]), &mut vec![])
+            .unwrap()
+        else {
+            panic!("unexpected state after partial hello");
+        };
+
+        let ServerHandshake::Accepted(accepted) = needs_input
+            .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
+            .unwrap()
+        else {
+            panic!("unexpected state after full hello");
+        };
+
         let client_hello = accepted.client_hello();
         assert_eq!(
             client_hello
@@ -309,35 +323,198 @@ fn test_quic_acceptor() {
                 .collect::<Vec<_>>(),
             vec![b"h3".as_slice()]
         );
+
+        let mut server_flight = vec![];
+        let Ok(ServerHandshake::NeedsInput(server)) =
+            accepted.choose_config(server_config, server_params.into(), &mut server_flight)
+        else {
+            panic!("unexpected state");
+        };
+        assert_eq!(server.quic_transport_parameters(), Some(client_params));
+        assert!(server.zero_rtt_keys().is_none());
+        assert_eq!(server.server_name().map(AsRef::as_ref), Some("localhost"));
+        assert_eq!(
+            server
+                .alpn_protocol()
+                .map(AsRef::as_ref),
+            Some(b"h3".as_slice())
+        );
+        assert_eq!(server.protocol_version(), Some(ProtocolVersion::TLSv1_3));
+        assert!(
+            server
+                .negotiated_cipher_suite()
+                .is_some()
+        );
+        assert!(
+            server
+                .negotiated_key_exchange_group()
+                .is_some()
+        );
+        quic_insert(server_flight, &mut client).unwrap();
+
+        let mut server_flight = vec![];
+        let mut data = flatten_events(&mut client);
+        let mut server_input = SliceInput::new(&mut data);
+        let server = server
+            .process(&mut server_input, &mut server_flight)
+            .unwrap();
+
+        let mut server = match server {
+            ServerHandshake::Complete(server) => {
+                assert!(!expect.client_auth);
+                server
+            }
+
+            ServerHandshake::VerifyClientIdentity(verify) => {
+                assert!(expect.client_auth);
+                println!("{verify:?}");
+                println!("identity: {:?}", verify.presented_identity());
+                let ServerHandshake::NeedsInput(server) = verify.use_verifier_trait().unwrap()
+                else {
+                    panic!("unexpected state");
+                };
+                let ServerHandshake::Complete(server) = server
+                    .process(&mut server_input, &mut server_flight)
+                    .unwrap()
+                else {
+                    panic!("unexpected state");
+                };
+                server
+            }
+
+            _ => panic!("unexpected state"),
+        };
+
+        assert_eq!(server.fips(), server_fips);
+        assert_eq!(server.quic_transport_parameters(), Some(client_params));
+
+        quic_transfer(&mut server, &mut client).unwrap();
+        quic_transfer(&mut client, &mut server).unwrap();
+
+        assert!(!client.is_handshaking());
+        assert!(!server.is_handshaking());
+        assert_eq!(client.quic_transport_parameters(), Some(server_params));
     }
+}
 
-    let mut server = accepted
-        .into_connection(server_config, server_params.into())
-        .unwrap();
-    assert_eq!(server.fips(), server_fips);
+#[test]
+fn test_quic_acceptor_exposes_zero_rtt_keys_before_completion() {
+    let kt = KeyType::default();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+
+    let mut client_config = make_client_config(kt, &provider);
+    client_config.enable_early_data = true;
+    let client_config = Arc::new(client_config);
+
+    let mut server_config = make_server_config(kt, &provider);
+    server_config.max_early_data_size = 0xffff_ffff;
+    let server_config = Arc::new(server_config);
+
+    let client_params: &[u8] = b"client params";
+    let server_params: &[u8] = b"server params";
+
+    let mut client = quic::ClientConnection::new(
+        client_config.clone(),
+        quic::Version::V1,
+        server_name("localhost"),
+        client_params.to_vec(),
+    )
+    .unwrap();
+    let mut server = quic::ServerConnection::new(
+        server_config.clone(),
+        quic::Version::V1,
+        server_params.to_vec(),
+    )
+    .unwrap();
+    do_quic_handshake(&mut client, &mut server);
+    quic_transfer(&mut server, &mut client).unwrap();
+    quic_transfer(&mut client, &mut server).unwrap();
+    assert!(client.tls13_tickets_received() > 0);
+
+    let mut client = quic::ClientConnection::new(
+        client_config,
+        quic::Version::V1,
+        server_name("localhost"),
+        client_params.to_vec(),
+    )
+    .unwrap();
+
+    let mut client_initial = flatten_events(&mut client);
+    assert!(client.zero_rtt_keys().is_some());
+    let ServerHandshake::Accepted(accepted) = ServerHandshake::start(quic::Version::V1)
+        .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
+        .unwrap()
+    else {
+        panic!("unexpected state after ClientHello");
+    };
+
+    let ServerHandshake::NeedsInput(server) = accepted
+        .choose_config(server_config, server_params.to_vec(), &mut vec![])
+        .unwrap()
+    else {
+        panic!("unexpected state after choosing config");
+    };
     assert_eq!(server.quic_transport_parameters(), Some(client_params));
+    assert!(server.zero_rtt_keys().is_some());
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
+}
 
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
-    step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
-    step(&mut client, &mut server)
-        .unwrap()
+#[test]
+fn test_quic_acceptor_external_verifier_rejects_client_cert() {
+    for (client_config, server_config, _) in
+        MultiTest::new(provider::DEFAULT_TLS13_PROVIDER).require_client_auth()
+    {
+        let mut client = quic::ClientConnection::new(
+            client_config,
+            quic::Version::V1,
+            server_name("localhost"),
+            b"client params".into(),
+        )
         .unwrap();
 
-    assert!(!client.is_handshaking());
-    assert!(!server.is_handshaking());
-    assert_eq!(client.quic_transport_parameters(), Some(server_params));
+        let needs_input = ServerHandshake::start(quic::Version::V1);
+
+        let mut client_initial = flatten_events(&mut client);
+
+        let ServerHandshake::Accepted(accepted) = needs_input
+            .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
+            .unwrap()
+        else {
+            panic!("unexpected state after full hello");
+        };
+
+        let mut server_flight = vec![];
+        let Ok(ServerHandshake::NeedsInput(server)) =
+            accepted.choose_config(server_config, b"server params".into(), &mut server_flight)
+        else {
+            panic!("unexpected state");
+        };
+        quic_insert(server_flight, &mut client).unwrap();
+
+        let mut server_flight = vec![];
+        let mut data = flatten_events(&mut client);
+        let mut server_input = SliceInput::new(&mut data);
+        let ServerHandshake::VerifyClientIdentity(verify_client) = server
+            .process(&mut server_input, &mut server_flight)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+
+        let err = verify_client
+            .continue_with(Err(CertificateError::UnknownIssuer.into()))
+            .unwrap_err();
+        assert_eq!(err, CertificateError::UnknownIssuer.into());
+        assert_eq!(
+            AlertDescription::try_from(&err),
+            Ok(AlertDescription::UnknownCa)
+        );
+    }
 }
 
 #[test]
 fn test_quic_acceptor_continues_with_server_config_chosen_from_client_hello() {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let mut client_config = make_client_config(kt, &provider);
     client_config.alpn_protocols = vec![b"h3".into()];
@@ -362,18 +539,15 @@ fn test_quic_acceptor_continues_with_server_config_chosen_from_client_hello() {
     )
     .unwrap();
 
-    let mut acceptor = quic::Acceptor::new(quic::Version::V1);
-    let mut client_initial = Vec::new();
-    assert!(
-        client
-            .write_hs(&mut client_initial)
-            .is_none()
-    );
+    let needs_input = ServerHandshake::start(quic::Version::V1);
+    let mut client_initial = flatten_events(&mut client);
 
-    acceptor
-        .read_hs(&client_initial)
-        .unwrap();
-    let accepted = acceptor.accept().unwrap().unwrap();
+    let ServerHandshake::Accepted(accepted) = needs_input
+        .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
+        .unwrap()
+    else {
+        panic!("unexpected state after full hello");
+    };
 
     let selected_config = {
         let client_hello = accepted.client_hello();
@@ -400,22 +574,29 @@ fn test_quic_acceptor_continues_with_server_config_chosen_from_client_hello() {
         }
     };
 
-    let mut server = accepted
-        .into_connection(selected_config, server_params.into())
-        .unwrap();
+    let mut server_flight = vec![];
+    let Ok(ServerHandshake::NeedsInput(server)) =
+        accepted.choose_config(selected_config, server_params.into(), &mut server_flight)
+    else {
+        panic!("unexpected state");
+    };
+    quic_insert(server_flight, &mut client).unwrap();
 
-    step(&mut server, &mut client)
+    let mut server_flight = vec![];
+    let ServerHandshake::Complete(mut server) = server
+        .process(
+            &mut SliceInput::new(&mut flatten_events(&mut client)),
+            &mut server_flight,
+        )
         .unwrap()
-        .unwrap();
-    step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
-    step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
+    else {
+        panic!("unexpected state");
+    };
+
+    quic_transfer(&mut server, &mut client).unwrap();
+    quic_transfer(&mut client, &mut server).unwrap();
+    quic_transfer(&mut server, &mut client).unwrap();
+    quic_transfer(&mut client, &mut server).unwrap();
 
     assert!(!client.is_handshaking());
     assert!(!server.is_handshaking());
@@ -425,7 +606,7 @@ fn test_quic_acceptor_continues_with_server_config_chosen_from_client_hello() {
 
 #[test]
 fn test_quic_acceptor_invalid_early_data_size() {
-    let kt = KeyType::Ed25519;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let client_config = Arc::new(make_client_config(kt, &provider));
     let mut server_config = make_server_config(kt, &provider);
@@ -440,22 +621,23 @@ fn test_quic_acceptor_invalid_early_data_size() {
     )
     .unwrap();
 
-    let mut acceptor = quic::Acceptor::new(quic::Version::V1);
-    let mut client_initial = Vec::new();
-    assert!(
-        client
-            .write_hs(&mut client_initial)
-            .is_none()
-    );
+    let needs_input = ServerHandshake::start(quic::Version::V1);
+    let mut client_initial = flatten_events(&mut client);
 
-    acceptor
-        .read_hs(&client_initial)
-        .unwrap();
-    let accepted = acceptor.accept().unwrap().unwrap();
+    let ServerHandshake::Accepted(accepted) = needs_input
+        .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
+        .unwrap()
+    else {
+        panic!("unexpected state after hello");
+    };
 
     assert_eq!(
         accepted
-            .into_connection(Arc::new(server_config), b"server params".to_vec())
+            .choose_config(
+                Arc::new(server_config),
+                b"server params".to_vec(),
+                &mut vec![]
+            )
             .err(),
         Some(ApiMisuse::QuicRestrictsMaxEarlyDataSize.into())
     );
@@ -463,24 +645,22 @@ fn test_quic_acceptor_invalid_early_data_size() {
 
 #[test]
 fn test_quic_acceptor_read_error_is_terminal() {
-    let mut acceptor = quic::Acceptor::new(quic::Version::V1);
+    let needs_input = ServerHandshake::start(quic::Version::V1);
 
-    let err = acceptor
-        .read_hs(&encoding::handshake_framing(
-            rustls::enums::HandshakeType::ClientHello,
-            vec![0x00; 32],
-        ))
+    let err = needs_input
+        .process(
+            &mut SliceInput::new(&mut encoding::handshake_framing(
+                rustls::enums::HandshakeType::ClientHello,
+                vec![0x00; 32],
+            )),
+            &mut vec![],
+        )
         .err()
         .unwrap();
     assert_eq!(err, InvalidMessage::MissingData("Random").into());
-    assert_eq!(
-        acceptor.accept().err(),
-        Some(InvalidMessage::MissingData("Random").into())
-    );
-    assert_eq!(
-        acceptor.accept().err(),
-        Some(ApiMisuse::AcceptorPolledAfterCompletion.into())
-    );
+
+    // impossible:
+    // drop(needs_input);
 }
 
 #[test]
@@ -508,7 +688,7 @@ fn test_quic_rejects_missing_alpn() {
             quic::ServerConnection::new(server_config, quic::Version::V1, server_params.into())
                 .unwrap();
 
-        let err = step(&mut client, &mut server)
+        let err = quic_transfer(&mut client, &mut server)
             .err()
             .unwrap();
         assert_eq!(err, Error::NoApplicationProtocol);
@@ -522,7 +702,7 @@ fn test_quic_rejects_missing_alpn() {
 #[test]
 fn test_quic_no_tls13_error() {
     let provider = provider::DEFAULT_TLS12_PROVIDER;
-    let mut client_config = make_client_config(KeyType::Ed25519, &provider);
+    let mut client_config = make_client_config(KeyType::default(), &provider);
     client_config.alpn_protocols = vec![b"foo".into()];
     let client_config = Arc::new(client_config);
 
@@ -537,7 +717,7 @@ fn test_quic_no_tls13_error() {
         Some(ApiMisuse::QuicRequiresTls13Support.into())
     );
 
-    let mut server_config = make_server_config(KeyType::Ed25519, &provider);
+    let mut server_config = make_server_config(KeyType::default(), &provider);
     server_config.alpn_protocols = vec![b"foo".into()];
     let server_config = Arc::new(server_config);
 
@@ -551,7 +731,7 @@ fn test_quic_no_tls13_error() {
 #[test]
 fn test_quic_invalid_early_data_size() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
-    let mut server_config = make_server_config(KeyType::Ed25519, &provider);
+    let mut server_config = make_server_config(KeyType::default(), &provider);
     server_config.alpn_protocols = vec![b"foo".into()];
 
     let cases = [
@@ -579,7 +759,7 @@ fn test_quic_invalid_early_data_size() {
 #[test]
 fn test_quic_read_deframer_failure() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
-    let server_config = make_server_config(KeyType::EcdsaP256, &provider);
+    let server_config = make_server_config(KeyType::default(), &provider);
     let server_config = Arc::new(server_config);
 
     let mut server =
@@ -587,10 +767,10 @@ fn test_quic_read_deframer_failure() {
             .unwrap();
 
     let err = server
-        .read_hs(&encoding::handshake_framing(
+        .read_hs(&mut SliceInput::new(&mut encoding::handshake_framing(
             rustls::enums::HandshakeType::ClientHello,
             vec![0x00; 32],
-        ))
+        )))
         .err()
         .unwrap();
     assert_eq!(err, InvalidMessage::MissingData("Random").into());
@@ -603,16 +783,16 @@ fn test_quic_read_deframer_failure() {
 #[test]
 fn test_quic_server_no_params_received() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
-    let server_config = make_server_config(KeyType::EcdsaP256, &provider);
+    let server_config = make_server_config(KeyType::default(), &provider);
     let server_config = Arc::new(server_config);
 
     let mut server =
         quic::ServerConnection::new(server_config, quic::Version::V1, b"server params".to_vec())
             .unwrap();
 
-    let buf = encoding::basic_client_hello(vec![]);
+    let mut buf = encoding::basic_client_hello(vec![]);
     let err = server
-        .read_hs(buf.as_slice())
+        .read_hs(&mut SliceInput::new(&mut buf))
         .err()
         .unwrap();
     assert_eq!(
@@ -628,7 +808,7 @@ fn test_quic_server_no_params_received() {
 #[test]
 fn test_quic_server_no_tls12() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
-    let mut server_config = make_server_config(KeyType::Ed25519, &provider);
+    let mut server_config = make_server_config(KeyType::default(), &provider);
     server_config.alpn_protocols = vec![b"foo".into()];
     let server_config = Arc::new(server_config);
 
@@ -636,18 +816,18 @@ fn test_quic_server_no_tls12() {
         quic::ServerConnection::new(server_config, quic::Version::V1, b"server params".to_vec())
             .unwrap();
 
-    let buf = encoding::client_hello_with_extensions(vec![
+    let mut buf = encoding::client_hello_with_extensions(vec![
         encoding::Extension::new_sig_algs(),
         encoding::Extension::new_dummy_key_share(),
         encoding::Extension::new_kx_groups(),
     ]);
     let err = server
-        .read_hs(buf.as_slice())
+        .read_hs(&mut SliceInput::new(&mut buf))
         .err()
         .unwrap();
     assert_eq!(
         err,
-        Error::PeerIncompatible(PeerIncompatible::SupportedVersionsExtensionRequired),
+        Error::PeerIncompatible(PeerIncompatible::Tls13RequiredForQuic),
     );
     assert_eq!(
         AlertDescription::try_from(&err).ok(),
@@ -655,29 +835,121 @@ fn test_quic_server_no_tls12() {
     );
 }
 
+#[test]
+fn test_quic_server_rejects_tls12_hello() {
+    let mut server = quic::ServerConnection::new(
+        Arc::new(make_server_config(
+            KeyType::EcdsaP256,
+            &provider::DEFAULT_PROVIDER,
+        )),
+        quic::Version::V2,
+        vec![],
+    )
+    .unwrap();
+    assert_eq!(
+        server
+            .read_hs(&mut SliceInput::new(&mut encoding::client_hello(
+                ProtocolVersion::TLSv1_2,
+                &[0x12; 32],
+                &[0x00],
+                vec![CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256],
+                vec![encoding::Extension::new_sig_algs()],
+            )))
+            .err(),
+        Some(PeerIncompatible::Tls13RequiredForQuic.into())
+    );
+}
+
+#[test]
+fn test_quic_client_rejects_tls12_server() {
+    let mut client = quic::ClientConnection::new(
+        Arc::new(make_client_config(
+            KeyType::EcdsaP256,
+            &provider::DEFAULT_PROVIDER,
+        )),
+        quic::Version::V2,
+        "hello.com".try_into().unwrap(),
+        vec![],
+    )
+    .unwrap();
+    let _ = client.events();
+    assert_eq!(
+        client
+            .read_hs(&mut SliceInput::new(&mut encoding::server_hello(
+                ProtocolVersion::TLSv1_2,
+                &[0x12; 32],
+                &[0],
+                CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                vec![]
+            )))
+            .err(),
+        Some(PeerIncompatible::ServerTlsVersionIsDisabledByOurConfig.into()),
+    );
+}
+
 fn do_quic_handshake(client: &mut impl Connection, server: &mut impl Connection) {
     while client.is_handshaking() || server.is_handshaking() {
-        quic_transfer(client, server);
-        quic_transfer(server, client);
+        quic_transfer(client, server).unwrap();
+        quic_transfer(server, client).unwrap();
     }
 }
 
-fn quic_transfer(sender: &mut impl Connection, receiver: &mut impl Connection) {
-    let mut buf = Vec::new();
-    while let Some(_change) = sender.write_hs(&mut buf) {
-        // In a real QUIC implementation, we would handle key changes here
-        // For testing, we just continue
+fn quic_transfer(
+    sender: &mut impl Connection,
+    receiver: &mut impl Connection,
+) -> Result<KeyChanges, Error> {
+    let events = sender.events().collect();
+    println!("{sender:?}: events {events:?}");
+    quic_insert(events, receiver)
+}
+
+fn quic_insert(
+    events: Vec<QuicEvent>,
+    receiver: &mut impl Connection,
+) -> Result<KeyChanges, Error> {
+    let mut changes = KeyChanges::default();
+
+    for e in events {
+        match e {
+            QuicEvent::Message(mut m) => receiver.read_hs(&mut SliceInput::new(&mut m))?,
+
+            // In a real QUIC implementation, we would handle key changes here
+            QuicEvent::KeyChange(kc @ quic::KeyChange::Handshake { .. }) => {
+                changes.handshake = Some(kc)
+            }
+
+            QuicEvent::KeyChange(kc @ quic::KeyChange::OneRtt { .. }) => changes.one_rtt = Some(kc),
+
+            _ => todo!("{e:?}"),
+        }
     }
 
-    if !buf.is_empty() {
-        receiver.read_hs(&buf).unwrap();
+    Ok(changes)
+}
+
+#[derive(Default)]
+struct KeyChanges {
+    handshake: Option<quic::KeyChange>,
+    one_rtt: Option<quic::KeyChange>,
+}
+
+// Obtains and concatenates all messages from `send`
+fn flatten_events(send: &mut impl Connection) -> Vec<u8> {
+    let mut out = vec![];
+    for e in send.events() {
+        match e {
+            QuicEvent::Message(m) => out.extend(m),
+            QuicEvent::KeyChange(..) => {}
+            _ => todo!("{e:?}"),
+        }
     }
+    out
 }
 
 #[test]
 fn test_quic_resumption_data_basic() {
     let server_params = b"server params";
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_TLS13_PROVIDER;
 
     let mut server_config = make_server_config(kt, &provider);
@@ -689,7 +961,7 @@ fn test_quic_resumption_data_basic() {
             .ticketer()
             .unwrap(),
     );
-    server_config.send_tls13_tickets = 2;
+    server_config.send_tls13_tickets = Tls13Tickets { default: 2, max: 2 };
     let server_config = Arc::new(server_config);
 
     let mut server =
@@ -724,7 +996,7 @@ fn test_quic_resumption_data_basic() {
 fn test_quic_resumption_data_0rtt() {
     let client_params = b"client params";
     let server_params = b"server params";
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let provider = provider::DEFAULT_TLS13_PROVIDER;
 
     let mut client_config = make_client_config(kt, &provider);
@@ -742,7 +1014,7 @@ fn test_quic_resumption_data_0rtt() {
             .ticketer()
             .unwrap(),
     );
-    server_config.send_tls13_tickets = 2;
+    server_config.send_tls13_tickets = Tls13Tickets { default: 2, max: 2 };
     let server_config = Arc::new(server_config);
 
     // QUIC 0-RTT parameters to store in resumption data
@@ -797,7 +1069,7 @@ fn test_quic_resumption_data_0rtt() {
     );
 
     // Start handshake and check transport parameters early
-    quic_transfer(&mut client2, &mut server2);
+    quic_transfer(&mut client2, &mut server2).unwrap();
     assert_eq!(
         client2.quic_transport_parameters(),
         Some(server_params.as_slice())
@@ -864,8 +1136,7 @@ fn packet_key_api() {
 
     let client_keys = Keys::initial(
         Version::V1,
-        TLS13_AES_128_GCM_SHA256,
-        TLS13_AES_128_GCM_SHA256.quic.unwrap(),
+        quic::Suite::try_from(TLS13_AES_128_GCM_SHA256).unwrap(),
         CONNECTION_ID,
         Side::Client,
     );
@@ -986,8 +1257,7 @@ fn packet_key_api() {
 
     let server_keys = Keys::initial(
         Version::V1,
-        TLS13_AES_128_GCM_SHA256,
-        TLS13_AES_128_GCM_SHA256.quic.unwrap(),
+        quic::Suite::try_from(TLS13_AES_128_GCM_SHA256).unwrap(),
         CONNECTION_ID,
         Side::Server,
     );
@@ -1055,7 +1325,7 @@ fn test_quic_exporter() {
 #[test]
 fn test_fragmented_append() {
     // Create a QUIC client connection.
-    let client_config = make_client_config(KeyType::Rsa2048, &provider::DEFAULT_TLS13_PROVIDER);
+    let client_config = make_client_config(KeyType::default(), &provider::DEFAULT_TLS13_PROVIDER);
     let client_config = Arc::new(client_config);
     let mut client = quic::ClientConnection::new(
         client_config,
@@ -1074,7 +1344,9 @@ fn test_fragmented_append() {
 
     // Read the message - this will put us into a joining handshake message state, buffering
     // 4096 bytes into the deframer buffer.
-    client.read_hs(&out).unwrap();
+    client
+        .read_hs(&mut SliceInput::new(&mut out))
+        .unwrap();
 
     // Read the message again - once more it isn't a complete message, so we'll try to
     // append another 4096 bytes into the deframer buffer.
@@ -1082,14 +1354,16 @@ fn test_fragmented_append() {
     // If the deframer mishandles writing into the used buffer space this will panic with
     // an index out of range error:
     //   range end index 8192 out of range for slice of length 4096
-    client.read_hs(&out).unwrap();
+    client
+        .read_hs(&mut SliceInput::new(&mut out))
+        .unwrap();
 }
 
 #[test]
 fn server_rejects_client_hello_with_trailing_fragment() {
     let mut server = quic::ServerConnection::new(
         Arc::new(make_server_config(
-            KeyType::EcdsaP256,
+            KeyType::default(),
             &provider::DEFAULT_TLS13_PROVIDER,
         )),
         quic::Version::V2,
@@ -1105,7 +1379,174 @@ fn server_rejects_client_hello_with_trailing_fragment() {
     hello.extend(&hello[..10].to_vec());
 
     assert_eq!(
-        server.read_hs(&hello).unwrap_err(),
+        server
+            .read_hs(&mut SliceInput::new(&mut hello))
+            .unwrap_err(),
         PeerMisbehaved::KeyEpochWithPendingFragment.into()
     );
 }
+
+#[test]
+fn client_rejects_server_choosing_non_quic_suite() {
+    // we support [TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC, TLS13_AES_256_GCM_SHA384].  our
+    // offer is [TLS13_AES_256_GCM_SHA384].  The server chooses TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC
+    // which we should reject.
+    let provider = CryptoProvider {
+        tls13_cipher_suites: Cow::Owned(vec![
+            TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC,
+            provider::cipher_suite::TLS13_AES_256_GCM_SHA384,
+        ]),
+        kx_groups: Cow::Owned(vec![provider::kx_group::SECP256R1]),
+        ..provider::DEFAULT_PROVIDER
+    };
+    let mut client = quic::ClientConnection::new(
+        Arc::new(make_client_config(KeyType::EcdsaP256, &provider)),
+        quic::Version::V2,
+        "hello.com".try_into().unwrap(),
+        vec![],
+    )
+    .unwrap();
+    let _ = client.events();
+    assert_eq!(
+        client
+            .read_hs(&mut SliceInput::new(&mut encoding::server_hello(
+                ProtocolVersion::TLSv1_2,
+                &[0x12; 32],
+                &[0],
+                CipherSuite::TLS13_AES_128_GCM_SHA256,
+                vec![
+                    encoding::Extension::new_versions_server_tls13(),
+                    encoding::Extension::new_dummy_key_share_server()
+                ]
+            )))
+            .err(),
+        Some(PeerMisbehaved::SelectedUnofferedCipherSuite.into()),
+    );
+}
+
+#[test]
+fn server_rejects_client_choosing_non_quic_suite() {
+    let provider = CryptoProvider {
+        tls13_cipher_suites: Cow::Owned(vec![
+            TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC,
+            provider::cipher_suite::TLS13_AES_256_GCM_SHA384,
+        ]),
+        kx_groups: Cow::Owned(vec![provider::kx_group::SECP256R1]),
+        ..provider::DEFAULT_PROVIDER
+    };
+    let mut server = quic::ServerConnection::new(
+        Arc::new(make_server_config(KeyType::EcdsaP256, &provider)),
+        quic::Version::V2,
+        vec![],
+    )
+    .unwrap();
+    assert_eq!(
+        server
+            .read_hs(&mut SliceInput::new(&mut encoding::client_hello(
+                ProtocolVersion::TLSv1_2,
+                &[0x12; 32],
+                &[0x00],
+                vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
+                vec![
+                    encoding::Extension::new_sig_algs(),
+                    encoding::Extension::new_versions(),
+                    encoding::Extension::new_dummy_key_share(),
+                    encoding::Extension::new_kx_groups(),
+                    encoding::Extension::new_quic_transport_params(b"blurgh")
+                ],
+            )))
+            .err(),
+        Some(PeerIncompatible::NoCipherSuitesInCommon.into())
+    );
+}
+
+// A session stored from a TCP connection may name a cipher suite that cannot be
+// used for QUIC.  Such a session is simply not resumable on a QUIC connection:
+// it must not prevent the connection being made at all.
+#[test]
+fn quic_client_ignores_stored_session_with_non_quic_suite() {
+    let tcp_provider = CryptoProvider {
+        tls13_cipher_suites: Cow::Owned(vec![TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC]),
+        ..provider::DEFAULT_TLS13_PROVIDER
+    };
+
+    // Fill the session store over TCP, using the suite which does not support QUIC.
+    let storage = Arc::new(ClientStorage::new());
+    let mut client_config = make_client_config(KeyType::default(), &tcp_provider);
+    client_config.resumption = Resumption::store(storage.clone());
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair_for_arc_configs(
+        &Arc::new(client_config),
+        &Arc::new(make_server_config(KeyType::default(), &tcp_provider)),
+        &mut client_output,
+    );
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+    assert!(
+        storage
+            .ops()
+            .iter()
+            .any(|op| matches!(op, rustls_test::ClientStorageOp::InsertTls13Ticket(_)))
+    );
+
+    // Now connect over QUIC, sharing the session store.  This provider _does_ offer a
+    // QUIC-capable suite, so the connection is perfectly viable -- the stored session
+    // just cannot be used for it.
+    let quic_provider = CryptoProvider {
+        tls13_cipher_suites: Cow::Owned(vec![
+            TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC,
+            provider::cipher_suite::TLS13_AES_256_GCM_SHA384,
+        ]),
+        ..provider::DEFAULT_TLS13_PROVIDER
+    };
+    let mut client_config = make_client_config(KeyType::default(), &quic_provider);
+    client_config.resumption = Resumption::store(storage);
+    let mut client = quic::ClientConnection::new(
+        Arc::new(client_config),
+        quic::Version::V2,
+        "localhost".try_into().unwrap(),
+        vec![],
+    )
+    .unwrap();
+    let mut server = quic::ServerConnection::new(
+        Arc::new(make_server_config(KeyType::EcdsaP256, &quic_provider)),
+        quic::Version::V2,
+        vec![],
+    )
+    .unwrap();
+
+    do_quic_handshake(&mut client, &mut server);
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+}
+
+/// TLS13_AES_128_GCM_SHA256 which doesn't support QUIC.
+///
+/// Once `clone` is const this can be more directly written.
+const TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC: &Tls13CipherSuite = &Tls13CipherSuite {
+    common: CipherSuiteCommon {
+        suite: provider::cipher_suite::TLS13_AES_128_GCM_SHA256
+            .common
+            .suite,
+        hash_provider: provider::cipher_suite::TLS13_AES_128_GCM_SHA256
+            .common
+            .hash_provider,
+        confidentiality_limit: provider::cipher_suite::TLS13_AES_128_GCM_SHA256
+            .common
+            .confidentiality_limit,
+    },
+    protocol_version: provider::cipher_suite::TLS13_AES_128_GCM_SHA256.protocol_version,
+    hkdf_provider: provider::cipher_suite::TLS13_AES_128_GCM_SHA256.hkdf_provider,
+    aead_alg: provider::cipher_suite::TLS13_AES_128_GCM_SHA256.aead_alg,
+    quic: None,
+};

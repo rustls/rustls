@@ -19,23 +19,23 @@
 //!
 //! [mio]: https://docs.rs/mio/latest/mio/
 
+use core::mem;
 use std::collections::HashMap;
-use std::io::{self, Read, Write};
+use std::io::{self, IsTerminal, Read, Write, stderr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{fs, net};
 
 use clap::{Parser, Subcommand};
-use log::{debug, error};
 use mio::net::{TcpListener, TcpStream};
 use rustls::crypto::{CryptoProvider, Identity};
 use rustls::enums::{ApplicationProtocol, ProtocolVersion};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use rustls::server::{NoServerSessionStorage, WebPkiClientVerifier};
-use rustls::{Connection, RootCertStore, ServerConfig, ServerConnection};
+use rustls::{Connection, RootCertStore, ServerConfig, ServerConnection, VecInput};
 use rustls_aws_lc_rs as provider;
-use rustls_util::KeyLogFile;
+use tracing::{Level, debug, error};
 
 // Token for our listening socket.
 const LISTENER: mio::Token = mio::Token(0);
@@ -130,6 +130,9 @@ struct OpenConnection {
     mode: ServerMode,
     tls_conn: ServerConnection,
     back: Option<TcpStream>,
+    input: VecInput,
+    output: Vec<u8>,
+    pending: Vec<u8>,
     sent_http_response: bool,
 }
 
@@ -176,19 +179,21 @@ impl OpenConnection {
             mode,
             tls_conn,
             back,
+            input: VecInput::default(),
+            output: Vec::new(),
+            pending: Vec::new(),
             sent_http_response: false,
         }
     }
 
     /// We're a connection, and we have something to do.
     fn ready(&mut self, registry: &mio::Registry, ev: &mio::event::Event) {
-        // If we're readable: read some TLS.  Then
-        // see if that yielded new plaintext.  Then
-        // see if the backend is readable too.
+        // If we're readable: read some TLS, handle any plaintext it
+        // yields, then see if the backend is readable too.
         if ev.is_readable() {
             self.do_tls_read();
-            self.try_plain_read();
             self.try_back_read();
+            self.flush_pending();
         }
 
         if ev.is_writable() {
@@ -217,7 +222,7 @@ impl OpenConnection {
 
     fn do_tls_read(&mut self) {
         // Read some TLS data.
-        match self.tls_conn.read_tls(&mut self.socket) {
+        match self.input.read(&mut self.socket) {
             Err(err) => {
                 if let io::ErrorKind::WouldBlock = err.kind() {
                     return;
@@ -235,44 +240,40 @@ impl OpenConnection {
             Ok(_) => {}
         };
 
-        // Process newly-received TLS messages.
-        if let Err(err) = self.tls_conn.process_new_packets() {
+        // Process newly-received TLS messages, collecting any plaintext
+        // application data.  The `MessageHandler` API hands the plaintext
+        // back to us through `handle_all`, so there is no separate
+        // "read plaintext" step anymore.
+        let mut received_plaintext = Vec::new();
+        if let Err(err) = self
+            .tls_conn
+            .process_new_packets(&mut self.input, &mut self.output)
+            .handle_all(&mut received_plaintext)
+        {
             error!("cannot process packet: {err:?}");
 
             // last gasp write to send any alerts
             self.do_tls_write_and_handle_error();
 
             self.closing = true;
+            return;
         }
-    }
 
-    fn try_plain_read(&mut self) {
-        // Read and process all available plaintext.
-        if let Ok(io_state) = self.tls_conn.process_new_packets() {
-            if let Some(mut early_data) = self.tls_conn.early_data() {
-                let mut buf = Vec::new();
-                early_data
-                    .read_to_end(&mut buf)
-                    .unwrap();
+        // Handle any 0-RTT early data.
+        if let Some(mut early_data) = self.tls_conn.early_data() {
+            let mut buf = Vec::new();
+            early_data
+                .read_to_end(&mut buf)
+                .unwrap();
 
-                if !buf.is_empty() {
-                    debug!("early data read {:?}", buf.len());
-                    self.incoming_plaintext(&buf);
-                    return;
-                }
-            }
-
-            if io_state.plaintext_bytes_to_read() > 0 {
-                let mut buf = vec![0u8; io_state.plaintext_bytes_to_read()];
-
-                self.tls_conn
-                    .reader()
-                    .read_exact(&mut buf)
-                    .unwrap();
-
-                debug!("plaintext read {:?}", buf.len());
+            if !buf.is_empty() {
+                debug!("early data read {:?}", buf.len());
                 self.incoming_plaintext(&buf);
             }
+        }
+
+        if !received_plaintext.is_empty() {
+            self.incoming_plaintext(&received_plaintext);
         }
     }
 
@@ -301,25 +302,47 @@ impl OpenConnection {
                 debug!("back eof");
                 self.closing = true;
             }
-            Some(len) => {
-                self.tls_conn
-                    .writer()
-                    .write_all(&buf[..len])
-                    .unwrap();
-            }
+            Some(len) => self.send_plaintext(&buf[..len]),
             None => {}
         };
+    }
+
+    /// Encrypt `plaintext` into `output`, or queue it if the handshake is
+    /// still in progress (which can happen if plaintext arrives as early data).
+    fn send_plaintext(&mut self, plaintext: &[u8]) {
+        match self.tls_conn.is_handshaking() {
+            true => self
+                .pending
+                .extend_from_slice(plaintext),
+            false => {
+                self.flush_pending();
+                self.tls_conn
+                    .write_tls(plaintext.into(), &mut self.output)
+                    .unwrap();
+            }
+        }
+    }
+
+    /// Encrypt plaintext that was queued while the handshake was in progress.
+    fn flush_pending(&mut self) {
+        if self.tls_conn.is_handshaking() || self.pending.is_empty() {
+            return;
+        }
+
+        let pending = mem::take(&mut self.pending);
+        self.tls_conn
+            .write_tls((&pending).into(), &mut self.output)
+            .unwrap();
+        if self.sent_http_response {
+            self.tls_conn
+                .send_close_notify(&mut self.output);
+        }
     }
 
     /// Process some amount of received plaintext.
     fn incoming_plaintext(&mut self, buf: &[u8]) {
         match self.mode {
-            ServerMode::Echo => {
-                self.tls_conn
-                    .writer()
-                    .write_all(buf)
-                    .unwrap();
-            }
+            ServerMode::Echo => self.send_plaintext(buf),
             ServerMode::Http => {
                 self.send_http_response_once();
             }
@@ -337,18 +360,21 @@ impl OpenConnection {
         let response =
             b"HTTP/1.0 200 OK\r\nConnection: close\r\n\r\nHello world from rustls tlsserver\r\n";
         if !self.sent_http_response {
-            self.tls_conn
-                .writer()
-                .write_all(response)
-                .unwrap();
+            self.send_plaintext(response);
             self.sent_http_response = true;
-            self.tls_conn.send_close_notify();
+            // If the response was queued until the handshake completes,
+            // flush_pending() sends the close_notify instead.
+            if !self.tls_conn.is_handshaking() {
+                self.tls_conn
+                    .send_close_notify(&mut self.output);
+            }
         }
     }
 
     fn tls_write(&mut self) -> io::Result<usize> {
-        self.tls_conn
-            .write_tls(&mut self.socket)
+        let len = self.socket.write(&self.output)?;
+        self.output.drain(..len);
+        Ok(len)
     }
 
     fn do_tls_write_and_handle_error(&mut self) {
@@ -390,10 +416,10 @@ impl OpenConnection {
     }
 
     /// What IO events we're currently waiting for,
-    /// based on wants_read/wants_write.
+    /// based on wants_read and buffered TLS output.
     fn event_set(&self) -> mio::Interest {
         let rd = self.tls_conn.wants_read();
-        let wr = self.tls_conn.wants_write();
+        let wr = !self.output.is_empty();
 
         if rd && wr {
             mio::Interest::READABLE | mio::Interest::WRITABLE
@@ -636,7 +662,11 @@ fn make_config(args: &Args) -> Arc<ServerConfig> {
         )
         .expect("bad certificates/private key");
 
-    config.key_log = Arc::new(KeyLogFile::new());
+    // Allow using SSLKEYLOGFILE in debug builds.
+    #[cfg(debug_assertions)]
+    {
+        config.key_log = Arc::new(rustls_util::KeyLogFile::new());
+    }
 
     if args.no_resumption {
         config.session_storage = Arc::new(NoServerSessionStorage {});
@@ -676,8 +706,10 @@ fn make_config(args: &Args) -> Arc<ServerConfig> {
 fn main() {
     let args = Args::parse();
     if args.verbose {
-        env_logger::Builder::new()
-            .parse_filters("trace")
+        tracing_subscriber::fmt()
+            .with_max_level(Level::TRACE)
+            .with_writer(stderr)
+            .with_ansi(stderr().is_terminal())
             .init();
     }
 

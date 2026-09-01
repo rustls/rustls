@@ -1,23 +1,23 @@
 [package]
 name = "rustls-examples"
 version = "0.0.1"
-edition = "2021"
+edition.workspace = true
 license = "Apache-2.0 OR ISC OR MIT"
 description = "Rustls example code and tests."
 publish = false
 
 [dependencies]
 clap = { workspace = true }
-env_logger = { workspace = true }
 hickory-resolver = { workspace = true }
-log = { workspace = true }
 mio = { workspace = true }
 rcgen = { workspace = true }
-rustls = { path = "../rustls", features = ["log"] }
+rustls = { path = "../rustls", features = ["tracing"] }
 rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs" }
 rustls-util = { path = "../rustls-util" }
 serde = { workspace = true }
 tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 webpki-roots = { workspace = true }
 
 [lints]

@@ -10,19 +10,17 @@ mod client {
     use std::net::TcpStream;
     use std::sync::Arc;
 
-    use rustls::client::danger::{
-        HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
-    };
+    use rustls::client::danger::{HandshakeSignatureValid, ServerIdentity, ServerVerifier};
     use rustls::crypto::{
         Credentials, Identity, InconsistentKeys, SignatureScheme, SingleCredential,
-        WebPkiSupportedAlgorithms, verify_tls13_signature,
+        VerifiedIdentity, WebPkiSupportedAlgorithms, verify_tls13_signature,
     };
     use rustls::enums::CertificateType;
     use rustls::error::{ApiMisuse, CertificateError, PeerIncompatible};
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::SignatureVerificationInput;
-    use rustls::{ClientConfig, Error};
+    use rustls::{ClientConfig, Error, VecInput};
     use rustls_aws_lc_rs as provider;
     use rustls_util::Stream;
 
@@ -63,12 +61,21 @@ mod client {
     /// This client reads a message and then writes 'Hello from the client' to the server.
     pub(super) fn run_client(config: ClientConfig, port: u16) -> Result<String, io::Error> {
         let server_name = "0.0.0.0".try_into().unwrap();
+        let mut output = Vec::new();
         let mut conn = Arc::new(config)
             .connect(server_name)
-            .build()
+            .build(&mut output)
             .unwrap();
         let mut sock = TcpStream::connect(format!("[::]:{port}")).unwrap();
-        let mut tls = Stream::new(&mut conn, &mut sock);
+        let mut input = VecInput::default();
+        let mut received_plaintext = Vec::new();
+        let mut tls = Stream::new(
+            &mut input,
+            &mut received_plaintext,
+            &mut output,
+            &mut conn,
+            &mut sock,
+        );
 
         let mut buf = vec![0; 128];
         let len = tls.read(&mut buf).unwrap();
@@ -101,14 +108,17 @@ mod client {
     }
 
     impl ServerVerifier for SimpleRpkServerVerifier {
-        fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
+        fn verify_identity<'a>(
+            &self,
+            identity: &ServerIdentity<'a, '_>,
+        ) -> Result<VerifiedIdentity<'a>, Error> {
             let Identity::RawPublicKey(spki) = identity.identity else {
                 return Err(ApiMisuse::UnverifiableCertificateType.into());
             };
 
             match self.trusted_spki.contains(spki) {
                 false => Err(Error::InvalidCertificate(CertificateError::UnknownIssuer)),
-                true => Ok(PeerVerified::assertion()),
+                true => Ok(VerifiedIdentity::assertion(identity.identity.clone())),
             }
         }
 
@@ -145,24 +155,21 @@ mod client {
 }
 
 mod server {
-    #![allow(clippy::std_instead_of_core)] // awaits core::io::ErrorKind in stable (1.97)
-    use std::io::{self, ErrorKind, Read, Write};
+    use std::io;
     use std::net::TcpListener;
     use std::sync::Arc;
 
     use rustls::client::danger::HandshakeSignatureValid;
     use rustls::crypto::{
         Credentials, Identity, InconsistentKeys, SignatureScheme, SingleCredential,
-        WebPkiSupportedAlgorithms, verify_tls13_signature,
+        VerifiedIdentity, WebPkiSupportedAlgorithms, verify_tls13_signature,
     };
     use rustls::enums::CertificateType;
     use rustls::error::{ApiMisuse, CertificateError, Error, PeerIncompatible};
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
-    use rustls::server::danger::{
-        ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
-    };
-    use rustls::{Connection, DistinguishedName, ServerConfig, ServerConnection};
+    use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
+    use rustls::{Connection, DistinguishedName, ServerConfig, ServerConnection, VecInput};
     use rustls_aws_lc_rs as provider;
     use rustls_util::complete_io;
 
@@ -209,29 +216,44 @@ mod server {
         let (mut stream, _) = listener.accept()?;
 
         let mut conn = ServerConnection::new(Arc::new(config)).unwrap();
-        complete_io(&mut stream, &mut conn)?;
+        let mut input = VecInput::default();
+        let mut received_plaintext = Vec::new();
+        let mut output = Vec::new();
+        complete_io(
+            &mut stream,
+            &mut input,
+            &mut received_plaintext,
+            &mut output,
+            &mut conn,
+        )?;
 
-        conn.writer()
-            .write_all(b"Hello from the server")?;
-        complete_io(&mut stream, &mut conn)?;
-
-        let mut buf = [0; 128];
+        conn.write_tls(b"Hello from the server".into(), &mut output)
+            .unwrap();
+        complete_io(
+            &mut stream,
+            &mut input,
+            &mut received_plaintext,
+            &mut output,
+            &mut conn,
+        )?;
 
         loop {
-            match conn.reader().read(&mut buf) {
-                Ok(len) => {
-                    conn.send_close_notify();
-                    complete_io(&mut stream, &mut conn)?;
-                    return Ok(String::from_utf8_lossy(&buf[..len]).to_string());
-                }
-                Err(err) if err.kind() == ErrorKind::WouldBlock => {
-                    conn.read_tls(&mut stream)?;
-                    conn.process_new_packets().unwrap();
-                }
-                Err(err) => {
-                    return Err(err);
-                }
-            };
+            if !received_plaintext.is_empty() {
+                conn.send_close_notify(&mut output);
+                complete_io(
+                    &mut stream,
+                    &mut input,
+                    &mut received_plaintext,
+                    &mut output,
+                    &mut conn,
+                )?;
+                return Ok(String::from_utf8_lossy(&received_plaintext).to_string());
+            }
+
+            input.read(&mut stream)?;
+            conn.process_new_packets(&mut input, &mut output)
+                .handle_all(&mut received_plaintext)
+                .unwrap();
         }
     }
 
@@ -255,14 +277,17 @@ mod server {
     }
 
     impl ClientVerifier for SimpleRpkClientVerifier {
-        fn verify_identity(&self, identity: &ClientIdentity<'_>) -> Result<PeerVerified, Error> {
+        fn verify_identity<'a>(
+            &self,
+            identity: &ClientIdentity<'a, '_>,
+        ) -> Result<VerifiedIdentity<'a>, Error> {
             let Identity::RawPublicKey(spki) = identity.identity else {
                 return Err(ApiMisuse::UnverifiableCertificateType.into());
             };
 
             match self.trusted_spki.contains(spki) {
                 false => Err(Error::InvalidCertificate(CertificateError::UnknownIssuer)),
-                true => Ok(PeerVerified::assertion()),
+                true => Ok(VerifiedIdentity::assertion(identity.identity.clone())),
             }
         }
 

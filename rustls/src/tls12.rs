@@ -8,7 +8,7 @@ use zeroize::Zeroizing;
 
 use crate::common_state::{Protocol, Side};
 use crate::conn::{ConnectionRandoms, Exporter};
-use crate::crypto::cipher::{AeadKey, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm};
+use crate::crypto::cipher::{AeadKey, RecordDecrypter, RecordEncrypter, Tls12AeadAlgorithm};
 use crate::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::crypto::tls12::PrfSecret;
 use crate::crypto::{self, SignatureScheme, hash};
@@ -61,7 +61,7 @@ pub struct Tls12CipherSuite {
     /// The precise scheme used is then chosen from this set by the selected authentication key.
     pub sign: &'static [SignatureScheme],
 
-    /// How to produce a [`MessageDecrypter`] or [`MessageEncrypter`]
+    /// How to produce a [`RecordDecrypter`] or [`RecordEncrypter`]
     /// from raw key material.
     pub aead_alg: &'static dyn Tls12AeadAlgorithm,
 }
@@ -212,9 +212,9 @@ impl ConnectionSecrets {
         }
     }
 
-    /// Make a `MessageCipherPair` based on the given supported ciphersuite `self.suite`,
+    /// Make a `RecordCipherPair` based on the given supported ciphersuite `self.suite`,
     /// and the session's `secrets`.
-    pub(crate) fn make_cipher_pair(&self, side: Side) -> MessageCipherPair {
+    pub(crate) fn make_cipher_pair(&self, side: Side) -> RecordCipherPair {
         // Make a key block, and chop it up.
         // Note: we don't implement any ciphersuites with nonzero mac_key_len.
         let key_block = self.make_key_block();
@@ -361,10 +361,10 @@ impl Exporter for Tls12Exporter {
         randoms.extend_from_slice(&self.randoms.client);
         randoms.extend_from_slice(&self.randoms.server);
         if let Some(context) = context {
-            match u16::try_from(context.len()) {
-                Ok(len) => len.encode(&mut randoms),
-                Err(_) => return Err(ApiMisuse::ExporterContextTooLong.into()),
-            }
+            let Ok(len) = u16::try_from(context.len()) else {
+                return Err(ApiMisuse::ExporterContextTooLong.into());
+            };
+            len.encode(&mut randoms);
             randoms.extend_from_slice(context);
         }
 
@@ -398,7 +398,7 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
     randoms
 }
 
-type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
+type RecordCipherPair = (Box<dyn RecordDecrypter>, Box<dyn RecordEncrypter>);
 
 pub(crate) fn decode_kx_params<'a, T: KxDecode<'a>>(
     kx_algorithm: KeyExchangeAlgorithm,
@@ -417,19 +417,12 @@ pub(crate) const DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto::TEST_PROVIDER;
-    use crate::crypto::kx::NamedGroup;
+    use crate::crypto::test_provider::KEY_EXCHANGE_GROUP;
     use crate::msgs::{ServerEcdhParams, ServerKeyExchangeParams};
 
     #[test]
     fn server_ecdhe_remaining_bytes() {
-        let Some(kx_group) =
-            TEST_PROVIDER.find_kx_group(NamedGroup::X25519, ProtocolVersion::TLSv1_3)
-        else {
-            return;
-        };
-
-        let key = kx_group.start().unwrap();
+        let key = KEY_EXCHANGE_GROUP.start().unwrap();
         let server_params = ServerEcdhParams::new(&*key);
         let mut server_buf = Vec::new();
         server_params.encode(&mut server_buf);

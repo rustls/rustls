@@ -4,11 +4,13 @@ use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::sync::Mutex;
 
-#[cfg(feature = "log")]
-use log::warn;
 use rustls::KeyLog;
+#[cfg(feature = "tracing")]
+use tracing::warn;
 
 // Internal mutable state for KeyLogFile
 struct KeyLogFileInner {
@@ -25,16 +27,19 @@ impl KeyLogFileInner {
             };
         };
 
-        #[cfg_attr(not(feature = "log"), expect(clippy::manual_ok_err))]
-        let file = match OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(path)
-        {
+        let mut options = OpenOptions::new();
+        options.append(true).create(true);
+        // Key material is extremely sensitive. On Unix, create with owner-only
+        // access so a default umask does not leave the file world-readable.
+        #[cfg(unix)]
+        options.mode(0o600);
+
+        #[cfg_attr(not(feature = "tracing"), expect(clippy::manual_ok_err))]
+        let file = match options.open(path) {
             Ok(f) => Some(f),
-            #[cfg_attr(not(feature = "log"), expect(unused_variables))]
+            #[cfg_attr(not(feature = "tracing"), expect(unused_variables))]
             Err(e) => {
-                #[cfg(feature = "log")]
+                #[cfg(feature = "tracing")]
                 warn!("unable to create key log file {path:?}: {e}");
                 None
             }
@@ -82,6 +87,23 @@ impl Debug for KeyLogFileInner {
 ///
 /// If such a file cannot be opened, or cannot be written then
 /// this does nothing but logs errors at warning-level.
+///
+/// # Security
+///
+/// Key material is extremely sensitive. Prefer not enabling `KeyLog`
+/// outside of local debugging. On Unix, files created by this type use
+/// owner-only permissions (`0o600`).
+///
+/// This type reads `SSLKEYLOGFILE` from the process environment with a
+/// normal environment lookup. In a setuid/setgid (or otherwise elevated)
+/// process, that variable may have been inherited from an untrusted parent
+/// and could point at an attacker-chosen path. Applications that raise
+/// privileges should clear sensitive environment variables, avoid compiling
+/// key-log support into production builds, or supply their own [`KeyLog`]
+/// implementation.
+///
+/// This util is intentionally small. It does not attempt a full
+/// `secure_getenv`-style environment filter.
 pub struct KeyLogFile(Mutex<KeyLogFileInner>);
 
 impl KeyLogFile {
@@ -102,9 +124,9 @@ impl KeyLog for KeyLogFile {
             .try_write(label, client_random, secret)
         {
             Ok(()) => {}
-            #[cfg_attr(not(feature = "log"), expect(unused_variables))]
+            #[cfg_attr(not(feature = "tracing"), expect(unused_variables))]
             Err(e) => {
-                #[cfg(feature = "log")]
+                #[cfg(feature = "tracing")]
                 warn!("error writing to key log file: {e}");
             }
         }
@@ -122,17 +144,14 @@ impl Debug for KeyLogFile {
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod tests {
-    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::{env, fs, process};
 
-    fn init() {
-        let _ = env_logger::builder()
-            .is_test(true)
-            .try_init();
-    }
+    use super::*;
 
     #[test]
     fn test_env_var_is_not_set() {
-        init();
         let mut inner = KeyLogFileInner::new(None);
         assert!(
             inner
@@ -143,7 +162,6 @@ mod tests {
 
     #[test]
     fn test_env_var_cannot_be_opened() {
-        init();
         let mut inner = KeyLogFileInner::new(Some("/dev/does-not-exist".into()));
         assert!(
             inner
@@ -154,8 +172,6 @@ mod tests {
 
     #[test]
     fn test_env_var_cannot_be_written() {
-        init();
-
         #[cfg(target_os = "linux")]
         const UNWRITABLE_FILE: &str = "/dev/full";
 
@@ -167,6 +183,34 @@ mod tests {
             inner
                 .try_write("label", b"random", b"secret")
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn test_created_file_has_owner_only_permissions() {
+        let path = env::temp_dir().join(format!(
+            "rustls-keylog-perm-{}-{}",
+            process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_file(&path);
+
+        let inner = KeyLogFileInner::new(Some(path.clone().into()));
+        assert!(inner.file.is_some(), "key log file should open");
+
+        let mode = fs::metadata(&path)
+            .expect("metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(
+            mode, 0o600,
+            "SSLKEYLOGFILE must be created with mode 0o600, got {mode:#o}"
         );
     }
 }

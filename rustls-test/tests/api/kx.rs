@@ -3,6 +3,7 @@
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
 use std::borrow::Cow;
+use std::io::{IoSlice, Write};
 use std::sync::Arc;
 
 use rustls::client::Resumption;
@@ -13,43 +14,69 @@ use rustls::crypto::kx::{
 };
 use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
-use rustls::{ClientConfig, Connection, HandshakeKind, ServerConfig};
+use rustls::{ClientConfig, Connection, HandshakeKind, ServerConfig, VecInput};
 use rustls_test::{
-    ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, OtherSession,
-    ServerConfigExt, do_handshake, do_handshake_until_error, encoding,
+    ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, MultiTest,
+    OtherSession, ServerConfigExt, do_handshake, do_handshake_until_error, encoding,
     make_client_config_with_kx_groups, make_pair, make_pair_for_configs, make_server_config,
     make_server_config_with_kx_groups, transfer,
 };
 
-use super::{ALL_VERSIONS, provider};
+use super::provider;
 
 #[test]
 fn test_client_config_keyshare() {
     let provider = provider::DEFAULT_PROVIDER;
     let kx_groups = vec![provider::kx_group::SECP384R1];
     let client_config =
-        make_client_config_with_kx_groups(KeyType::Rsa2048, kx_groups.clone(), &provider);
-    let server_config = make_server_config_with_kx_groups(KeyType::Rsa2048, kx_groups, &provider);
-    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-    do_handshake_until_error(&mut client, &mut server).unwrap();
+        make_client_config_with_kx_groups(KeyType::default(), kx_groups.clone(), &provider);
+    let server_config = make_server_config_with_kx_groups(KeyType::default(), kx_groups, &provider);
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    do_handshake_until_error(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    )
+    .unwrap();
 }
 
 #[test]
 fn test_client_config_keyshare_mismatch() {
     let provider = provider::DEFAULT_PROVIDER;
     let client_config = make_client_config_with_kx_groups(
-        KeyType::Rsa2048,
+        KeyType::default(),
         vec![provider::kx_group::SECP384R1],
         &provider,
     );
     let server_config = make_server_config_with_kx_groups(
-        KeyType::Rsa2048,
+        KeyType::default(),
         vec![provider::kx_group::X25519],
         &provider,
     );
-    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
     assert_eq!(
-        do_handshake_until_error(&mut client, &mut server).err(),
+        do_handshake_until_error(
+            &mut client_input,
+            &mut client_output,
+            &mut client,
+            &mut server_input,
+            &mut server_output,
+            &mut server
+        )
+        .err(),
         Some(ErrorFromPeer::Server(
             PeerIncompatible::NoKxGroupsInCommon.into()
         ))
@@ -58,30 +85,41 @@ fn test_client_config_keyshare_mismatch() {
 
 #[test]
 fn exercise_all_key_exchange_methods() {
-    for (version, version_provider) in [
-        (ProtocolVersion::TLSv1_3, provider::DEFAULT_TLS13_PROVIDER),
-        (ProtocolVersion::TLSv1_2, provider::DEFAULT_TLS12_PROVIDER),
-    ] {
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+
+    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
         for kx_group in provider::ALL_KX_GROUPS {
             if !kx_group
                 .name()
-                .usable_for_version(version)
+                .usable_for_version(expect.version)
             {
                 continue;
             }
 
             let client_config = make_client_config_with_kx_groups(
-                KeyType::Rsa2048,
+                expect.key_type,
                 vec![*kx_group],
-                &version_provider,
+                client_config.provider(),
             );
             let server_config = make_server_config_with_kx_groups(
-                KeyType::Rsa2048,
+                expect.key_type,
                 vec![*kx_group],
-                &version_provider,
+                server_config.provider(),
             );
-            let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-            do_handshake_until_error(&mut client, &mut server).unwrap();
+            let mut client_output = Vec::new();
+            let mut server_output = Vec::new();
+            let (mut client, mut server) =
+                make_pair_for_configs(client_config, server_config, &mut client_output);
+            do_handshake_until_error(
+                &mut client_input,
+                &mut client_output,
+                &mut client,
+                &mut server_input,
+                &mut server_output,
+                &mut server,
+            )
+            .unwrap();
             println!("kx_group {:?} is self-consistent", kx_group.name());
         }
     }
@@ -92,7 +130,7 @@ fn test_client_sends_helloretryrequest() {
     let provider = provider::DEFAULT_PROVIDER;
     // client sends a secp384r1 key share
     let mut client_config = make_client_config_with_kx_groups(
-        KeyType::Rsa2048,
+        KeyType::default(),
         vec![provider::kx_group::SECP384R1, provider::kx_group::X25519],
         &provider,
     );
@@ -102,23 +140,30 @@ fn test_client_sends_helloretryrequest() {
 
     // but server only accepts x25519, so a HRR is required
     let server_config = make_server_config_with_kx_groups(
-        KeyType::Rsa2048,
+        KeyType::default(),
         vec![provider::kx_group::X25519],
         &provider,
     );
 
-    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
 
     assert_eq!(client.handshake_kind(), None);
     assert_eq!(server.handshake_kind(), None);
 
     // client sends hello
     {
-        let mut pipe = OtherSession::new(&mut server);
-        let wrlen = client.write_tls(&mut pipe).unwrap();
+        let mut pipe = OtherSession::new(&mut server_input, &mut server_output, &mut server);
+        let wrlen = pipe
+            .write_vectored(&[IoSlice::new(&client_output)])
+            .unwrap();
+        client_output.clear();
         assert!(wrlen > 200);
-        assert_eq!(pipe.writevs.len(), 1);
-        assert!(pipe.writevs[0].len() == 1);
+        assert_eq!(pipe.record_lengths().len(), 1);
     }
 
     assert_eq!(client.handshake_kind(), None);
@@ -126,11 +171,13 @@ fn test_client_sends_helloretryrequest() {
 
     // server sends HRR
     {
-        let mut pipe = OtherSession::new(&mut client);
-        let wrlen = server.write_tls(&mut pipe).unwrap();
+        let mut pipe = OtherSession::new(&mut client_input, &mut client_output, &mut client);
+        let wrlen = pipe
+            .write_vectored(&[IoSlice::new(&server_output)])
+            .unwrap();
+        server_output.clear();
         assert!(wrlen < 100); // just the hello retry request
-        assert_eq!(pipe.writevs.len(), 1); // only one writev
-        assert!(pipe.writevs[0].len() == 2); // hello retry request and CCS
+        assert_eq!(pipe.record_lengths().len(), 2); // hello retry request and CCS
     }
 
     assert_eq!(client.handshake_kind(), None);
@@ -138,20 +185,24 @@ fn test_client_sends_helloretryrequest() {
 
     // client sends fixed hello
     {
-        let mut pipe = OtherSession::new(&mut server);
-        let wrlen = client.write_tls(&mut pipe).unwrap();
+        let mut pipe = OtherSession::new(&mut server_input, &mut server_output, &mut server);
+        let wrlen = pipe
+            .write_vectored(&[IoSlice::new(&client_output)])
+            .unwrap();
+        client_output.clear();
         assert!(wrlen > 200); // just the client hello retry
-        assert_eq!(pipe.writevs.len(), 1); // only one writev
-        assert!(pipe.writevs[0].len() == 2); // only a CCS & client hello retry
+        assert_eq!(pipe.record_lengths().len(), 2); // only a CCS & client hello retry
     }
 
     // server completes handshake
     {
-        let mut pipe = OtherSession::new(&mut client);
-        let wrlen = server.write_tls(&mut pipe).unwrap();
+        let mut pipe = OtherSession::new(&mut client_input, &mut client_output, &mut client);
+        let wrlen = pipe
+            .write_vectored(&[IoSlice::new(&server_output)])
+            .unwrap();
+        server_output.clear();
         assert!(wrlen > 200);
-        assert_eq!(pipe.writevs.len(), 1);
-        assert_eq!(pipe.writevs[0].len(), 2); // { server hello / encrypted exts / cert / cert-verify } / finished
+        assert_eq!(pipe.record_lengths().len(), 2); // { server hello / encrypted exts / cert / cert-verify } / finished
     }
 
     assert_eq!(
@@ -163,7 +214,15 @@ fn test_client_sends_helloretryrequest() {
         Some(HandshakeKind::FullWithHelloRetryRequest)
     );
 
-    do_handshake_until_error(&mut client, &mut server).unwrap();
+    do_handshake_until_error(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    )
+    .unwrap();
 
     // client only did following storage queries:
     println!("storage {:#?}", storage.ops());
@@ -204,11 +263,13 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     // common to both client configs
     let shared_storage = Arc::new(ClientStorage::new());
     let provider = provider::DEFAULT_PROVIDER;
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
 
     // first, client sends a secp-256 share and server agrees. secp-256 is inserted
     //   into kx group cache.
     let mut client_config_1 = make_client_config_with_kx_groups(
-        KeyType::Rsa2048,
+        KeyType::default(),
         vec![provider::kx_group::SECP256R1],
         &provider,
     );
@@ -217,17 +278,28 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     // second, client only supports secp-384 and so kx group cache
     //   contains an unusable value.
     let mut client_config_2 = make_client_config_with_kx_groups(
-        KeyType::Rsa2048,
+        KeyType::default(),
         vec![provider::kx_group::SECP384R1],
         &provider,
     );
     client_config_2.resumption = Resumption::store(shared_storage.clone());
 
-    let server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let server_config = make_server_config(KeyType::default(), &provider);
 
     // first handshake
-    let (mut client_1, mut server) = make_pair_for_configs(client_config_1, server_config.clone());
-    do_handshake_until_error(&mut client_1, &mut server).unwrap();
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client_1, mut server) =
+        make_pair_for_configs(client_config_1, server_config.clone(), &mut client_output);
+    do_handshake_until_error(
+        &mut client_input,
+        &mut client_output,
+        &mut client_1,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    )
+    .unwrap();
 
     let ops = shared_storage.ops();
     println!("storage {ops:#?}");
@@ -238,8 +310,17 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     ));
 
     // second handshake
-    let (mut client_2, mut server) = make_pair_for_configs(client_config_2, server_config);
-    do_handshake_until_error(&mut client_2, &mut server).unwrap();
+    let (mut client_2, mut server) =
+        make_pair_for_configs(client_config_2, server_config, &mut client_output);
+    do_handshake_until_error(
+        &mut client_input,
+        &mut client_output,
+        &mut client_2,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    )
+    .unwrap();
 
     let ops = shared_storage.ops();
     println!("storage {:?} {:#?}", ops.len(), ops);
@@ -263,11 +344,13 @@ fn test_client_sends_share_for_less_preferred_group() {
     // common to both client configs
     let shared_storage = Arc::new(ClientStorage::new());
     let provider = provider::DEFAULT_PROVIDER;
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
 
     // first, client sends a secp384r1 share and server agrees. secp384r1 is inserted
     //   into kx group cache.
     let mut client_config_1 = make_client_config_with_kx_groups(
-        KeyType::Rsa2048,
+        KeyType::default(),
         vec![provider::kx_group::SECP384R1],
         &provider,
     );
@@ -276,21 +359,32 @@ fn test_client_sends_share_for_less_preferred_group() {
     // second, client supports (x25519, secp384r1) and so kx group cache
     //   contains a supported but less-preferred group.
     let mut client_config_2 = make_client_config_with_kx_groups(
-        KeyType::Rsa2048,
+        KeyType::default(),
         vec![provider::kx_group::X25519, provider::kx_group::SECP384R1],
         &provider,
     );
     client_config_2.resumption = Resumption::store(shared_storage.clone());
 
     let server_config = make_server_config_with_kx_groups(
-        KeyType::Rsa2048,
+        KeyType::default(),
         provider::ALL_KX_GROUPS.to_vec(),
         &provider,
     );
 
     // first handshake
-    let (mut client_1, mut server) = make_pair_for_configs(client_config_1, server_config.clone());
-    do_handshake_until_error(&mut client_1, &mut server).unwrap();
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client_1, mut server) =
+        make_pair_for_configs(client_config_1, server_config.clone(), &mut client_output);
+    do_handshake_until_error(
+        &mut client_input,
+        &mut client_output,
+        &mut client_1,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    )
+    .unwrap();
     assert_eq!(
         client_1
             .negotiated_key_exchange_group()
@@ -309,8 +403,16 @@ fn test_client_sends_share_for_less_preferred_group() {
 
     // second handshake; HRR'd from secp384r1 to X25519
     // (but resuming is possible, since the session storage is shared)
-    let (mut client_2, mut server) = make_pair_for_configs(client_config_2, server_config);
-    do_handshake(&mut client_2, &mut server);
+    let (mut client_2, mut server) =
+        make_pair_for_configs(client_config_2, server_config, &mut client_output);
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client_2,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
     assert_eq!(
         client_2
             .negotiated_key_exchange_group()
@@ -325,10 +427,17 @@ fn test_client_sends_share_for_less_preferred_group() {
 
 #[test]
 fn test_server_rejects_clients_without_any_kx_groups() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
-    server
-        .read_tls(
-            &mut encoding::message_framing(
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (_, mut server) = make_pair(
+        KeyType::default(),
+        &provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
+    let mut server_input = VecInput::default();
+    server_input
+        .read(
+            &mut encoding::record_framing(
                 ContentType::Handshake,
                 ProtocolVersion::TLSv1_2,
                 encoding::client_hello_with_extensions(vec![
@@ -346,50 +455,64 @@ fn test_server_rejects_clients_without_any_kx_groups() {
             .as_slice(),
         )
         .unwrap();
+
     assert_eq!(
-        server.process_new_packets(),
-        Err(Error::InvalidMessage(InvalidMessage::IllegalEmptyList(
-            "NamedGroups"
-        )))
+        server
+            .process_new_packets(&mut server_input, &mut server_output)
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        Error::InvalidMessage(InvalidMessage::IllegalEmptyList("NamedGroups"))
     );
 }
 
 #[test]
 fn test_server_rejects_clients_without_any_kx_group_overlap() {
-    for version_provider in ALL_VERSIONS {
+    for (client_config, _, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let base_provider = client_config.provider();
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
         let (mut client, mut server) = make_pair_for_configs(
             make_client_config_with_kx_groups(
-                KeyType::Rsa2048,
+                expect.key_type,
                 vec![provider::kx_group::X25519],
-                &version_provider,
+                base_provider,
             ),
             ServerConfig::builder(
                 CryptoProvider {
                     kx_groups: Cow::Owned(vec![provider::kx_group::SECP384R1]),
-                    ..version_provider
+                    ..CryptoProvider::clone(base_provider)
                 }
                 .into(),
             )
-            .finish(KeyType::Rsa2048),
+            .finish(KeyType::default()),
+            &mut client_output,
         );
-        transfer(&mut client, &mut server);
+
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        transfer(&mut client_output, &mut server_input);
         assert_eq!(
-            server.process_new_packets(),
-            Err(Error::PeerIncompatible(
-                PeerIncompatible::NoKxGroupsInCommon
-            ))
+            server
+                .process_new_packets(&mut server_input, &mut server_output)
+                .handle_all(&mut Vec::new())
+                .unwrap_err(),
+            Error::PeerIncompatible(PeerIncompatible::NoKxGroupsInCommon),
         );
-        transfer(&mut server, &mut client);
+
+        transfer(&mut server_output, &mut client_input);
         assert_eq!(
-            client.process_new_packets(),
-            Err(Error::AlertReceived(AlertDescription::HandshakeFailure))
+            client
+                .process_new_packets(&mut client_input, &mut client_output)
+                .handle_all(&mut Vec::new())
+                .unwrap_err(),
+            Error::AlertReceived(AlertDescription::HandshakeFailure),
         );
     }
 }
 
 #[test]
 fn hybrid_kx_component_share_offered_but_server_chooses_something_else() {
-    let kt = KeyType::Rsa2048;
+    let kt = KeyType::default();
     let client_config = ClientConfig::builder(
         CryptoProvider {
             kx_groups: Cow::Owned(vec![&FakeHybrid, provider::kx_group::SECP384R1]),
@@ -401,16 +524,26 @@ fn hybrid_kx_component_share_offered_but_server_chooses_something_else() {
     let provider = provider::DEFAULT_PROVIDER;
     let server_config = make_server_config(kt, &provider);
 
-    let (mut client_1, mut server) = make_pair_for_configs(client_config, server_config);
-    let (mut client_2, _) = make_pair(kt, &provider);
+    let mut client_1_output = Vec::new();
+    let mut client_2_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client_1, mut server) =
+        make_pair_for_configs(client_config, server_config, &mut client_1_output);
+    let (_client_2, _) = make_pair(kt, &provider, &mut client_2_output);
+    let mut client_1_input = VecInput::default();
+    let mut server_input = VecInput::default();
 
     // client_2 supplies the ClientHello, client_1 receives the ServerHello
-    transfer(&mut client_2, &mut server);
-    server.process_new_packets().unwrap();
-    transfer(&mut server, &mut client_1);
+    transfer(&mut client_2_output, &mut server_input);
+    server
+        .process_new_packets(&mut server_input, &mut server_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    transfer(&mut server_output, &mut client_1_input);
     assert_eq!(
         client_1
-            .process_new_packets()
+            .process_new_packets(&mut client_1_input, &mut client_1_output)
+            .handle_all(&mut Vec::new())
             .unwrap_err(),
         PeerMisbehaved::WrongGroupForKeyShare.into()
     );

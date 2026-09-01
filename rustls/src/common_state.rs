@@ -6,18 +6,18 @@ use core::ops::{Deref, DerefMut, Range};
 use pki_types::{DnsName, FipsStatus};
 
 use crate::client::EchStatus;
-use crate::conn::{Exporter, ReceivePath, SendOutput, SendPath};
-use crate::crypto::Identity;
-use crate::crypto::cipher::Payload;
+use crate::conn::{Exporter, KeyingMaterialExporter, ReceivePath, SendOutput, SendPath};
+use crate::crypto::cipher::{EncodableVersion, Payload};
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ApplicationProtocol, ProtocolVersion};
-use crate::error::{AlertDescription, Error};
+use crate::error::{AlertDescription, ApiMisuse, Error};
 use crate::hash_hs::HandshakeHash;
 use crate::msgs::{
     AlertLevel, Codec, Delocator, HandshakeMessagePayload, Locator, Message, MessagePayload,
 };
 use crate::quic::{self, QuicOutput};
 use crate::suites::SupportedCipherSuite;
+use crate::verify::VerifiedIdentity;
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
@@ -37,22 +37,21 @@ impl CommonState {
         }
     }
 
-    /// Returns true if the caller should call [`Connection::write_tls`] as soon as possible.
-    ///
-    /// [`Connection::write_tls`]: crate::Connection::write_tls
-    pub fn wants_write(&self) -> bool {
-        !self.send.sendable_tls.is_empty()
+    pub(crate) fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        match self.early_exporter.take() {
+            Some(inner) => Ok(KeyingMaterialExporter { inner }),
+            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
+        }
     }
 
-    /// Queues a `close_notify` warning alert to be sent in the next
-    /// [`Connection::write_tls`] call.  This informs the peer that the
-    /// connection is being closed.
+    /// Writes a `close_notify` warning alert to into the `tls` buffer.
     ///
-    /// Does nothing if any `close_notify` or fatal alert was already sent.
+    /// This informs the peer that the connection is being closed. Does nothing if any
+    /// `close_notify` or fatal alert was already sent.
     ///
     /// [`Connection::write_tls`]: crate::Connection::write_tls
-    pub fn send_close_notify(&mut self) {
-        self.send.send_close_notify()
+    pub fn send_close_notify(&mut self, tls: &mut Vec<u8>) {
+        self.send.send_close_notify(tls)
     }
 
     /// Returns true if the connection is currently performing the TLS handshake.
@@ -96,7 +95,8 @@ pub struct ConnectionOutputs {
     suite: Option<SupportedCipherSuite>,
     negotiated_kx_group: Option<&'static dyn SupportedKxGroup>,
     alpn_protocol: Option<ApplicationProtocol<'static>>,
-    peer_identity: Option<Identity<'static>>,
+    peer_identity: Option<VerifiedIdentity<'static>>,
+    extended_main_secret: Option<bool>,
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
 }
@@ -110,7 +110,7 @@ impl ConnectionOutputs {
     /// client, if client authentication was completed.
     ///
     /// The return value is None until this value is available.
-    pub fn peer_identity(&self) -> Option<&Identity<'static>> {
+    pub fn peer_identity(&self) -> Option<&VerifiedIdentity<'static>> {
         self.peer_identity.as_ref()
     }
 
@@ -150,6 +150,17 @@ impl ConnectionOutputs {
         self.negotiated_version
     }
 
+    /// Whether the Extended Main Secret extension was negotiated.
+    ///
+    /// Returns:
+    /// - `None` until the handshake reaches the point where this is known.
+    /// - `None` for TLS 1.3, where the extension does not apply.
+    /// - `Some(true)` for TLS 1.2 if the extension was negotiated.
+    /// - `Some(false)` otherwise.
+    pub fn extended_main_secret(&self) -> Option<bool> {
+        self.extended_main_secret
+    }
+
     /// Which kind of handshake was performed.
     ///
     /// This tells you whether the handshake was a resumption or not.
@@ -183,6 +194,7 @@ impl ConnectionOutput for ConnectionOutputs {
             OutputEvent::CipherSuite(suite) => self.suite = Some(suite),
             OutputEvent::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
             OutputEvent::Exporter(exporter) => self.exporter = Some(exporter),
+            OutputEvent::ExtendedMainSecret(ems) => self.extended_main_secret = Some(ems),
             OutputEvent::HandshakeKind(hk) => {
                 assert!(self.handshake_kind.is_none());
                 self.handshake_kind = Some(hk);
@@ -199,12 +211,37 @@ impl ConnectionOutput for ConnectionOutputs {
     }
 }
 
+impl fmt::Debug for ConnectionOutputs {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            negotiated_version,
+            handshake_kind,
+            suite,
+            negotiated_kx_group,
+            alpn_protocol,
+            peer_identity,
+            extended_main_secret,
+            exporter: _,
+            early_exporter: _,
+        } = self;
+        f.debug_struct("ConnectionOutputs")
+            .field("negotiated_version", negotiated_version)
+            .field("handshake_kind", handshake_kind)
+            .field("suite", suite)
+            .field("negotiated_kx_group", negotiated_kx_group)
+            .field("alpn_protocol", alpn_protocol)
+            .field("peer_identity", peer_identity)
+            .field("extended_main_secret", extended_main_secret)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Send an alert via `output` if `error` specifies one.
-pub(crate) fn maybe_send_fatal_alert(send: &mut dyn SendOutput, error: &Error) {
+pub(crate) fn maybe_send_fatal_alert(send: &mut dyn SendOutput, error: &Error, tls: &mut Vec<u8>) {
     let Ok(alert) = AlertDescription::try_from(error) else {
         return;
     };
-    send.send_alert(AlertLevel::Fatal, alert);
+    send.send_alert(AlertLevel::Fatal, alert, tls);
 }
 
 /// Describes which sort of handshake happened.
@@ -278,9 +315,10 @@ pub(crate) enum OutputEvent<'a> {
     CipherSuite(SupportedCipherSuite),
     EarlyExporter(Box<dyn Exporter>),
     Exporter(Box<dyn Exporter>),
+    ExtendedMainSecret(bool),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
-    PeerIdentity(Identity<'static>),
+    PeerIdentity(VerifiedIdentity<'static>),
     ProtocolVersion(ProtocolVersion),
 }
 
@@ -346,17 +384,26 @@ pub enum Side {
     Server,
 }
 
+/// Transport protocol in use for a connection.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub(crate) enum Protocol {
-    /// TCP-TLS, standardized in RFC5246 and RFC8446
+#[non_exhaustive]
+pub enum Protocol {
+    /// TCP-TLS, standardized in RFC 5246 and RFC 9846
     Tcp,
-    /// QUIC, standardized in RFC9001
+    /// QUIC, standardized in RFC 9001
     Quic(quic::Version),
 }
 
 impl Protocol {
     pub(crate) fn is_quic(&self) -> bool {
         matches!(self, Self::Quic(_))
+    }
+
+    pub(crate) fn supports_version(&self, version: ProtocolVersion) -> bool {
+        match self {
+            Self::Quic(_) => version == ProtocolVersion::TLSv1_3,
+            Self::Tcp => true,
+        }
     }
 }
 
@@ -382,10 +429,10 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
 
     pub(crate) fn finish(self, output: &mut dyn Output<'_>) {
         let m = Message {
-            version: match TLS13 {
+            version: EncodableVersion::Legacy(match TLS13 {
                 true => ProtocolVersion::TLSv1_3,
                 false => ProtocolVersion::TLSv1_2,
-            },
+            }),
             payload: MessagePayload::HandshakeFlight(Payload::new(self.body)),
         };
 

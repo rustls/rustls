@@ -34,7 +34,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use crate::crypto::cipher::{EncodedMessage, MessageError, Payload};
+use crate::crypto::cipher::{EncodableVersion, Payload, Record, RecordError};
 use crate::enums::{ContentType, ContentTypeName, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, InvalidMessage};
 use crate::verify::DigitallySignedStruct;
@@ -45,21 +45,19 @@ mod macros;
 mod client_hello;
 pub(crate) use client_hello::{
     CertificateStatusRequest, ClientExtensions, ClientHelloPayload, ClientSessionTicket,
-    EncryptedClientHello, EncryptedClientHelloOuter, PresharedKeyBinder, PresharedKeyIdentity,
-    PresharedKeyOffer, PskKeyExchangeModes, ServerNamePayload,
+    ClientTicketRequest, EncryptedClientHello, EncryptedClientHelloOuter, PresharedKeyBinder,
+    PresharedKeyIdentity, PresharedKeyOffer, PskKeyExchangeModes, ServerNamePayload,
 };
 
 mod codec;
+use codec::U24;
 pub(crate) use codec::{
-    CERTIFICATE_MAX_SIZE_LIMIT, Codec, ListLength, MaybeEmpty, NonEmpty, Reader, SizedPayload,
-    TlsListElement, hex, put_u16, put_u64,
+    CERTIFICATE_MAX_SIZE_LIMIT, Codec, LengthPrefixedBuffer, ListLength, MaybeEmpty, NonEmpty,
+    Reader, SizedPayload, TlsListElement, hex, put_u16, put_u64,
 };
-use codec::{LengthPrefixedBuffer, U24};
 
 mod deframer;
-pub(crate) use deframer::{
-    Deframed, Deframer, Delocator, HandshakeAlignedProof, Locator, TlsInputBuffer, VecInput,
-};
+pub(crate) use deframer::{Deframed, Deframer, Delocator, HandshakeAlignedProof, Locator};
 
 mod enums;
 #[cfg(test)]
@@ -71,7 +69,7 @@ pub(crate) use enums::{
 };
 
 mod fragmenter;
-pub(crate) use fragmenter::{MAX_FRAGMENT_LEN, MessageFragmenter};
+pub(crate) use fragmenter::{Fragmenter, MAX_FRAGMENT_LEN};
 
 #[macro_use]
 mod handshake;
@@ -91,7 +89,8 @@ pub(crate) use handshake::{EcParameters, NewSessionTicketExtensions, ServerEcdhP
 
 mod server_hello;
 pub(crate) use server_hello::{
-    EchConfigContents, EchConfigPayload, HpkeKeyConfig, ServerExtensions, ServerHelloPayload,
+    EchConfigContents, EchConfigPayload, EncryptedExtensions, HpkeKeyConfig, ServerExtensions,
+    ServerHelloPayload, ServerTicketRequestHint,
 };
 
 #[cfg(test)]
@@ -99,27 +98,23 @@ mod handshake_test;
 
 pub mod fuzzing {
     pub use super::deframer::fuzz_deframer;
-    use super::{Codec, EncodedMessage, Message, MessageFragmenter, Payload, Reader};
+    use super::{Codec, Fragmenter, Message, Payload, Reader, Record};
     use crate::server::ServerSessionValue;
 
     pub fn fuzz_fragmenter(data: &[u8]) {
         let mut rdr = Reader::new(data);
-        let Ok(msg) = EncodedMessage::<Payload<'_>>::read(&mut rdr) else {
+        let Ok(record) = Record::<Payload<'_>>::read(&mut rdr) else {
             return;
         };
 
-        let Ok(msg) = Message::try_from(&msg) else {
-            return;
-        };
-
-        let mut frg = MessageFragmenter::default();
+        let mut frg = Fragmenter::default();
         frg.set_max_fragment_size(Some(32))
             .unwrap();
-        for msg in frg.fragment_message(&EncodedMessage::<Payload<'_>>::from(msg)) {
-            Message::try_from(&EncodedMessage {
-                typ: msg.typ,
-                version: msg.version,
-                payload: Payload::Owned(msg.payload.to_vec()),
+        for record in frg.fragment(record.typ, record.version, record.payload.bytes().into(), 0) {
+            Message::try_from(&Record {
+                typ: record.typ,
+                version: record.version,
+                payload: Payload::Owned(record.payload.to_vec()),
             })
             .ok();
         }
@@ -127,20 +122,24 @@ pub mod fuzzing {
 
     pub fn fuzz_message(data: &[u8]) {
         let mut rdr = Reader::new(data);
-        let Ok(m) = EncodedMessage::<Payload<'_>>::read(&mut rdr) else {
+        let Ok(record) = Record::<Payload<'_>>::read(&mut rdr) else {
             return;
         };
 
-        let Ok(msg) = Message::try_from(&m) else {
+        let Ok(msg) = Message::try_from(&record) else {
             return;
         };
 
-        //println!("msg = {:#?}", m);
-        let enc = EncodedMessage::<Payload<'_>>::from(msg)
-            .into_unencrypted_opaque()
-            .encode();
+        //println!("record = {record:#?}");
+        let expected_version = msg.version.encode();
+        let enc = Record::<Payload<'_>>::from(msg)
+            .borrow_outbound()
+            .to_unencrypted_bytes();
         //println!("data = {:?}", &data[..rdr.used()]);
-        assert_eq!(enc, data[..data.len() - rdr.left()]);
+        assert_eq!(enc[0], data[0]);
+        // The version bytes will have been rewritten by `EncodableVersion`
+        assert_eq!([enc[1], enc[2]], expected_version.to_array());
+        assert_eq!(&enc[3..], &data[3..data.len() - rdr.left()]);
     }
 
     pub fn fuzz_server_session_value(data: &[u8]) {
@@ -152,14 +151,14 @@ pub mod fuzzing {
 /// A message with decoded payload
 #[derive(Debug)]
 pub(crate) struct Message<'a> {
-    pub version: ProtocolVersion,
+    pub version: EncodableVersion,
     pub payload: MessagePayload<'a>,
 }
 
 impl Message<'_> {
     pub(crate) fn build_alert(level: AlertLevel, desc: AlertDescription) -> Self {
         Self {
-            version: ProtocolVersion::TLSv1_2,
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::Alert(AlertMessagePayload {
                 level,
                 description: desc,
@@ -169,7 +168,7 @@ impl Message<'_> {
 
     pub(crate) fn build_key_update_notify() -> Self {
         Self {
-            version: ProtocolVersion::TLSv1_3,
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
             )),
@@ -178,7 +177,7 @@ impl Message<'_> {
 
     pub(crate) fn build_key_update_request() -> Self {
         Self {
-            version: ProtocolVersion::TLSv1_3,
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateRequested),
             )),
@@ -195,9 +194,9 @@ impl Message<'_> {
 
     #[cfg(test)]
     pub(crate) fn into_wire_bytes(self) -> Vec<u8> {
-        EncodedMessage::<Payload<'_>>::from(self)
-            .into_unencrypted_opaque()
-            .encode()
+        Record::<Payload<'_>>::from(self)
+            .borrow_outbound()
+            .to_unencrypted_bytes()
     }
 
     pub(crate) fn handshake_type(&self) -> Option<HandshakeType> {
@@ -208,55 +207,59 @@ impl Message<'_> {
     }
 }
 
-impl<'a> TryFrom<EncodedMessage<&'a [u8]>> for Message<'a> {
+impl<'a> TryFrom<Record<&'a [u8]>> for Message<'a> {
     type Error = InvalidMessage;
 
-    fn try_from(plain: EncodedMessage<&'a [u8]>) -> Result<Self, Self::Error> {
+    fn try_from(plain: Record<&'a [u8]>) -> Result<Self, Self::Error> {
         Ok(Self {
             version: plain.version,
-            payload: MessagePayload::new(plain.typ, plain.version, plain.payload)?,
+            payload: MessagePayload::new(plain.typ, plain.version.version(), plain.payload)?,
         })
     }
 }
 
-impl<'a> TryFrom<&'a EncodedMessage<Payload<'a>>> for Message<'a> {
+impl<'a> TryFrom<&'a Record<Payload<'a>>> for Message<'a> {
     type Error = InvalidMessage;
 
-    fn try_from(plain: &'a EncodedMessage<Payload<'a>>) -> Result<Self, Self::Error> {
+    fn try_from(plain: &'a Record<Payload<'a>>) -> Result<Self, Self::Error> {
         Ok(Self {
             version: plain.version,
-            payload: MessagePayload::new(plain.typ, plain.version, plain.payload.bytes())?,
+            payload: MessagePayload::new(
+                plain.typ,
+                plain.version.version(),
+                plain.payload.bytes(),
+            )?,
         })
     }
 }
 
-pub(crate) fn read_opaque_message_header(
+pub(crate) fn read_record_header(
     r: &mut Reader<'_>,
-) -> Result<(ContentType, ProtocolVersion, u16), MessageError> {
-    let typ = ContentType::read(r).map_err(|_| MessageError::TooShortForHeader)?;
+) -> Result<(ContentType, ProtocolVersion, u16), RecordError> {
+    let typ = ContentType::read(r).map_err(|_| RecordError::TooShortForHeader)?;
     // Don't accept any new content-types.
     if ContentTypeName::try_from(typ).is_err() {
-        return Err(MessageError::InvalidContentType);
+        return Err(RecordError::InvalidContentType);
     }
 
-    let version = ProtocolVersion::read(r).map_err(|_| MessageError::TooShortForHeader)?;
+    let version = ProtocolVersion::read(r).map_err(|_| RecordError::TooShortForHeader)?;
     // Accept only versions 0x03XX for any XX.
     if version.0 & 0xff00 != 0x0300 {
-        return Err(MessageError::UnknownProtocolVersion);
+        return Err(RecordError::UnknownProtocolVersion);
     }
 
-    let len = u16::read(r).map_err(|_| MessageError::TooShortForHeader)?;
+    let len = u16::read(r).map_err(|_| RecordError::TooShortForHeader)?;
 
     // Reject undersize messages
-    //  implemented per section 5.1 of RFC8446 (TLSv1.3)
-    //              per section 6.2.1 of RFC5246 (TLSv1.2)
+    //  implemented per section 5.1 of RFC 9846 (TLSv1.3)
+    //              per section 6.2.1 of RFC 5246 (TLSv1.2)
     if typ != ContentType::ApplicationData && len == 0 {
-        return Err(MessageError::InvalidEmptyPayload);
+        return Err(RecordError::InvalidEmptyPayload);
     }
 
     // Reject oversize messages
     if len >= MAX_PAYLOAD {
-        return Err(MessageError::MessageTooLarge);
+        return Err(RecordError::MessageTooLarge);
     }
 
     Ok((typ, version, len))
@@ -341,7 +344,7 @@ impl<'a> MessagePayload<'a> {
     }
 }
 
-impl From<Message<'_>> for EncodedMessage<Payload<'_>> {
+impl From<Message<'_>> for Record<Payload<'_>> {
     fn from(msg: Message<'_>) -> Self {
         let typ = msg.payload.content_type();
         let payload = match msg.payload {
@@ -381,100 +384,98 @@ impl<'a> HandshakeMessagePayload<'a> {
     ) -> Result<Self, InvalidMessage> {
         let typ = HandshakeType::read(r)?;
         let len = U24::read(r)?.0 as usize;
-        let mut sub = r.sub(len)?;
+        r.sub(len)?
+            .all("HandshakeMessagePayload", |sub| {
+                Ok(Self(match typ {
+                    HandshakeType::HelloRequest if sub.left() == 0 => {
+                        HandshakePayload::HelloRequest
+                    }
+                    HandshakeType::ClientHello => {
+                        HandshakePayload::ClientHello(ClientHelloPayload::read(sub)?)
+                    }
+                    HandshakeType::ServerHello => {
+                        let version = ProtocolVersion::read(sub)?;
+                        let random = Random::read(sub)?;
 
-        let payload = match typ {
-            HandshakeType::HelloRequest if sub.left() == 0 => HandshakePayload::HelloRequest,
-            HandshakeType::ClientHello => {
-                HandshakePayload::ClientHello(ClientHelloPayload::read(&mut sub)?)
-            }
-            HandshakeType::ServerHello => {
-                let version = ProtocolVersion::read(&mut sub)?;
-                let random = Random::read(&mut sub)?;
-
-                if random == HELLO_RETRY_REQUEST_RANDOM {
-                    let mut hrr = HelloRetryRequest::read(&mut sub)?;
-                    hrr.legacy_version = version;
-                    HandshakePayload::HelloRetryRequest(hrr)
-                } else {
-                    let mut shp = ServerHelloPayload::read(&mut sub)?;
-                    shp.legacy_version = version;
-                    shp.random = random;
-                    HandshakePayload::ServerHello(shp)
-                }
-            }
-            HandshakeType::Certificate if vers == ProtocolVersion::TLSv1_3 => {
-                let p = CertificatePayloadTls13::read(&mut sub)?;
-                HandshakePayload::CertificateTls13(p)
-            }
-            HandshakeType::Certificate => {
-                HandshakePayload::Certificate(CertificateChain::read(&mut sub)?)
-            }
-            HandshakeType::ServerKeyExchange => {
-                let p = ServerKeyExchangePayload::read(&mut sub)?;
-                HandshakePayload::ServerKeyExchange(p)
-            }
-            HandshakeType::ServerHelloDone => {
-                sub.expect_empty("ServerHelloDone")?;
-                HandshakePayload::ServerHelloDone
-            }
-            HandshakeType::ClientKeyExchange => {
-                HandshakePayload::ClientKeyExchange(Payload::read(&mut sub))
-            }
-            HandshakeType::CertificateRequest if vers == ProtocolVersion::TLSv1_3 => {
-                let p = CertificateRequestPayloadTls13::read(&mut sub)?;
-                HandshakePayload::CertificateRequestTls13(p)
-            }
-            HandshakeType::CertificateRequest => {
-                let p = CertificateRequestPayload::read(&mut sub)?;
-                HandshakePayload::CertificateRequest(p)
-            }
-            HandshakeType::CompressedCertificate => HandshakePayload::CompressedCertificate(
-                CompressedCertificatePayload::read(&mut sub)?,
-            ),
-            HandshakeType::CertificateVerify => {
-                HandshakePayload::CertificateVerify(DigitallySignedStruct::read(&mut sub)?)
-            }
-            HandshakeType::NewSessionTicket if vers == ProtocolVersion::TLSv1_3 => {
-                let p = NewSessionTicketPayloadTls13::read(&mut sub)?;
-                HandshakePayload::NewSessionTicketTls13(p)
-            }
-            HandshakeType::NewSessionTicket => {
-                let p = NewSessionTicketPayload::read(&mut sub)?;
-                HandshakePayload::NewSessionTicket(p)
-            }
-            HandshakeType::EncryptedExtensions => {
-                HandshakePayload::EncryptedExtensions(Box::new(ServerExtensions::read(&mut sub)?))
-            }
-            HandshakeType::KeyUpdate => {
-                HandshakePayload::KeyUpdate(KeyUpdateRequest::read(&mut sub)?)
-            }
-            HandshakeType::EndOfEarlyData => {
-                sub.expect_empty("EndOfEarlyData")?;
-                HandshakePayload::EndOfEarlyData
-            }
-            HandshakeType::Finished => HandshakePayload::Finished(Payload::read(&mut sub)),
-            HandshakeType::CertificateStatus => {
-                HandshakePayload::CertificateStatus(CertificateStatus::read(&mut sub)?)
-            }
-            HandshakeType::MessageHash => {
-                // does not appear on the wire
-                return Err(InvalidMessage::UnexpectedMessage("MessageHash"));
-            }
-            HandshakeType::HelloRetryRequest => {
-                // not legal on wire
-                return Err(InvalidMessage::UnexpectedMessage("HelloRetryRequest"));
-            }
-            _ => HandshakePayload::Unknown((typ, Payload::read(&mut sub))),
-        };
-
-        sub.expect_empty("HandshakeMessagePayload")
-            .map(|_| Self(payload))
+                        if random == HELLO_RETRY_REQUEST_RANDOM {
+                            let mut hrr = HelloRetryRequest::read(sub)?;
+                            hrr.legacy_version = version;
+                            HandshakePayload::HelloRetryRequest(hrr)
+                        } else {
+                            let mut shp = ServerHelloPayload::read(sub)?;
+                            shp.legacy_version = version;
+                            shp.random = random;
+                            HandshakePayload::ServerHello(shp)
+                        }
+                    }
+                    HandshakeType::Certificate if vers == ProtocolVersion::TLSv1_3 => {
+                        let p = CertificatePayloadTls13::read(sub)?;
+                        HandshakePayload::CertificateTls13(p)
+                    }
+                    HandshakeType::Certificate => {
+                        HandshakePayload::Certificate(CertificateChain::read(sub)?)
+                    }
+                    HandshakeType::ServerKeyExchange => {
+                        let p = ServerKeyExchangePayload::read(sub)?;
+                        HandshakePayload::ServerKeyExchange(p)
+                    }
+                    HandshakeType::ServerHelloDone => HandshakePayload::ServerHelloDone,
+                    HandshakeType::ClientKeyExchange => {
+                        HandshakePayload::ClientKeyExchange(Payload::read(sub))
+                    }
+                    HandshakeType::CertificateRequest if vers == ProtocolVersion::TLSv1_3 => {
+                        let p = CertificateRequestPayloadTls13::read(sub)?;
+                        HandshakePayload::CertificateRequestTls13(p)
+                    }
+                    HandshakeType::CertificateRequest => {
+                        let p = CertificateRequestPayload::read(sub)?;
+                        HandshakePayload::CertificateRequest(p)
+                    }
+                    HandshakeType::CompressedCertificate => {
+                        HandshakePayload::CompressedCertificate(CompressedCertificatePayload::read(
+                            sub,
+                        )?)
+                    }
+                    HandshakeType::CertificateVerify => {
+                        HandshakePayload::CertificateVerify(DigitallySignedStruct::read(sub)?)
+                    }
+                    HandshakeType::NewSessionTicket if vers == ProtocolVersion::TLSv1_3 => {
+                        let p = NewSessionTicketPayloadTls13::read(sub)?;
+                        HandshakePayload::NewSessionTicketTls13(p)
+                    }
+                    HandshakeType::NewSessionTicket => {
+                        let p = NewSessionTicketPayload::read(sub)?;
+                        HandshakePayload::NewSessionTicket(p)
+                    }
+                    HandshakeType::EncryptedExtensions => HandshakePayload::EncryptedExtensions(
+                        Box::new(EncryptedExtensions::read(sub)?),
+                    ),
+                    HandshakeType::KeyUpdate => {
+                        HandshakePayload::KeyUpdate(KeyUpdateRequest::read(sub)?)
+                    }
+                    HandshakeType::EndOfEarlyData => HandshakePayload::EndOfEarlyData,
+                    HandshakeType::Finished => HandshakePayload::Finished(Payload::read(sub)),
+                    HandshakeType::CertificateStatus => {
+                        HandshakePayload::CertificateStatus(CertificateStatus::read(sub)?)
+                    }
+                    HandshakeType::MessageHash => {
+                        // does not appear on the wire
+                        return Err(InvalidMessage::UnexpectedMessage("MessageHash"));
+                    }
+                    HandshakeType::HelloRetryRequest => {
+                        // not legal on wire
+                        return Err(InvalidMessage::UnexpectedMessage("HelloRetryRequest"));
+                    }
+                    _ => HandshakePayload::Unknown((typ, Payload::read(sub))),
+                }))
+            })
     }
 
     pub(crate) fn encoding_for_binder_signing(&self) -> Vec<u8> {
         let mut ret = self.get_encoding();
-        let ret_len = ret.len() - self.total_binder_length();
+        let ret_len = ret
+            .len()
+            .saturating_sub(self.total_binder_length());
         ret.truncate(ret_len);
         ret
     }
@@ -549,7 +550,7 @@ pub(crate) enum HandshakePayload<'a> {
     ClientKeyExchange(Payload<'a>),
     NewSessionTicket(NewSessionTicketPayload),
     NewSessionTicketTls13(NewSessionTicketPayloadTls13),
-    EncryptedExtensions(Box<ServerExtensions<'a>>),
+    EncryptedExtensions(Box<EncryptedExtensions<'a>>),
     KeyUpdate(KeyUpdateRequest),
     Finished(Payload<'a>),
     CertificateStatus(CertificateStatus<'a>),
@@ -660,10 +661,12 @@ impl Codec<'_> for AlertMessagePayload {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let level = AlertLevel::read(r)?;
-        let description = AlertDescription::read(r)?;
-        r.expect_empty("AlertMessagePayload")
-            .map(|_| Self { level, description })
+        r.all("AlertMessagePayload", |r| {
+            Ok(Self {
+                level: AlertLevel::read(r)?,
+                description: AlertDescription::read(r)?,
+            })
+        })
     }
 }
 
@@ -676,13 +679,13 @@ impl Codec<'_> for ChangeCipherSpecPayload {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let typ = u8::read(r)?;
-        if typ != 1 {
-            return Err(InvalidMessage::InvalidCcs);
-        }
-
-        r.expect_empty("ChangeCipherSpecPayload")
-            .map(|_| Self {})
+        r.all("ChangeCipherSpecPayload", |r| {
+            let typ = u8::read(r)?;
+            if typ != 1 {
+                return Err(InvalidMessage::InvalidCcs);
+            }
+            Ok(Self)
+        })
     }
 }
 
@@ -701,7 +704,6 @@ mod tests {
     use std::{format, fs, println};
 
     use super::*;
-    use crate::crypto::cipher::OutboundOpaque;
     use crate::error::AlertDescription;
 
     #[test]
@@ -723,27 +725,26 @@ mod tests {
             f.read_to_end(&mut bytes).unwrap();
 
             let mut rd = Reader::new(&bytes);
-            let msg = EncodedMessage::<Payload<'_>>::read(&mut rd).unwrap();
-            println!("{msg:?}");
+            let record = Record::<Payload<'_>>::read(&mut rd).unwrap();
+            println!("{record:?}");
 
-            let Ok(msg) = Message::try_from(&msg) else {
+            let Ok(msg) = Message::try_from(&record) else {
                 continue;
             };
 
-            let enc = EncodedMessage::<Payload<'_>>::from(msg)
-                .into_unencrypted_opaque()
-                .encode();
-            assert_eq!(bytes.to_vec(), enc);
-            assert_eq!(bytes[..bytes.len() - rd.left()].to_vec(), enc);
+            let enc = Record::<Payload<'_>>::from(msg)
+                .borrow_outbound()
+                .to_unencrypted_bytes();
+            // Check that round-tripped message matches the input, ignoring the protocol version
+            // bytes, which will have been forced to a compatible TLS version.
+            assert_eq!(bytes[0], enc[0]);
+            assert_eq!(&bytes[3..], &enc[3..]);
+            assert_eq!(rd.left(), 0);
         }
     }
 
     #[test]
     fn can_read_safari_client_hello_with_ip_address_in_sni_extension() {
-        let _ = env_logger::Builder::new()
-            .filter(None, log::LevelFilter::Trace)
-            .try_init();
-
         let bytes = b"\
         \x16\x03\x01\x00\xeb\x01\x00\x00\xe7\x03\x03\xb6\x1f\xe4\x3a\x55\
         \x90\x3e\xc0\x28\x9c\x12\xe0\x5c\x84\xea\x90\x1b\xfb\x11\xfc\xbd\
@@ -761,9 +762,9 @@ mod tests {
         \x79\x2f\x33\x08\x68\x74\x74\x70\x2f\x31\x2e\x31\x00\x0b\x00\x02\
         \x01\x00\x00\x0a\x00\x0a\x00\x08\x00\x1d\x00\x17\x00\x18\x00\x19";
         let mut rd = Reader::new(bytes);
-        let m = EncodedMessage::<Payload<'_>>::read(&mut rd).unwrap();
-        println!("m = {m:?}");
-        Message::try_from(&m).unwrap();
+        let record = Record::<Payload<'_>>::read(&mut rd).unwrap();
+        println!("record = {record:?}");
+        Message::try_from(&record).unwrap();
     }
 
     #[test]
@@ -782,9 +783,9 @@ mod tests {
             &b"\x18\x03\x04\x00\x04\x11\x22\x33\x44"[..],
         ];
         for &bytes in samples.iter() {
-            let m = EncodedMessage::<Payload<'_>>::read(&mut Reader::new(bytes)).unwrap();
-            println!("m = {m:?}");
-            let m = Message::try_from(&m);
+            let record = Record::<Payload<'_>>::read(&mut Reader::new(bytes)).unwrap();
+            println!("record = {record:?}");
+            let m = Message::try_from(&record);
             println!("m' = {m:?}");
         }
     }
@@ -817,7 +818,7 @@ mod tests {
         // Message::into_wire_bytes() include both message-level and handshake-level headers
         assert_eq!(
             Message::build_key_update_request().into_wire_bytes(),
-            &[0x16, 0x3, 0x4, 0x0, 0x5, 0x18, 0x0, 0x0, 0x1, 0x1]
+            &[0x16, 0x3, 0x3, 0x0, 0x5, 0x18, 0x0, 0x0, 0x1, 0x1]
         );
     }
 
@@ -827,17 +828,14 @@ mod tests {
         let mut r = Reader::new(bytes);
 
         while r.any_left() {
-            let m = EncodedMessage::<Payload<'_>>::read(&mut r).unwrap();
+            let record = Record::<Payload<'_>>::read(&mut r).unwrap();
 
-            let out = EncodedMessage {
-                typ: m.typ,
-                version: m.version,
-                payload: OutboundOpaque::from(m.payload.bytes()),
-            }
-            .encode();
+            let out = record
+                .borrow_outbound()
+                .to_unencrypted_bytes();
             assert!(!out.is_empty());
 
-            Message::try_from(&m).unwrap();
+            Message::try_from(&record).unwrap();
         }
     }
 }

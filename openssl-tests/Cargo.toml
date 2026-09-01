@@ -1,10 +1,10 @@
 [package]
-description = "Rustls tests that require OpenSSL"
-edition = "2021"
-license = "Apache-2.0 OR ISC OR MIT"
 name = "rustls-openssl-tests"
-publish = false
 version = "0.0.1"
+edition.workspace = true
+description = "Rustls tests that require OpenSSL"
+license = "Apache-2.0 OR ISC OR MIT"
+publish = false
 
 [dependencies]
 asn1 = { workspace = true }

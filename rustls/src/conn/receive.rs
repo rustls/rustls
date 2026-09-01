@@ -1,24 +1,206 @@
+use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::mem;
 use core::ops::Range;
+use std::io::{self, Read};
 
-use super::SendOutput;
+use super::send::{SendOutput, SendPath};
+use super::split::SendAdapter;
 use crate::SideData;
 use crate::common_state::{
-    ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent, Side, UnborrowedPayload,
-    maybe_send_fatal_alert,
+    ConnectionOutput, Event, Output, OutputEvent, Side, UnborrowedPayload, maybe_send_fatal_alert,
 };
-use crate::conn::StateMachine;
 use crate::conn::private::SideOutput;
-use crate::crypto::cipher::{Decrypted, DecryptionState, EncodedMessage, Payload};
+use crate::conn::{ConnectionCommon, StateMachine};
+use crate::crypto::cipher::{Decrypted, DecryptionState, EncodableVersion, Payload, Record};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
-use crate::log::{trace, warn};
 use crate::msgs::{
     AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, Delocator,
-    HandshakeAlignedProof, Locator, Message, MessagePayload, TlsInputBuffer,
+    HandshakeAlignedProof, Locator, Message, MessagePayload,
 };
 use crate::quic::QuicOutput;
+use crate::tracing::{trace, warn};
+
+pub(crate) struct MessageIter<'a, 'm, Side: SideData, Send: SendOutput + 'a> {
+    pub(super) input: &'m mut dyn TlsInputBuffer,
+    pub(super) tls: &'a mut Vec<u8>,
+    pub(super) recv: &'a mut ReceivePath,
+    pub(super) state: &'a mut Result<Side::State, Error>,
+    pub(super) output: JoinOutput<'a, Send>,
+    pub(super) advance: bool,
+}
+
+impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
+    pub(crate) fn new(
+        input: &'m mut dyn TlsInputBuffer,
+        tls: &'a mut Vec<u8>,
+        quic: Option<&'a mut dyn QuicOutput>,
+        conn: &'a mut ConnectionCommon<Side>,
+        advance: bool,
+    ) -> Self {
+        Self {
+            input,
+            tls,
+            recv: &mut conn.common.recv,
+            state: &mut conn.state,
+            output: JoinOutput {
+                outputs: &mut conn.common.outputs,
+                quic,
+                send: &mut conn.common.send,
+                side: &mut conn.side,
+            },
+            advance,
+        }
+    }
+}
+
+impl<'a, 'm, 's, Side: SideData> MessageIter<'a, 'm, Side, SendAdapter<'s>> {
+    pub(super) fn receive(
+        input: &'m mut dyn TlsInputBuffer,
+        tls: &'a mut Vec<u8>,
+        state: &'a mut Result<Side::State, Error>,
+        recv: &'a mut ReceivePath,
+        output: JoinOutput<'a, SendAdapter<'s>>,
+        advance: bool,
+    ) -> Self {
+        Self {
+            input,
+            tls,
+            recv,
+            state,
+            output,
+            advance,
+        }
+    }
+}
+
+impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Send> {
+    pub(crate) fn next(&mut self) -> Option<Result<UnborrowedPayload, Error>> {
+        let mut st = match mem::replace(self.state, Err(Error::HandshakeNotComplete)) {
+            Ok(state) => state,
+            Err(e) => {
+                *self.state = Err(e.clone());
+                return Some(Err(e));
+            }
+        };
+
+        let mut plaintext = None;
+        while st.wants_input() {
+            let buffer = self.input.slice_mut();
+            let locator = Locator::new(buffer);
+            let res = self.recv.deframe(buffer);
+
+            let mut output = CaptureAppData {
+                recv: self.recv,
+                tls: self.tls,
+                other: &mut self.output,
+                plaintext_locator: &locator,
+                received_plaintext: &mut plaintext,
+                _message_lifetime: PhantomData,
+            };
+
+            let opt_record = match res {
+                Ok(opt_record) => opt_record,
+                Err(e) => {
+                    maybe_send_fatal_alert(output.other.send, &e, output.tls);
+                    if let Error::DecryptError = e {
+                        st.handle_decrypt_error();
+                    }
+                    *self.state = Err(e.clone());
+                    return Some(Err(e));
+                }
+            };
+
+            let Some(record) = opt_record else {
+                break;
+            };
+
+            let Decrypted {
+                plaintext: record,
+                want_close_before_decrypt,
+            } = record;
+
+            if want_close_before_decrypt {
+                output.other.send.send_alert(
+                    AlertLevel::Warning,
+                    AlertDescription::CloseNotify,
+                    output.tls,
+                );
+            } else if record.payload.is_empty()
+                && matches!(record.typ, ContentType::Handshake | ContentType::Alert)
+            {
+                // <https://datatracker.ietf.org/doc/html/rfc9846#section-5.4>
+                output.other.send.send_alert(
+                    AlertLevel::Fatal,
+                    AlertDescription::UnexpectedMessage,
+                    output.tls,
+                );
+                let error = Error::from(PeerMisbehaved::EmptyFragment);
+                *self.state = Err(error.clone());
+                return Some(Err(error));
+            }
+
+            let hs_aligned = output.recv.deframer.aligned();
+            let result =
+                match output
+                    .recv
+                    .receive_record(record, hs_aligned, output.tls, output.other.send)
+                {
+                    Ok(Some(input)) => st.handle(input, &mut output),
+                    Ok(None) => Ok(st),
+                    Err(e) => Err(e),
+                };
+
+            match result {
+                Ok(new) => st = new,
+                Err(e) => {
+                    maybe_send_fatal_alert(output.other.send, &e, output.tls);
+                    *self.state = Err(e.clone());
+                    return Some(Err(e));
+                }
+            }
+
+            if self.advance && !st.wants_input() {
+                st = match st.handle_without_input() {
+                    Ok(st) => st,
+                    Err(err) => {
+                        maybe_send_fatal_alert(self.output.send, &err, self.tls);
+                        *self.state = Err(err.clone());
+                        return Some(Err(err));
+                    }
+                };
+            }
+
+            if self.recv.has_received_close_notify {
+                // "Any data received after a closure alert has been received MUST be ignored."
+                // -- <https://datatracker.ietf.org/doc/html/rfc9846#section-6.1>
+
+                // First, discard actually-processed bytes.
+                self.input
+                    .discard(self.recv.deframer.take_discard());
+
+                // Then the rest of any input data.
+                let entirety = self.input.slice_mut().len();
+                self.recv.deframer.set_discard(entirety);
+                self.input.received_close_notify();
+                break;
+            }
+
+            if let Some(payload) = plaintext.take() {
+                *self.state = Ok(st);
+                return Some(Ok(payload));
+            }
+        }
+
+        *self.state = Ok(st);
+        None
+    }
+
+    pub(crate) fn state(&self) -> &Result<Side::State, Error> {
+        self.state
+    }
+}
 
 pub(crate) struct ReceivePath {
     side: Side,
@@ -31,7 +213,7 @@ pub(crate) struct ReceivePath {
     pub(crate) deframer: Deframer,
 
     /// We limit consecutive empty fragments to avoid a route for the peer to send
-    /// us significant but fruitless traffic.
+    /// us significant but fruitless traffic.  That includes other record types too.
     seen_consecutive_empty_fragments: u8,
 
     pub(crate) tls13_tickets_received: u32,
@@ -52,116 +234,15 @@ impl ReceivePath {
         }
     }
 
-    pub(super) fn process_new_packets<'a, 'm, Side: SideData>(
-        &mut self,
-        input: &'m mut dyn TlsInputBuffer,
-        state: &mut Result<Side::State, Error>,
-        output: &mut JoinOutput<'a>,
-    ) -> Result<Option<UnborrowedPayload>, Error> {
-        let mut st = match mem::replace(state, Err(Error::HandshakeNotComplete)) {
-            Ok(state) => state,
-            Err(e) => {
-                *state = Err(e.clone());
-                return Err(e);
-            }
-        };
-
-        let mut plaintext = None;
-        while st.wants_input() {
-            let buffer = input.slice_mut();
-            let locator = Locator::new(buffer);
-            let res = self.deframe(buffer);
-
-            let mut output = CaptureAppData {
-                recv: self,
-                other: &mut *output,
-                plaintext_locator: &locator,
-                received_plaintext: &mut plaintext,
-                _message_lifetime: PhantomData,
-            };
-
-            let opt_msg = match res {
-                Ok(opt_msg) => opt_msg,
-                Err(e) => {
-                    maybe_send_fatal_alert(output.other.send, &e);
-                    if let Error::DecryptError = e {
-                        st.handle_decrypt_error();
-                    }
-                    *state = Err(e.clone());
-                    input.discard(self.deframer.take_discard());
-                    return Err(e);
-                }
-            };
-
-            let Some(msg) = opt_msg else {
-                break;
-            };
-
-            let Decrypted {
-                plaintext: msg,
-                want_close_before_decrypt,
-            } = msg;
-
-            if want_close_before_decrypt {
-                output
-                    .other
-                    .send
-                    .send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
-            }
-
-            let hs_aligned = output.recv.deframer.aligned();
-            let result = match output
-                .recv
-                .receive_message(msg, hs_aligned, output.other.send)
-            {
-                Ok(Some(input)) => st.handle(input, &mut output),
-                Ok(None) => Ok(st),
-                Err(e) => Err(e),
-            };
-
-            match result {
-                Ok(new) => st = new,
-                Err(e) => {
-                    maybe_send_fatal_alert(output.other.send, &e);
-                    *state = Err(e.clone());
-                    input.discard(self.deframer.take_discard());
-                    return Err(e);
-                }
-            }
-
-            if self.has_received_close_notify {
-                // "Any data received after a closure alert has been received MUST be ignored."
-                // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
-                // This is data that has already been accepted in `read_tls`.
-                let entirety = input.slice_mut().len();
-                input.discard(entirety);
-                break;
-            }
-
-            if let Some(payload) = plaintext.take() {
-                *state = Ok(st);
-                return Ok(Some(payload));
-            }
-
-            input.discard(self.deframer.take_discard());
-        }
-
-        input.discard(self.deframer.take_discard());
-        *state = Ok(st);
-        Ok(None)
-    }
-
-    /// Pull a message out of the deframer and send any messages that need to be sent as a result.
+    /// Pull a potentially coalesced record out of the deframer.
     fn deframe<'b>(&mut self, buffer: &'b mut [u8]) -> Result<Option<Decrypted<'b>>, Error> {
-        let version_is_tls13 = matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3));
-
         let locator = Locator::new(buffer);
 
         let mut want_close_before_decrypt = false;
         loop {
-            // before processing any more of `buffer`, return any extant messages from `deframer`
+            // before processing any more of `buffer`, return any extant records from `deframer`
             if let Some(span) = self.deframer.complete_span() {
-                let plaintext = self.deframer.message(span, buffer);
+                let plaintext = self.deframer.record(span, buffer);
 
                 // trial decryption finishes with the first handshake message after it started.
                 self.decrypt_state
@@ -173,84 +254,30 @@ impl ReceivePath {
                 }));
             }
 
-            let (message, bounds) = loop {
-                let (message, bounds) = match self.deframer.deframe(buffer) {
-                    Some(Ok(Deframed { message, bounds })) => (message, bounds),
-                    Some(Err(err)) => return Err(err),
-                    None => return Ok(None),
-                };
-
-                let allowed_plaintext = match message.typ {
-                    // CCS messages are always plaintext.
-                    ContentType::ChangeCipherSpec => true,
-                    // Alerts are allowed to be plaintext if-and-only-if:
-                    // * The negotiated protocol version is TLS 1.3. - In TLS 1.2 it is unambiguous when
-                    //   keying changes based on the CCS message. Only TLS 1.3 requires these heuristics.
-                    // * We have not yet decrypted any messages from the peer - if we have we don't
-                    //   expect any plaintext.
-                    // * The payload size is indicative of a plaintext alert message.
-                    ContentType::Alert
-                        if version_is_tls13
-                            && !self.decrypt_state.has_decrypted()
-                            && message.payload.len() <= 2 =>
-                    {
-                        true
-                    }
-                    // In other circumstances, we expect all messages to be encrypted.
-                    _ => false,
-                };
-
-                if allowed_plaintext && !self.deframer.is_active() {
-                    break (
-                        Decrypted {
-                            plaintext: message.into_plain_message(),
-                            want_close_before_decrypt: false,
-                        },
-                        bounds,
-                    );
-                }
-
-                match self
-                    .decrypt_state
-                    .decrypt_incoming(message)
-                {
-                    // failed decryption during trial decryption is not allowed to be
-                    // interleaved with partial handshake data.
-                    Ok(None) if self.deframer.aligned().is_none() => {
-                        return Err(
-                            PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage.into(),
-                        );
-                    }
-
-                    // failed decryption during trial decryption.
-                    Ok(None) => continue,
-
-                    Ok(Some(decrypted)) => {
-                        // After decryption, the payload is shorter
-                        let bounds = locator.locate(decrypted.plaintext.payload);
-                        break (decrypted, bounds);
-                    }
-
-                    Err(err) => return Err(err),
+            let (record, bounds) = loop {
+                match self.deframe_decrypted(buffer, &locator)? {
+                    DeframeResult::Decrypted(decrypted, bounds) => break (decrypted, bounds),
+                    DeframeResult::DecryptionFailed => continue,
+                    DeframeResult::None => return Ok(None),
                 }
             };
 
-            want_close_before_decrypt = message.want_close_before_decrypt;
+            want_close_before_decrypt = record.want_close_before_decrypt;
             let Decrypted {
-                plaintext: message,
+                plaintext: record,
                 want_close_before_decrypt: _,
-            } = message;
+            } = record;
 
-            if self.deframer.aligned().is_none() && message.typ != ContentType::Handshake {
+            if self.deframer.aligned().is_none() && record.typ != ContentType::Handshake {
                 // "Handshake messages MUST NOT be interleaved with other record
                 // types.  That is, if a handshake message is split over two or more
                 // records, there MUST NOT be any other records between them."
-                // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
+                // https://www.rfc-editor.org/rfc/rfc9846#section-5.1
                 return Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
             }
 
-            match message.payload.len() {
-                0 => {
+            match (record.payload.len(), record.typ) {
+                (0, _) => {
                     if self.seen_consecutive_empty_fragments
                         == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
                     {
@@ -258,59 +285,123 @@ impl ReceivePath {
                     }
                     self.seen_consecutive_empty_fragments += 1;
                 }
-                _ => {
+                (_, ContentType::Handshake | ContentType::ApplicationData) => {
                     self.seen_consecutive_empty_fragments = 0;
                 }
+                (_, _) => {}
             };
 
-            // do an end-run around the borrow checker, converting `message` (containing
+            // do an end-run around the borrow checker, converting `record` (containing
             // a borrowed slice) to an unborrowed one (containing a `Range` into the
             // same buffer).  the reborrow happens inside the branch that returns the
-            // message.
+            // record.
             //
             // is fixed by -Zpolonius
             // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md#problem-case-3-conditional-control-flow-across-functions
-            let unborrowed = InboundUnborrowedMessage::unborrow(&locator, message);
+            let unborrowed = InboundUnborrowedRecord::unborrow(&locator, record);
 
             if unborrowed.typ != ContentType::Handshake {
-                let message = unborrowed.reborrow(&Delocator::new(buffer));
+                let record = unborrowed.reborrow(&Delocator::new(buffer));
                 self.deframer.discard_processed();
                 return Ok(Some(Decrypted {
-                    plaintext: message,
+                    plaintext: record,
                     want_close_before_decrypt,
                 }));
             }
 
-            let message = unborrowed.reborrow(&Delocator::new(buffer));
+            let record = unborrowed.reborrow(&Delocator::new(buffer));
             self.deframer
-                .input_message(message, bounds);
+                .input_message(record.version.version(), bounds, buffer);
             self.deframer.coalesce(buffer)?;
         }
     }
 
-    /// Take a TLS message `msg` and map it into an `Input`
+    fn deframe_decrypted<'b>(
+        &mut self,
+        buffer: &'b mut [u8],
+        locator: &Locator,
+    ) -> Result<DeframeResult<'b>, Error> {
+        let (record, bounds) = match self.deframer.deframe(buffer) {
+            Some(Ok(Deframed { record, bounds })) => (record, bounds),
+            Some(Err(err)) => return Err(err),
+            None => return Ok(DeframeResult::None),
+        };
+
+        let allowed_plaintext = match record.typ {
+            // CCS messages are always plaintext.
+            ContentType::ChangeCipherSpec => true,
+            // Alerts are allowed to be plaintext if-and-only-if:
+            // * The negotiated protocol version is TLS 1.3. - In TLS 1.2 it is unambiguous when
+            //   keying changes based on the CCS message. Only TLS 1.3 requires these heuristics.
+            // * We have not yet decrypted any records from the peer - if we have we don't
+            //   expect any plaintext.
+            // * The payload size is indicative of a plaintext alert message.
+            ContentType::Alert
+                if matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+                    && !self.decrypt_state.has_decrypted()
+                    && record.payload.len() <= 2 =>
+            {
+                true
+            }
+            // In other circumstances, we expect all records to be encrypted.
+            _ => false,
+        };
+
+        if allowed_plaintext && !self.deframer.is_active() {
+            return Ok(DeframeResult::Decrypted(
+                Decrypted {
+                    plaintext: record.into_plain_record(),
+                    want_close_before_decrypt: false,
+                },
+                bounds,
+            ));
+        }
+
+        match self
+            .decrypt_state
+            .decrypt_incoming(record)?
+        {
+            Some(decrypted) => {
+                // After decryption, the payload is shorter
+                let bounds = locator.locate(decrypted.plaintext.payload);
+                Ok(DeframeResult::Decrypted(decrypted, bounds))
+            }
+
+            // failed decryption during trial decryption is not allowed to be
+            // interleaved with partial handshake data.
+            None if self.deframer.aligned().is_none() => {
+                Err(PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage.into())
+            }
+
+            // failed decryption during trial decryption.
+            None => Ok(DeframeResult::DecryptionFailed),
+        }
+    }
+
+    /// Take a TLS record and map it into an `Input`
     ///
     /// `Input` is the input to our state machine.
     ///
-    /// The message is mapped into `None` if it should be dropped with no further
+    /// The record is mapped into `None` if it should be dropped with no further
     /// action.
     ///
     /// Otherwise the caller must present the returned `Input` to the state machine to
     /// progress the connection.
-    pub(crate) fn receive_message<'a>(
+    pub(crate) fn receive_record<'a>(
         &mut self,
-        msg: EncodedMessage<&'a [u8]>,
+        record: Record<&'a [u8]>,
         aligned_handshake: Option<HandshakeAlignedProof>,
+        tls: &mut Vec<u8>,
         send: &mut dyn SendOutput,
     ) -> Result<Option<Input<'a>>, Error> {
         // Drop CCS messages during handshake in TLS1.3
-        if msg.typ == ContentType::ChangeCipherSpec && self.drop_tls13_ccs(&msg)? {
+        if record.typ == ContentType::ChangeCipherSpec && self.drop_tls13_ccs(&record)? {
             trace!("Dropping CCS");
             return Ok(None);
         }
 
-        // Now we can fully parse the message payload.
-        let message = Message::try_from(msg)?;
+        // Now we can fully parse the record payload.
+        let message = Message::try_from(record)?;
 
         // For alerts, we have separate logic.
         if let MessagePayload::Alert(alert) = &message.payload {
@@ -320,7 +411,7 @@ impl ReceivePath {
 
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
-        if self.reject_renegotiation_request(&message, send)? {
+        if self.reject_renegotiation_request(&message, tls, send)? {
             return Ok(None);
         }
 
@@ -330,14 +421,14 @@ impl ReceivePath {
         }))
     }
 
-    fn drop_tls13_ccs(&mut self, msg: &EncodedMessage<&'_ [u8]>) -> Result<bool, Error> {
+    fn drop_tls13_ccs(&mut self, record: &Record<&'_ [u8]>) -> Result<bool, Error> {
         if self.may_receive_application_data
             || !matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
         {
             return Ok(false);
         }
 
-        if !msg.is_valid_ccs() {
+        if !record.is_valid_ccs() {
             // "An implementation which receives any other change_cipher_spec value or
             //  which receives a protected change_cipher_spec record MUST abort the
             //  handshake with an "unexpected_message" alert."
@@ -352,6 +443,7 @@ impl ReceivePath {
     fn reject_renegotiation_request(
         &mut self,
         msg: &Message<'_>,
+        tls: &mut Vec<u8>,
         send: &mut dyn SendOutput,
     ) -> Result<bool, Error> {
         if !self.may_receive_application_data
@@ -372,7 +464,7 @@ impl ReceivePath {
             .received_renegotiation_request()?;
         let desc = AlertDescription::NoRenegotiation;
         warn!("sending warning alert {desc:?}");
-        send.send_alert(AlertLevel::Warning, desc);
+        send.send_alert(AlertLevel::Warning, desc, tls);
         Ok(true)
     }
 
@@ -414,9 +506,16 @@ impl ReceivePath {
     }
 }
 
-struct CaptureAppData<'a, 'j, 'm> {
+enum DeframeResult<'b> {
+    Decrypted(Decrypted<'b>, Range<usize>),
+    DecryptionFailed,
+    None,
+}
+
+struct CaptureAppData<'a, 'j, 'm, Send: SendOutput + 'a> {
     recv: &'a mut ReceivePath,
-    other: &'a mut JoinOutput<'j>,
+    other: &'a mut JoinOutput<'j, Send>,
+    tls: &'a mut Vec<u8>,
     /// Store a [`Locator`] initialized from the current receive buffer
     ///
     /// Allows received plaintext data to be unborrowed and stored in
@@ -432,7 +531,7 @@ struct CaptureAppData<'a, 'j, 'm> {
     _message_lifetime: PhantomData<&'m ()>,
 }
 
-impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
+impl<'a, 'm, Send: SendOutput + 'a> Output<'m> for CaptureAppData<'a, '_, 'm, Send> {
     fn emit(&mut self, ev: Event<'_>) {
         self.other.side.emit(ev)
     }
@@ -451,7 +550,7 @@ impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
             None => self
                 .other
                 .send
-                .send_msg(m, must_encrypt),
+                .send_msg(m, must_encrypt, self.tls),
         }
     }
 
@@ -489,11 +588,21 @@ impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
     }
 }
 
-pub(super) struct JoinOutput<'a> {
-    pub(super) outputs: &'a mut ConnectionOutputs,
+pub(super) struct JoinOutput<'a, Send: SendOutput + 'a> {
+    pub(super) outputs: &'a mut dyn ConnectionOutput,
     pub(super) quic: Option<&'a mut dyn QuicOutput>,
-    pub(super) send: &'a mut dyn SendOutput,
+    pub(super) send: &'a mut Send,
     pub(super) side: &'a mut dyn SideOutput,
+}
+
+pub(super) struct Discard;
+
+impl ConnectionOutput for Discard {
+    fn handle(&mut self, _ev: OutputEvent<'_>) {}
+}
+
+impl SideOutput for Discard {
+    fn emit(&mut self, _ev: Event<'_>) {}
 }
 
 /// Tracking technically-allowed protocol actions
@@ -604,30 +713,241 @@ impl Input<'_> {
     }
 }
 
-/// An [`EncodedMessage<Payload<'_>>`] which does not borrow its payload, but
+/// An [`Record<Payload<'_>>`] which does not borrow its payload, but
 /// references a range that can later be borrowed.
-struct InboundUnborrowedMessage {
+struct InboundUnborrowedRecord {
     typ: ContentType,
-    version: ProtocolVersion,
+    version: EncodableVersion,
     bounds: Range<usize>,
 }
 
-impl InboundUnborrowedMessage {
-    fn unborrow(locator: &Locator, msg: EncodedMessage<&'_ [u8]>) -> Self {
+impl InboundUnborrowedRecord {
+    fn unborrow(locator: &Locator, record: Record<&'_ [u8]>) -> Self {
         Self {
-            typ: msg.typ,
-            version: msg.version,
-            bounds: locator.locate(msg.payload),
+            typ: record.typ,
+            version: record.version,
+            bounds: locator.locate(record.payload),
         }
     }
 
-    fn reborrow<'b>(self, delocator: &Delocator<'b>) -> EncodedMessage<&'b [u8]> {
-        EncodedMessage {
+    fn reborrow<'b>(self, delocator: &Delocator<'b>) -> Record<&'b [u8]> {
+        Record {
             typ: self.typ,
             version: self.version,
             payload: delocator.slice_from_range(&self.bounds),
         }
     }
+}
+
+/// A buffer of TLS bytes read from a socket, stored in a `Vec<u8>`.
+#[derive(Default, Debug)]
+pub struct VecInput {
+    /// Buffer of data read from the socket, in the process of being parsed into messages.
+    ///
+    /// For buffer size management, checkout out the [`VecInput::prepare_read()`] method.
+    buf: Vec<u8>,
+
+    /// What size prefix of `buf` is used.
+    used: usize,
+
+    /// Whether we've seen a 0-byte read.
+    has_seen_eof: bool,
+
+    /// Whether a CloseNotify alert has been seen.
+    received_close_notify: bool,
+}
+
+impl VecInput {
+    /// Discard `taken` bytes from the start of our buffer.
+    pub(crate) fn discard(&mut self, taken: usize) {
+        if taken < self.used {
+            /* Before:
+             * +----------+----------+----------+
+             * | taken    | pending  |xxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ taken    ^ self.used
+             *
+             * After:
+             * +----------+----------+----------+
+             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ self.used
+             */
+
+            self.buf
+                .copy_within(taken..self.used, 0);
+            self.used -= taken;
+        } else if taken >= self.used {
+            self.used = 0;
+        }
+    }
+
+    pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
+        &mut self.buf[..self.used]
+    }
+
+    /// Read some bytes from `rd`, and add them to the buffer.
+    ///
+    /// Once the buffer contains 64 kB of data, we will not read any more bytes until some
+    /// are consumed by reading from the buffer via
+    /// [`Connection::process_new_packets()`][super::Connection::process_new_packets()].
+    pub fn read(&mut self, rd: &mut dyn Read) -> io::Result<usize> {
+        if self.received_close_notify {
+            return Ok(0);
+        } else if let Err(err) = self.prepare_read() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, err));
+        }
+
+        // Try to do the largest reads possible. Note that if
+        // we get a record with a length field out of range here,
+        // we do a zero length read.  That looks like an EOF to
+        // the next layer up, which is fine.
+        let new_bytes = rd.read(&mut self.buf[self.used..])?;
+        if new_bytes == 0 {
+            self.has_seen_eof = true;
+        }
+
+        self.used += new_bytes;
+        Ok(new_bytes)
+    }
+
+    /// Resize the internal `buf` if necessary for reading more bytes.
+    fn prepare_read(&mut self) -> Result<(), &'static str> {
+        /// TLS allows for handshake messages of up to 16MB.  We
+        /// restrict that to 64KB to limit potential for denial-of-
+        /// service.
+        const MAX_HANDSHAKE_SIZE: usize = 0xffff;
+
+        const READ_SIZE: usize = 4096;
+
+        // We allow a maximum of 64k of buffered data. Given that the first read of such a
+        // payload will only ever be 4k bytes, the next time we come around here we allow a
+        // larger buffer size. Once the large message and any following handshake messages in
+        // the same flight have been consumed, `pop()` will call `discard()` to reset `used`.
+        // At this point, the buffer resizing logic below should reduce the buffer size.
+        if self.used >= MAX_HANDSHAKE_SIZE {
+            return Err("message buffer full");
+        }
+
+        // If we can and need to increase the buffer size to allow a 4k read, do so. After
+        // dealing with a large handshake message (exceeding `MAX_HANDSHAKE_SIZE`),
+        // make sure to reduce the buffer size again (large messages should be rare).
+        // Also, reduce the buffer size if there are neither full nor partial messages in it,
+        // which usually means that the other side suspended sending data.
+        let need_capacity = Ord::min(MAX_HANDSHAKE_SIZE, self.used + READ_SIZE);
+        if need_capacity > self.buf.len() {
+            self.buf.resize(need_capacity, 0);
+        } else if self.used == 0 || self.buf.len() > MAX_HANDSHAKE_SIZE {
+            self.buf.resize(need_capacity, 0);
+            self.buf.shrink_to(need_capacity);
+        }
+
+        Ok(())
+    }
+}
+
+impl TlsInputBuffer for VecInput {
+    fn slice_mut(&mut self) -> &mut [u8] {
+        self.filled_mut()
+    }
+
+    fn discard(&mut self, num_bytes: usize) {
+        self.discard(num_bytes)
+    }
+
+    fn received_close_notify(&mut self) {
+        self.received_close_notify = true;
+    }
+
+    fn has_seen_eof(&self) -> bool {
+        self.has_seen_eof
+    }
+}
+
+/// A borrowed version of [`VecInput`] that tracks discard operations
+#[derive(Debug)]
+pub struct SliceInput<'a> {
+    // a fully initialized buffer that will be deframed
+    buf: &'a mut [u8],
+    // number of bytes to discard from the front of `buf` at a later time
+    discard: usize,
+    /// Whether we've seen a 0-byte read.
+    has_seen_eof: bool,
+    /// Whether a CloseNotify alert has been seen.
+    received_close_notify: bool,
+}
+
+impl<'a> SliceInput<'a> {
+    /// Create a new [`SliceInput`] from a mutable slice of bytes.
+    pub fn new(buf: &'a mut [u8]) -> Self {
+        Self {
+            buf,
+            discard: 0,
+            has_seen_eof: false,
+            received_close_notify: false,
+        }
+    }
+
+    /// Returns how many bytes were consumed at the start of the original buffer.
+    pub fn into_used(self) -> usize {
+        self.discard
+    }
+}
+
+impl TlsInputBuffer for SliceInput<'_> {
+    fn slice_mut(&mut self) -> &mut [u8] {
+        &mut self.buf[self.discard..]
+    }
+
+    fn discard(&mut self, num_bytes: usize) {
+        self.discard += num_bytes;
+    }
+
+    fn received_close_notify(&mut self) {
+        self.received_close_notify = true;
+    }
+
+    fn has_seen_eof(&self) -> bool {
+        self.has_seen_eof
+    }
+}
+
+/// An abstraction over received data buffers (either owned or borrowed)
+pub trait TlsInputBuffer {
+    /// Return the buffer which contains the received data.
+    ///
+    /// If no data is available, return the empty slice.
+    ///
+    /// This is mutable, because the buffer is used for in-place decryption
+    /// and coalescing of TLS records.  Coalescing of TLS records can happen
+    /// incrementally over multiple calls into rustls.  As a result the
+    /// contents of this buffer must not be altered except to add new bytes
+    /// at the end.
+    fn slice_mut(&mut self) -> &mut [u8];
+
+    /// Discard `num_bytes` from the front of the buffer returned by `slice_mut()`.
+    ///
+    /// Multiple calls to `discard()` are cumulative, rather than "last wins".  In
+    /// other words, `discard(1)` followed by `discard(1)` gives the same result
+    /// as `discard(2)`.
+    ///
+    /// The next call to `slice_mut()` must reflect all previous `discard()`s. In
+    /// other words, if `slice_mut()` returns slice `[p..q]`, it should then
+    /// return `[p+n..q]` after `discard(n)`.
+    ///
+    /// Rustls guarantees it will not `discard()` more bytes than are returned
+    /// from `slice_mut()`.
+    fn discard(&mut self, num_bytes: usize);
+
+    /// Signal that the connection has received a TLS `close_notify` alert.
+    ///
+    /// The buffer should not accept any more data, because the peer has closed the connection.
+    fn received_close_notify(&mut self);
+
+    /// Whether the buffer has seen a TCP EOF.
+    ///
+    /// This is not a TCP-level event, but it is signalled to the TLS state via the input buffer.
+    fn has_seen_eof(&self) -> bool;
 }
 
 /// cf. BoringSSL's `kMaxEmptyRecords`

@@ -1,16 +1,16 @@
 [package]
 name = "rustls-test"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 publish = false
 
 [features]
-default = ["aws-lc-rs", "brotli", "log", "ring", "zlib"]
+default = ["aws-lc-rs", "brotli", "ring", "tracing", "zlib"]
 aws-lc-rs = ["dep:rustls-aws-lc-rs"]
 brotli = ["rustls/brotli"]
 fips = ["rustls-aws-lc-rs/fips"]
-log = ["rustls/log", "rustls-util/log"]
 ring = ["dep:rustls-ring"]
+tracing = ["rustls/tracing", "rustls-util/tracing"]
 zlib = ["rustls/zlib"]
 
 [dependencies]
@@ -18,10 +18,9 @@ rustls = { path = "../rustls", default-features = false, features = ["webpki"] }
 rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs", features = ["std"], optional = true }
 rustls-ring = { path = "../rustls-ring", optional = true }
 rustls-util = { path = "../rustls-util", default-features = false }
+tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
-env_logger = { workspace = true }
-log = { workspace = true }
 macro_rules_attribute = { workspace = true }
 num-bigint = { workspace = true }
 pki-types = { workspace = true }

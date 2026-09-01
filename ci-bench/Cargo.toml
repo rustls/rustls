@@ -1,7 +1,7 @@
 [package]
 name = "rustls-ci-bench"
 version = "0.0.1"
-edition = "2021"
+edition.workspace = true
 license = "Apache-2.0 OR ISC OR MIT"
 description = "Rustls CPU instruction counting benchmarks."
 publish = false

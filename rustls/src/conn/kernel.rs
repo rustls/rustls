@@ -139,7 +139,7 @@ impl KernelConnection<ClientSide> {
     /// This method expects to be passed the inner payload of the handshake
     /// message. This means that you will need to parse the header of the
     /// handshake message in order to determine the correct payload to pass in.
-    /// The message format is described in [RFC 8446 section 4][0]. `payload`
+    /// The message format is described in [RFC 9846 section 4][0]. `payload`
     /// should not include the `msg_type` or `length` fields.
     ///
     /// Code to parse out the payload should look something like this
@@ -191,15 +191,13 @@ impl KernelConnection<ClientSide> {
     ///   extra unparsed trailing data.
     /// - An error occurs while the connection updates the session ticket store.
     ///
-    /// [0]: https://datatracker.ietf.org/doc/html/rfc8446#section-4
+    /// [0]: https://datatracker.ietf.org/doc/html/rfc9846#section-4
     pub fn handle_new_session_ticket(&mut self, payload: &[u8]) -> Result<(), Error> {
         // We want to return a more specific error here first if this is called
         // on a non-TLS 1.3 connection since a parsing error isn't the real issue
         // here.
         if self.protocol_version() != ProtocolVersion::TLSv1_3 {
-            return Err(Error::General(
-                "TLS 1.2 session tickets may not be sent once the handshake has completed".into(),
-            ));
+            return Err(ApiMisuse::KernelSessionTicketHandlingNotAvailableForTls12.into());
         }
 
         let nst = NewSessionTicketPayloadTls13::read_bytes(payload)?;

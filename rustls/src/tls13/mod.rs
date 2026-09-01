@@ -5,10 +5,30 @@ use pki_types::FipsStatus;
 use crate::common_state::Protocol;
 use crate::crypto::{self, SignatureScheme, hash};
 use crate::enums::ProtocolVersion;
+use crate::quic;
 use crate::suites::{CipherSuiteCommon, Suite, SupportedCipherSuite};
 use crate::version::Tls13Version;
 
 pub(crate) mod key_schedule;
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Tls13ProtocolSuite {
+    Tcp(&'static Tls13CipherSuite),
+    Quic(quic::Suite),
+}
+
+impl Tls13ProtocolSuite {
+    pub(crate) fn suite(&self) -> &'static Tls13CipherSuite {
+        match self {
+            Self::Tcp(suite) => suite,
+            Self::Quic(quic) => quic.inner,
+        }
+    }
+
+    pub(crate) fn is_quic(&self) -> bool {
+        matches!(self, Self::Quic(_))
+    }
+}
 
 /// A TLS 1.3 cipher suite supported by rustls.
 #[expect(clippy::exhaustive_structs)]
@@ -37,11 +57,11 @@ pub struct Tls13CipherSuite {
     /// [`crypto::tls13::HkdfUsingHmac`].
     pub hkdf_provider: &'static dyn crypto::tls13::Hkdf,
 
-    /// How to produce a [MessageDecrypter] or [MessageEncrypter]
+    /// How to produce a [RecordDecrypter] or [RecordEncrypter]
     /// from raw key material.
     ///
-    /// [MessageDecrypter]: crate::crypto::cipher::MessageDecrypter
-    /// [MessageEncrypter]: crate::crypto::cipher::MessageEncrypter
+    /// [RecordDecrypter]: crate::crypto::cipher::RecordDecrypter
+    /// [RecordEncrypter]: crate::crypto::cipher::RecordEncrypter
     pub aead_alg: &'static dyn crypto::cipher::Tls13AeadAlgorithm,
 
     /// How to create QUIC header and record protection algorithms
@@ -49,7 +69,7 @@ pub struct Tls13CipherSuite {
     ///
     /// Provide `None` to opt out of QUIC support for this suite.  It will
     /// not be offered in QUIC handshakes.
-    pub quic: Option<&'static dyn crate::quic::Algorithm>,
+    pub quic: Option<&'static dyn quic::Algorithm>,
 }
 
 impl Tls13CipherSuite {
@@ -77,12 +97,6 @@ impl Tls13CipherSuite {
             Some(quic) => Ord::min(status, quic.fips()),
             None => status,
         }
-    }
-
-    /// Returns a `quic::Suite` for the ciphersuite, if supported.
-    pub fn quic_suite(&'static self) -> Option<crate::quic::Suite> {
-        self.quic
-            .map(|quic| crate::quic::Suite { suite: self, quic })
     }
 }
 
@@ -136,12 +150,12 @@ impl fmt::Debug for Tls13CipherSuite {
     }
 }
 
-/// Constructs the signature message specified in section 4.4.3 of RFC8446.
+/// Constructs the signature message specified in section 4.5.2 of RFC 9846.
 pub(crate) fn construct_client_verify_message(handshake_hash: &hash::Output) -> VerifyMessage {
     VerifyMessage::new(handshake_hash, CLIENT_CONSTANT)
 }
 
-/// Constructs the signature message specified in section 4.4.3 of RFC8446.
+/// Constructs the signature message specified in section 4.5.2 of RFC 9846.
 pub(crate) fn construct_server_verify_message(handshake_hash: &hash::Output) -> VerifyMessage {
     VerifyMessage::new(handshake_hash, SERVER_CONSTANT)
 }
@@ -177,30 +191,55 @@ const MAX_VERIFY_MSG: usize = 64 + CLIENT_CONSTANT.len() + hash::Output::MAX_LEN
 
 #[cfg(test)]
 mod tests {
-    use crate::crypto::{CipherSuite, TEST_PROVIDER, tls13_suite};
+    use std::boxed::Box;
+
+    use crate::crypto::test_provider::FAKE_HASH;
+    use crate::crypto::{HashAlgorithm, TLS13_TEST_SUITE, hash};
+    use crate::{CipherSuiteCommon, Tls13CipherSuite};
 
     #[test]
     fn test_can_resume_to() {
-        let Some(cha_poly) = TEST_PROVIDER
-            .tls13_cipher_suites
-            .iter()
-            .find(|cs| cs.common.suite == CipherSuite::TLS13_CHACHA20_POLY1305_SHA256)
-        else {
-            return;
+        let other_tls13_suite = Tls13CipherSuite {
+            common: CipherSuiteCommon {
+                hash_provider: &OtherHash,
+                ..TLS13_TEST_SUITE.common
+            },
+            ..*TLS13_TEST_SUITE
         };
 
-        let aes_128_gcm = tls13_suite(CipherSuite::TLS13_AES_128_GCM_SHA256, &TEST_PROVIDER);
         assert!(
-            aes_128_gcm
-                .can_resume_from(cha_poly)
+            TLS13_TEST_SUITE
+                .can_resume_from(TLS13_TEST_SUITE)
                 .is_some()
         );
 
-        let aes_256_gcm = tls13_suite(CipherSuite::TLS13_AES_256_GCM_SHA384, &TEST_PROVIDER);
         assert!(
-            aes_256_gcm
-                .can_resume_from(cha_poly)
+            other_tls13_suite
+                .can_resume_from(TLS13_TEST_SUITE)
                 .is_none()
         );
+    }
+
+    struct OtherHash;
+
+    impl hash::Hash for OtherHash {
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn start(&self) -> Box<dyn hash::Context> {
+            FAKE_HASH.start()
+        }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn hash(&self, data: &[u8]) -> hash::Output {
+            FAKE_HASH.hash(data)
+        }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn output_len(&self) -> usize {
+            FAKE_HASH.output_len()
+        }
+
+        fn algorithm(&self) -> HashAlgorithm {
+            HashAlgorithm(123)
+        }
     }
 }

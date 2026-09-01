@@ -6,7 +6,7 @@
 use core::num::NonZeroUsize;
 use core::time::Duration;
 use std::fs::File;
-use std::io::{self, Read, Write};
+use std::io::Write;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -18,7 +18,7 @@ use rustls::enums::ProtocolVersion;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     ClientConfig, ClientConnection, Connection, HandshakeKind, RootCertStore, ServerConfig,
-    ServerConnection,
+    ServerConnection, VecInput,
 };
 use rustls_test::KeyType;
 
@@ -283,7 +283,8 @@ fn bench_handshake_buffered(
     params: &Parameters,
 ) -> Timings {
     let mut timings = Timings::default();
-    let mut buffers = TempBuffers::new();
+    let mut client_buffers = TempBuffers::new();
+    let mut server_buffers = TempBuffers::new();
     let mut client_latency = params.open_latency_file("client");
     let mut server_latency = params.open_latency_file("server");
 
@@ -291,28 +292,57 @@ fn bench_handshake_buffered(
         let mut client_time = 0f64;
         let mut server_time = 0f64;
 
+        client_buffers.tls.clear();
+        server_buffers.tls.clear();
+
         let mut client = time(&mut client_time, || {
             let server_name = "localhost".try_into().unwrap();
             client_config
                 .connect(server_name)
-                .build()
+                .build(&mut client_buffers.tls)
                 .unwrap()
         });
+        let mut client_input = VecInput::default();
         let mut server = time(&mut server_time, || {
             ServerConnection::new(server_config.clone()).unwrap()
         });
+        let mut server_input = VecInput::default();
 
         time(&mut server_time, || {
-            transfer(&mut buffers, &mut client, &mut server, None);
+            transfer(
+                &mut client_buffers,
+                &mut server_input,
+                &mut server_buffers,
+                &mut server,
+                None,
+            );
         });
         time(&mut client_time, || {
-            transfer(&mut buffers, &mut server, &mut client, None);
+            transfer(
+                &mut server_buffers,
+                &mut client_input,
+                &mut client_buffers,
+                &mut client,
+                None,
+            );
         });
         time(&mut server_time, || {
-            transfer(&mut buffers, &mut client, &mut server, None);
+            transfer(
+                &mut client_buffers,
+                &mut server_input,
+                &mut server_buffers,
+                &mut server,
+                None,
+            );
         });
         time(&mut client_time, || {
-            transfer(&mut buffers, &mut server, &mut client, None);
+            transfer(
+                &mut server_buffers,
+                &mut client_input,
+                &mut client_buffers,
+                &mut client,
+                None,
+            );
         });
 
         // check we reached idle
@@ -460,25 +490,41 @@ fn bench_bulk_buffered(
     rounds: u64,
 ) -> Timings {
     let server_name = "localhost".try_into().unwrap();
+    let mut client_buffers = TempBuffers::new();
     let mut client = client_config
         .connect(server_name)
-        .build()
+        .build(&mut client_buffers.tls)
         .unwrap();
-    client.set_buffer_limit(None);
+    let mut client_input = VecInput::default();
     let mut server = ServerConnection::new(server_config).unwrap();
-    server.set_buffer_limit(None);
+    let mut server_buffers = TempBuffers::new();
+    let mut server_input = VecInput::default();
 
     let mut timings = Timings::default();
-    let mut buffers = TempBuffers::new();
-    do_handshake(&mut buffers, &mut client, &mut server);
+    do_handshake(
+        &mut client_input,
+        &mut client_buffers,
+        &mut client,
+        &mut server_input,
+        &mut server_buffers,
+        &mut server,
+    );
 
     let buf = vec![0; plaintext_size as usize];
     for _ in 0..rounds {
         time(&mut timings.server, || {
-            server.writer().write_all(&buf).unwrap();
+            server
+                .write_tls((&buf).into(), &mut server_buffers.tls)
+                .unwrap();
         });
 
-        timings.client += transfer(&mut buffers, &mut server, &mut client, Some(buf.len()));
+        timings.client += transfer(
+            &mut server_buffers,
+            &mut client_input,
+            &mut client_buffers,
+            &mut client,
+            Some(buf.len()),
+        );
     }
 
     timings
@@ -516,17 +562,20 @@ fn bench_memory(
     let conn_count = (conn_count / 2) as usize;
     let mut servers = Vec::with_capacity(conn_count);
     let mut clients = Vec::with_capacity(conn_count);
-    let mut buffers = TempBuffers::new();
 
     for _i in 0..conn_count {
-        servers.push(ServerConnection::new(server_config.clone()).unwrap());
+        servers.push((
+            VecInput::default(),
+            TempBuffers::new(),
+            ServerConnection::new(server_config.clone()).unwrap(),
+        ));
         let server_name = "localhost".try_into().unwrap();
-        clients.push(
-            client_config
-                .connect(server_name)
-                .build()
-                .unwrap(),
-        );
+        let mut client_buffers = TempBuffers::new();
+        let client = client_config
+            .connect(server_name)
+            .build(&mut client_buffers.tls)
+            .unwrap();
+        clients.push((VecInput::default(), client_buffers, client));
     }
 
     for _step in 0..5 {
@@ -534,14 +583,21 @@ fn bench_memory(
             .iter_mut()
             .zip(servers.iter_mut())
         {
-            do_handshake_step(&mut buffers, client, server);
+            do_handshake_step(
+                &mut client.0,
+                &mut client.1,
+                &mut client.2,
+                &mut server.0,
+                &mut server.1,
+                &mut server.2,
+            );
         }
     }
 
     for client in clients.iter_mut() {
         client
-            .writer()
-            .write_all(&[0u8; 1024])
+            .2
+            .write_tls((&[0u8; 1024]).into(), &mut client.1.tls)
             .unwrap();
     }
 
@@ -549,7 +605,13 @@ fn bench_memory(
         .iter_mut()
         .zip(servers.iter_mut())
     {
-        transfer(&mut buffers, client, server, Some(1024));
+        transfer(
+            &mut client.1,
+            &mut server.0,
+            &mut server.1,
+            &mut server.2,
+            Some(1024),
+        );
     }
 }
 
@@ -684,7 +746,7 @@ impl Parameters {
             }
             ResumptionParam::Tickets => {
                 cfg.ticketer = Some(
-                    cfg.crypto_provider()
+                    cfg.provider()
                         .ticketer_factory
                         .ticketer()
                         .unwrap(),
@@ -930,13 +992,16 @@ impl From<RequestedKeyType> for KeyType {
 }
 
 fn do_handshake_step(
-    buffers: &mut TempBuffers,
+    client_input: &mut VecInput,
+    client_buffers: &mut TempBuffers,
     client: &mut ClientConnection,
+    server_input: &mut VecInput,
+    server_buffers: &mut TempBuffers,
     server: &mut ServerConnection,
 ) -> bool {
     if server.is_handshaking() || client.is_handshaking() {
-        transfer(buffers, client, server, None);
-        transfer(buffers, server, client, None);
+        transfer(client_buffers, server_input, server_buffers, server, None);
+        transfer(server_buffers, client_input, client_buffers, client, None);
         true
     } else {
         false
@@ -944,11 +1009,21 @@ fn do_handshake_step(
 }
 
 fn do_handshake(
-    buffers: &mut TempBuffers,
+    client_input: &mut VecInput,
+    client_buffers: &mut TempBuffers,
     client: &mut ClientConnection,
+    server_input: &mut VecInput,
+    server_buffers: &mut TempBuffers,
     server: &mut ServerConnection,
 ) {
-    while do_handshake_step(buffers, client, server) {}
+    while do_handshake_step(
+        client_input,
+        client_buffers,
+        client,
+        server_input,
+        server_buffers,
+        server,
+    ) {}
 }
 
 fn time<F, T>(time_out: &mut f64, mut f: F) -> T
@@ -963,67 +1038,48 @@ where
 }
 
 fn transfer(
-    buffers: &mut TempBuffers,
-    left: &mut impl Connection,
+    left_buffers: &mut TempBuffers,
+    right_input: &mut VecInput,
+    right_buffers: &mut TempBuffers,
     right: &mut impl Connection,
     expect_data: Option<usize>,
 ) -> f64 {
     let mut read_time = 0f64;
     let mut data_left = expect_data;
+    let sz = left_buffers.tls.len();
 
+    if sz == 0 {
+        return read_time;
+    }
+
+    let mut offs = 0;
     loop {
-        let mut sz = 0;
-
-        while left.wants_write() {
-            let written = left
-                .write_tls(&mut buffers.tls[sz..].as_mut())
-                .unwrap();
-            if written == 0 {
-                break;
-            }
-
-            sz += written;
+        let start = Instant::now();
+        match right_input.read(&mut left_buffers.tls[offs..sz].as_ref()) {
+            Ok(read) => offs += read,
+            Err(err) => panic!("error on transfer {offs}..{sz}: {err}"),
         }
 
-        if sz == 0 {
-            return read_time;
-        }
-
-        let mut offs = 0;
-        loop {
-            let start = Instant::now();
-            match right.read_tls(&mut buffers.tls[offs..sz].as_ref()) {
-                Ok(read) => {
-                    right.process_new_packets().unwrap();
-                    offs += read;
-                }
-                Err(err) => {
-                    panic!("error on transfer {offs}..{sz}: {err}");
-                }
-            }
-
+        let mut iter = right.process_new_packets(right_input, &mut right_buffers.tls);
+        while let Some(result) = iter.next_payload() {
+            let chunk = result.unwrap();
             if let Some(left) = &mut data_left {
-                loop {
-                    let sz = match right.reader().read(&mut [0u8; 16_384]) {
-                        Ok(sz) => sz,
-                        Err(err) if err.kind() == io::ErrorKind::WouldBlock => break,
-                        Err(err) => panic!("failed to read data: {err}"),
-                    };
-
-                    *left -= sz;
-                    if *left == 0 {
-                        break;
-                    }
+                *left -= chunk.bytes().len();
+                if *left == 0 {
+                    break;
                 }
             }
+        }
 
-            let end = Instant::now();
-            read_time += duration_nanos(end.duration_since(start));
-            if sz == offs {
-                break;
-            }
+        let end = Instant::now();
+        read_time += duration_nanos(end.duration_since(start));
+        if sz == offs {
+            break;
         }
     }
+
+    left_buffers.tls.clear();
+    read_time
 }
 
 /// Temporary buffers shared between calls.
@@ -1034,7 +1090,7 @@ struct TempBuffers {
 impl TempBuffers {
     fn new() -> Self {
         Self {
-            tls: vec![0u8; 262_144],
+            tls: Vec::with_capacity(262_144),
         }
     }
 }

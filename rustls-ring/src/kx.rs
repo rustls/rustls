@@ -10,6 +10,12 @@ use rustls::crypto::kx::{
 };
 use rustls::error::{Error, PeerMisbehaved};
 
+/// A list of the default key exchange groups supported by this provider.
+pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = ALL_KX_GROUPS;
+
+/// A list of all the key exchange groups supported by this provider.
+pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[X25519, SECP256R1, SECP384R1];
+
 /// A key-exchange group supported by *ring*.
 struct KxGroup {
     /// The IANA "TLS Supported Groups" name of the group
@@ -76,7 +82,7 @@ impl fmt::Debug for KxGroup {
     }
 }
 
-/// Ephemeral ECDH on curve25519 (see RFC7748)
+/// Ephemeral ECDH on curve25519 (see RFC 7748)
 pub static X25519: &dyn SupportedKxGroup = &KxGroup {
     name: NamedGroup::X25519,
     agreement_algorithm: &agreement::X25519,
@@ -110,7 +116,7 @@ pub static SECP384R1: &dyn SupportedKxGroup = &KxGroup {
 fn uncompressed_point(point: &[u8]) -> bool {
     // See `UncompressedPointRepresentation`, which is a retelling of
     // SEC1 section 2.3.3 "Elliptic-Curve-Point-to-Octet-String Conversion"
-    // <https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.8.2>
+    // <https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.8.2>
     matches!(point.first(), Some(0x04))
 }
 

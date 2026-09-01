@@ -7,26 +7,28 @@
 use core::ops::Add;
 use core::time::Duration;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{IsTerminal, Read, Write, stderr};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::{fs, thread};
 
 use clap::Parser;
 use rcgen::{Issuer, KeyPair, SerialNumber};
-use rustls::RootCertStore;
 use rustls::crypto::{CryptoProvider, Identity};
 use rustls::pki_types::{CertificateRevocationListDer, PrivatePkcs8KeyDer};
-use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
+use rustls::server::{ClientHello, ServerConfig, ServerHandshake, WebPkiClientVerifier};
+use rustls::{RootCertStore, VecInput};
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
-use rustls_util::{KeyLogFile, complete_io};
+use tracing::Level;
 
 fn main() {
     let args = Args::parse();
 
     if args.verbose {
-        env_logger::Builder::new()
-            .parse_filters("trace")
+        tracing_subscriber::fmt()
+            .with_max_level(Level::TRACE)
+            .with_writer(stderr)
+            .with_ansi(stderr().is_terminal())
             .init();
     }
 
@@ -77,37 +79,47 @@ fn main() {
     let listener = std::net::TcpListener::bind(format!("[::]:{}", args.port)).unwrap();
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
-        let mut acceptor = Acceptor::default();
+        let mut handshake = ServerHandshake::NeedsInput(ServerHandshake::start());
+        let mut input = VecInput::default();
+        let mut output = vec![];
 
-        // Read TLS packets until we've consumed a full client hello and are ready to accept a
-        // connection.
-        let accepted = loop {
-            acceptor.read_tls(&mut stream).unwrap();
-
-            match acceptor.accept() {
-                Ok(Some(accepted)) => break accepted,
-                Ok(None) => continue,
-                Err((e, mut alert)) => {
-                    alert.write_all(&mut stream).unwrap();
-                    panic!("error accepting connection: {e}");
+        let _connection = loop {
+            handshake = match handshake {
+                // Read TLS packets until we've completed the handshake.
+                ServerHandshake::NeedsInput(receive) => {
+                    match receive.process(&mut input, &mut output) {
+                        Ok(next @ ServerHandshake::NeedsInput(_)) => {
+                            stream.write_all(&output).unwrap();
+                            output.clear();
+                            input.read(&mut stream).unwrap();
+                            next
+                        }
+                        Ok(next) => next,
+                        Err(error) => panic!("error completing handshake: {error}"),
+                    }
                 }
-            }
-        };
 
-        // Generate a server config for the accepted connection, optionally customizing the
-        // configuration based on the client hello.
-        let config = test_pki.server_config(&args.crl_path, accepted.client_hello());
-        let mut conn = match accepted.into_connection(config) {
-            Ok(conn) => conn,
-            Err((e, mut alert)) => {
-                alert.write_all(&mut stream).unwrap();
-                panic!("error completing accepting connection: {e}");
-            }
-        };
+                // Generate a server config for the accepted connection, optionally customizing the
+                // configuration based on the client hello.
+                ServerHandshake::Accepted(accepted) => {
+                    let config = test_pki.server_config(&args.crl_path, accepted.client_hello());
+                    accepted
+                        .choose_config(config, &mut output)
+                        .expect("error choosing configuration for connection")
+                }
 
-        // Proceed with handling the ServerConnection
-        // Important: We do no error handling here, but you should!
-        _ = complete_io(&mut stream, &mut conn);
+                ServerHandshake::VerifyClientIdentity(verify) => verify
+                    .use_verifier_trait(&mut output)
+                    .expect("error verifying client certificate for connection"),
+
+                ServerHandshake::Complete(connection) => break connection,
+
+                other => panic!("unexpected ServerHandshake state {other:?}"),
+            };
+
+            stream.write_all(&output).unwrap();
+            output.clear();
+        };
     }
 }
 
@@ -214,6 +226,7 @@ impl TestPki {
         // Build a server config using the fresh verifier. If necessary, this could be customized
         // based on the ClientHello (e.g. selecting a different certificate, or customizing
         // supported algorithms/protocol versions).
+        #[cfg_attr(not(debug_assertions), expect(unused_mut))]
         let mut server_config = ServerConfig::builder(self.provider.clone())
             .with_client_cert_verifier(verifier)
             .with_single_cert(
@@ -229,8 +242,11 @@ impl TestPki {
             )
             .unwrap();
 
-        // Allow using SSLKEYLOGFILE.
-        server_config.key_log = Arc::new(KeyLogFile::new());
+        // Allow using SSLKEYLOGFILE in debug builds.
+        #[cfg(debug_assertions)]
+        {
+            server_config.key_log = Arc::new(rustls_util::KeyLogFile::new());
+        }
 
         Arc::new(server_config)
     }

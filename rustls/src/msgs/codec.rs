@@ -406,7 +406,7 @@ impl Codec<'_> for () {
     fn encode(&self, _: &mut Vec<u8>) {}
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        r.expect_empty("Empty")
+        r.all("Empty", |_| Ok(()))
     }
 }
 
@@ -433,14 +433,10 @@ pub(crate) trait Codec<'a>: Debug + Sized {
     /// Function for wrapping a call to the read function in
     /// a Reader for the slice of bytes provided
     ///
-    /// Returns `Err(InvalidMessage::ExcessData(_))` if
+    /// Returns `Err(InvalidMessage::TrailingData(_))` if
     /// `Self::read` does not read the entirety of `bytes`.
     fn read_bytes(bytes: &'a [u8]) -> Result<Self, InvalidMessage> {
-        let mut reader = Reader::new(bytes);
-        Self::read(&mut reader).and_then(|r| {
-            reader.expect_empty("read_bytes")?;
-            Ok(r)
-        })
+        Reader::new(bytes).all("read_bytes", Self::read)
     }
 }
 
@@ -459,6 +455,19 @@ impl<'a> Reader<'a> {
     /// Creates a new Reader of the provided `bytes` slice.
     pub(crate) fn new(buffer: &'a [u8]) -> Self {
         Self { buffer }
+    }
+
+    /// Reads all of `buffer` into a type of `T`, checking for trailing data.
+    pub(crate) fn all<T, E: From<InvalidMessage>, F: FnOnce(&mut Self) -> Result<T, E>>(
+        &mut self,
+        type_name: &'static str,
+        f: F,
+    ) -> Result<T, E> {
+        let value = f(self)?;
+        match self.any_left() {
+            true => Err(InvalidMessage::TrailingData(type_name).into()),
+            false => Ok(value),
+        }
     }
 
     /// Attempts to create a new Reader on a sub section of this
@@ -501,13 +510,6 @@ impl<'a> Reader<'a> {
     /// Moves the cursor to the end of the buffer length.
     pub(crate) fn rest(&mut self) -> &'a [u8] {
         mem::take(&mut self.buffer)
-    }
-
-    pub(crate) fn expect_empty(&self, name: &'static str) -> Result<(), InvalidMessage> {
-        match self.any_left() {
-            true => Err(InvalidMessage::TrailingData(name)),
-            false => Ok(()),
-        }
     }
 
     /// Whether the reader has any content left.

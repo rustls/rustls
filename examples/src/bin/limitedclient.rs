@@ -8,7 +8,7 @@ use std::net::TcpStream;
 use std::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
-use rustls::{ClientConfig, RootCertStore};
+use rustls::{ClientConfig, RootCertStore, VecInput};
 use rustls_aws_lc_rs as provider;
 use rustls_util::Stream;
 
@@ -27,12 +27,21 @@ fn main() {
     );
 
     let server_name = "www.rust-lang.org".try_into().unwrap();
+    let mut output = Vec::new();
     let mut conn = config
         .connect(server_name)
-        .build()
+        .build(&mut output)
         .unwrap();
     let mut sock = TcpStream::connect("www.rust-lang.org:443").unwrap();
-    let mut tls = Stream::new(&mut conn, &mut sock);
+    let mut input = VecInput::default();
+    let mut received_plaintext = Vec::new();
+    let mut tls = Stream::new(
+        &mut input,
+        &mut received_plaintext,
+        &mut output,
+        &mut conn,
+        &mut sock,
+    );
     tls.write_all(
         concat!(
             "GET / HTTP/1.1\r\n",

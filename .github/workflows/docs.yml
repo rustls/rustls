@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -40,7 +40,7 @@ jobs:
 
       - name: cargo doc
         # keep features in sync with Cargo.toml `[package.metadata.docs.rs]` section
-        run: cargo doc --locked --features brotli,hashbrown,log,zlib --no-deps --package rustls
+        run: cargo doc --locked --features brotli,hashbrown,tracing,zlib --no-deps --package rustls
         env:
           RUSTDOCFLAGS: -Dwarnings --cfg=rustls_docsrs --html-after-content tag.html
 
@@ -49,7 +49,7 @@ jobs:
           cd website && zola build --output-dir ../target/website/
 
       - name: Restore lychee cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .lycheecache
           key: cache-lychee-${{ github.sha }}
@@ -57,6 +57,7 @@ jobs:
 
       - name: Check links
         uses: lycheeverse/lychee-action@v2
+        if: github.event_name != 'pull_request'
         with:
           args: >
             --accept 200..=204,403,429,500
@@ -72,8 +73,9 @@ jobs:
           # lockfile causes deployment step to go wrong, due to permissions
           rm -f target/doc/.lock
           # move the result into website root
-          mv target/doc/* target/website/
-          mv target/website/rustls target/website/docs
+          mkdir target/website/docs
+          mv target/doc/* target/website/docs/
+          echo '<meta http-equiv="refresh" content="0; url=rustls/index.html">' > target/website/docs/index.html
 
       - name: Package and upload artifact
         uses: actions/upload-pages-artifact@v5

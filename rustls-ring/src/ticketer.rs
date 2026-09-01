@@ -77,18 +77,14 @@ impl TicketProducer for AeadTicketer {
         ciphertext.extend(self.key_name);
         ciphertext.extend(nonce_buf);
         ciphertext.extend(message);
-        let ciphertext = self
-            .key
-            .seal_in_place_separate_tag(
-                nonce,
-                aad,
-                &mut ciphertext[self.key_name.len() + nonce_buf.len()..],
-            )
-            .map(|tag| {
-                ciphertext.extend(tag.as_ref());
-                ciphertext
-            })
-            .ok()?;
+        match self.key.seal_in_place_separate_tag(
+            nonce,
+            aad,
+            &mut ciphertext[self.key_name.len() + nonce_buf.len()..],
+        ) {
+            Ok(tag) => ciphertext.extend(tag.as_ref()),
+            Err(_) => return None,
+        }
 
         self.maximum_ciphertext_len
             .fetch_max(ciphertext.len(), Ordering::SeqCst);

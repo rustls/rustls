@@ -11,20 +11,21 @@ use crate::msgs::{put_u16, put_u64};
 use crate::suites::ConnectionTrafficSecrets;
 
 mod messages;
+pub(crate) use messages::encode_record_header;
 pub use messages::{
-    EncodedMessage, InboundOpaque, MessageError, OutboundOpaque, OutboundPlain, Payload,
+    EncodableVersion, EncryptBuffer, InboundOpaque, OutboundPlain, Payload, Record, RecordError,
 };
 
 mod record_layer;
 pub(crate) use record_layer::{Decrypted, DecryptionState, EncryptionState, PreEncryptAction};
 
-/// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suite.
+/// Factory trait for building `RecordEncrypter` and `RecordDecrypter` for a TLS1.3 cipher suite.
 pub trait Tls13AeadAlgorithm: Send + Sync {
-    /// Build a `MessageEncrypter` for the given key/iv.
-    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter>;
+    /// Build a `RecordEncrypter` for the given key/iv.
+    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordEncrypter>;
 
-    /// Build a `MessageDecrypter` for the given key/iv.
-    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter>;
+    /// Build a `RecordDecrypter` for the given key/iv.
+    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordDecrypter>;
 
     /// The length of key in bytes required by `encrypter()` and `decrypter()`.
     fn key_len(&self) -> usize;
@@ -50,9 +51,9 @@ pub trait Tls13AeadAlgorithm: Send + Sync {
     }
 }
 
-/// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.2 cipher suite.
+/// Factory trait for building `RecordEncrypter` and `RecordDecrypter` for a TLS1.2 cipher suite.
 pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
-    /// Build a `MessageEncrypter` for the given key/iv and extra key block (which can be used for
+    /// Build a `RecordEncrypter` for the given key/iv and extra key block (which can be used for
     /// improving explicit nonce size security, if needed).
     ///
     /// The length of `key` is set by [`KeyBlockShape::enc_key_len`].
@@ -60,14 +61,14 @@ pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
     /// The length of `iv` is set by [`KeyBlockShape::fixed_iv_len`].
     ///
     /// The length of `extra` is set by [`KeyBlockShape::explicit_nonce_len`].
-    fn encrypter(&self, key: AeadKey, iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
+    fn encrypter(&self, key: AeadKey, iv: &[u8], extra: &[u8]) -> Box<dyn RecordEncrypter>;
 
-    /// Build a `MessageDecrypter` for the given key/iv.
+    /// Build a `RecordDecrypter` for the given key/iv.
     ///
     /// The length of `key` is set by [`KeyBlockShape::enc_key_len`].
     ///
     /// The length of `iv` is set by [`KeyBlockShape::fixed_iv_len`].
-    fn decrypter(&self, key: AeadKey, iv: &[u8]) -> Box<dyn MessageDecrypter>;
+    fn decrypter(&self, key: AeadKey, iv: &[u8]) -> Box<dyn RecordDecrypter>;
 
     /// Return a `KeyBlockShape` that defines how large the `key_block` is and how it
     /// is split up prior to calling `encrypter()`, `decrypter()` and/or `extract_keys()`.
@@ -122,19 +123,19 @@ impl core::error::Error for UnsupportedOperationError {}
 pub struct KeyBlockShape {
     /// How long keys are.
     ///
-    /// `enc_key_length` terminology is from the standard ([RFC5246 A.6]).
+    /// `enc_key_length` terminology is from the standard ([RFC 5246 A.6]).
     ///
-    /// [RFC5246 A.6]: <https://www.rfc-editor.org/rfc/rfc5246#appendix-A.6>
+    /// [RFC 5246 A.6]: <https://www.rfc-editor.org/rfc/rfc5246#appendix-A.6>
     pub enc_key_len: usize,
 
     /// How long the fixed part of the 'IV' is.
     ///
-    /// `fixed_iv_length` terminology is from the standard ([RFC5246 A.6]).
+    /// `fixed_iv_length` terminology is from the standard ([RFC 5246 A.6]).
     ///
     /// This isn't usually an IV, but we continue the
     /// terminology misuse to match the standard.
     ///
-    /// [RFC5246 A.6]: <https://www.rfc-editor.org/rfc/rfc5246#appendix-A.6>
+    /// [RFC 5246 A.6]: <https://www.rfc-editor.org/rfc/rfc5246#appendix-A.6>
     pub fixed_iv_len: usize,
 
     /// This is a non-standard extension which extends the
@@ -144,29 +145,46 @@ pub struct KeyBlockShape {
     pub explicit_nonce_len: usize,
 }
 
-/// Objects with this trait can decrypt TLS messages.
-pub trait MessageDecrypter: Send + Sync {
-    /// Decrypt the given TLS message `msg`, using the sequence number
+/// Objects with this trait can decrypt TLS records.
+pub trait RecordDecrypter: Send + Sync {
+    /// Decrypt the given TLS record, using the sequence number
     /// `seq` which can be used to derive a unique [`Nonce`].
     fn decrypt<'a>(
         &mut self,
-        msg: EncodedMessage<InboundOpaque<'a>>,
+        record: Record<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<&'a [u8]>, Error>;
+    ) -> Result<Record<&'a [u8]>, Error>;
 }
 
-/// Objects with this trait can encrypt TLS messages.
-pub trait MessageEncrypter: Send + Sync {
-    /// Encrypt the given TLS message `msg`, using the sequence number
+/// Objects with this trait can encrypt TLS records.
+pub trait RecordEncrypter: Send + Sync {
+    /// Encrypt the given TLS record into `out`, using the sequence number
     /// `seq` which can be used to derive a unique [`Nonce`].
-    fn encrypt(
+    ///
+    /// The encrypted payload including all framing the ciphersuite requires, such
+    /// as any explicit nonce, padding and/or authentication tag, is written to the
+    /// front of `out`. `out` must be at least [`Self::encrypted_payload_len()`] bytes
+    /// long. See [`EncryptBuffer`] for a convenient wrapper.
+    ///
+    /// The return value describes the resulting record: its payload borrows the
+    /// written prefix of `out`, and its `typ` and `version` are what the record
+    /// header should carry on the wire. Encoding the record header is the caller's
+    /// responsibility and implementations of the `RecordEncrypter` trait must not
+    /// write it to `out` themselves.
+    fn encrypt<'a>(
         &mut self,
-        msg: EncodedMessage<OutboundPlain<'_>>,
+        record: Record<OutboundPlain<'_>>,
         seq: u64,
-    ) -> Result<EncodedMessage<OutboundOpaque>, Error>;
+        out: &'a mut [u8],
+    ) -> Result<Record<&'a [u8]>, Error>;
 
-    /// Return the length of the ciphertext that results from encrypting plaintext of
-    /// length `payload_len`
+    /// Return the length of the ciphertext that results from encrypting plaintext of length `payload_len`.
+    ///
+    /// For a zero `payload_len` this should return the _minimum_ overhead for any
+    /// payload.  Then, to fragment a long payload into chunks of length `F`,
+    /// Rustls will first set `A := encrypted_payload_len(0)` and then supply the
+    /// payload to [`Self::encrypt()`] in chunks of length `F - A`.  Each `encrypt()`
+    /// is then free to pad or otherwise transform the length at its option.
     fn encrypted_payload_len(&self, payload_len: usize) -> usize;
 }
 
@@ -219,7 +237,7 @@ impl AsRef<[u8]> for Iv {
     }
 }
 
-/// A nonce.  This is unique for all messages on a connection.
+/// A nonce.  This is unique for all records on a connection.
 pub struct Nonce {
     buf: [u8; Iv::MAX_LEN],
     len: usize,
@@ -311,13 +329,15 @@ pub const NONCE_LEN: usize = 12;
 
 /// Returns a TLS1.3 `additional_data` encoding.
 ///
-/// See RFC8446 s5.2 for the `additional_data` definition.
+/// For decryption, the parameters should be those that were received on the wire.
+/// For encryption, the parameters should be those that will be put on the wire.
+///
+/// See RFC 9846 s5.2 for the `additional_data` definition.
 #[inline]
-pub fn make_tls13_aad(payload_len: usize) -> [u8; 5] {
-    let version = ProtocolVersion::TLSv1_2.to_array();
+pub fn make_tls13_aad(typ: ContentType, version: ProtocolVersion, payload_len: usize) -> [u8; 5] {
+    let version = version.to_array();
     [
-        ContentType::ApplicationData.into(),
-        // Note: this is `legacy_record_version`, i.e. TLS1.2 even for TLS1.3.
+        typ.into(),
         version[0],
         version[1],
         (payload_len >> 8) as u8,
@@ -327,7 +347,7 @@ pub fn make_tls13_aad(payload_len: usize) -> [u8; 5] {
 
 /// Returns a TLS1.2 `additional_data` encoding.
 ///
-/// See RFC5246 s6.2.3.3 for the `additional_data` definition.
+/// See RFC 5246 s6.2.3.3 for the `additional_data` definition.
 #[inline]
 pub fn make_tls12_aad(
     seq: u64,
@@ -410,11 +430,11 @@ pub(crate) struct FakeAead;
 
 #[cfg(test)]
 impl Tls12AeadAlgorithm for FakeAead {
-    fn encrypter(&self, _: AeadKey, _: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, _: AeadKey, _: &[u8], _: &[u8]) -> Box<dyn RecordEncrypter> {
         todo!()
     }
 
-    fn decrypter(&self, _: AeadKey, _: &[u8]) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, _: AeadKey, _: &[u8]) -> Box<dyn RecordDecrypter> {
         todo!()
     }
 

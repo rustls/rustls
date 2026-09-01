@@ -1,7 +1,8 @@
 #![allow(clippy::std_instead_of_core)] // awaits core::io::IoSlice in stable (1.98)
-use std::io::{BufRead, IoSlice, Read, Result, Write};
+use std::io::{BufRead, Error, ErrorKind, IoSlice, Read, Result, Write};
 
-use rustls::Connection;
+use rustls::crypto::cipher::OutboundPlain;
+use rustls::{Connection, TlsInputBuffer, VecInput};
 
 use crate::complete_io;
 
@@ -21,6 +22,26 @@ pub struct Stream<'a, C: 'a + ?Sized, T: 'a + Read + Write + ?Sized> {
 
     /// The underlying transport, like a socket
     pub sock: &'a mut T,
+
+    /// The input buffer
+    pub input: &'a mut VecInput,
+
+    /// The buffer to store received plaintext
+    pub received_plaintext: &'a mut Vec<u8>,
+
+    /// The output buffer, holding TLS data waiting to be sent
+    pub output: &'a mut Vec<u8>,
+
+    /// Limit on the size of `output`, in bytes
+    ///
+    /// If the transport does not accept data fast enough, buffered TLS output accumulates in
+    /// `output`. Once its size reaches this limit, `write()` encrypts only as much plaintext as
+    /// fits under the limit and returns the resulting short write count, or fails with
+    /// [`ErrorKind::WouldBlock`] if nothing can be buffered. `output` may exceed the limit by the
+    /// encryption overhead of the final record.
+    ///
+    /// Defaults to 64KB.
+    pub limit: usize,
 }
 
 impl<'a, C, T> Stream<'a, C, T>
@@ -30,19 +51,44 @@ where
 {
     /// Make a new Stream using the Connection `conn` and socket-like object
     /// `sock`.  This does not fail and does no IO.
-    pub fn new(conn: &'a mut C, sock: &'a mut T) -> Self {
-        Self { conn, sock }
+    pub fn new(
+        input: &'a mut VecInput,
+        received_plaintext: &'a mut Vec<u8>,
+        output: &'a mut Vec<u8>,
+        conn: &'a mut C,
+        sock: &'a mut T,
+    ) -> Self {
+        Self {
+            conn,
+            sock,
+            input,
+            received_plaintext,
+            output,
+            limit: DEFAULT_BUFFER_LIMIT,
+        }
     }
 
     /// If we're handshaking, complete all the IO for that.
     /// If we have data to write, write it all.
     fn complete_prior_io(&mut self) -> Result<()> {
         if self.conn.is_handshaking() {
-            complete_io(self.sock, self.conn)?;
+            complete_io(
+                self.sock,
+                self.input,
+                self.received_plaintext,
+                self.output,
+                self.conn,
+            )?;
         }
 
-        if self.conn.wants_write() {
-            complete_io(self.sock, self.conn)?;
+        if !self.output.is_empty() {
+            complete_io(
+                self.sock,
+                self.input,
+                self.received_plaintext,
+                self.output,
+                self.conn,
+            )?;
         }
 
         Ok(())
@@ -54,20 +100,33 @@ where
         // We call complete_io() in a loop since a single call may read only
         // a partial packet from the underlying transport. A full packet is
         // needed to get more plaintext, which we must do if EOF has not been
-        // hit.
-        while self.conn.wants_read() {
-            if complete_io(self.sock, self.conn)?.0 == 0 {
+        // hit. We stop as soon as we have some plaintext to return, since
+        // `wants_read()` stays true even when plaintext is available.
+        while self.received_plaintext.is_empty() && self.conn.wants_read() {
+            if complete_io(
+                self.sock,
+                self.input,
+                self.received_plaintext,
+                self.output,
+                self.conn,
+            )?
+            .0 == 0
+            {
                 break;
             }
         }
 
-        Ok(())
-    }
+        // If we have no plaintext to return and the peer closed the connection without
+        // sending a `close_notify`, surface that as an unexpected EOF.  A clean closure
+        // (via `close_notify`) is instead reported as `Ok(0)`/an empty buffer.
+        if self.received_plaintext.is_empty() && self.input.has_seen_eof() {
+            return Err(Error::new(
+                ErrorKind::UnexpectedEof,
+                "peer closed connection without sending TLS close_notify",
+            ));
+        }
 
-    // Implements `BufRead::fill_buf` but with more flexible lifetimes, so StreamOwned can reuse it
-    fn fill_buf(mut self) -> Result<&'a [u8]> {
-        self.prepare_read()?;
-        self.conn.reader().into_first_chunk()
+        Ok(())
     }
 }
 
@@ -78,7 +137,21 @@ where
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         self.prepare_read()?;
-        self.conn.reader().read(buf)
+        let len = Ord::min(buf.len(), self.received_plaintext.len());
+        let Some((src, _)) = self
+            .received_plaintext
+            .split_at_checked(len)
+        else {
+            return Ok(0);
+        };
+
+        let Some((dst, _)) = buf.split_at_mut_checked(len) else {
+            return Ok(0);
+        };
+
+        dst.copy_from_slice(src);
+        self.received_plaintext.drain(..len);
+        Ok(len)
     }
 }
 
@@ -88,16 +161,12 @@ where
     T: 'a + Read + Write,
 {
     fn fill_buf(&mut self) -> Result<&[u8]> {
-        // reborrow to get an owned `Stream`
-        Stream {
-            conn: self.conn,
-            sock: self.sock,
-        }
-        .fill_buf()
+        self.prepare_read()?;
+        Ok(self.received_plaintext)
     }
 
     fn consume(&mut self, amt: usize) {
-        self.conn.reader().consume(amt)
+        self.received_plaintext.drain(..amt);
     }
 }
 
@@ -108,41 +177,79 @@ where
 {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         self.complete_prior_io()?;
+        if self.conn.is_handshaking() {
+            return Err(ErrorKind::WouldBlock.into());
+        }
 
-        let len = self.conn.writer().write(buf)?;
+        let len = Ord::min(
+            buf.len(),
+            self.limit
+                .saturating_sub(self.output.len()),
+        );
+        if len == 0 && !buf.is_empty() {
+            return Err(ErrorKind::WouldBlock.into());
+        }
+
+        self.conn
+            .write_tls((&buf[..len]).into(), self.output)
+            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
 
         // Try to write the underlying transport here, but don't let
-        // any errors mask the fact we've consumed `len` bytes.
+        // any errors mask the fact we've consumed `buf[..len]`.
         // Callers will learn of permanent errors on the next call.
-        let _ = complete_io(self.sock, self.conn);
+        let _ = complete_io(
+            self.sock,
+            self.input,
+            self.received_plaintext,
+            self.output,
+            self.conn,
+        );
 
         Ok(len)
     }
 
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> Result<usize> {
         self.complete_prior_io()?;
+        if self.conn.is_handshaking() {
+            return Err(ErrorKind::WouldBlock.into());
+        }
 
-        let len = self
-            .conn
-            .writer()
-            .write_vectored(bufs)?;
+        let mut available = self
+            .limit
+            .saturating_sub(self.output.len());
+        let mut len = 0;
+        let mut slices = Vec::with_capacity(bufs.len());
+        for buf in bufs {
+            let take = Ord::min(buf.len(), available);
+            slices.push(&buf[..take]);
+            len += take;
+            available -= take;
+        }
+
+        if len == 0 && bufs.iter().any(|buf| !buf.is_empty()) {
+            return Err(ErrorKind::WouldBlock.into());
+        }
+
+        self.conn
+            .write_tls(OutboundPlain::new(&slices), self.output)
+            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
 
         // Try to write the underlying transport here, but don't let
         // any errors mask the fact we've consumed `len` bytes.
         // Callers will learn of permanent errors on the next call.
-        let _ = complete_io(self.sock, self.conn);
+        let _ = complete_io(
+            self.sock,
+            self.input,
+            self.received_plaintext,
+            self.output,
+            self.conn,
+        );
 
         Ok(len)
     }
 
     fn flush(&mut self) -> Result<()> {
-        self.complete_prior_io()?;
-
-        self.conn.writer().flush()?;
-        if self.conn.wants_write() {
-            complete_io(self.sock, self.conn)?;
-        }
-        Ok(())
+        self.complete_prior_io()
     }
 }
 
@@ -162,6 +269,26 @@ pub struct StreamOwned<C: Sized, T: Read + Write + Sized> {
 
     /// The underlying transport, like a socket
     pub sock: T,
+
+    /// The input buffer
+    pub input: VecInput,
+
+    /// The buffer to store received plaintext
+    pub received_plaintext: Vec<u8>,
+
+    /// The output buffer, holding TLS data waiting to be sent
+    pub output: Vec<u8>,
+
+    /// Limit on the size of `output`, in bytes
+    ///
+    /// If the transport does not accept data fast enough, buffered TLS output accumulates in
+    /// `output`. Once its size reaches this limit, `write()` encrypts only as much plaintext as
+    /// fits under the limit and returns the resulting short write count, or fails with
+    /// [`ErrorKind::WouldBlock`] if nothing can be buffered. `output` may exceed the limit by the
+    /// encryption overhead of the final record.
+    ///
+    /// Defaults to 64KB.
+    pub limit: usize,
 }
 
 impl<C, T> StreamOwned<C, T>
@@ -172,10 +299,20 @@ where
     /// Make a new StreamOwned taking the Connection `conn` and socket-like
     /// object `sock`.  This does not fail and does no IO.
     ///
+    /// `output` may contain TLS data already generated by the connection,
+    /// such as the initial `ClientHello`.
+    ///
     /// This is the same as `Stream::new` except `conn` and `sock` are
     /// moved into the StreamOwned.
-    pub fn new(conn: C, sock: T) -> Self {
-        Self { conn, sock }
+    pub fn new(conn: C, sock: T, output: Vec<u8>) -> Self {
+        Self {
+            conn,
+            sock,
+            input: VecInput::default(),
+            received_plaintext: Vec::new(),
+            output,
+            limit: DEFAULT_BUFFER_LIMIT,
+        }
     }
 
     /// Get a reference to the underlying socket
@@ -203,6 +340,10 @@ where
         Stream {
             conn: &mut self.conn,
             sock: &mut self.sock,
+            input: &mut self.input,
+            received_plaintext: &mut self.received_plaintext,
+            output: &mut self.output,
+            limit: self.limit,
         }
     }
 }
@@ -223,7 +364,8 @@ where
     T: Read + Write,
 {
     fn fill_buf(&mut self) -> Result<&[u8]> {
-        self.as_stream().fill_buf()
+        self.as_stream().prepare_read()?;
+        Ok(&self.received_plaintext)
     }
 
     fn consume(&mut self, amt: usize) {
@@ -244,6 +386,9 @@ where
         self.as_stream().flush()
     }
 }
+
+/// Default limit on buffered TLS output for [`Stream`] and [`StreamOwned`].
+const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
 
 #[cfg(test)]
 mod tests {

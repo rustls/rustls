@@ -25,7 +25,7 @@ gives a flavour of the kind of complexity required to remove the side channel.
 rustls does not implement CBC MAC-then-encrypt ciphersuites for these reasons.  TLSv1.3 removed support for these
 ciphersuites in 2018.
 
-There are some further rejected options worth mentioning: [RFC7366](https://tools.ietf.org/html/rfc7366) defines
+There are some further rejected options worth mentioning: [RFC 7366](https://tools.ietf.org/html/rfc7366) defines
 Encrypt-then-MAC for TLS, but unfortunately cannot be negotiated without also supporting MAC-then-encrypt
 (clients cannot express "I offer CBC, but only EtM and not MtE").
 
@@ -121,15 +121,15 @@ downgraded to SSLv3 after failed handshakes for later versions.
 
 rustls does not support CBC mode ciphersuites, or SSLv3.  Note that rustls does not need to implement `TLS_FALLBACK_SCSV`
 introduced as a countermeasure because it contains no ability to downgrade from TLS 1.2 to earlier protocol versions,
-and TLS 1.3 has protocol-level downgrade protection based on the [ServerHello server random value](https://www.rfc-editor.org/rfc/rfc8446#section-4.1.3).
+and TLS 1.3 has protocol-level downgrade protection based on the [ServerHello server random value](https://www.rfc-editor.org/rfc/rfc9846#section-4.2.3).
 
 ## GCM nonces
 
-[RFC5288](https://tools.ietf.org/html/rfc5288) introduced GCM-based ciphersuites for use in TLS.  Unfortunately
-the design was poor; it reused design for an unrelated security setting proposed in RFC5116.
+[RFC 5288](https://tools.ietf.org/html/rfc5288) introduced GCM-based ciphersuites for use in TLS.  Unfortunately
+the design was poor; it reused design for an unrelated security setting proposed in RFC 5116.
 
 GCM is a typical nonce-based AEAD: it requires a unique (but not necessarily unpredictable) 96-bit nonce for each encryption
-with a given key.  The design specified by RFC5288 left two-thirds of the nonce construction up to implementations:
+with a given key.  The design specified by RFC 5288 left two-thirds of the nonce construction up to implementations:
 
 - wasting 8 bytes per TLS ciphertext,
 - meaning correct operation cannot be tested for (e.g., in protocol-level test vectors).
@@ -159,9 +159,9 @@ rustls does not support renegotiation in TLSv1.2.  TLSv1.3 also no longer suppor
 introduced as a countermeasure to the previous protocol flaw.
 
 rustls does not support renegotiation for TLSv1.2 connections, or RSA key exchange, and both are required for this attack
-to work.  rustls implements the "Extended Master Secret" (RFC7627) extension for TLSv1.2 which was standardised as a countermeasure.
+to work.  rustls implements the "Extended Main Secret" (RFC 7627, as renamed by RFC 9846) extension for TLSv1.2 which was standardised as a countermeasure.
 
-TLSv1.3 no longer supports renegotiation and RSA key exchange.  It also effectively incorporates the improvements made in RFC7627.
+TLSv1.3 no longer supports renegotiation and RSA key exchange.  It also effectively incorporates the improvements made in RFC 7627.
 
 ## KCI
 

@@ -17,7 +17,6 @@ use crate::enums::{
     ApplicationProtocol, CertificateCompressionAlgorithm, CertificateType, ProtocolVersion,
 };
 use crate::error::InvalidMessage;
-use crate::log::warn;
 use crate::msgs::codec::{
     CERTIFICATE_MAX_SIZE_LIMIT, Codec, LengthPrefixedBuffer, ListLength, MaybeEmpty, NonEmpty,
     Reader, SizedPayload, TlsListElement, TlsListIter, U24, hex,
@@ -27,6 +26,7 @@ use crate::msgs::enums::{
     ExtensionType,
 };
 use crate::sync::Arc;
+use crate::tracing::warn;
 use crate::verify::{DigitallySignedStruct, DistinguishedName};
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -177,28 +177,28 @@ impl Default for SupportedEcPointFormats {
     }
 }
 
-/// RFC8422: `ECPointFormat ec_point_format_list<1..2^8-1>`
+/// RFC 8422: `ECPointFormat ec_point_format_list<1..2^8-1>`
 impl TlsListElement for ECPointFormat {
     const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
         empty_error: InvalidMessage::IllegalEmptyList("ECPointFormats"),
     };
 }
 
-/// RFC8422: `NamedCurve named_curve_list<2..2^16-1>`
+/// RFC 8422: `NamedCurve named_curve_list<2..2^16-1>`
 impl TlsListElement for NamedGroup {
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
         empty_error: InvalidMessage::IllegalEmptyList("NamedGroups"),
     };
 }
 
-/// RFC8446: `SignatureScheme supported_signature_algorithms<2..2^16-2>;`
+/// RFC 9846: `SignatureScheme supported_signature_algorithms<2..2^16-2>;`
 impl TlsListElement for SignatureScheme {
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
         empty_error: InvalidMessage::NoSignatureSchemes,
     };
 }
 
-/// RFC7301 encodes a single protocol name as `Vec<ProtocolName>`
+/// RFC 7301 encodes a single protocol name as `Vec<ProtocolName>`
 #[derive(Clone, Debug)]
 pub(crate) struct SingleProtocolName(ApplicationProtocol<'static>);
 
@@ -220,15 +220,11 @@ impl Codec<'_> for SingleProtocolName {
 
     fn read(reader: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let len = Self::SIZE_LEN.read(reader)?;
-        let mut sub = reader.sub(len)?;
-
-        let item = ApplicationProtocol::read(&mut sub)?;
-
-        if sub.any_left() {
-            Err(InvalidMessage::TrailingData("SingleProtocolName"))
-        } else {
-            Ok(Self(item.to_owned()))
-        }
+        reader
+            .sub(len)?
+            .all("SingleProtocolName", |sub| {
+                Ok(Self(ApplicationProtocol::read(sub)?.to_owned()))
+            })
     }
 }
 
@@ -242,7 +238,7 @@ impl AsRef<ApplicationProtocol<'static>> for SingleProtocolName {
 #[derive(Clone, Debug)]
 pub(crate) struct KeyShareEntry {
     pub(crate) group: NamedGroup,
-    /// RFC8446: `opaque key_exchange<1..2^16-1>;`
+    /// RFC 9846: `opaque key_exchange<1..2^16-1>;`
     pub(crate) payload: SizedPayload<'static, u16, NonEmpty>,
 }
 
@@ -271,7 +267,7 @@ impl Codec<'_> for KeyShareEntry {
 
 // ---
 
-/// RFC8446: `KeyShareEntry client_shares<0..2^16-1>;`
+/// RFC 9846: `KeyShareEntry client_shares<0..2^16-1>;`
 impl TlsListElement for KeyShareEntry {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
@@ -282,7 +278,7 @@ impl TlsListElement for KeyShareEntry {
 /// This is documented as a preference-order vector, but we (as a server)
 /// ignore the preference of the client.
 ///
-/// RFC8446: `ProtocolVersion versions<2..254>;`
+/// RFC 9846: `ProtocolVersion versions<2..254>;`
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct SupportedProtocolVersions {
     pub(crate) tls13: bool,
@@ -339,7 +335,7 @@ impl TlsListElement for ProtocolVersion {
     };
 }
 
-/// RFC7250: `CertificateType client_certificate_types<1..2^8-1>;`
+/// RFC 7250: `CertificateType client_certificate_types<1..2^8-1>;`
 ///
 /// Ditto `CertificateType server_certificate_types<1..2^8-1>;`
 impl TlsListElement for CertificateType {
@@ -348,7 +344,7 @@ impl TlsListElement for CertificateType {
     };
 }
 
-/// RFC8879: `CertificateCompressionAlgorithm algorithms<2..2^8-2>;`
+/// RFC 8879: `CertificateCompressionAlgorithm algorithms<2..2^8-2>;`
 impl TlsListElement for CertificateCompressionAlgorithm {
     const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
         empty_error: InvalidMessage::IllegalEmptyList("CertificateCompressionAlgorithms"),
@@ -384,7 +380,7 @@ impl ClientExtensionsInput {
 
 #[derive(Clone)]
 pub(crate) enum TransportParameters {
-    /// QUIC transport parameters (RFC9001)
+    /// QUIC transport parameters (RFC 9001)
     Quic(Payload<'static>),
 }
 
@@ -394,14 +390,14 @@ pub(crate) struct ServerExtensionsInput {
     pub(crate) transport_parameters: Option<TransportParameters>,
 }
 
-/// RFC8446: `CipherSuite cipher_suites<2..2^16-2>;`
+/// RFC 9846: `CipherSuite cipher_suites<2..2^16-2>;`
 impl TlsListElement for CipherSuite {
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
         empty_error: InvalidMessage::IllegalEmptyList("CipherSuites"),
     };
 }
 
-/// RFC5246: `CompressionMethod compression_methods<1..2^8-1>;`
+/// RFC 5246: `CompressionMethod compression_methods<1..2^8-1>;`
 impl TlsListElement for Compression {
     const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
         empty_error: InvalidMessage::IllegalEmptyList("Compressions"),
@@ -852,7 +848,7 @@ impl KxDecode<'_> for ClientKeyExchangeParams {
 
 #[derive(Debug)]
 pub(crate) struct ClientEcdhParams {
-    /// RFC4492: `opaque point <1..2^8-1>;`
+    /// RFC 4492: `opaque point <1..2^8-1>;`
     pub(crate) public: SizedPayload<'static, u8, NonEmpty>,
 }
 
@@ -869,7 +865,7 @@ impl Codec<'_> for ClientEcdhParams {
 
 #[derive(Debug)]
 pub(crate) struct ClientDhParams {
-    /// RFC5246: `opaque dh_Yc<1..2^16-1>;`
+    /// RFC 5246: `opaque dh_Yc<1..2^16-1>;`
     pub(crate) public: SizedPayload<'static, u16, NonEmpty>,
 }
 
@@ -888,7 +884,7 @@ impl Codec<'_> for ClientDhParams {
 #[derive(Debug)]
 pub(crate) struct ServerEcdhParams {
     pub(crate) curve_params: EcParameters,
-    /// RFC4492: `opaque point <1..2^8-1>;`
+    /// RFC 4492: `opaque point <1..2^8-1>;`
     pub(crate) public: SizedPayload<'static, u8, NonEmpty>,
 }
 
@@ -923,11 +919,11 @@ impl Codec<'_> for ServerEcdhParams {
 
 #[derive(Debug)]
 pub(crate) struct ServerDhParams {
-    /// RFC5246: `opaque dh_p<1..2^16-1>;`
+    /// RFC 5246: `opaque dh_p<1..2^16-1>;`
     pub(crate) dh_p: SizedPayload<'static, u16, NonEmpty>,
-    /// RFC5246: `opaque dh_g<1..2^16-1>;`
+    /// RFC 5246: `opaque dh_g<1..2^16-1>;`
     pub(crate) dh_g: SizedPayload<'static, u16, NonEmpty>,
-    /// RFC5246: `opaque dh_Ys<1..2^16-1>;`
+    /// RFC 5246: `opaque dh_Ys<1..2^16-1>;`
     pub(crate) dh_ys: SizedPayload<'static, u16, NonEmpty>,
 }
 
@@ -1063,7 +1059,7 @@ impl ServerKeyExchangePayload {
     }
 }
 
-/// RFC5246: `ClientCertificateType certificate_types<1..2^8-1>;`
+/// RFC 5246: `ClientCertificateType certificate_types<1..2^8-1>;`
 impl TlsListElement for ClientCertificateType {
     const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
         empty_error: InvalidMessage::IllegalEmptyList("ClientCertificateTypes"),
@@ -1115,6 +1111,23 @@ extension_struct! {
     }
 }
 
+impl CertificateRequestExtensions {
+    /// Recognized but unprocessed extensions specified for CertificateRequest.
+    ///
+    /// rustls does not process these, and they are ignored if received in a
+    /// CertificateRequest message.
+    ///
+    /// See RFC 9846 section 4.3 Table 1, plus `signed_certificate_timestamp` per
+    /// its IANA "TLS 1.3" registry entry (carried over from RFC 9846 section 4.3).
+    pub(super) const UNPROCESSED: &'static [ExtensionType] = &[
+        ExtensionType::ServerName,
+        ExtensionType::StatusRequest,
+        ExtensionType::SCT,
+        ExtensionType::OIDFilters,
+        ExtensionType::SignatureAlgorithmsCert,
+    ];
+}
+
 impl Codec<'_> for CertificateRequestExtensions {
     fn encode(&self, bytes: &mut Vec<u8>) {
         let extensions = LengthPrefixedBuffer::new(ListLength::U16, bytes);
@@ -1133,7 +1146,9 @@ impl Codec<'_> for CertificateRequestExtensions {
         let mut sub = r.sub(len)?;
 
         while sub.any_left() {
-            out.read_one(&mut sub, |unknown| checker.check(unknown))?;
+            out.read_one(&mut sub, |unknown| {
+                checker.check_unprocessed(unknown, Self::UNPROCESSED)
+            })?;
         }
 
         if out
@@ -1143,6 +1158,10 @@ impl Codec<'_> for CertificateRequestExtensions {
             .unwrap_or_default()
         {
             return Err(InvalidMessage::NoSignatureSchemes);
+        }
+
+        if let Some([]) = out.authority_names.as_deref() {
+            return Err(InvalidMessage::IllegalEmptyCertificateAuthoritiesExtension);
         }
 
         Ok(out)
@@ -1231,7 +1250,11 @@ impl Codec<'_> for NewSessionTicketExtensions {
         let mut sub = r.sub(len)?;
 
         while sub.any_left() {
-            out.read_one(&mut sub, |unknown| checker.check(unknown))?;
+            // `read_one` processes `early_data`, the only extension
+            // specified for NewSessionTicket, and calls this closure for
+            // other types. Every specified type is processed, so the
+            // permitted list is empty.
+            out.read_one(&mut sub, |unknown| checker.check_unprocessed(unknown, &[]))?;
         }
 
         Ok(out)
@@ -1272,7 +1295,7 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
         let lifetime = Duration::from_secs(u32::read(r)? as u64);
         let age_add = u32::read(r)?;
         let nonce = SizedPayload::read(r)?.into_owned();
-        // nb. RFC8446: `opaque ticket<1..2^16-1>;`
+        // nb. RFC 9846: `opaque ticket<1..2^16-1>;`
         let ticket = Arc::new(match SizedPayload::<u16, NonEmpty>::read(r) {
             Err(InvalidMessage::IllegalEmptyList(_)) => Err(InvalidMessage::EmptyTicketValue),
             Err(err) => Err(err),
@@ -1290,7 +1313,7 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
     }
 }
 
-// -- RFC6066 certificate status types
+// -- RFC 6066 certificate status types
 
 /// Only supports OCSP
 #[derive(Clone, Debug)]
@@ -1335,7 +1358,7 @@ impl<'a> CertificateStatus<'a> {
     }
 }
 
-// -- RFC8879 compressed certificates
+// -- RFC 8879 compressed certificates
 
 #[derive(Debug)]
 pub(crate) struct CompressedCertificatePayload<'a> {
@@ -1383,7 +1406,7 @@ impl CompressedCertificatePayload<'_> {
 /// In some cases a handshake message may be encoded differently depending on the purpose
 /// the encoded message is being used for.
 pub(crate) enum Encoding {
-    /// Standard RFC 8446 encoding.
+    /// Standard RFC 9846 encoding.
     Standard,
     /// Encoding for ECH confirmation for HRR.
     EchConfirmation,
@@ -1408,6 +1431,25 @@ pub(super) struct DuplicateExtensionChecker(pub(super) BTreeSet<u16>);
 impl DuplicateExtensionChecker {
     pub(super) fn new() -> Self {
         Self(BTreeSet::new())
+    }
+
+    /// Check an unmodelled extension of type `typ` is appropriate for the message.
+    ///
+    /// A message must reject recognized extension types not specified for it
+    /// (RFC 9846 section 4.3).
+    ///
+    /// `permitted` lists the types that are specified for the message but
+    /// not processed by rustls. These, and unrecognized types, are ignored
+    /// (subject to the usual duplicate check).
+    pub(super) fn check_unprocessed(
+        &mut self,
+        typ: ExtensionType,
+        permitted: &[ExtensionType],
+    ) -> Result<(), InvalidMessage> {
+        match typ.is_recognized() && !permitted.contains(&typ) {
+            true => Err(InvalidMessage::MisplacedExtension(u16::from(typ))),
+            false => self.check(typ),
+        }
     }
 
     pub(super) fn check(&mut self, typ: ExtensionType) -> Result<(), InvalidMessage> {

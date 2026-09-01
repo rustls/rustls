@@ -3,8 +3,8 @@
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::fmt;
 use core::ops::Deref;
-use core::{fmt, mem};
 use std::time::SystemTimeError;
 
 use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
@@ -175,6 +175,7 @@ impl TryFrom<&Error> for AlertDescription {
             Error::PeerIncompatible(e) => Self::from(*e),
             Error::PeerSentOversizedRecord => Self::RecordOverflow,
             Error::RejectedEch(_) => Self::EncryptedClientHelloRequired,
+            Error::General(_) => Self::GeneralError,
 
             _ => return Err(()),
         })
@@ -590,7 +591,7 @@ impl From<&CertificateError> for AlertDescription {
             | UnhandledCriticalExtension
             | NotValidForName
             | NotValidForNameContext { .. } => Self::BadCertificate,
-            // RFC 5246/RFC 8446
+            // RFC 5246/RFC 9846
             // certificate_expired
             //  A certificate has expired or **is not currently valid**.
             Expired | ExpiredContext { .. } | NotValidYet | NotValidYetContext { .. } => {
@@ -609,7 +610,7 @@ impl From<&CertificateError> for AlertDescription {
             | UnsupportedSignatureAlgorithmForPublicKey { .. } => Self::DecryptError,
             InvalidPurpose | InvalidPurposeContext { .. } => Self::UnsupportedCertificate,
             ApplicationVerificationFailure => Self::AccessDenied,
-            // RFC 5246/RFC 8446
+            // RFC 5246/RFC 9846
             // certificate_unknown
             //  Some other (unspecified) issue arose in processing the
             //  certificate, rendering it unacceptable.
@@ -717,44 +718,220 @@ impl fmt::Display for CertificateError {
 enum_builder! {
     /// The `AlertDescription` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
+    ///
+    /// The list of alerts is available at
+    /// <https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-6>.
     pub struct AlertDescription(pub u8);
 
     enum AlertDescriptionName {
+        /// Notifies the recipient that the sender will not send any more messages on this connection.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.1-2.2.1>
         CloseNotify => 0x00,
+
+        /// An inappropriate message was received.
+        ///
+        /// E.g., the wrong handshake message, premature Application Data, etc.
+        /// This alert should never be observed in communication between proper implementations.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.2.1>
         UnexpectedMessage => 0x0a,
+
+        /// This alert is returned if a record is received which cannot be deprotected.
+        ///
+        /// Because AEAD algorithms combine decryption and verification,
+        /// and also to avoid side-channel attacks,
+        /// this alert is used for all deprotection failures.
+        /// This alert should never be observed in communication between proper implementations,
+        /// except when messages were corrupted in the network.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.4.1>
         BadRecordMac => 0x14,
+
+        /// Reserved. Used in TLS versions prior to 1.3.
+        ///
+        /// According to TLS 1.2 specification at <https://www.rfc-editor.org/info/rfc5246/>
+        /// "This alert was used in some earlier versions of TLS, and may have
+        /// permitted certain attacks against the CBC mode.
+        /// It MUST NOT be sent by compliant implementations."
         DecryptionFailed => 0x15,
+
+        /// TLS record larger than the limit was received.
+        ///
+        /// A TLSCiphertext record was received that had a length more than 214 + 256 bytes,
+        /// or a record decrypted to a TLSPlaintext record with more than 214 bytes
+        /// (or some other negotiated limit).
+        /// This alert should never be observed in communication between proper implementations,
+        /// except when messages were corrupted in the network.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.6.1>
         RecordOverflow => 0x16,
+
+        /// Reserved. Used in TLS versions prior to 1.3.
+        ///
+        /// The decompression function received improper input
+        /// (e.g., data that would expand to excessive length).
+        /// This message is always fatal and should never be observed
+        /// in communication between proper implementations.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc5246/>
         DecompressionFailure => 0x1e,
+
+        /// The sender was unable to negotiate an acceptable set of security parameters.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.8.1>
         HandshakeFailure => 0x28,
+
+        /// Reserved. Used in SSLv3 but not in TLS.
         NoCertificate => 0x29,
+
+        /// A certificate was corrupt, contained signatures that did not verify correctly, etc.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.10.1>
         BadCertificate => 0x2a,
+
+        /// A certificate was of an unsupported type.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.12.1>
         UnsupportedCertificate => 0x2b,
+
+        /// A certificate was revoked by its signer.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.14.1>
         CertificateRevoked => 0x2c,
+
+        /// A certificate has expired or is not currently valid.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.16.1>
         CertificateExpired => 0x2d,
+
+        /// Unspecified issue arose in processing the certificate, rendering it unacceptable.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.18.1>
         CertificateUnknown => 0x2e,
+
+        /// A field in the handshake was incorrect or inconsistent with other fields.
+        ///
+        /// This alert is used for errors which conform to the formal protocol syntax
+        /// but are otherwise incorrect.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.20.1>
         IllegalParameter => 0x2f,
+
+        /// The CA certificate could not be located or could not be matched with a known trust anchor.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.22.1>
         UnknownCa => 0x30,
+
+        /// A valid certificate or PSK was received, but did not pass access control.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.24.1>
         AccessDenied => 0x31,
+
+        /// A message could not be decoded.
+        ///
+        /// Some field was out of the specified range
+        /// or the length of the message was incorrect.
+        /// This alert is used for errors where the message does not conform
+        /// to the formal protocol syntax.
+        /// This alert should never be observed in communication between proper implementations,
+        /// except when messages were corrupted in the network.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.26.1>
         DecodeError => 0x32,
+
+        /// A handshake (not record layer) cryptographic operation failed.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.28.1>
         DecryptError => 0x33,
+
+        /// Reserved. Used in TLS 1.0 but not TLS 1.1 or later.
         ExportRestriction => 0x3c,
+
+        /// Peer has attempted to negotiate a recognized but not supported protocol version.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.30.1>
         ProtocolVersion => 0x46,
+
+        /// The server requires parameters more secure than those supported by the client.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.32.1>
         InsufficientSecurity => 0x47,
+
+        /// An internal error unrelated to the peer or the correctness of the protocol.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.34.1>
         InternalError => 0x50,
+
+        /// Sent by a server in response to an invalid connection retry attempt from a client.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.36.1>
         InappropriateFallback => 0x56,
+
+        /// The sender is canceling the handshake for some reason unrelated to a protocol failure.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.1-2.4.1>
         UserCanceled => 0x5a,
+
+        /// Reserved. Used in TLS versions prior to 1.3.
+        ///
+        /// See TLS 1.2 specification at <https://www.rfc-editor.org/info/rfc5246/>
+        /// for the description.
         NoRenegotiation => 0x64,
+
+        /// A handshake message does not contain an extension that is mandatory to send.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.38.1>
         MissingExtension => 0x6d,
+
+        /// Received an extension not offered in ClientHello or CertificateRequest.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.38.1>
         UnsupportedExtension => 0x6e,
+
+        /// The server is unable to obtain certificate sent as an URL by the client.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc6066>
         CertificateUnobtainable => 0x6f,
+
+        /// The server does not recognize SNI sent by the client.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc6066>
         UnrecognizedName => 0x70,
+
+        /// <https://datatracker.ietf.org/doc/html/rfc6066>
         BadCertificateStatusResponse => 0x71,
+
+        /// Reserved. Used in TLS versions prior to 1.3.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc6066>
         BadCertificateHashValue => 0x72,
+
+        /// The server does not recognize PSK identity.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc4279>
         UnknownPskIdentity => 0x73,
+
+        /// A client certificate is desired but none was provided by the client.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc9846#section-6.2-4.48.1>
         CertificateRequired => 0x74,
+
+        /// An error condition in cases when either no more specific error is available
+        /// or the sender wishes to conceal the specific error code.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc9846#section-6.2-4.49>
+        GeneralError => 0x75,
+
+        /// A client ALPN extension advertises only protocols that the server does not support.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc9846#section-6.2-4.52.1>
         NoApplicationProtocol => 0x78,
-        EncryptedClientHelloRequired => 0x79, // https://datatracker.ietf.org/doc/html/rfc9849#section-11.2
+
+        /// Use of Encrypted Client Hello is required.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc9849#section-11.2>
+        EncryptedClientHelloRequired => 0x79,
     }
 }
 
@@ -794,6 +971,7 @@ impl fmt::Display for AlertDescription {
             AlertDescriptionName::UnsupportedExtension => {
                 write!(f, "rejected an unsolicited extension")
             }
+            AlertDescriptionName::GeneralError => write!(f, "experienced a general error"),
 
             // these are deprecated by TLS1.3 and should be very rare (but possible
             // with TLS1.2 or earlier peers)
@@ -920,6 +1098,8 @@ pub enum InvalidMessage {
     MessageTooLarge,
     /// Message is shorter than the expected length
     MessageTooShort,
+    /// A peer sent a recognized extension type in a message where it is not permitted
+    MisplacedExtension(u16),
     /// Missing data for the named handshake payload value
     MissingData(&'static str),
     /// A peer did not advertise its supported key exchange groups.
@@ -952,6 +1132,8 @@ pub enum InvalidMessage {
     UnknownHelloRetryRequestExtension,
     /// The peer sent a TLS1.3 Certificate with an unknown extension
     UnknownCertificateExtension,
+    /// A peer sent an empty TLS1.3 `certificate_authorities` extension
+    IllegalEmptyCertificateAuthoritiesExtension,
 }
 
 impl From<InvalidMessage> for AlertDescription {
@@ -959,6 +1141,8 @@ impl From<InvalidMessage> for AlertDescription {
         match e {
             InvalidMessage::PreSharedKeyIsNotFinalExtension => Self::IllegalParameter,
             InvalidMessage::DuplicateExtension(_) => Self::IllegalParameter,
+            InvalidMessage::MisplacedExtension(_) => Self::IllegalParameter,
+            InvalidMessage::UnsupportedCompression => Self::IllegalParameter,
             InvalidMessage::UnknownHelloRetryRequestExtension => Self::UnsupportedExtension,
             InvalidMessage::CertificatePayloadTooLarge => Self::BadCertificate,
             _ => Self::DecodeError,
@@ -992,6 +1176,7 @@ pub enum PeerMisbehaved {
     EarlyDataAttemptedInSecondClientHello,
     EarlyDataExtensionWithoutResumption,
     EarlyDataOfferedWithVariedCipherSuite,
+    EmptyFragment,
     HandshakeHashVariedAfterRetry,
     /// Received an alert with an undefined level and the given [`AlertDescription`]
     IllegalAlertLevel(u8, AlertDescription),
@@ -1060,6 +1245,7 @@ pub enum PeerMisbehaved {
     UnsolicitedServerHelloExtension,
     WrongGroupForKeyShare,
     UnsolicitedEchExtension,
+    IllegalTls13ContentType,
 }
 
 impl From<PeerMisbehaved> for AlertDescription {
@@ -1074,7 +1260,8 @@ impl From<PeerMisbehaved> for AlertDescription {
 
             PeerMisbehaved::IllegalMiddleboxChangeCipherSpec
             | PeerMisbehaved::KeyEpochWithPendingFragment
-            | PeerMisbehaved::KeyUpdateReceivedInQuicConnection => Self::UnexpectedMessage,
+            | PeerMisbehaved::KeyUpdateReceivedInQuicConnection
+            | PeerMisbehaved::IllegalTls13ContentType => Self::UnexpectedMessage,
 
             PeerMisbehaved::IllegalWarningAlert(_) => Self::DecodeError,
 
@@ -1106,7 +1293,7 @@ impl From<PeerMisbehaved> for AlertDescription {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PeerIncompatible {
     EcPointsExtensionRequired,
-    ExtendedMasterSecretExtensionRequired,
+    ExtendedMainSecretExtensionRequired,
     IncorrectCertificateTypeExtension,
     KeyShareExtensionRequired,
     MultipleRawKeys,
@@ -1141,6 +1328,8 @@ impl From<PeerIncompatible> for AlertDescription {
             | PeerIncompatible::Tls12NotOffered
             | PeerIncompatible::Tls12NotOfferedOrEnabled
             | PeerIncompatible::Tls13RequiredForQuic => Self::ProtocolVersion,
+
+            PeerIncompatible::KeyShareExtensionRequired => Self::MissingExtension,
 
             PeerIncompatible::UnknownCertificateType(_) => Self::UnsupportedCertificate,
 
@@ -1395,13 +1584,6 @@ pub enum ApiMisuse {
     /// [`KeyingMaterialExporter::derive()`]: crate::KeyingMaterialExporter::derive()
     ExporterOutputZeroLength,
 
-    /// A server [`Acceptor::accept()`][] or QUIC [`quic::Acceptor::accept()`][] called after it
-    /// yielded a connection.
-    ///
-    /// [`Acceptor::accept()`]: crate::server::Acceptor::accept()
-    /// [`quic::Acceptor::accept()`]: crate::quic::Acceptor::accept()
-    AcceptorPolledAfterCompletion,
-
     /// Incorrect sample length provided to [`quic::HeaderProtectionKey::encrypt_in_place()`][]
     ///
     /// [`quic::HeaderProtectionKey::encrypt_in_place()`]: crate::quic::HeaderProtectionKey::encrypt_in_place()
@@ -1456,14 +1638,6 @@ pub enum ApiMisuse {
     /// is available.
     SecretExtractionRequiresPriorOptIn,
 
-    /// Secret extraction operation attempted without first extracting all pending
-    /// TLS data.
-    ///
-    /// See [`Self::SecretExtractionRequiresPriorOptIn`] for a list of the affected
-    /// functions.  You must ensure any prior generated TLS records are extracted
-    /// from the library before using one of these functions.
-    SecretExtractionWithPendingSendableData,
-
     /// Attempt to verify a certificate with an unsupported type.
     ///
     /// A verifier indicated support for a certificate type but then failed to verify the peer's
@@ -1508,6 +1682,31 @@ pub enum ApiMisuse {
     ///
     /// [`KernelConnection::update_tx_secret()`]: crate::conn::kernel::KernelConnection::update_tx_secret()
     KeyUpdateNotAvailableForTls12,
+
+    /// [`KernelConnection::handle_new_session_ticket()`] and associated are not available for TLS1.2 connections.
+    ///
+    /// [`KernelConnection::handle_new_session_ticket()`]: crate::conn::kernel::KernelConnection::handle_new_session_ticket()
+    KernelSessionTicketHandlingNotAvailableForTls12,
+
+    /// [`ClientConnection::split()`] or [`ServerConnection::split()`] called during handshake.
+    ///
+    /// [`ServerConnection::split()`]: crate::server::ServerConnection::split()
+    /// [`ClientConnection::split()`]: crate::client::ClientConnection::split()
+    SplitDuringHandshake,
+
+    /// An output buffer provided for encryption was too small.
+    EncryptBufferTooSmall {
+        /// The minimum required buffer length
+        required: usize,
+        /// The buffer length actually provided
+        provided: usize,
+    },
+
+    /// Plaintext cannot be encrypted before the handshake is complete.
+    WriteTlsBeforeHandshakeComplete,
+
+    /// Plaintext cannot be encrypted after the send path has been closed.
+    WriteTlsAfterSendPathClosed,
 }
 
 impl fmt::Display for ApiMisuse {
@@ -1564,33 +1763,32 @@ pub use other_error::OtherError;
 
 /// An [`Error`] along with the (possibly encrypted) alert to send to
 /// the peer.
-pub struct ErrorWithAlert {
+///
+/// This borrows the output buffer passed to the operation that failed;
+/// the alert (if one is to be sent) has been appended to that buffer.
+pub struct ErrorWithAlert<'a> {
     /// The error
     pub error: Error,
-    pub(crate) data: Vec<u8>,
+    pub(crate) tls: &'a mut Vec<u8>,
 }
 
-impl ErrorWithAlert {
-    pub(crate) fn new(error: Error, send_path: &mut SendPath) -> Self {
-        maybe_send_fatal_alert(send_path, &error);
-        Self {
-            error,
-            data: send_path.sendable_tls.take_one_vec(),
-        }
+impl<'a> ErrorWithAlert<'a> {
+    pub(crate) fn new(error: Error, send_path: &mut SendPath, tls: &'a mut Vec<u8>) -> Self {
+        maybe_send_fatal_alert(send_path, &error, tls);
+        Self { error, tls }
     }
 
-    /// Consume any pending TLS data.
+    /// Yields remaining TLS data, if any, to send to the peer.
     ///
-    /// The returned buffer will contain the alert, if one is to be sent.
-    pub fn take_tls_data(&mut self) -> Option<Vec<u8>> {
-        match self.data.is_empty() {
-            true => None,
-            false => Some(mem::take(&mut self.data)),
-        }
+    /// The returned slice is the contents of the output buffer passed to the failed operation:
+    /// the alert (if one is to be sent) and any TLS data generated before the error.  Send it to
+    /// the peer before closing the connection.
+    pub fn tls(&self) -> &[u8] {
+        self.tls
     }
 }
 
-impl Deref for ErrorWithAlert {
+impl Deref for ErrorWithAlert<'_> {
     type Target = Error;
 
     fn deref(&self) -> &Self::Target {
@@ -1598,21 +1796,11 @@ impl Deref for ErrorWithAlert {
     }
 }
 
-/// Direct conversion with no alert.
-impl From<Error> for ErrorWithAlert {
-    fn from(error: Error) -> Self {
-        Self {
-            error,
-            data: Vec::new(),
-        }
-    }
-}
-
-impl fmt::Debug for ErrorWithAlert {
+impl fmt::Debug for ErrorWithAlert<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ErrorWithAlert")
             .field("error", &self.error)
-            .field("data", &self.data.len())
+            .field("tls", &self.tls.len())
             .finish_non_exhaustive()
     }
 }

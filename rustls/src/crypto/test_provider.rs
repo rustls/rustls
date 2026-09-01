@@ -5,8 +5,8 @@ use core::time::Duration;
 use std::borrow::Cow;
 
 use crate::crypto::cipher::{
-    AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
-    OutboundOpaque, OutboundPlain, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
+    AeadKey, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape, OutboundPlain, Record,
+    RecordDecrypter, RecordEncrypter, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
     UnsupportedOperationError,
 };
 use crate::crypto::kx::{
@@ -16,7 +16,7 @@ use crate::crypto::{
     self, CipherSuite, CipherSuiteCommon, GetRandomFailed, HashAlgorithm, SignatureScheme,
     TicketProducer, WebPkiSupportedAlgorithms, hash, hmac, tls12, tls13,
 };
-use crate::enums::{ContentType, ProtocolVersion};
+use crate::enums::ContentType;
 use crate::error::PeerMisbehaved;
 use crate::pki_types::{
     AlgorithmIdentifier, InvalidSignature, PrivateKeyDer, SignatureVerificationAlgorithm,
@@ -81,7 +81,7 @@ pub(crate) const TLS13_TEST_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {
     quic: None,
 };
 
-const TLS_TEST_SUITE: &Tls12CipherSuite = &Tls12CipherSuite {
+pub(crate) const TLS_TEST_SUITE: &Tls12CipherSuite = &Tls12CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite(0xff12),
         hash_provider: FAKE_HASH,
@@ -292,7 +292,8 @@ impl crypto::kx::ActiveKeyExchange for ActiveKeyExchange {
     }
 }
 
-const KEY_EXCHANGE_GROUP: &dyn SupportedKxGroup = &FakeKeyExchangeGroup(NamedGroup(0xfe00));
+pub(crate) const KEY_EXCHANGE_GROUP: &dyn SupportedKxGroup =
+    &FakeKeyExchangeGroup(NamedGroup(0xfe00));
 
 #[derive(Debug)]
 pub(crate) struct FakeKeyExchangeGroup(pub(crate) NamedGroup);
@@ -315,11 +316,11 @@ const KX_SHARED_SECRET: &[u8] = b"KxSharedSecretKxSharedSecret";
 struct Aead;
 
 impl Tls13AeadAlgorithm for Aead {
-    fn encrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn RecordEncrypter> {
         Box::new(Tls13Cipher)
     }
 
-    fn decrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn RecordDecrypter> {
         Box::new(Tls13Cipher)
     }
 
@@ -337,11 +338,11 @@ impl Tls13AeadAlgorithm for Aead {
 }
 
 impl Tls12AeadAlgorithm for Aead {
-    fn encrypter(&self, _key: AeadKey, _iv: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, _key: AeadKey, _iv: &[u8], _: &[u8]) -> Box<dyn RecordEncrypter> {
         Box::new(Tls12Cipher)
     }
 
-    fn decrypter(&self, _key: AeadKey, _iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, _key: AeadKey, _iv: &[u8]) -> Box<dyn RecordDecrypter> {
         Box::new(Tls12Cipher)
     }
 
@@ -363,19 +364,20 @@ impl Tls12AeadAlgorithm for Aead {
     }
 }
 
-struct Tls13Cipher;
+pub(crate) struct Tls13Cipher;
 
-impl MessageEncrypter for Tls13Cipher {
-    fn encrypt(
+impl RecordEncrypter for Tls13Cipher {
+    fn encrypt<'a>(
         &mut self,
-        m: EncodedMessage<OutboundPlain<'_>>,
+        record: Record<OutboundPlain<'_>>,
         seq: u64,
-    ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
-        let total_len = self.encrypted_payload_len(m.payload.len());
-        let mut payload = OutboundOpaque::with_capacity(total_len);
+        out: &'a mut [u8],
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let total_len = self.encrypted_payload_len(record.payload.len());
+        let mut payload = EncryptBuffer::new(out, total_len)?;
 
-        payload.extend_from_chunks(&m.payload);
-        payload.extend_from_slice(&m.typ.to_array());
+        payload.extend_from_chunks(&record.payload);
+        payload.extend_from_slice(&record.typ.to_array());
 
         for (p, mask) in payload
             .as_mut()
@@ -388,10 +390,10 @@ impl MessageEncrypter for Tls13Cipher {
         payload.extend_from_slice(&seq.to_be_bytes());
         payload.extend_from_slice(AEAD_TAG);
 
-        Ok(EncodedMessage {
+        Ok(Record {
             typ: ContentType::ApplicationData,
-            version: ProtocolVersion::TLSv1_2,
-            payload,
+            version: record.version,
+            payload: payload.into_written(),
         })
     }
 
@@ -400,13 +402,13 @@ impl MessageEncrypter for Tls13Cipher {
     }
 }
 
-impl MessageDecrypter for Tls13Cipher {
+impl RecordDecrypter for Tls13Cipher {
     fn decrypt<'a>(
         &mut self,
-        mut m: EncodedMessage<InboundOpaque<'a>>,
+        mut record: Record<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let payload = &mut m.payload;
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let payload = &mut record.payload;
 
         let mut expected_tag = vec![];
         expected_tag.extend_from_slice(&seq.to_be_bytes());
@@ -428,21 +430,22 @@ impl MessageDecrypter for Tls13Cipher {
             *p ^= *mask;
         }
 
-        m.into_tls13_unpadded_message()
+        record.into_tls13_unpadded_record()
     }
 }
 
 struct Tls12Cipher;
 
-impl MessageEncrypter for Tls12Cipher {
-    fn encrypt(
+impl RecordEncrypter for Tls12Cipher {
+    fn encrypt<'a>(
         &mut self,
-        m: EncodedMessage<OutboundPlain<'_>>,
+        record: Record<OutboundPlain<'_>>,
         seq: u64,
-    ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
-        let total_len = self.encrypted_payload_len(m.payload.len());
-        let mut payload = OutboundOpaque::with_capacity(total_len);
-        payload.extend_from_chunks(&m.payload);
+        out: &'a mut [u8],
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let total_len = self.encrypted_payload_len(record.payload.len());
+        let mut payload = EncryptBuffer::new(out, total_len)?;
+        payload.extend_from_chunks(&record.payload);
 
         for (p, mask) in payload
             .as_mut()
@@ -455,10 +458,10 @@ impl MessageEncrypter for Tls12Cipher {
         payload.extend_from_slice(&seq.to_be_bytes());
         payload.extend_from_slice(AEAD_TAG);
 
-        Ok(EncodedMessage {
-            typ: m.typ,
-            version: m.version,
-            payload,
+        Ok(Record {
+            typ: record.typ,
+            version: record.version,
+            payload: payload.into_written(),
         })
     }
 
@@ -467,13 +470,13 @@ impl MessageEncrypter for Tls12Cipher {
     }
 }
 
-impl MessageDecrypter for Tls12Cipher {
+impl RecordDecrypter for Tls12Cipher {
     fn decrypt<'a>(
         &mut self,
-        mut m: EncodedMessage<InboundOpaque<'a>>,
+        mut record: Record<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let payload = &mut m.payload;
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let payload = &mut record.payload;
 
         let mut expected_tag = vec![];
         expected_tag.extend_from_slice(&seq.to_be_bytes());
@@ -495,7 +498,7 @@ impl MessageDecrypter for Tls12Cipher {
             *p ^= *mask;
         }
 
-        Ok(m.into_plain_message())
+        Ok(record.into_plain_record())
     }
 }
 

@@ -14,6 +14,8 @@ cargo test --locked --all-features # this presumably enables `fips`
 cargo test -p rustls-ring --locked
 cargo test -p rustls-aws-lc-rs --locked
 cargo test -p rustls-test --locked --features aws-lc-rs # aws-lc-rs, but no fips
+# rustls-util isn't a workspace default-member, test it explicitly.
+cargo test -p rustls-util --locked --all-features
 
 # ensure both zlib and brotli are tested, irrespective of their order
 cargo test --locked $(admin/all-features-except zlib rustls)

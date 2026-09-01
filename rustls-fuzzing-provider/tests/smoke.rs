@@ -1,9 +1,8 @@
 use std::fs;
-use std::io::Write;
 use std::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
-use rustls::{ClientConfig, Connection, ServerConfig, ServerConnection};
+use rustls::{ClientConfig, Connection, ServerConfig, ServerConnection, SliceInput};
 
 // These tests exercise rustls_fuzzing_provider and makes sure it can
 // handshake with itself without errors.
@@ -73,7 +72,7 @@ fn pairwise_tls13() {
 }
 
 fn test_version(provider: CryptoProvider) -> Transcript {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server_config = ServerConfig::builder(provider.clone().into())
         .with_no_client_auth()
@@ -89,46 +88,57 @@ fn test_version(provider: CryptoProvider) -> Transcript {
             .unwrap(),
     );
     let hostname = "localhost".try_into().unwrap();
+    let mut client_output = Vec::new();
     let mut client = client_config
         .connect(hostname)
-        .build()
-        .unwrap();
-    server
-        .writer()
-        .write_all(b"hello from server")
-        .unwrap();
-    client
-        .writer()
-        .write_all(b"hello from client")
+        .build(&mut client_output)
         .unwrap();
 
     let mut transcript = Transcript::default();
+    let mut server_output = Vec::new();
 
     while client.is_handshaking() || server.is_handshaking() {
-        let mut buffer = vec![];
-        client
-            .write_tls(&mut &mut buffer)
-            .unwrap();
         transcript
             .client_wrote
-            .extend_from_slice(&buffer);
+            .extend_from_slice(&client_output);
         server
-            .read_tls(&mut &buffer[..])
+            .process_new_packets(&mut SliceInput::new(&mut client_output), &mut server_output)
+            .handle_all(&mut Vec::new())
             .unwrap();
-        server.process_new_packets().unwrap();
+        client_output.clear();
 
-        let mut buffer = vec![];
-        server
-            .write_tls(&mut &mut buffer)
-            .unwrap();
         transcript
             .server_wrote
-            .extend_from_slice(&buffer);
+            .extend_from_slice(&server_output);
         client
-            .read_tls(&mut &buffer[..])
+            .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
+            .handle_all(&mut Vec::new())
             .unwrap();
-        client.process_new_packets().unwrap();
+        server_output.clear();
     }
+
+    client
+        .write_tls(b"hello from client".into(), &mut client_output)
+        .unwrap();
+    transcript
+        .client_wrote
+        .extend_from_slice(&client_output);
+    server
+        .process_new_packets(&mut SliceInput::new(&mut client_output), &mut server_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    client_output.clear();
+
+    server
+        .write_tls(b"hello from server".into(), &mut server_output)
+        .unwrap();
+    transcript
+        .server_wrote
+        .extend_from_slice(&server_output);
+    client
+        .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
 
     transcript
 }

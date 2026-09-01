@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::hash::Hasher;
+use core::ops::Deref;
 
 use pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime};
 
@@ -31,9 +32,12 @@ pub trait ServerVerifier: Debug + Send + Sync {
     /// the implementer to handle invalid data. It is recommended that the implementer returns
     /// [`Error::InvalidCertificate`] containing [`CertificateError::BadEncoding`] when these cases are encountered.
     ///
-    /// [Certificate]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.4.2
+    /// [Certificate]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.5.1
     /// [`CertificateError::BadEncoding`]: crate::error::CertificateError::BadEncoding
-    fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error>;
+    fn verify_identity<'a>(
+        &self,
+        identity: &ServerIdentity<'a, '_>,
+    ) -> Result<VerifiedIdentity<'a>, Error>;
 
     /// Verify a signature allegedly by the given server certificate.
     ///
@@ -93,7 +97,7 @@ pub trait ServerVerifier: Debug + Send + Sync {
     /// If specified, will be sent as the [`certificate_authorities`] extension in ClientHello.
     /// Note that this is only applicable to TLS 1.3.
     ///
-    /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
+    /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.4
     fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
         None
     }
@@ -105,23 +109,23 @@ pub trait ServerVerifier: Debug + Send + Sync {
 /// Data required to verify a server's identity.
 #[non_exhaustive]
 #[derive(Debug)]
-pub struct ServerIdentity<'a> {
+pub struct ServerIdentity<'a, 'b> {
     /// Identity information presented by the server.
-    pub identity: &'a Identity<'a>,
+    pub identity: &'b Identity<'a>,
     /// The server name the client specified when connecting to the server.
-    pub server_name: &'a ServerName<'a>,
+    pub server_name: &'b ServerName<'a>,
     /// OCSP response stapled to the server's `Certificate` message, if any.
     ///
     /// Empty if no OCSP response was received, and that also
     /// covers the case where `request_ocsp_response()` returns false.
-    pub ocsp_response: &'a [u8],
+    pub ocsp_response: &'b [u8],
     /// Current time against which time-sensitive inputs should be validated.
     pub now: UnixTime,
 }
 
-impl<'a> ServerIdentity<'a> {
+impl<'a, 'b> ServerIdentity<'a, 'b> {
     /// Create a new `ServerIdentity` instance with empty OCSP response.
-    pub fn new(identity: &'a Identity<'a>, server_name: &'a ServerName<'a>, now: UnixTime) -> Self {
+    pub fn new(identity: &'b Identity<'a>, server_name: &'b ServerName<'a>, now: UnixTime) -> Self {
         Self {
             identity,
             server_name,
@@ -140,7 +144,10 @@ pub trait ClientVerifier: Debug + Send + Sync {
     /// a [`CertificateError::BadEncoding`] error when these cases are encountered.
     ///
     /// [`CertificateError::BadEncoding`]: crate::error::CertificateError::BadEncoding
-    fn verify_identity(&self, identity: &ClientIdentity<'_>) -> Result<PeerVerified, Error>;
+    fn verify_identity<'a>(
+        &self,
+        identity: &ClientIdentity<'a, '_>,
+    ) -> Result<VerifiedIdentity<'a>, Error>;
 
     /// Verify a signature allegedly by the given client certificate.
     ///
@@ -197,8 +204,8 @@ pub trait ClientVerifier: Debug + Send + Sync {
     ///
     /// [subjects]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6
     /// [RFC 5280 A.1]: https://www.rfc-editor.org/rfc/rfc5280#appendix-A.1
-    /// [`CertificateRequest`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.3.2
-    /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
+    /// [`CertificateRequest`]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.4.2
+    /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.4
     fn root_hint_subjects(&self) -> Arc<[DistinguishedName]>;
 
     /// Return `true` to require a client certificate and `false` to make
@@ -234,9 +241,9 @@ pub trait ClientVerifier: Debug + Send + Sync {
 /// Data required to verify a client's identity.
 #[non_exhaustive]
 #[derive(Debug)]
-pub struct ClientIdentity<'a> {
+pub struct ClientIdentity<'a, 'b> {
     /// Identity information presented by the client.
-    pub identity: &'a Identity<'a>,
+    pub identity: &'b Identity<'a>,
     /// Current time against which time-sensitive inputs should be validated.
     pub now: UnixTime,
 }
@@ -278,7 +285,10 @@ pub enum SignerPublicKey<'a> {
 pub struct NoClientAuth;
 
 impl ClientVerifier for NoClientAuth {
-    fn verify_identity(&self, _identity: &ClientIdentity<'_>) -> Result<PeerVerified, Error> {
+    fn verify_identity<'a>(
+        &self,
+        _identity: &ClientIdentity<'a, '_>,
+    ) -> Result<VerifiedIdentity<'a>, Error> {
         unimplemented!();
     }
 
@@ -359,7 +369,7 @@ wrapped_payload!(
     /// }
     /// ```
     ///
-    /// The TLS encoding is defined in RFC5246: `opaque DistinguishedName<1..2^16-1>;`
+    /// The TLS encoding is defined in RFC 5246: `opaque DistinguishedName<1..2^16-1>;`
     pub struct DistinguishedName,
     SizedPayload<u16, NonEmpty>,
 );
@@ -384,8 +394,8 @@ impl PartialEq for DistinguishedName {
     }
 }
 
-/// RFC8446: `DistinguishedName authorities<3..2^16-1>;` however,
-/// RFC5246: `DistinguishedName certificate_authorities<0..2^16-1>;`
+/// RFC 9846: `DistinguishedName authorities<3..2^16-1>;` however,
+/// RFC 5246: `DistinguishedName certificate_authorities<0..2^16-1>;`
 impl TlsListElement for DistinguishedName {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
@@ -412,12 +422,50 @@ impl FinishedMessageVerified {
 
 /// Zero-sized marker type representing verification of the peer's identity.
 #[derive(Debug)]
-pub struct PeerVerified(());
+pub(crate) struct PeerVerified(());
 
-impl PeerVerified {
-    /// Make a `PeerVerified`
-    pub fn assertion() -> Self {
-        Self(())
+/// A peer's identity, which has been verified.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct VerifiedIdentity<'a>(Identity<'a>);
+
+impl<'a> VerifiedIdentity<'a> {
+    /// Make a `VerifiedIdentity`, noting that `identity` has been verified somehow.
+    pub fn assertion(identity: Identity<'a>) -> Self {
+        VerifiedIdentity(identity)
+    }
+
+    /// Borrow the verified [`Identity`].
+    pub fn identity(&self) -> &Identity<'a> {
+        &self.0
+    }
+
+    /// Convert the value into an owned one.
+    ///
+    /// This is a straight move if the value is already owned.
+    pub fn into_owned(self) -> VerifiedIdentity<'static> {
+        VerifiedIdentity(self.0.into_owned())
+    }
+
+    pub(crate) fn as_marker(&self) -> PeerVerified {
+        PeerVerified(())
+    }
+
+    pub(crate) fn into_inner(self) -> Identity<'a> {
+        self.0
+    }
+}
+
+impl PartialEq<Identity<'_>> for VerifiedIdentity<'_> {
+    fn eq(&self, other: &Identity<'_>) -> bool {
+        self.0 == *other
+    }
+}
+
+impl<'a> Deref for VerifiedIdentity<'a> {
+    type Target = Identity<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -425,10 +473,7 @@ impl PeerVerified {
 fn assertions_are_debug() {
     use std::format;
 
-    assert_eq!(
-        format!("{:?}", PeerVerified::assertion()),
-        "PeerVerified(())"
-    );
+    assert_eq!(format!("{:?}", PeerVerified(())), "PeerVerified(())");
     assert_eq!(
         format!("{:?}", HandshakeSignatureValid::assertion()),
         "HandshakeSignatureValid(())"

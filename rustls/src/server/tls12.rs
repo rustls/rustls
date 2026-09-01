@@ -10,11 +10,12 @@ use zeroize::Zeroize;
 use super::config::ServerConfig;
 use super::hs::ServerState;
 use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
+use crate::ConnectionTrafficSecrets;
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
 use crate::conn::{ConnectionRandoms, Input};
-use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
+use crate::crypto::cipher::{EncodableVersion, Payload, RecordDecrypter, RecordEncrypter};
 use crate::crypto::kx::{ActiveKeyExchange, SupportedKxGroup};
 use crate::crypto::{Identity, TicketProducer};
 use crate::enums::{
@@ -22,18 +23,20 @@ use crate::enums::{
 };
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
-use crate::log::{debug, trace};
 use crate::msgs::{
     CertificateChain, ChangeCipherSpecPayload, ClientKeyExchangeParams, Codec,
     HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload, Message, MessagePayload,
     NewSessionTicketPayload, NewSessionTicketPayloadTls13, Reader, SessionId,
 };
+use crate::server::hs::{VerifyClientIdentity, VerifyClientIdentityInternal};
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
-use crate::verify::{ClientIdentity, SignatureVerificationInput};
-use crate::{ConnectionTrafficSecrets, verify};
+use crate::tracing::{debug, trace};
+use crate::verify::{
+    ClientIdentity, FinishedMessageVerified, SignatureVerificationInput, VerifiedIdentity,
+};
 
 #[expect(private_interfaces)]
 pub(crate) enum Tls12State {
@@ -101,12 +104,12 @@ mod client_hello {
 
             if input
                 .client_hello
-                .extended_master_secret_request
+                .extended_main_secret_request
                 .is_some()
             {
                 st.using_ems = true;
             } else if st.config.require_ems {
-                return Err(PeerIncompatible::ExtendedMasterSecretExtensionRequired.into());
+                return Err(PeerIncompatible::ExtendedMainSecretExtensionRequired.into());
             }
 
             // "RFC 4492 specified that if this extension is missing,
@@ -549,35 +552,30 @@ impl ExpectCertificate {
 
         trace!("certs {cert_chain:?}");
 
-        let peer_identity = match Identity::from_peer(cert_chain.0, CertificateType::X509)? {
-            None if mandatory => {
-                return Err(PeerMisbehaved::NoCertificatesPresented.into());
-            }
+        match Identity::from_peer(cert_chain.0, CertificateType::X509)? {
+            None if mandatory => Err(PeerMisbehaved::NoCertificatesPresented.into()),
             None => {
                 debug!("client auth requested but no certificate supplied");
                 self.hs.transcript.abandon_client_auth();
-                None
-            }
-            Some(identity) => {
-                self.hs
-                    .config
-                    .verifier
-                    .verify_identity(&ClientIdentity {
-                        identity: &identity,
-                        now: self.hs.config.current_time()?,
-                    })?;
-                Some(identity.into_owned())
-            }
-        };
 
-        Ok(Box::new(ExpectClientKx {
-            hs: self.hs,
-            randoms: self.randoms,
-            suite: self.suite,
-            server_kx: self.server_kx,
-            peer_identity,
-        })
-        .into())
+                Ok(Box::new(ExpectClientKx {
+                    hs: self.hs,
+                    randoms: self.randoms,
+                    suite: self.suite,
+                    server_kx: self.server_kx,
+                    peer_identity: None,
+                })
+                .into())
+            }
+            Some(identity) => Ok(Box::new(AwaitClientIdentityVerification {
+                hs: self.hs,
+                randoms: self.randoms,
+                suite: self.suite,
+                server_kx: self.server_kx,
+                peer_identity: identity.into_owned(),
+            })
+            .into()),
+        }
     }
 }
 
@@ -587,13 +585,63 @@ impl From<Box<ExpectCertificate>> for ServerState {
     }
 }
 
+// --- Verify the client's identity
+struct AwaitClientIdentityVerification {
+    hs: HandshakeState,
+    randoms: ConnectionRandoms,
+    suite: &'static Tls12CipherSuite,
+    server_kx: GroupAndKeyExchange,
+    peer_identity: Identity<'static>,
+}
+
+impl VerifyClientIdentityInternal for AwaitClientIdentityVerification {
+    fn presented_identity(&self) -> Result<ClientIdentity<'static, '_>, Error> {
+        Ok(ClientIdentity {
+            identity: &self.peer_identity,
+            now: self.hs.config.current_time()?,
+        })
+    }
+
+    fn with_config(self: Box<Self>) -> Result<ServerState, Error> {
+        let peer_identity = self
+            .hs
+            .config
+            .verifier
+            .verify_identity(&self.presented_identity()?)?;
+
+        self.continue_with(peer_identity)
+    }
+
+    fn continue_with(
+        self: Box<Self>,
+        peer_identity: VerifiedIdentity<'static>,
+    ) -> Result<ServerState, Error> {
+        Ok(Box::new(ExpectClientKx {
+            hs: self.hs,
+            randoms: self.randoms,
+            suite: self.suite,
+            server_kx: self.server_kx,
+            peer_identity: Some(peer_identity),
+        })
+        .into())
+    }
+}
+
+impl From<Box<AwaitClientIdentityVerification>> for ServerState {
+    fn from(value: Box<AwaitClientIdentityVerification>) -> Self {
+        Self::VerifyClientIdentity(VerifyClientIdentity::from(
+            value as Box<dyn VerifyClientIdentityInternal>,
+        ))
+    }
+}
+
 // --- Process client's KeyExchange ---
 struct ExpectClientKx {
     hs: HandshakeState,
     randoms: ConnectionRandoms,
     suite: &'static Tls12CipherSuite,
     server_kx: GroupAndKeyExchange,
-    peer_identity: Option<Identity<'static>>,
+    peer_identity: Option<VerifiedIdentity<'static>>,
 }
 
 impl ExpectClientKx {
@@ -640,7 +688,7 @@ impl ExpectClientKx {
                 peer_identity,
             })
             .into()),
-            _ => Ok(Box::new(ExpectCcs {
+            None => Ok(Box::new(ExpectCcs {
                 hs: self.hs,
                 secrets,
                 peer_identity: None,
@@ -661,7 +709,7 @@ impl From<Box<ExpectClientKx>> for ServerState {
 struct ExpectCertificateVerify {
     hs: HandshakeState,
     secrets: ConnectionSecrets,
-    peer_identity: Identity<'static>,
+    peer_identity: VerifiedIdentity<'static>,
 }
 
 impl ExpectCertificateVerify {
@@ -676,26 +724,23 @@ impl ExpectCertificateVerify {
             HandshakePayload::CertificateVerify
         )?;
 
-        match self.hs.transcript.take_handshake_buf() {
-            Some(msgs) => {
-                self.hs
-                    .config
-                    .verifier
-                    .verify_tls12_signature(&SignatureVerificationInput {
-                        message: &msgs,
-                        signer: &self.peer_identity.as_signer(),
-                        signature,
-                    })?;
-            }
-            None => {
-                // This should be unreachable; the handshake buffer was initialized with
-                // client authentication if the verifier wants to offer it.
-                // `transcript.abandon_client_auth()` can extract it, but its only caller in
-                // this flow will also set `ExpectClientKx::client_cert` to `None`, making it
-                // impossible to reach this state.
-                return Err(Error::Unreachable("client authentication not set up"));
-            }
-        }
+        let Some(msgs) = self.hs.transcript.take_handshake_buf() else {
+            // This should be unreachable; the handshake buffer was initialized with
+            // client authentication if the verifier wants to offer it.
+            // `transcript.abandon_client_auth()` can extract it, but its only caller in
+            // this flow will also set `ExpectClientKx::client_cert` to `None`, making it
+            // impossible to reach this state.
+            return Err(Error::Unreachable("client authentication not set up"));
+        };
+
+        self.hs
+            .config
+            .verifier
+            .verify_tls12_signature(&SignatureVerificationInput {
+                message: &msgs,
+                signer: &self.peer_identity.as_signer(),
+                signature,
+            })?;
 
         trace!("client CertificateVerify OK");
 
@@ -720,8 +765,8 @@ impl From<Box<ExpectCertificateVerify>> for ServerState {
 struct ExpectCcs {
     hs: HandshakeState,
     secrets: ConnectionSecrets,
-    peer_identity: Option<Identity<'static>>,
-    resuming_decrypter: Option<Box<dyn MessageDecrypter>>,
+    peer_identity: Option<VerifiedIdentity<'static>>,
+    resuming_decrypter: Option<Box<dyn RecordDecrypter>>,
 }
 
 impl ExpectCcs {
@@ -757,7 +802,7 @@ impl ExpectCcs {
         output
             .receive()
             .decrypt_state
-            .set_message_decrypter(decrypter, &proof);
+            .set_record_decrypter(decrypter, &proof);
 
         Ok(Box::new(ExpectFinished {
             hs: self.hs,
@@ -858,7 +903,7 @@ fn emit_ticket(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
     using_ems: bool,
-    peer_identity: Option<&Identity<'static>>,
+    peer_identity: Option<&VerifiedIdentity<'static>>,
     alpn_protocol: Option<&ApplicationProtocol<'_>>,
     sni: Option<&DnsName<'static>>,
     resumption_data: Vec<u8>,
@@ -888,7 +933,7 @@ fn emit_ticket(
     let ticket_lifetime = ticketer.lifetime();
 
     let m = Message {
-        version: ProtocolVersion::TLSv1_2,
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(
             HandshakePayload::NewSessionTicket(NewSessionTicketPayload::new(
                 ticket_lifetime,
@@ -905,7 +950,7 @@ fn emit_ticket(
 fn emit_ccs(output: &mut dyn Output<'_>) {
     output.send_msg(
         Message {
-            version: ProtocolVersion::TLSv1_2,
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         },
         false,
@@ -923,7 +968,7 @@ fn emit_finished(
     let verify_data_payload = Payload::Borrowed(&verify_data);
 
     let f = Message {
-        version: ProtocolVersion::TLSv1_2,
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Finished(
             verify_data_payload,
         ))),
@@ -936,9 +981,9 @@ fn emit_finished(
 pub(super) struct ExpectFinished {
     hs: HandshakeState,
     secrets: ConnectionSecrets,
-    peer_identity: Option<Identity<'static>>,
+    peer_identity: Option<VerifiedIdentity<'static>>,
     resuming: bool,
-    pending_encrypter: Option<Box<dyn MessageEncrypter>>,
+    pending_encrypter: Option<Box<dyn RecordEncrypter>>,
 }
 
 impl ExpectFinished {
@@ -962,7 +1007,7 @@ impl ExpectFinished {
 
         let fin_verified =
             match ConstantTimeEq::ct_eq(&expect_verify_data[..], finished.bytes()).into() {
-                true => verify::FinishedMessageVerified::assertion(),
+                true => FinishedMessageVerified::assertion(),
                 false => {
                     return Err(PeerMisbehaved::IncorrectFinished.into());
                 }
@@ -1041,6 +1086,7 @@ impl ExpectFinished {
                     .extract_secrets(Side::Server)
             });
 
+        output.output(OutputEvent::ExtendedMainSecret(self.hs.using_ems));
         output.output(OutputEvent::Exporter(self.secrets.into_exporter()));
         output.start_traffic();
 
@@ -1073,7 +1119,7 @@ struct HandshakeState {
 pub(super) struct ExpectTraffic {
     // only `Some` if `config.enable_secret_extraction` is true
     extracted_secrets: Option<Result<PartiallyExtractedSecrets, Error>>,
-    _fin_verified: verify::FinishedMessageVerified,
+    _fin_verified: FinishedMessageVerified,
 }
 
 impl ExpectTraffic {}

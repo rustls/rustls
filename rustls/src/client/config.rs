@@ -13,6 +13,7 @@ use super::handy::{ClientSessionMemoryCache, FailResolveClientCert, NoClientSess
 use super::{Tls12Session, Tls13Session};
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::connection::ClientConnectionBuilder;
+use crate::common_state::Protocol;
 #[cfg(doc)]
 use crate::crypto;
 use crate::crypto::kx::NamedGroup;
@@ -25,9 +26,10 @@ use crate::key_log::NoKeyLog;
 use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
 use crate::time_provider::{DefaultTimeProvider, TimeProvider};
+use crate::verify::ServerVerifier;
 #[cfg(feature = "webpki")]
 use crate::webpki::{self, WebPkiServerVerifier};
-use crate::{DistinguishedName, DynHasher, KeyLog, compress, verify};
+use crate::{DistinguishedName, DynHasher, KeyLog, compress};
 
 /// Common configuration for (typically) all connections made by a program.
 ///
@@ -89,7 +91,7 @@ pub struct ClientConfig {
     /// store, and then resumed by `A`.  This would give a false impression to the user
     /// of `A` that the server certificate is fully validated.
     ///
-    /// [`ServerVerifier::hash_config()`]: verify::ServerVerifier::hash_config()
+    /// [`ServerVerifier::hash_config()`]: crate::verify::ServerVerifier::hash_config()
     pub resumption: Resumption,
 
     /// The maximum size of plaintext input to be emitted in a single TLS record.
@@ -101,7 +103,7 @@ pub struct ClientConfig {
     /// Setting this value to a little less than the TCP MSS may improve latency
     /// for stream-y workloads.
     ///
-    /// [TLS maximum]: https://datatracker.ietf.org/doc/html/rfc8446#section-5.1
+    /// [TLS maximum]: https://datatracker.ietf.org/doc/html/rfc9846#section-5.1
     pub max_fragment_size: Option<usize>,
 
     /// Whether to send the Server Name Indication (SNI) extension
@@ -110,8 +112,11 @@ pub struct ClientConfig {
     /// The default is true.
     pub enable_sni: bool,
 
-    /// How to output key material for debugging.  The default
-    /// does nothing.
+    /// How to output key material for debugging.
+    ///
+    /// The default does nothing.
+    ///
+    /// See [RFC 9850](https://datatracker.ietf.org/doc/html/rfc9850) for background.
     pub key_log: Arc<dyn KeyLog>,
 
     /// Allows traffic secrets to be extracted after the handshake,
@@ -138,31 +143,38 @@ pub struct ClientConfig {
     /// [FIPS 140-3 IG.pdf]: https://csrc.nist.gov/csrc/media/Projects/cryptographic-module-validation-program/documents/fips%20140-3/FIPS%20140-3%20IG.pdf
     pub require_ems: bool,
 
+    /// Request a specific number of TLS 1.3 session tickets via [RFC 9149].
+    ///
+    /// Set to `None` to disable sending the extension (the default).
+    ///
+    /// [RFC 9149]: https://datatracker.ietf.org/doc/html/rfc9149
+    pub send_ticket_request: Option<TicketRequest>,
+
     /// Items that affect the fundamental security properties of a connection.
     pub(super) domain: SecurityDomain,
 
     /// How to decompress the server's certificate chain.
     ///
-    /// If this is non-empty, the [RFC8779] certificate compression
+    /// If this is non-empty, the [RFC 8779] certificate compression
     /// extension is offered, and any compressed certificates are
     /// transparently decompressed during the handshake.
     ///
     /// This only applies to TLS1.3 connections.  It is ignored for
     /// TLS1.2 connections.
     ///
-    /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
+    /// [RFC 8779]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_decompressors: Vec<&'static dyn compress::CertDecompressor>,
 
     /// How to compress the client's certificate chain.
     ///
     /// If a server supports this extension, and advertises support
     /// for one of the compression algorithms included here, the
-    /// client certificate will be compressed according to [RFC8779].
+    /// client certificate will be compressed according to [RFC 8779].
     ///
     /// This only applies to TLS1.3 connections.  It is ignored for
     /// TLS1.2 connections.
     ///
-    /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
+    /// [RFC 8779]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_compressors: Vec<&'static dyn compress::CertCompressor>,
 
     /// Caching for compressed certificates.
@@ -259,12 +271,12 @@ impl ClientConfig {
     /// Return the verifier for this client configuration.
     ///
     /// This is the object that determines how server certificates are verified.
-    pub fn verifier(&self) -> &Arc<dyn verify::ServerVerifier> {
+    pub fn verifier(&self) -> &Arc<dyn ServerVerifier> {
         &self.domain.verifier
     }
 
-    pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
-        self.domain.provider.supports_version(v)
+    pub(crate) fn supports_version(&self, v: ProtocolVersion, protocol: Protocol) -> bool {
+        self.domain.provider.supports_version(v) && protocol.supports_version(v)
     }
 
     pub(super) fn find_cipher_suite(&self, suite: CipherSuite) -> Option<SupportedCipherSuite> {
@@ -458,7 +470,7 @@ pub(super) struct SecurityDomain {
     provider: Arc<CryptoProvider>,
 
     /// How to verify the server certificate chain.
-    verifier: Arc<dyn verify::ServerVerifier>,
+    verifier: Arc<dyn ServerVerifier>,
 
     /// How to decide what client auth certificate/keys to use.
     client_auth_cert_resolver: Arc<dyn ClientCredentialResolver>,
@@ -470,7 +482,7 @@ impl SecurityDomain {
     pub(crate) fn new(
         provider: Arc<CryptoProvider>,
         client_auth_cert_resolver: Arc<dyn ClientCredentialResolver + 'static>,
-        verifier: Arc<dyn verify::ServerVerifier + 'static>,
+        verifier: Arc<dyn ServerVerifier + 'static>,
         time_provider: Arc<dyn TimeProvider + 'static>,
     ) -> Self {
         // Use a hash function that outputs at least 32 bytes.
@@ -512,7 +524,7 @@ impl SecurityDomain {
         }
     }
 
-    fn with_verifier(&self, verifier: Arc<dyn verify::ServerVerifier + 'static>) -> Self {
+    fn with_verifier(&self, verifier: Arc<dyn ServerVerifier + 'static>) -> Self {
         let Self {
             time_provider,
             provider,
@@ -605,6 +617,26 @@ pub enum Tls12Resumption {
     SessionIdOrTickets,
 }
 
+/// Number of TLS 1.3 session tickets to request via the [RFC 9149]
+/// `ticket_request` extension.
+///
+/// [RFC 9149]: https://datatracker.ietf.org/doc/html/rfc9149
+#[expect(clippy::exhaustive_structs)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TicketRequest {
+    /// Tickets desired when the server negotiates a new connection.
+    ///
+    /// RFC 9149 recommends setting this to the desired number of tickets
+    /// and `resumption_count` to 0 for initial connections.
+    pub new_session_count: u8,
+
+    /// Tickets desired when the server resumes using a presented ticket.
+    ///
+    /// A value of 1 is a good default for primed caches. Clients racing
+    /// multiple connections may want a higher value.
+    pub resumption_count: u8,
+}
+
 impl ConfigBuilder<ClientConfig, WantsVerifier> {
     /// Choose how to verify server certificates.
     ///
@@ -679,7 +711,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone)]
 pub struct WantsClientCert {
-    verifier: Arc<dyn verify::ServerVerifier>,
+    verifier: Arc<dyn ServerVerifier>,
     client_ech_mode: Option<EchMode>,
 }
 
@@ -741,6 +773,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             enable_secret_extraction: false,
             enable_early_data: false,
             require_ems,
+            send_ticket_request: None,
             domain: SecurityDomain::new(
                 self.provider,
                 client_auth_cert_resolver,

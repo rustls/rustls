@@ -3,8 +3,8 @@ use alloc::boxed::Box;
 use pki_types::FipsStatus;
 use ring::aead;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
-    NONCE_LEN, Nonce, OutboundOpaque, OutboundPlain, Tls12AeadAlgorithm, UnsupportedOperationError,
+    AeadKey, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape, NONCE_LEN, Nonce, OutboundPlain,
+    Record, RecordDecrypter, RecordEncrypter, Tls12AeadAlgorithm, UnsupportedOperationError,
     make_tls12_aad,
 };
 use rustls::crypto::kx::KeyExchangeAlgorithm;
@@ -13,6 +13,22 @@ use rustls::crypto::{CipherSuite, SignatureScheme};
 use rustls::error::Error;
 use rustls::version::TLS12_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls12CipherSuite};
+
+/// The TLS1.2 cipher suite configuration that an application should use by default.
+///
+/// This will be [`ALL_TLS12_CIPHER_SUITES`] sans any supported cipher suites that
+/// shouldn't be enabled by most applications.
+pub static DEFAULT_TLS12_CIPHER_SUITES: &[&Tls12CipherSuite] = ALL_TLS12_CIPHER_SUITES;
+
+/// A list of all the TLS1.2 cipher suites supported by the rustls *ring* provider.
+pub static ALL_TLS12_CIPHER_SUITES: &[&Tls12CipherSuite] = &[
+    TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+    TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+    TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+    TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+    TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+];
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
 pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: &Tls12CipherSuite = &Tls12CipherSuite {
@@ -120,11 +136,11 @@ pub(crate) static AES256_GCM: GcmAlgorithm = GcmAlgorithm(&aead::AES_256_GCM);
 pub(crate) struct GcmAlgorithm(&'static aead::Algorithm);
 
 impl Tls12AeadAlgorithm for GcmAlgorithm {
-    fn decrypter(&self, dec_key: AeadKey, dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, dec_key: AeadKey, dec_iv: &[u8]) -> Box<dyn RecordDecrypter> {
         let dec_key =
             aead::LessSafeKey::new(aead::UnboundKey::new(self.0, dec_key.as_ref()).unwrap());
 
-        let mut ret = GcmMessageDecrypter {
+        let mut ret = GcmRecordDecrypter {
             dec_key,
             dec_salt: [0u8; 4],
         };
@@ -139,11 +155,11 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
         enc_key: AeadKey,
         write_iv: &[u8],
         explicit: &[u8],
-    ) -> Box<dyn MessageEncrypter> {
+    ) -> Box<dyn RecordEncrypter> {
         let enc_key =
             aead::LessSafeKey::new(aead::UnboundKey::new(self.0, enc_key.as_ref()).unwrap());
         let iv = gcm_iv(write_iv, explicit);
-        Box::new(GcmMessageEncrypter { enc_key, iv })
+        Box::new(GcmRecordEncrypter { enc_key, iv })
     }
 
     fn key_block_shape(&self) -> KeyBlockShape {
@@ -176,21 +192,21 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
 pub(crate) struct ChaCha20Poly1305;
 
 impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
-    fn decrypter(&self, dec_key: AeadKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, dec_key: AeadKey, iv: &[u8]) -> Box<dyn RecordDecrypter> {
         let dec_key = aead::LessSafeKey::new(
             aead::UnboundKey::new(&aead::CHACHA20_POLY1305, dec_key.as_ref()).unwrap(),
         );
-        Box::new(ChaCha20Poly1305MessageDecrypter {
+        Box::new(ChaCha20Poly1305RecordDecrypter {
             dec_key,
             dec_offset: Iv::new(iv).expect("IV length validated by key_block_shape"),
         })
     }
 
-    fn encrypter(&self, enc_key: AeadKey, enc_iv: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, enc_key: AeadKey, enc_iv: &[u8], _: &[u8]) -> Box<dyn RecordEncrypter> {
         let enc_key = aead::LessSafeKey::new(
             aead::UnboundKey::new(&aead::CHACHA20_POLY1305, enc_key.as_ref()).unwrap(),
         );
-        Box::new(ChaCha20Poly1305MessageEncrypter {
+        Box::new(ChaCha20Poly1305RecordEncrypter {
             enc_key,
             enc_offset: Iv::new(enc_iv).expect("IV length validated by key_block_shape"),
         })
@@ -223,14 +239,14 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
     }
 }
 
-/// A `MessageEncrypter` for AES-GCM AEAD ciphersuites. TLS 1.2 only.
-struct GcmMessageEncrypter {
+/// A `RecordEncrypter` for AES-GCM AEAD ciphersuites. TLS 1.2 only.
+struct GcmRecordEncrypter {
     enc_key: aead::LessSafeKey,
     iv: Iv,
 }
 
-/// A `MessageDecrypter` for AES-GCM AEAD ciphersuites.  TLS1.2 only.
-struct GcmMessageDecrypter {
+/// A `RecordDecrypter` for AES-GCM AEAD ciphersuites.  TLS1.2 only.
+struct GcmRecordDecrypter {
     dec_key: aead::LessSafeKey,
     dec_salt: [u8; 4],
 }
@@ -238,13 +254,13 @@ struct GcmMessageDecrypter {
 const GCM_EXPLICIT_NONCE_LEN: usize = 8;
 const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
-impl MessageDecrypter for GcmMessageDecrypter {
+impl RecordDecrypter for GcmRecordDecrypter {
     fn decrypt<'a>(
         &mut self,
-        mut msg: EncodedMessage<InboundOpaque<'a>>,
+        mut record: Record<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let payload = &msg.payload;
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let payload = &record.payload;
         if payload.len() < GCM_OVERHEAD {
             return Err(Error::DecryptError);
         }
@@ -258,12 +274,12 @@ impl MessageDecrypter for GcmMessageDecrypter {
 
         let aad = aead::Aad::from(make_tls12_aad(
             seq,
-            msg.typ,
-            msg.version,
+            record.typ,
+            record.version.version(),
             payload.len() - GCM_OVERHEAD,
         ));
 
-        let payload = &mut msg.payload;
+        let payload = &mut record.payload;
         let plain_len = self
             .dec_key
             .open_within(nonce, aad, payload, GCM_EXPLICIT_NONCE_LEN..)
@@ -275,33 +291,43 @@ impl MessageDecrypter for GcmMessageDecrypter {
         }
 
         payload.truncate(plain_len);
-        Ok(msg.into_plain_message())
+        Ok(record.into_plain_record())
     }
 }
 
-impl MessageEncrypter for GcmMessageEncrypter {
-    fn encrypt(
+impl RecordEncrypter for GcmRecordEncrypter {
+    fn encrypt<'a>(
         &mut self,
-        msg: EncodedMessage<OutboundPlain<'_>>,
+        record: Record<OutboundPlain<'_>>,
         seq: u64,
-    ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
-        let total_len = self.encrypted_payload_len(msg.payload.len());
-        let mut payload = OutboundOpaque::with_capacity(total_len);
+        out: &'a mut [u8],
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let total_len = self.encrypted_payload_len(record.payload.len());
+        let mut payload = EncryptBuffer::new(out, total_len)?;
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
+        let aad = aead::Aad::from(make_tls12_aad(
+            seq,
+            record.typ,
+            record.version.encode(),
+            record.payload.len(),
+        ));
         payload.extend_from_slice(&nonce.as_ref()[4..]);
-        payload.extend_from_chunks(&msg.payload);
+        payload.extend_from_chunks(&record.payload);
 
-        self.enc_key
-            .seal_in_place_separate_tag(nonce, aad, &mut payload.as_mut()[GCM_EXPLICIT_NONCE_LEN..])
-            .map(|tag| payload.extend_from_slice(tag.as_ref()))
-            .map_err(|_| Error::EncryptError)?;
+        match self.enc_key.seal_in_place_separate_tag(
+            nonce,
+            aad,
+            &mut payload.as_mut()[GCM_EXPLICIT_NONCE_LEN..],
+        ) {
+            Ok(tag) => payload.extend_from_slice(tag.as_ref()),
+            Err(_) => return Err(Error::EncryptError),
+        }
 
-        Ok(EncodedMessage {
-            typ: msg.typ,
-            version: msg.version,
-            payload,
+        Ok(Record {
+            typ: record.typ,
+            version: record.version,
+            payload: payload.into_written(),
         })
     }
 
@@ -310,31 +336,31 @@ impl MessageEncrypter for GcmMessageEncrypter {
     }
 }
 
-/// The RFC7905/RFC7539 ChaCha20Poly1305 construction.
+/// The RFC 7905/RFC 7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
-/// TLS1.3 uses `TLS13MessageEncrypter`.
-struct ChaCha20Poly1305MessageEncrypter {
+/// TLS1.3 uses `Tls13RecordEncrypter`.
+struct ChaCha20Poly1305RecordEncrypter {
     enc_key: aead::LessSafeKey,
     enc_offset: Iv,
 }
 
-/// The RFC7905/RFC7539 ChaCha20Poly1305 construction.
+/// The RFC 7905/RFC 7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
-/// TLS1.3 uses `TLS13MessageDecrypter`.
-struct ChaCha20Poly1305MessageDecrypter {
+/// TLS1.3 uses `Tls13RecordDecrypter`.
+struct ChaCha20Poly1305RecordDecrypter {
     dec_key: aead::LessSafeKey,
     dec_offset: Iv,
 }
 
 const CHACHAPOLY1305_OVERHEAD: usize = 16;
 
-impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
+impl RecordDecrypter for ChaCha20Poly1305RecordDecrypter {
     fn decrypt<'a>(
         &mut self,
-        mut msg: EncodedMessage<InboundOpaque<'a>>,
+        mut record: Record<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        let payload = &msg.payload;
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let payload = &record.payload;
 
         if payload.len() < CHACHAPOLY1305_OVERHEAD {
             return Err(Error::DecryptError);
@@ -344,12 +370,12 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
             aead::Nonce::assume_unique_for_key(Nonce::new(&self.dec_offset, seq).to_array()?);
         let aad = aead::Aad::from(make_tls12_aad(
             seq,
-            msg.typ,
-            msg.version,
+            record.typ,
+            record.version.version(),
             payload.len() - CHACHAPOLY1305_OVERHEAD,
         ));
 
-        let payload = &mut msg.payload;
+        let payload = &mut record.payload;
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, payload)
@@ -361,32 +387,42 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         }
 
         payload.truncate(plain_len);
-        Ok(msg.into_plain_message())
+        Ok(record.into_plain_record())
     }
 }
 
-impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
-    fn encrypt(
+impl RecordEncrypter for ChaCha20Poly1305RecordEncrypter {
+    fn encrypt<'a>(
         &mut self,
-        msg: EncodedMessage<OutboundPlain<'_>>,
+        record: Record<OutboundPlain<'_>>,
         seq: u64,
-    ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
-        let total_len = self.encrypted_payload_len(msg.payload.len());
-        let mut payload = OutboundOpaque::with_capacity(total_len);
+        out: &'a mut [u8],
+    ) -> Result<Record<&'a [u8]>, Error> {
+        let total_len = self.encrypted_payload_len(record.payload.len());
+        let mut payload = EncryptBuffer::new(out, total_len)?;
 
         let nonce =
             aead::Nonce::assume_unique_for_key(Nonce::new(&self.enc_offset, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
-        payload.extend_from_chunks(&msg.payload);
+        let aad = aead::Aad::from(make_tls12_aad(
+            seq,
+            record.typ,
+            record.version.encode(),
+            record.payload.len(),
+        ));
+        payload.extend_from_chunks(&record.payload);
 
-        self.enc_key
-            .seal_in_place_append_tag(nonce, aad, &mut payload)
-            .map_err(|_| Error::EncryptError)?;
+        match self
+            .enc_key
+            .seal_in_place_separate_tag(nonce, aad, payload.as_mut())
+        {
+            Ok(tag) => payload.extend_from_slice(tag.as_ref()),
+            Err(_) => return Err(Error::EncryptError),
+        }
 
-        Ok(EncodedMessage {
-            typ: msg.typ,
-            version: msg.version,
-            payload,
+        Ok(Record {
+            typ: record.typ,
+            version: record.version,
+            payload: payload.into_written(),
         })
     }
 

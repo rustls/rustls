@@ -223,7 +223,7 @@ mod tests {
     use std::dbg;
 
     use rustls::crypto::tls13::OkmBlock;
-    use rustls::quic::*;
+    use rustls::quic::{KeyBuilder, Keys, Side, Suite, Version};
 
     use crate::tls13::{TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256};
 
@@ -309,8 +309,7 @@ mod tests {
         let icid = [0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
         let server = Keys::initial(
             Version::V2,
-            TLS13_AES_128_GCM_SHA256,
-            TLS13_AES_128_GCM_SHA256.quic.unwrap(),
+            Suite::try_from(TLS13_AES_128_GCM_SHA256).unwrap(),
             &icid,
             Side::Server,
         );

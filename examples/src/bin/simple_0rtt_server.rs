@@ -21,7 +21,7 @@ use std::{env, io};
 use rustls::crypto::Identity;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::{Connection, ServerConfig, ServerConnection};
+use rustls::{Connection, ServerConfig, ServerConnection, VecInput};
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 use rustls_util::complete_io;
 
@@ -56,20 +56,24 @@ fn main() -> Result<(), Box<dyn StdError>> {
 
         let mut conn = ServerConnection::new(Arc::new(config.clone()))?;
 
+        let mut input = VecInput::default();
+        let mut output = Vec::new();
         let mut buf = Vec::new();
         let mut did_early_data = false;
         'handshake: while conn.is_handshaking() {
-            while conn.wants_write() {
-                if conn.write_tls(&mut stream)? == 0 {
+            while !output.is_empty() {
+                let len = stream.write(&output)?;
+                if len == 0 {
                     // EOF
                     stream.flush()?;
                     break 'handshake;
                 }
+                output.drain(..len);
             }
             stream.flush()?;
 
             while conn.wants_read() {
-                match conn.read_tls(&mut stream) {
+                match input.read(&mut stream) {
                     Ok(0) => return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into()),
                     Ok(_) => break,
                     Err(err) if err.kind() == io::ErrorKind::Interrupted => {}
@@ -77,8 +81,11 @@ fn main() -> Result<(), Box<dyn StdError>> {
                 };
             }
 
-            if let Err(e) = conn.process_new_packets() {
-                let _ignored = conn.write_tls(&mut stream);
+            if let Err(e) = conn
+                .process_new_packets(&mut input, &mut output)
+                .handle_all(&mut Vec::new())
+            {
+                let _ignored = stream.write_all(&output);
                 stream.flush()?;
 
                 return Err(io::Error::new(io::ErrorKind::InvalidData, e).into());
@@ -106,9 +113,8 @@ fn main() -> Result<(), Box<dyn StdError>> {
 
         println!("Handshake complete\n");
 
-        conn.writer()
-            .write_all(b"Hello from the server")?;
-        conn.send_close_notify();
-        complete_io(&mut stream, &mut conn)?;
+        conn.write_tls(b"Hello from the server".into(), &mut output)?;
+        conn.send_close_notify(&mut output);
+        complete_io(&mut stream, &mut input, &mut buf, &mut output, &mut conn)?;
     }
 }

@@ -20,6 +20,32 @@ information.
 
 [SECURITY.md]: SECURITY.md
 
+## AI policy
+
+Using AI (LLMs) as tools for coding is welcome. A high bar is held for all contributions to this
+project. Moreover, the project maintainers remain responsible for any code that is published as
+part of a release. Contributors are expected to be responsible for any code they publish.
+
+AI should not be used to generate comments when communicating with maintainers. Comments are
+expected to be written by humans. Comments that are believed to be written by AI may be hidden
+without notice.
+
+If you are opening an issue, you should be able to describe the problem in your own words.
+
+If you are opening a pull request, you are expected to be able to explain the proposed changes in
+your own words. This includes the pull request body and responses to questions. Make sure you have
+reviewed the PR yourself before submitting it for review to the maintainers. Do not copy responses
+from the AI when replying to questions from maintainers.
+
+If you wish to include context from an interaction with AI in your comments, it must be in a
+quote block (using `>`) and disclosed as such. It must be accompanied by human commentary
+explaining the relevance and implications of the context. Do not share long snippets.
+
+AI is useful when communicating as a non-native English speaker. If you are using AI to edit your
+comments for this purpose, please take the time to ensure it reflects your own voice and ideas.
+When using AI for translation, we recommend writing in your native language and including the AI
+translation in a quote block.
+
 ## Code changes
 
 Some ideas and guidelines for contributions:
@@ -34,6 +60,16 @@ Some ideas and guidelines for contributions:
   how to run the various test suites, and how to make coverage measurements.
 - I run `cargo outdated` prior to major releases; but PRs to update specific
   dependencies are welcome.
+
+## Crate features
+
+Enabling a Cargo feature must not change rustls' default behavior. Cargo unifies enabled features
+across the entire dependency graph, so a library using rustls cannot control whether another
+library or the application enabled a feature.
+
+A feature may expose additional APIs for opt-in functionality, but that functionality must be
+enabled through those APIs by the application. For example, a feature must not automatically
+enable key logging or select a set of trust anchors.
 
 ## Commit history
 
@@ -349,6 +385,18 @@ expect every user will need. The canonical example of such types are
 `client::ClientConfig` and `server::ServerConfig`. In general this sort of type
 is rare and most new types should be exported only from the module in which they
 are defined.
+
+### Comments
+
+Crate items should have descriptive doccomments on them. These are required for
+any publicly exposed items.
+
+All comments (doccomment or not) should be wrapped to 100 columns.
+
+In addition to the conventions above, all doccomments should conform to
+[Appendix A of Rust RFC 1574][1574-A].
+
+[1574-A]: https://rust-lang.github.io/rfcs/1574-more-api-documentation-conventions.html#appendix-a-full-conventions-text
 
 ### Misc
 

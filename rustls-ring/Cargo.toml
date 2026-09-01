@@ -1,7 +1,7 @@
 [package]
 name = "rustls-ring"
-version = "0.1.0-dev.0"
-edition = "2021"
+version = "0.1.0-dev.1"
+edition.workspace = true
 rust-version = "1.85"
 license = "Apache-2.0 OR ISC OR MIT"
 description = "A *ring*-based crypto provider for rustls."
@@ -16,7 +16,7 @@ std = []
 
 [dependencies]
 pki-types = { workspace = true }
-rustls = { path = "../rustls", version = "0.24.0-dev.0", default-features = false }
+rustls = { path = "../rustls", version = "0.24.0-dev.1", default-features = false }
 ring = { workspace = true }
 subtle = { workspace = true }
 

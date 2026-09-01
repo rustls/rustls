@@ -20,31 +20,40 @@ use alloc::sync::Arc;
 use core::time::Duration;
 
 use pki_types::{FipsStatus, PrivateKeyDer};
-use rustls::crypto::kx::SupportedKxGroup;
 use rustls::crypto::{
-    CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom, SignatureScheme, SigningKey,
-    TicketProducer, TicketerFactory, WebPkiSupportedAlgorithms,
+    CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom, SigningKey, TicketProducer,
+    TicketerFactory,
 };
 use rustls::error::Error;
 #[cfg(feature = "std")]
 use rustls::ticketer::TicketRotator;
-use rustls::{Tls12CipherSuite, Tls13CipherSuite};
 
 /// Using software keys for authentication.
 pub mod sign;
 use sign::{EcdsaSigner, Ed25519Signer, RsaSigningKey};
 
 pub(crate) mod hash;
+
 pub(crate) mod hmac;
+
 pub(crate) mod kx;
+pub use kx::{ALL_KX_GROUPS, DEFAULT_KX_GROUPS};
+
 pub(crate) mod quic;
+
 #[cfg(feature = "std")]
 pub(crate) mod ticketer;
 #[cfg(feature = "std")]
 use ticketer::AeadTicketer;
+
 pub(crate) mod tls12;
+pub use tls12::{ALL_TLS12_CIPHER_SUITES, DEFAULT_TLS12_CIPHER_SUITES};
+
 pub(crate) mod tls13;
+pub use tls13::{ALL_TLS13_CIPHER_SUITES, DEFAULT_TLS13_CIPHER_SUITES};
+
 mod verify;
+use verify::SUPPORTED_SIG_ALGS;
 pub use verify::{
     ALL_VERIFICATION_ALGS, ECDSA_P256_SHA256, ECDSA_P256_SHA384, ECDSA_P384_SHA256,
     ECDSA_P384_SHA384, ED25519, RSA_PKCS1_2048_8192_SHA256,
@@ -148,35 +157,6 @@ impl TicketerFactory for Ring {
     }
 }
 
-/// The TLS1.2 cipher suite configuration that an application should use by default.
-///
-/// This will be [`ALL_TLS12_CIPHER_SUITES`] sans any supported cipher suites that
-/// shouldn't be enabled by most applications.
-pub static DEFAULT_TLS12_CIPHER_SUITES: &[&Tls12CipherSuite] = ALL_TLS12_CIPHER_SUITES;
-
-/// A list of all the TLS1.2 cipher suites supported by the rustls *ring* provider.
-pub static ALL_TLS12_CIPHER_SUITES: &[&Tls12CipherSuite] = &[
-    tls12::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-    tls12::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-    tls12::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-    tls12::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-    tls12::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-    tls12::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-];
-
-/// The TLS1.3 cipher suite configuration that an application should use by default.
-///
-/// This will be [`ALL_TLS13_CIPHER_SUITES`] sans any supported cipher suites that
-/// shouldn't be enabled by most applications.
-pub static DEFAULT_TLS13_CIPHER_SUITES: &[&Tls13CipherSuite] = ALL_TLS13_CIPHER_SUITES;
-
-/// A list of all the TLS1.3 cipher suites supported by the rustls *ring* provider.
-pub static ALL_TLS13_CIPHER_SUITES: &[&Tls13CipherSuite] = &[
-    tls13::TLS13_AES_128_GCM_SHA256,
-    tls13::TLS13_AES_256_GCM_SHA384,
-    tls13::TLS13_CHACHA20_POLY1305_SHA256,
-];
-
 /// All defined cipher suites supported by *ring* appear in this module.
 pub mod cipher_suite {
     pub use super::tls12::{
@@ -189,66 +169,6 @@ pub mod cipher_suite {
     };
 }
 
-/// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
-/// compiled against *ring*.
-static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = match WebPkiSupportedAlgorithms::new(
-    &[
-        ECDSA_P256_SHA256,
-        ECDSA_P256_SHA384,
-        ECDSA_P384_SHA256,
-        ECDSA_P384_SHA384,
-        ED25519,
-        RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
-        RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
-        RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
-        RSA_PKCS1_2048_8192_SHA256,
-        RSA_PKCS1_2048_8192_SHA384,
-        RSA_PKCS1_2048_8192_SHA512,
-        RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS,
-        RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS,
-        RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS,
-    ],
-    &[
-        // Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
-        (
-            SignatureScheme::ECDSA_NISTP384_SHA384,
-            &[ECDSA_P384_SHA384, ECDSA_P256_SHA384],
-        ),
-        (
-            SignatureScheme::ECDSA_NISTP256_SHA256,
-            &[ECDSA_P256_SHA256, ECDSA_P384_SHA256],
-        ),
-        (SignatureScheme::ED25519, &[ED25519]),
-        (
-            SignatureScheme::RSA_PSS_SHA512,
-            &[RSA_PSS_2048_8192_SHA512_LEGACY_KEY],
-        ),
-        (
-            SignatureScheme::RSA_PSS_SHA384,
-            &[RSA_PSS_2048_8192_SHA384_LEGACY_KEY],
-        ),
-        (
-            SignatureScheme::RSA_PSS_SHA256,
-            &[RSA_PSS_2048_8192_SHA256_LEGACY_KEY],
-        ),
-        (
-            SignatureScheme::RSA_PKCS1_SHA512,
-            &[RSA_PKCS1_2048_8192_SHA512],
-        ),
-        (
-            SignatureScheme::RSA_PKCS1_SHA384,
-            &[RSA_PKCS1_2048_8192_SHA384],
-        ),
-        (
-            SignatureScheme::RSA_PKCS1_SHA256,
-            &[RSA_PKCS1_2048_8192_SHA256],
-        ),
-    ],
-) {
-    Ok(algs) => algs,
-    Err(_) => panic!("bad WebPkiSupportedAlgorithms"),
-};
-
 /// All defined key exchange groups supported by *ring* appear in this module.
 ///
 /// [`ALL_KX_GROUPS`] is provided as an array of all of these values.
@@ -256,13 +176,6 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = match WebPkiSupportedAlgo
 pub mod kx_group {
     pub use super::kx::{SECP256R1, SECP384R1, X25519};
 }
-
-/// A list of the default key exchange groups supported by this provider.
-pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = ALL_KX_GROUPS;
-
-/// A list of all the key exchange groups supported by this provider.
-pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] =
-    &[kx_group::X25519, kx_group::SECP256R1, kx_group::SECP384R1];
 
 /// Compatibility shims between ring 0.16.x and 0.17.x API
 mod ring_shim {

@@ -9,24 +9,25 @@ use crate::crypto::cipher::Payload;
 use crate::crypto::{CipherSuite, CryptoProvider, Identity, SelectedCredential, SignatureScheme};
 use crate::enums::{ApplicationProtocol, CertificateType};
 use crate::error::{ApiMisuse, Error, InvalidMessage};
-use crate::log::{debug, trace};
 use crate::msgs::{
     CertificateChain, Codec, ExtensionType, MaybeEmpty, NewSessionTicketPayloadTls13, Reader,
-    ServerExtensions, SessionId, SizedPayload,
+    SessionId, SizedPayload,
 };
 use crate::sync::Arc;
-use crate::verify::DistinguishedName;
+use crate::tls13::Tls13ProtocolSuite;
+use crate::tracing::{debug, trace};
+use crate::verify::{DistinguishedName, VerifiedIdentity};
 #[cfg(feature = "webpki")]
 pub use crate::webpki::{
     ServerVerifierBuilder, VerifierBuilderError, WebPkiServerVerifier,
     verify_identity_signed_by_trust_anchor, verify_server_name,
 };
-use crate::{Tls12CipherSuite, Tls13CipherSuite, compress};
+use crate::{Tls12CipherSuite, compress};
 
 mod config;
 pub use config::{
     ClientConfig, ClientCredentialResolver, ClientSessionKey, ClientSessionStore,
-    CredentialRequest, Resumption, Tls12Resumption, WantsClientCert,
+    CredentialRequest, Resumption, TicketRequest, Tls12Resumption, WantsClientCert,
 };
 
 mod connection;
@@ -51,8 +52,7 @@ pub(crate) use tls13::TLS13_HANDLER;
 pub mod danger {
     pub use super::config::danger::{DangerousClientConfig, DangerousClientConfigBuilder};
     pub use crate::verify::{
-        HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
-        SignatureVerificationInput,
+        HandshakeSignatureValid, ServerIdentity, ServerVerifier, SignatureVerificationInput,
     };
 }
 
@@ -86,7 +86,10 @@ impl Retrieved<&Tls13Session> {
             .retrieved_at
             .as_secs()
             .saturating_sub(self.value.common.epoch);
-        let age_millis = age_secs as u32 * 1000;
+        // nb. tickets have an upper age limit of ~7 days, well short of the 49 days here
+        let age_millis = u32::try_from(age_secs)
+            .unwrap_or(u32::MAX)
+            .saturating_mul(1000);
         age_millis.wrapping_add(self.value.age_add)
     }
 }
@@ -113,7 +116,7 @@ impl<T> Deref for Retrieved<T> {
 /// A stored TLS 1.3 client session value.
 #[derive(Debug)]
 pub struct Tls13Session {
-    suite: &'static Tls13CipherSuite,
+    suite: Tls13ProtocolSuite,
     secret: Zeroizing<SizedPayload<'static, u8>>,
     pub(crate) age_add: u32,
     max_early_data_size: u32,
@@ -123,22 +126,24 @@ pub struct Tls13Session {
 
 impl Tls13Session {
     /// Decode a ticket from the given bytes.
+    #[cfg(test)]
     pub fn from_slice(bytes: &[u8], provider: &CryptoProvider) -> Result<Self, Error> {
-        let mut reader = Reader::new(bytes);
-        let suite = CipherSuite::read(&mut reader)?;
-        let suite = provider
-            .tls13_cipher_suites
-            .iter()
-            .find(|s| s.common.suite == suite)
-            .ok_or(ApiMisuse::ResumingFromUnknownCipherSuite(suite))?;
+        Reader::new(bytes).all("Tls13Session", |reader| {
+            let suite = CipherSuite::read(reader)?;
+            let suite = provider
+                .tls13_cipher_suites
+                .iter()
+                .find(|s| s.common.suite == suite)
+                .ok_or(ApiMisuse::ResumingFromUnknownCipherSuite(suite))?;
 
-        Ok(Self {
-            suite: *suite,
-            secret: Zeroizing::new(SizedPayload::<u8>::read(&mut reader)?.into_owned()),
-            age_add: u32::read(&mut reader)?,
-            max_early_data_size: u32::read(&mut reader)?,
-            common: ClientSessionCommon::read(&mut reader)?,
-            quic_params: SizedPayload::<u16, MaybeEmpty>::read(&mut reader)?.into_owned(),
+            Ok(Self {
+                suite: Tls13ProtocolSuite::Tcp(suite),
+                secret: Zeroizing::new(SizedPayload::<u8>::read(reader)?.into_owned()),
+                age_add: u32::read(reader)?,
+                max_early_data_size: u32::read(reader)?,
+                common: ClientSessionCommon::read(reader)?,
+                quic_params: SizedPayload::<u16, MaybeEmpty>::read(reader)?.into_owned(),
+            })
         })
     }
 
@@ -170,7 +175,11 @@ impl Tls13Session {
 
     /// Encode this ticket into `buf` for persistence.
     pub fn encode(&self, buf: &mut Vec<u8>) {
-        self.suite.common.suite.encode(buf);
+        self.suite
+            .suite()
+            .common
+            .suite
+            .encode(buf);
         self.secret.encode(buf);
         buf.extend_from_slice(&self.age_add.to_be_bytes());
         buf.extend_from_slice(&self.max_early_data_size.to_be_bytes());
@@ -206,8 +215,8 @@ impl Deref for Tls13Session {
 /// A "template" for future TLS1.3 client session values.
 #[derive(Clone)]
 pub(crate) struct Tls13ClientSessionInput {
-    pub(crate) suite: &'static Tls13CipherSuite,
-    pub(crate) peer_identity: Identity<'static>,
+    pub(crate) suite: Tls13ProtocolSuite,
+    pub(crate) peer_identity: VerifiedIdentity<'static>,
     pub(crate) quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
 }
 
@@ -225,24 +234,25 @@ pub struct Tls12Session {
 impl Tls12Session {
     /// Decode a ticket from the given bytes.
     pub fn from_slice(bytes: &[u8], provider: &CryptoProvider) -> Result<Self, Error> {
-        let mut reader = Reader::new(bytes);
-        let suite = CipherSuite::read(&mut reader)?;
-        let suite = provider
-            .tls12_cipher_suites
-            .iter()
-            .find(|s| s.common.suite == suite)
-            .ok_or(ApiMisuse::ResumingFromUnknownCipherSuite(suite))?;
+        Reader::new(bytes).all("Tls12Session", |reader| {
+            let suite = CipherSuite::read(reader)?;
+            let suite = provider
+                .tls12_cipher_suites
+                .iter()
+                .find(|s| s.common.suite == suite)
+                .ok_or(ApiMisuse::ResumingFromUnknownCipherSuite(suite))?;
 
-        Ok(Self {
-            suite: *suite,
-            session_id: SessionId::read(&mut reader)?,
-            master_secret: Zeroizing::new(
-                reader
-                    .take_array("MasterSecret")
-                    .copied()?,
-            ),
-            extended_ms: matches!(u8::read(&mut reader)?, 1),
-            common: ClientSessionCommon::read(&mut reader)?,
+            Ok(Self {
+                suite: *suite,
+                session_id: SessionId::read(reader)?,
+                master_secret: Zeroizing::new(
+                    reader
+                        .take_array("MasterSecret")
+                        .copied()?,
+                ),
+                extended_ms: matches!(u8::read(reader)?, 1),
+                common: ClientSessionCommon::read(reader)?,
+            })
         })
     }
 
@@ -251,7 +261,7 @@ impl Tls12Session {
         session_id: SessionId,
         ticket: Arc<SizedPayload<'static, u16, MaybeEmpty>>,
         master_secret: &[u8; 48],
-        peer_identity: Identity<'static>,
+        peer_identity: VerifiedIdentity<'static>,
         time_now: UnixTime,
         lifetime: Duration,
         extended_ms: bool,
@@ -295,7 +305,7 @@ pub struct ClientSessionCommon {
     pub(crate) ticket: Arc<SizedPayload<'static, u16>>,
     pub(crate) epoch: u64,
     lifetime: Duration,
-    peer_identity: Arc<Identity<'static>>,
+    peer_identity: Arc<VerifiedIdentity<'static>>,
 }
 
 impl ClientSessionCommon {
@@ -303,7 +313,7 @@ impl ClientSessionCommon {
         ticket: Arc<SizedPayload<'static, u16>>,
         time_now: UnixTime,
         lifetime: Duration,
-        peer_identity: Identity<'static>,
+        peer_identity: VerifiedIdentity<'static>,
     ) -> Self {
         Self {
             ticket,
@@ -335,7 +345,7 @@ impl<'a> Codec<'a> for ClientSessionCommon {
             ticket: Arc::new(SizedPayload::read(r)?.into_owned()),
             epoch: u64::read(r)?,
             lifetime: Duration::from_secs(u64::read(r)?),
-            peer_identity: Arc::new(Identity::read(r)?.into_owned()),
+            peer_identity: Arc::new(VerifiedIdentity::assertion(Identity::read(r)?.into_owned())),
         })
     }
 }
@@ -360,6 +370,7 @@ struct ClientHelloDetails {
     sent_extensions: Vec<ExtensionType>,
     extension_order_seed: u16,
     offered_cert_compression: bool,
+    offered_cipher_suites: Vec<CipherSuite>,
 }
 
 impl ClientHelloDetails {
@@ -369,22 +380,16 @@ impl ClientHelloDetails {
             sent_extensions: Vec::new(),
             extension_order_seed,
             offered_cert_compression: false,
+            offered_cipher_suites: Vec::new(),
         }
     }
 
     fn server_sent_unsolicited_extensions(
         &self,
-        received_exts: &ServerExtensions<'_>,
+        received_exts: impl Iterator<Item = ExtensionType>,
         allowed_unsolicited: &[ExtensionType],
     ) -> bool {
-        let mut extensions = received_exts.collect_used();
-        extensions.extend(
-            received_exts
-                .unknown_extensions
-                .iter()
-                .map(|ext| ExtensionType::from(*ext)),
-        );
-        for ext_type in extensions {
+        for ext_type in received_exts {
             if !self.sent_extensions.contains(&ext_type) && !allowed_unsolicited.contains(&ext_type)
             {
                 trace!("Unsolicited extension {ext_type:?}");

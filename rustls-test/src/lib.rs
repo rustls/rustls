@@ -4,19 +4,17 @@ use std::borrow::Cow;
 use std::io;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use rustls::client::danger::{
-    HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
-};
+use rustls::client::danger::{HandshakeSignatureValid, ServerIdentity, ServerVerifier};
 use rustls::client::{
     ClientSessionKey, ServerVerifierBuilder, Tls13Session, WantsClientCert, WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{
-    EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, Payload,
+    EncodableVersion, InboundOpaque, Payload, Record, RecordDecrypter, RecordEncrypter,
 };
 use rustls::crypto::kx::{NamedGroup, SupportedKxGroup};
 use rustls::crypto::{
     CipherSuite, Credentials, CryptoProvider, Identity, InconsistentKeys, SelectedCredential,
-    SignatureScheme, SigningKey, SingleCredential, WebPkiSupportedAlgorithms,
+    SignatureScheme, SigningKey, SingleCredential, VerifiedIdentity, WebPkiSupportedAlgorithms,
     verify_tls13_signature,
 };
 use rustls::enums::{CertificateType, ContentType, ProtocolVersion};
@@ -32,9 +30,10 @@ use rustls::server::{
 };
 use rustls::{
     ClientConfig, ClientConnection, ConfigBuilder, Connection, ConnectionTrafficSecrets,
-    DistinguishedName, RootCertStore, ServerConfig, ServerConnection, SupportedCipherSuite,
-    WantsVerifier,
+    DistinguishedName, MessageHandler, RootCertStore, ServerConfig, ServerConnection, SideData,
+    SupportedCipherSuite, VecInput, WantsVerifier,
 };
+use tracing::{Event, Level, Metadata, field, span, subscriber};
 
 macro_rules! embed_files {
     (
@@ -200,37 +199,22 @@ embed_files! {
     (RSA_4096_INTER_KEY, "rsa-4096", "inter.key");
 }
 
-pub fn transfer(left: &mut impl Connection, right: &mut impl Connection) -> usize {
-    let mut buf = [0u8; 262144];
-    let mut total = 0;
-
-    while left.wants_write() {
-        let sz = {
-            let into_buf: &mut dyn io::Write = &mut &mut buf[..];
-            left.write_tls(into_buf).unwrap()
-        };
-        total += sz;
-        if sz == 0 {
-            return total;
-        }
-
-        let mut offs = 0;
-        loop {
-            let from_buf: &mut dyn io::Read = &mut &buf[offs..sz];
-            offs += right.read_tls(from_buf).unwrap();
-            if sz == offs {
-                break;
-            }
-        }
+pub fn transfer(left_output: &mut Vec<u8>, right_input: &mut VecInput) -> usize {
+    let total = left_output.len();
+    let mut offs = 0;
+    while offs < total {
+        let from_buf: &mut dyn io::Read = &mut &left_output[offs..];
+        offs += right_input.read(from_buf).unwrap();
     }
 
+    left_output.clear();
     total
 }
 
-pub fn transfer_eof(conn: &mut impl Connection) {
+pub fn transfer_eof(input: &mut VecInput) {
     let empty_buf = [0u8; 0];
     let empty_cursor: &mut dyn io::Read = &mut &empty_buf[..];
-    let sz = conn.read_tls(empty_cursor).unwrap();
+    let sz = input.read(empty_cursor).unwrap();
     assert_eq!(sz, 0);
 }
 
@@ -242,75 +226,68 @@ pub enum Altered {
 }
 
 pub fn transfer_altered<F>(
-    left: &mut impl Connection,
+    left_output: &mut Vec<u8>,
     filter: F,
-    right: &mut impl Connection,
+    right_input: &mut VecInput,
 ) -> usize
 where
-    F: Fn(&mut EncodedMessage<Vec<u8>>) -> Altered,
+    F: Fn(&mut Record<Vec<u8>>) -> Altered,
 {
-    let mut buf = [0u8; 262144];
-    let mut total = 0;
+    let sz = left_output.len();
 
-    while left.wants_write() {
-        let sz = {
-            let into_buf: &mut dyn io::Write = &mut &mut buf[..];
-            left.write_tls(into_buf).unwrap()
+    let mut offset = 0;
+    while offset < sz {
+        assert!(
+            offset + 5 <= sz,
+            "incomplete TLS record header at offset {offset}"
+        );
+
+        let typ = ContentType::from(left_output[offset]);
+        let version = ProtocolVersion::from(u16::from_be_bytes([
+            left_output[offset + 1],
+            left_output[offset + 2],
+        ]));
+        let payload_len =
+            u16::from_be_bytes([left_output[offset + 3], left_output[offset + 4]]) as usize;
+
+        assert!(
+            offset + 5 + payload_len <= sz,
+            "incomplete TLS record payload at offset {offset}"
+        );
+
+        let payload = left_output[offset + 5..offset + 5 + payload_len].to_vec();
+        offset += 5 + payload_len;
+
+        let mut record = Record {
+            typ,
+            version: EncodableVersion::Legacy(version),
+            payload,
         };
-        total += sz;
-        if sz == 0 {
-            return total;
-        }
 
-        let mut offset = 0;
-        while offset < sz {
-            assert!(
-                offset + 5 <= sz,
-                "incomplete TLS record header at offset {offset}"
-            );
+        let record_enc = match filter(&mut record) {
+            Altered::InPlace => {
+                encoding::record_framing(record.typ, version, record.payload.clone())
+            }
+            Altered::Raw(data) => data,
+        };
 
-            let typ = ContentType::from(buf[offset]);
-            let version =
-                ProtocolVersion::from(u16::from_be_bytes([buf[offset + 1], buf[offset + 2]]));
-            let payload_len = u16::from_be_bytes([buf[offset + 3], buf[offset + 4]]) as usize;
-
-            assert!(
-                offset + 5 + payload_len <= sz,
-                "incomplete TLS record payload at offset {offset}"
-            );
-
-            let payload = buf[offset + 5..offset + 5 + payload_len].to_vec();
-            offset += 5 + payload_len;
-
-            let mut encoded = EncodedMessage {
-                typ,
-                version,
-                payload,
-            };
-
-            let message_enc = match filter(&mut encoded) {
-                Altered::InPlace => {
-                    encoding::message_framing(encoded.typ, encoded.version, encoded.payload.clone())
-                }
-                Altered::Raw(data) => data,
-            };
-
-            let message_enc_reader: &mut dyn io::Read = &mut &message_enc[..];
-            let len = right
-                .read_tls(message_enc_reader)
-                .unwrap();
-            assert_eq!(len, message_enc.len());
-        }
+        let record_enc_reader: &mut dyn io::Read = &mut &record_enc[..];
+        let len = right_input
+            .read(record_enc_reader)
+            .unwrap();
+        assert_eq!(len, record_enc.len());
     }
 
-    total
+    left_output.clear();
+    sz
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum KeyType {
     Rsa2048,
     Rsa3072,
     Rsa4096,
+    #[default]
     EcdsaP256,
     EcdsaP384,
     EcdsaP521,
@@ -506,6 +483,176 @@ impl KeyType {
     }
 }
 
+/// An iterator for testing several combinations of config
+///
+/// By default the iterator goes over compatible pairs of client/server configs
+/// alongside the expected `KeyType`:
+///
+/// - for the provider as-is
+/// - for the provider reduced to only support TLS1.2 and 1.3 alone
+/// - for each key type supported by the provider
+/// - for server authentication and mutual authentication
+pub struct MultiTest {
+    providers: Vec<(ProtocolVersion, Arc<CryptoProvider>)>,
+    anon_client: bool,
+    client_auth: ClientAuth,
+    #[expect(clippy::type_complexity)]
+    custom_server_verifier:
+        Option<Box<dyn Fn(KeyType, Arc<CryptoProvider>) -> Arc<dyn ServerVerifier>>>,
+    key_types: Vec<KeyType>,
+}
+
+impl MultiTest {
+    pub fn new(provider: CryptoProvider) -> Self {
+        let key_types = KeyType::all_for_provider(&provider).to_vec();
+        let mut providers = vec![];
+
+        if !provider.tls13_cipher_suites.is_empty() {
+            providers.push((ProtocolVersion::TLSv1_3, Arc::new(provider.clone())));
+            providers.push((
+                ProtocolVersion::TLSv1_3,
+                Arc::new(CryptoProvider {
+                    tls12_cipher_suites: Cow::Borrowed(&[]),
+                    ..provider.clone()
+                }),
+            ));
+        }
+
+        if !provider.tls12_cipher_suites.is_empty() {
+            providers.push((
+                ProtocolVersion::TLSv1_2,
+                Arc::new(CryptoProvider {
+                    tls13_cipher_suites: Cow::Borrowed(&[]),
+                    ..provider
+                }),
+            ));
+        }
+
+        Self {
+            providers,
+            anon_client: true,
+            client_auth: ClientAuth::Yes,
+            custom_server_verifier: None,
+            key_types,
+        }
+    }
+
+    pub fn require_client_auth(mut self) -> Self {
+        self.anon_client = false;
+        self
+    }
+
+    pub fn with_client_verifier(
+        mut self,
+        builder: Box<dyn Fn(KeyType, Arc<CryptoProvider>) -> Arc<dyn ClientVerifier>>,
+    ) -> Self {
+        self.client_auth = ClientAuth::CustomClientVerifier(builder);
+        self
+    }
+
+    pub fn with_server_verifier(
+        mut self,
+        builder: Box<dyn Fn(KeyType, Arc<CryptoProvider>) -> Arc<dyn ServerVerifier>>,
+    ) -> Self {
+        self.custom_server_verifier = Some(builder);
+        self
+    }
+}
+
+impl IntoIterator for MultiTest {
+    type Item = (Arc<ClientConfig>, Arc<ServerConfig>, Expectation);
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let mut options = vec![];
+
+        for (version, provider) in self.providers {
+            for kt in &self.key_types {
+                let verifier = match &self.custom_server_verifier {
+                    Some(make_verifier) => make_verifier(*kt, provider.clone()),
+                    None => Arc::new(
+                        WebPkiServerVerifier::builder(kt.client_root_store(), &provider)
+                            .build()
+                            .unwrap(),
+                    ),
+                };
+
+                if self.anon_client {
+                    options.push((
+                        Arc::new(
+                            ClientConfig::builder(provider.clone())
+                                .dangerous()
+                                .with_custom_certificate_verifier(verifier.clone())
+                                .with_no_client_auth()
+                                .unwrap(),
+                        ),
+                        Arc::new(make_server_config(*kt, &provider)),
+                        Expectation {
+                            key_type: *kt,
+                            client_auth: false,
+                            version,
+                        },
+                    ));
+                }
+
+                let client_auth_config = Arc::new(
+                    ClientConfig::builder(provider.clone())
+                        .dangerous()
+                        .with_custom_certificate_verifier(verifier)
+                        .with_client_auth_cert(kt.client_identity(), kt.client_key())
+                        .unwrap(),
+                );
+
+                match &self.client_auth {
+                    ClientAuth::Yes => {
+                        options.push((
+                            client_auth_config.clone(),
+                            Arc::new(make_server_config_with_mandatory_client_auth(
+                                *kt, &provider,
+                            )),
+                            Expectation {
+                                key_type: *kt,
+                                client_auth: true,
+                                version,
+                            },
+                        ));
+                    }
+                    ClientAuth::CustomClientVerifier(make_verifier) => {
+                        options.push((
+                            client_auth_config.clone(),
+                            Arc::new(
+                                ServerConfig::builder(provider.clone())
+                                    .with_client_cert_verifier(make_verifier(*kt, provider.clone()))
+                                    .with_single_cert(kt.identity(), kt.key())
+                                    .unwrap(),
+                            ),
+                            Expectation {
+                                key_type: *kt,
+                                client_auth: true,
+                                version,
+                            },
+                        ));
+                    }
+                }
+            }
+        }
+
+        options.into_iter()
+    }
+}
+
+#[derive(Debug)]
+pub struct Expectation {
+    pub key_type: KeyType,
+    pub client_auth: bool,
+    pub version: ProtocolVersion,
+}
+
+pub enum ClientAuth {
+    Yes,
+    CustomClientVerifier(Box<dyn Fn(KeyType, Arc<CryptoProvider>) -> Arc<dyn ClientVerifier>>),
+}
+
 pub trait ServerConfigExt {
     fn finish(self, kt: KeyType) -> ServerConfig;
 }
@@ -535,18 +682,6 @@ pub fn make_server_config_with_kx_groups(
         .into(),
     )
     .finish(kt)
-}
-
-pub fn make_server_config_with_mandatory_client_auth_crls(
-    kt: KeyType,
-    crls: Vec<CertificateRevocationListDer<'static>>,
-    provider: &CryptoProvider,
-) -> ServerConfig {
-    make_server_config_with_client_verifier(
-        kt,
-        webpki_client_verifier_builder(kt.client_root_store(), provider).with_crls(crls),
-        provider,
-    )
 }
 
 pub fn make_server_config_with_mandatory_client_auth(
@@ -590,8 +725,7 @@ pub fn make_server_config_with_raw_key_support(
     kt: KeyType,
     provider: &CryptoProvider,
 ) -> ServerConfig {
-    let mut client_verifier =
-        MockClientVerifier::new(|| Ok(PeerVerified::assertion()), kt, provider);
+    let mut client_verifier = MockClientVerifier::new(|| Ok(()), kt, provider);
     let server_cert_resolver = Arc::new(SingleCredential::from(
         kt.credentials_with_raw_pub_key(provider)
             .unwrap(),
@@ -673,17 +807,6 @@ pub fn make_client_config_with_auth(kt: KeyType, provider: &CryptoProvider) -> C
     ClientConfig::builder(provider.clone().into()).finish_with_creds(kt)
 }
 
-pub fn make_client_config_with_verifier(
-    verifier_builder: ServerVerifierBuilder,
-    provider: &CryptoProvider,
-) -> ClientConfig {
-    ClientConfig::builder(provider.clone().into())
-        .dangerous()
-        .with_custom_certificate_verifier(Arc::new(verifier_builder.build().unwrap()))
-        .with_no_client_auth()
-        .unwrap()
-}
-
 pub fn webpki_client_verifier_builder(
     roots: Arc<RootCertStore>,
     provider: &CryptoProvider,
@@ -698,28 +821,39 @@ pub fn webpki_server_verifier_builder(
     WebPkiServerVerifier::builder(roots, provider)
 }
 
-pub fn make_pair(kt: KeyType, provider: &CryptoProvider) -> (ClientConnection, ServerConnection) {
+pub fn make_pair(
+    kt: KeyType,
+    provider: &CryptoProvider,
+    client_output: &mut Vec<u8>,
+) -> (ClientConnection, ServerConnection) {
     make_pair_for_configs(
         make_client_config(kt, provider),
         make_server_config(kt, provider),
+        client_output,
     )
 }
 
 pub fn make_pair_for_configs(
     client_config: ClientConfig,
     server_config: ServerConfig,
+    client_output: &mut Vec<u8>,
 ) -> (ClientConnection, ServerConnection) {
-    make_pair_for_arc_configs(&Arc::new(client_config), &Arc::new(server_config))
+    make_pair_for_arc_configs(
+        &Arc::new(client_config),
+        &Arc::new(server_config),
+        client_output,
+    )
 }
 
 pub fn make_pair_for_arc_configs(
     client_config: &Arc<ClientConfig>,
     server_config: &Arc<ServerConfig>,
+    client_output: &mut Vec<u8>,
 ) -> (ClientConnection, ServerConnection) {
     (
         client_config
             .connect(server_name("localhost"))
-            .build()
+            .build(client_output)
             .unwrap(),
         ServerConnection::new(server_config.clone()).unwrap(),
     )
@@ -753,13 +887,49 @@ pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, S
     (client_config, server_config)
 }
 
-pub fn do_handshake(client: &mut impl Connection, server: &mut impl Connection) -> (usize, usize) {
+pub fn do_handshake(
+    client_input: &mut VecInput,
+    client_output: &mut Vec<u8>,
+    client: &mut impl Connection,
+    server_input: &mut VecInput,
+    server_output: &mut Vec<u8>,
+    server: &mut impl Connection,
+) -> (usize, usize) {
+    do_handshake_collecting(
+        client_input,
+        client_output,
+        client,
+        &mut Vec::new(),
+        server_input,
+        server_output,
+        server,
+        &mut Vec::new(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn do_handshake_collecting(
+    client_input: &mut VecInput,
+    client_output: &mut Vec<u8>,
+    client: &mut impl Connection,
+    client_received: &mut Vec<u8>,
+    server_input: &mut VecInput,
+    server_output: &mut Vec<u8>,
+    server: &mut impl Connection,
+    server_received: &mut Vec<u8>,
+) -> (usize, usize) {
     let (mut to_client, mut to_server) = (0, 0);
     while server.is_handshaking() || client.is_handshaking() {
-        to_server += transfer(client, server);
-        server.process_new_packets().unwrap();
-        to_client += transfer(server, client);
-        client.process_new_packets().unwrap();
+        to_server += transfer(client_output, server_input);
+        server
+            .process_new_packets(server_input, server_output)
+            .handle_all(server_received)
+            .unwrap();
+        to_client += transfer(server_output, client_input);
+        client
+            .process_new_packets(client_input, client_output)
+            .handle_all(client_received)
+            .unwrap();
     }
     (to_server, to_client)
 }
@@ -771,40 +941,23 @@ pub enum ErrorFromPeer {
 }
 
 pub fn do_handshake_until_error(
+    client_input: &mut VecInput,
+    client_output: &mut Vec<u8>,
     client: &mut ClientConnection,
+    server_input: &mut VecInput,
+    server_output: &mut Vec<u8>,
     server: &mut ServerConnection,
 ) -> Result<(), ErrorFromPeer> {
     while server.is_handshaking() || client.is_handshaking() {
-        transfer(client, server);
+        transfer(client_output, server_input);
         server
-            .process_new_packets()
+            .process_new_packets(server_input, server_output)
+            .handle_all(&mut Vec::new())
             .map_err(ErrorFromPeer::Server)?;
-        transfer(server, client);
+        transfer(server_output, client_input);
         client
-            .process_new_packets()
-            .map_err(ErrorFromPeer::Client)?;
-    }
-
-    Ok(())
-}
-
-pub fn do_handshake_altered(
-    mut client: ClientConnection,
-    alter_server_message: impl Fn(&mut EncodedMessage<Vec<u8>>) -> Altered,
-    alter_client_message: impl Fn(&mut EncodedMessage<Vec<u8>>) -> Altered,
-    mut server: ServerConnection,
-) -> Result<(), ErrorFromPeer> {
-    while server.is_handshaking() || client.is_handshaking() {
-        transfer_altered(&mut client, &alter_client_message, &mut server);
-
-        server
-            .process_new_packets()
-            .map_err(ErrorFromPeer::Server)?;
-
-        transfer_altered(&mut server, &alter_server_message, &mut client);
-
-        client
-            .process_new_packets()
+            .process_new_packets(client_input, client_output)
+            .handle_all(&mut Vec::new())
             .map_err(ErrorFromPeer::Client)?;
     }
 
@@ -812,15 +965,27 @@ pub fn do_handshake_altered(
 }
 
 pub fn do_handshake_until_both_error(
+    client_input: &mut VecInput,
+    client_output: &mut Vec<u8>,
     client: &mut ClientConnection,
+    server_input: &mut VecInput,
+    server_output: &mut Vec<u8>,
     server: &mut ServerConnection,
 ) -> Result<(), Vec<ErrorFromPeer>> {
-    match do_handshake_until_error(client, server) {
+    match do_handshake_until_error(
+        client_input,
+        client_output,
+        client,
+        server_input,
+        server_output,
+        server,
+    ) {
         Err(server_err @ ErrorFromPeer::Server(_)) => {
             let mut errors = vec![server_err];
-            transfer(server, client);
+            transfer(server_output, client_input);
             let client_err = client
-                .process_new_packets()
+                .process_new_packets(client_input, client_output)
+                .handle_all(&mut Vec::new())
                 .map_err(ErrorFromPeer::Client)
                 .expect_err("client didn't produce error after server error");
             errors.push(client_err);
@@ -829,9 +994,10 @@ pub fn do_handshake_until_both_error(
 
         Err(client_err @ ErrorFromPeer::Client(_)) => {
             let mut errors = vec![client_err];
-            transfer(client, server);
+            transfer(client_output, server_input);
             let server_err = server
-                .process_new_packets()
+                .process_new_packets(server_input, server_output)
+                .handle_all(&mut Vec::new())
                 .map_err(ErrorFromPeer::Server)
                 .expect_err("server didn't produce error after client error");
             errors.push(server_err);
@@ -919,7 +1085,12 @@ pub fn do_suite_and_kx_test(
         expect_version,
         expect_suite.suite()
     );
-    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
 
     assert_eq!(None, client.negotiated_cipher_suite());
     assert_eq!(None, server.negotiated_cipher_suite());
@@ -938,8 +1109,11 @@ pub fn do_suite_and_kx_test(
     assert!(client.is_handshaking());
     assert!(server.is_handshaking());
 
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
+    transfer(&mut client_output, &mut server_input);
+    server
+        .process_new_packets(&mut server_input, &mut server_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
 
     assert!(client.is_handshaking());
     assert!(server.is_handshaking());
@@ -968,8 +1142,11 @@ pub fn do_suite_and_kx_test(
         );
     }
 
-    transfer(&mut server, &mut client);
-    client.process_new_packets().unwrap();
+    transfer(&mut server_output, &mut client_input);
+    client
+        .process_new_packets(&mut client_input, &mut client_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
 
     assert_eq!(Some(expect_suite), client.negotiated_cipher_suite());
     assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
@@ -996,10 +1173,16 @@ pub fn do_suite_and_kx_test(
         );
     }
 
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
-    transfer(&mut server, &mut client);
-    client.process_new_packets().unwrap();
+    transfer(&mut client_output, &mut server_input);
+    server
+        .process_new_packets(&mut server_input, &mut server_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    transfer(&mut server_output, &mut client_input);
+    client
+        .process_new_packets(&mut client_input, &mut client_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
 
     assert!(!client.is_handshaking());
     assert!(!server.is_handshaking());
@@ -1035,14 +1218,17 @@ pub struct MockServerVerifier {
 }
 
 impl ServerVerifier for MockServerVerifier {
-    fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
+    fn verify_identity<'a>(
+        &self,
+        identity: &ServerIdentity<'a, '_>,
+    ) -> Result<VerifiedIdentity<'a>, Error> {
         println!("verify_identity({identity:?})");
         if let Some(expected_ocsp) = &self.expected_ocsp_response {
             assert_eq!(expected_ocsp, identity.ocsp_response);
         }
         match &self.cert_rejection_error {
             Some(error) => Err(error.clone()),
-            _ => Ok(PeerVerified::assertion()),
+            _ => Ok(VerifiedIdentity::assertion(identity.identity.clone())),
         }
     }
 
@@ -1167,7 +1353,7 @@ impl Default for MockServerVerifier {
 
 #[derive(Debug)]
 pub struct MockClientVerifier {
-    pub verified: fn() -> Result<PeerVerified, Error>,
+    pub verified: fn() -> Result<(), Error>,
     pub subjects: Arc<[DistinguishedName]>,
     pub mandatory: bool,
     pub offered_schemes: Option<Vec<SignatureScheme>>,
@@ -1178,7 +1364,7 @@ pub struct MockClientVerifier {
 
 impl MockClientVerifier {
     pub fn new(
-        verified: fn() -> Result<PeerVerified, Error>,
+        verified: fn() -> Result<(), Error>,
         kt: KeyType,
         provider: &CryptoProvider,
     ) -> Self {
@@ -1199,8 +1385,12 @@ impl MockClientVerifier {
 }
 
 impl ClientVerifier for MockClientVerifier {
-    fn verify_identity(&self, _identity: &ClientIdentity<'_>) -> Result<PeerVerified, Error> {
-        (self.verified)()
+    fn verify_identity<'a>(
+        &self,
+        identity: &ClientIdentity<'a, '_>,
+    ) -> Result<VerifiedIdentity<'a>, Error> {
+        (self.verified)()?;
+        Ok(VerifiedIdentity::assertion(identity.identity.clone()))
     }
 
     fn verify_tls12_signature(
@@ -1261,9 +1451,9 @@ impl ClientVerifier for MockClientVerifier {
 /// It consumes one of the peers, extracts its secrets, and then reconstitutes the
 /// message encrypter/decrypter.  It does not do fragmentation/joining.
 pub struct RawTls {
-    encrypter: Box<dyn MessageEncrypter>,
+    encrypter: Box<dyn RecordEncrypter>,
     enc_seq: u64,
-    decrypter: Box<dyn MessageDecrypter>,
+    decrypter: Box<dyn RecordDecrypter>,
     dec_seq: u64,
 }
 
@@ -1342,29 +1532,42 @@ impl RawTls {
         }
     }
 
-    pub fn encrypt_and_send(
-        &mut self,
-        msg: &EncodedMessage<Payload<'_>>,
-        peer: &mut impl Connection,
-    ) {
-        let data = self
+    pub fn encrypt_and_send(&mut self, msg: &Record<Payload<'_>>, peer_input: &mut VecInput) {
+        /// The length of a TLS record header: 1 byte type, 2 bytes version, 2 bytes length.
+        const HEADER_SIZE: usize = 5;
+
+        let msg = msg.borrow_outbound();
+        let mut record = vec![
+            0u8;
+            HEADER_SIZE
+                + self
+                    .encrypter
+                    .encrypted_payload_len(msg.payload.len())
+        ];
+        let encrypted = self
             .encrypter
-            .encrypt(msg.borrow_outbound(), self.enc_seq)
-            .unwrap()
-            .encode();
+            .encrypt(msg, self.enc_seq, &mut record[HEADER_SIZE..])
+            .unwrap();
+
+        // Encode the TLS record header: 1 byte type, 2 bytes version, 2 bytes length
+        let (typ, version, len) = (
+            encrypted.typ,
+            encrypted.version.encode(),
+            encrypted.payload.len(),
+        );
+        record.truncate(HEADER_SIZE + len);
+        record[0] = typ.into();
+        record[1..3].copy_from_slice(&version.to_array());
+        record[3..5].copy_from_slice(&(len as u16).to_be_bytes());
+
         self.enc_seq += 1;
-        peer.read_tls(&mut io::Cursor::new(data))
+        peer_input
+            .read(&mut io::Cursor::new(record))
             .unwrap();
     }
 
-    pub fn receive_and_decrypt(
-        &mut self,
-        peer: &mut impl Connection,
-        f: impl Fn(EncodedMessage<&[u8]>),
-    ) {
-        let mut data = vec![];
-        peer.write_tls(&mut io::Cursor::new(&mut data))
-            .unwrap();
+    pub fn receive_and_decrypt(&mut self, peer_output: &mut Vec<u8>, f: impl Fn(Record<&[u8]>)) {
+        let mut data = mem::take(peer_output);
 
         // Parse TLS record header: 1 byte type, 2 bytes version, 2 bytes length
         assert!(data.len() >= 5, "incomplete TLS record header");
@@ -1374,21 +1577,21 @@ impl RawTls {
         let left = &mut data[5..];
         assert_eq!(len, left.len());
 
-        let inbound = EncodedMessage {
+        let inbound = Record {
             typ,
-            version,
+            version: EncodableVersion::Legacy(version),
             payload: InboundOpaque(left),
         };
 
-        let msg = self
+        let record = self
             .decrypter
             .decrypt(inbound, self.dec_seq)
             .unwrap();
         self.dec_seq += 1;
 
-        println!("receive_and_decrypt: {msg:?}");
+        println!("receive_and_decrypt: {record:?}");
 
-        f(msg);
+        f(record);
     }
 }
 
@@ -1559,6 +1762,8 @@ impl ServerCredentialResolver for ServerCheckCertResolve {
 
 pub struct OtherSession<'a, C: Connection> {
     sess: &'a mut C,
+    input: &'a mut VecInput,
+    output: &'a mut Vec<u8>,
     pub reads: usize,
     /// Writevs(Chunks(Bytes))
     pub writevs: Vec<Vec<Vec<u8>>>,
@@ -1567,12 +1772,15 @@ pub struct OtherSession<'a, C: Connection> {
     pub last_error: Option<Error>,
     pub buffered: bool,
     buffer: Vec<Vec<u8>>,
+    pub received: Vec<u8>,
 }
 
 impl<'a, C: Connection> OtherSession<'a, C> {
-    pub fn new(sess: &'a mut C) -> Self {
+    pub fn new(input: &'a mut VecInput, output: &'a mut Vec<u8>, sess: &'a mut C) -> Self {
         OtherSession {
             sess,
+            input,
+            output,
             reads: 0,
             writevs: vec![],
             fail_ok: false,
@@ -1580,17 +1788,18 @@ impl<'a, C: Connection> OtherSession<'a, C> {
             last_error: None,
             buffered: false,
             buffer: vec![],
+            received: vec![],
         }
     }
 
-    pub fn new_buffered(sess: &'a mut C) -> Self {
-        let mut os = OtherSession::new(sess);
+    pub fn new_buffered(input: &'a mut VecInput, output: &'a mut Vec<u8>, sess: &'a mut C) -> Self {
+        let mut os = OtherSession::new(input, output, sess);
         os.buffered = true;
         os
     }
 
-    pub fn new_fails(sess: &'a mut C) -> Self {
-        let mut os = OtherSession::new(sess);
+    pub fn new_fails(input: &'a mut VecInput, output: &'a mut Vec<u8>, sess: &'a mut C) -> Self {
+        let mut os = OtherSession::new(input, output, sess);
         os.fail_ok = true;
         os
     }
@@ -1610,8 +1819,8 @@ impl<'a, C: Connection> OtherSession<'a, C> {
             };
 
             let l = self
-                .sess
-                .read_tls(&mut io::Cursor::new(&bytes[..write_len]))?;
+                .input
+                .read(&mut io::Cursor::new(&bytes[..write_len]))?;
             chunks.push(bytes[..write_len].to_vec());
             total += l;
             if bytes.len() != l {
@@ -1619,11 +1828,14 @@ impl<'a, C: Connection> OtherSession<'a, C> {
             }
         }
 
-        let rc = self.sess.process_new_packets();
-        if !self.fail_ok {
-            rc.unwrap();
-        } else if rc.is_err() {
-            self.last_error = rc.err();
+        let iter = self
+            .sess
+            .process_new_packets(self.input, self.output);
+        match (iter.handle_all(&mut self.received), self.fail_ok) {
+            (Ok(_), false) => (),
+            (Err(error), true) => self.last_error = Some(error),
+            (Ok(_), true) => panic!("read_all() succeeded unexpectedly"),
+            (Err(error), false) => panic!("read_all() failed unexpectedly: {error}"),
         }
 
         self.writevs.push(chunks);
@@ -1642,7 +1854,7 @@ impl<'a, C: Connection> OtherSession<'a, C> {
             .collect()
     }
 
-    pub fn message_lengths(&self) -> Vec<usize> {
+    pub fn record_lengths(&self) -> Vec<usize> {
         let mut buffer = vec![];
         for writev in &self.writevs {
             for chunk in writev {
@@ -1670,15 +1882,18 @@ impl<'a, C: Connection> OtherSession<'a, C> {
 }
 
 impl<C: Connection> io::Read for OtherSession<'_, C> {
-    fn read(&mut self, mut b: &mut [u8]) -> io::Result<usize> {
+    fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
         self.reads += 1;
-        self.sess.write_tls(&mut b)
+        let n = Ord::min(b.len(), self.output.len());
+        b[..n].copy_from_slice(&self.output[..n]);
+        self.output.drain(..n);
+        Ok(n)
     }
 }
 
 impl<C: Connection> io::Write for OtherSession<'_, C> {
-    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
-        unreachable!()
+    fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+        self.write_vectored(&[io::IoSlice::new(b)])
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -1705,17 +1920,18 @@ impl<C: Connection> io::Write for OtherSession<'_, C> {
 
 /// Check `reader` has available exactly `bytes`
 #[track_caller]
+pub fn check_iter(iter: MessageHandler<'_, '_, impl SideData>, expected: &[u8]) {
+    let mut read = Vec::with_capacity(expected.len());
+    iter.handle_all(&mut read).unwrap();
+    assert_eq!(expected, &read);
+}
+
+/// Check `reader` has available exactly `bytes`
+#[track_caller]
 pub fn check_read(reader: &mut dyn io::Read, bytes: &[u8]) {
     let mut buf = vec![0u8; bytes.len() + 1];
     assert_eq!(bytes.len(), reader.read(&mut buf).unwrap());
     assert_eq!(bytes, &buf[..bytes.len()]);
-}
-
-/// Check `reader has available exactly `bytes`, followed by EOF
-#[track_caller]
-pub fn check_read_and_close(reader: &mut dyn io::Read, expect: &[u8]) {
-    check_read(reader, expect);
-    assert!(matches!(reader.read(&mut [0u8; 5]), Ok(0)));
 }
 
 /// Check `reader` yields only an error of kind `err_kind`
@@ -1761,8 +1977,8 @@ pub fn certificate_error_expecting_name(expected: &str) -> CertificateError {
 mod plaintext {
     use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
-        AeadKey, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, OutboundOpaque,
-        OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError,
+        AeadKey, EncryptBuffer, InboundOpaque, Iv, OutboundPlain, RecordDecrypter, RecordEncrypter,
+        Tls13AeadAlgorithm, UnsupportedOperationError,
     };
 
     use super::*;
@@ -1770,11 +1986,11 @@ mod plaintext {
     pub(super) struct Aead;
 
     impl Tls13AeadAlgorithm for Aead {
-        fn encrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn MessageEncrypter> {
+        fn encrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn RecordEncrypter> {
             Box::new(Encrypter)
         }
 
-        fn decrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn MessageDecrypter> {
+        fn decrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn RecordDecrypter> {
             Box::new(Decrypter)
         }
 
@@ -1793,19 +2009,20 @@ mod plaintext {
 
     struct Encrypter;
 
-    impl MessageEncrypter for Encrypter {
-        fn encrypt(
+    impl RecordEncrypter for Encrypter {
+        fn encrypt<'a>(
             &mut self,
-            msg: EncodedMessage<OutboundPlain<'_>>,
+            record: Record<OutboundPlain<'_>>,
             _seq: u64,
-        ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
-            let mut payload = OutboundOpaque::with_capacity(msg.payload.len());
-            payload.extend_from_chunks(&msg.payload);
+            out: &'a mut [u8],
+        ) -> Result<Record<&'a [u8]>, Error> {
+            let mut payload = EncryptBuffer::new(out, record.payload.len())?;
+            payload.extend_from_chunks(&record.payload);
 
-            Ok(EncodedMessage {
+            Ok(Record {
                 typ: ContentType::ApplicationData,
-                version: ProtocolVersion::TLSv1_2,
-                payload,
+                version: record.version,
+                payload: payload.into_written(),
             })
         }
 
@@ -1816,13 +2033,13 @@ mod plaintext {
 
     struct Decrypter;
 
-    impl MessageDecrypter for Decrypter {
+    impl RecordDecrypter for Decrypter {
         fn decrypt<'a>(
             &mut self,
-            msg: EncodedMessage<InboundOpaque<'a>>,
+            record: Record<InboundOpaque<'a>>,
             _seq: u64,
-        ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-            Ok(msg.into_plain_message())
+        ) -> Result<Record<&'a [u8]>, Error> {
+            Ok(record.into_plain_record())
         }
     }
 }
@@ -2000,14 +2217,9 @@ pub mod macros {
                 true
             }
             #[allow(dead_code)]
-            const fn provider_is_fips() -> rustls::pki_types::FipsStatus {
-                rustls::pki_types::FipsStatus::Unvalidated
+            const fn provider_is_fips() -> bool {
+                false
             }
-            #[allow(dead_code)]
-            const ALL_VERSIONS: [rustls::crypto::CryptoProvider; 2] = [
-                provider::DEFAULT_TLS12_PROVIDER,
-                provider::DEFAULT_TLS13_PROVIDER,
-            ];
         };
     }
 
@@ -2025,18 +2237,9 @@ pub mod macros {
                 false
             }
             #[allow(dead_code)]
-            const fn provider_is_fips() -> rustls::pki_types::FipsStatus {
-                if cfg!(feature = "fips") {
-                    rustls::pki_types::FipsStatus::Pending
-                } else {
-                    rustls::pki_types::FipsStatus::Unvalidated
-                }
+            const fn provider_is_fips() -> bool {
+                cfg!(feature = "fips")
             }
-            #[allow(dead_code)]
-            const ALL_VERSIONS: [rustls::crypto::CryptoProvider; 2] = [
-                provider::DEFAULT_TLS12_PROVIDER,
-                provider::DEFAULT_TLS13_PROVIDER,
-            ];
         };
     }
 }
@@ -2141,7 +2344,7 @@ pub mod encoding {
     }
 
     /// Apply message framing to `body`.
-    pub fn message_framing(ty: ContentType, vers: ProtocolVersion, body: Vec<u8>) -> Vec<u8> {
+    pub fn record_framing(ty: ContentType, vers: ProtocolVersion, body: Vec<u8>) -> Vec<u8> {
         let mut body = len_u16(body);
         body.splice(0..0, vers.to_array());
         body.splice(0..0, ty.to_array());
@@ -2160,7 +2363,8 @@ pub mod encoding {
                 typ: Self::SIGNATURE_ALGORITHMS,
                 body: len_u16(vector_of(
                     [
-                        SignatureScheme::RSA_PKCS1_SHA256,
+                        SignatureScheme::ED25519,
+                        SignatureScheme::RSA_PSS_SHA256,
                         SignatureScheme::ECDSA_NISTP256_SHA256,
                     ]
                     .map(|s| s.to_array()),
@@ -2184,20 +2388,32 @@ pub mod encoding {
             }
         }
 
-        pub fn new_dummy_key_share() -> Self {
-            const SOME_POINT_ON_P256: &[u8] = &[
-                4, 41, 39, 177, 5, 18, 186, 227, 237, 220, 254, 70, 120, 40, 18, 139, 173, 41, 3,
-                38, 153, 25, 247, 8, 96, 105, 200, 196, 223, 108, 115, 40, 56, 199, 120, 121, 100,
-                234, 172, 0, 229, 146, 31, 177, 73, 138, 96, 244, 96, 103, 102, 179, 217, 104, 80,
-                1, 85, 141, 26, 151, 78, 115, 65, 81, 62,
-            ];
+        pub fn new_versions_server_tls13() -> Self {
+            Self {
+                typ: Self::SUPPORTED_VERSIONS,
+                body: ProtocolVersion::TLSv1_3
+                    .to_array()
+                    .to_vec(),
+            }
+        }
 
-            let mut share = len_u16(SOME_POINT_ON_P256.to_vec());
+        pub fn new_dummy_key_share() -> Self {
+            let mut share = len_u16(Self::SOME_POINT_ON_P256.to_vec());
             share.splice(0..0, NamedGroup::secp256r1.to_array());
 
             Self {
                 typ: Self::KEY_SHARE,
                 body: len_u16(share),
+            }
+        }
+
+        pub fn new_dummy_key_share_server() -> Self {
+            let mut share = len_u16(Self::SOME_POINT_ON_P256.to_vec());
+            share.splice(0..0, NamedGroup::secp256r1.to_array());
+
+            Self {
+                typ: Self::KEY_SHARE,
+                body: share,
             }
         }
 
@@ -2221,18 +2437,25 @@ pub mod encoding {
         pub const KEY_SHARE: u16 = 0x0033;
         pub const TRANSPORT_PARAMETERS: u16 = 0x0039;
         pub const ALPN: u16 = 0x0010;
+
+        const SOME_POINT_ON_P256: &[u8] = &[
+            4, 41, 39, 177, 5, 18, 186, 227, 237, 220, 254, 70, 120, 40, 18, 139, 173, 41, 3, 38,
+            153, 25, 247, 8, 96, 105, 200, 196, 223, 108, 115, 40, 56, 199, 120, 121, 100, 234,
+            172, 0, 229, 146, 31, 177, 73, 138, 96, 244, 96, 103, 102, 179, 217, 104, 80, 1, 85,
+            141, 26, 151, 78, 115, 65, 81, 62,
+        ];
     }
 
     /// Return a full TLS message containing a fatal alert.
     pub fn alert(desc: AlertDescription, suffix: &[u8]) -> Vec<u8> {
         let mut body = vec![ALERT_LEVEL_FATAL, desc.into()];
         body.extend_from_slice(suffix);
-        message_framing(ContentType::Alert, ProtocolVersion::TLSv1_2, body)
+        record_framing(ContentType::Alert, ProtocolVersion::TLSv1_2, body)
     }
 
     /// Return a full TLS message containing a warning alert.
     pub fn warning_alert(desc: AlertDescription) -> Vec<u8> {
-        message_framing(
+        record_framing(
             ContentType::Alert,
             ProtocolVersion::TLSv1_2,
             vec![ALERT_LEVEL_WARNING, desc.into()],
@@ -2267,4 +2490,135 @@ pub mod encoding {
 
     const ALERT_LEVEL_WARNING: u8 = 1;
     const ALERT_LEVEL_FATAL: u8 = 2;
+}
+
+/// A tracing subscriber that collects everything which was logged.
+#[derive(Debug)]
+pub struct CountingSubscriber {
+    inner: Arc<CountingInner>,
+    _guard: Option<subscriber::DefaultGuard>,
+}
+
+impl CountingSubscriber {
+    pub fn new() -> Self {
+        TracingBug2874Workaround::init();
+
+        let inner = Arc::new(CountingInner::default());
+        Self {
+            _guard: Some(subscriber::set_default(inner.clone())),
+            inner,
+        }
+    }
+
+    pub fn sample(&self) -> CountingData {
+        self.inner.data.lock().unwrap().clone()
+    }
+}
+
+#[derive(Debug, Default)]
+struct CountingInner {
+    data: Mutex<CountingData>,
+}
+
+impl subscriber::Subscriber for CountingInner {
+    fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
+        true
+    }
+
+    fn event(&self, event: &Event<'_>) {
+        let level = *event.metadata().level();
+        let mut message = MessageVisitor::default();
+        event.record(&mut message);
+        println!("logging at {level:?}: {}", message.0);
+
+        self.data
+            .lock()
+            .unwrap()
+            .add(level, message.0);
+    }
+
+    // rustls emits events, never spans, so the span-related items are stubs.
+
+    fn new_span(&self, _span: &span::Attributes<'_>) -> span::Id {
+        span::Id::from_u64(1)
+    }
+
+    fn record(&self, _span: &span::Id, _values: &span::Record<'_>) {}
+
+    fn record_follows_from(&self, _span: &span::Id, _follows: &span::Id) {}
+
+    fn enter(&self, _span: &span::Id) {}
+
+    fn exit(&self, _span: &span::Id) {}
+}
+
+/// Collects the `message` field of an event: the formatted format string.
+#[derive(Default)]
+struct MessageVisitor(String);
+
+impl field::Visit for MessageVisitor {
+    fn record_debug(&mut self, field: &field::Field, value: &dyn fmt::Debug) {
+        if field.name() == "message" {
+            self.0 = format!("{value:?}");
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct CountingData {
+    pub trace: Vec<String>,
+    pub debug: Vec<String>,
+    pub info: Vec<String>,
+    pub warn: Vec<String>,
+    pub error: Vec<String>,
+}
+
+impl CountingData {
+    fn add(&mut self, level: Level, message: String) {
+        match level {
+            Level::TRACE => &mut self.trace,
+            Level::DEBUG => &mut self.debug,
+            Level::INFO => &mut self.info,
+            Level::WARN => &mut self.warn,
+            Level::ERROR => &mut self.error,
+        }
+        .push(message);
+    }
+}
+
+#[derive(Debug)]
+struct TracingBug2874Workaround;
+
+impl TracingBug2874Workaround {
+    fn init() {
+        static FLOOR: OnceLock<()> = OnceLock::new();
+        FLOOR.get_or_init(|| {
+            subscriber::set_global_default(Self).unwrap();
+            tracing::callsite::rebuild_interest_cache();
+        });
+    }
+}
+
+impl subscriber::Subscriber for TracingBug2874Workaround {
+    fn register_callsite(&self, _metadata: &Metadata<'_>) -> subscriber::Interest {
+        subscriber::Interest::sometimes()
+    }
+
+    fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
+        false
+    }
+
+    fn event(&self, _event: &Event<'_>) {}
+
+    fn new_span(&self, _span: &span::Attributes<'_>) -> span::Id {
+        span::Id::from_u64(1)
+    }
+
+    fn record(&self, _span: &span::Id, _values: &span::Record<'_>) {}
+
+    fn record_follows_from(&self, _span: &span::Id, _follows: &span::Id) {}
+
+    fn enter(&self, _span: &span::Id) {}
+
+    fn exit(&self, _span: &span::Id) {}
 }

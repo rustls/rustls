@@ -1,9 +1,5 @@
-//! This crate provide a [`CryptoProvider`] built on the default aws-lc-rs default provider.
-//!
-//! Features:
-//!
-//! - `aws-lc-rs-unstable`: adds support for three variants of the experimental ML-DSA signature
-//!   algorithm.
+//! This crate provides a [`CryptoProvider`] built on the default aws-lc-rs provider,
+//! with added support for three variants of the ML-DSA signature algorithm.
 //!
 //! Before rustls 0.23.22, this crate additionally provided support for the ML-KEM key exchange
 //! (both "pure" and hybrid variants), but these have been moved to the rustls crate itself.
@@ -13,9 +9,9 @@
 use core::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
 
-use aws_lc_rs::signature::KeyPair;
-use aws_lc_rs::unstable::signature::{
-    ML_DSA_44_SIGNING, ML_DSA_65_SIGNING, ML_DSA_87_SIGNING, PqdsaKeyPair, PqdsaSigningAlgorithm,
+use aws_lc_rs::signature::{
+    KeyPair, ML_DSA_44_SIGNING, ML_DSA_65_SIGNING, ML_DSA_87_SIGNING, PqdsaKeyPair,
+    PqdsaSigningAlgorithm,
 };
 use rustls::Error;
 use rustls::crypto::{
@@ -263,7 +259,7 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = match WebPkiSupportedAlgo
 pub static ML_DSA_44: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
     public_key_alg_id: alg_id::ML_DSA_44,
     signature_alg_id: alg_id::ML_DSA_44,
-    verification_alg: &aws_lc_rs::unstable::signature::ML_DSA_44,
+    verification_alg: &aws_lc_rs::signature::ML_DSA_44,
     // Not included in AWS-LC-FIPS 3.0 FIPS scope
     in_fips_submission: false,
 };
@@ -272,7 +268,7 @@ pub static ML_DSA_44: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerification
 pub static ML_DSA_65: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
     public_key_alg_id: alg_id::ML_DSA_65,
     signature_alg_id: alg_id::ML_DSA_65,
-    verification_alg: &aws_lc_rs::unstable::signature::ML_DSA_65,
+    verification_alg: &aws_lc_rs::signature::ML_DSA_65,
     // Not included in AWS-LC-FIPS 3.0 FIPS scope
     in_fips_submission: false,
 };
@@ -281,7 +277,7 @@ pub static ML_DSA_65: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerification
 pub static ML_DSA_87: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
     public_key_alg_id: alg_id::ML_DSA_87,
     signature_alg_id: alg_id::ML_DSA_87,
-    verification_alg: &aws_lc_rs::unstable::signature::ML_DSA_87,
+    verification_alg: &aws_lc_rs::signature::ML_DSA_87,
     // Not included in AWS-LC-FIPS 3.0 FIPS scope
     in_fips_submission: false,
 };
@@ -292,7 +288,7 @@ mod tests {
         CertificateParams, CertifiedIssuer, ExtendedKeyUsagePurpose, IsCa, KeyPair, KeyUsagePurpose,
     };
     use rustls::crypto::Identity;
-    use rustls::{ClientConfig, RootCertStore, ServerConfig, ServerConnection};
+    use rustls::{ClientConfig, RootCertStore, ServerConfig, ServerConnection, VecInput};
     use rustls_test::do_handshake;
 
     use super::*;
@@ -326,6 +322,8 @@ mod tests {
 
         let mut roots = RootCertStore::empty();
         roots.add(issuer.der().clone()).unwrap();
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
         let mut client = Arc::new(
             ClientConfig::builder(provider)
                 .with_root_certificates(roots)
@@ -333,10 +331,19 @@ mod tests {
                 .unwrap(),
         )
         .connect("localhost".try_into().unwrap())
-        .build()
+        .build(&mut client_output)
         .unwrap();
 
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
         let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
-        do_handshake(&mut client, &mut server);
+        do_handshake(
+            &mut client_input,
+            &mut client_output,
+            &mut client,
+            &mut server_input,
+            &mut server_output,
+            &mut server,
+        );
     }
 }
