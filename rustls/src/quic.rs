@@ -10,15 +10,15 @@ use crate::client::ClientSide;
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
 use crate::conn::{
-    ConnectionCommon, Core, KeyingMaterialExporter, MessageIter, MessageIterMode, SideCommonOutput,
-    SideData, StateMachine, Transport, VerifySidePeerIdentity,
+    Accepted, ConnectionCommon, Core, KeyingMaterialExporter, MessageIter, MessageIterMode,
+    SideCommonOutput, SideData, StateMachine, Transport, VerifySidePeerIdentity,
 };
 use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{Message, MessagePayload, ServerExtensionsInput, TransportParameters};
-use crate::server::{ChooseConfig, ClientHello, ServerConfig, ServerSide, ServerState};
+use crate::server::{ServerConfig, ServerSide, ServerState};
 use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
 use crate::tls13::Tls13CipherSuite;
@@ -303,7 +303,7 @@ pub enum ServerHandshake {
     ///
     /// The handshake can be progressed by choosing a [`ServerConfig`] based on
     /// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
-    Accepted(Accepted),
+    Accepted(Accepted<Quic>),
 
     /// The client's presented identity must be verified.
     ///
@@ -342,10 +342,10 @@ impl TryFrom<QuicCommon<ServerSide>> for ServerHandshake {
         const MISUSED: Error = Error::Unreachable("forgot to restore state");
 
         Ok(match mem::replace(&mut inner.common.state, Err(MISUSED))? {
-            ServerState::ChooseConfig(choose_config) => Self::Accepted(Accepted {
-                inner,
-                choose_config,
-            }),
+            ServerState::ChooseConfig(choose_config) => {
+                let QuicCommon { common, quic } = inner;
+                Self::Accepted(Accepted::new(Core::new(common, quic), choose_config))
+            }
 
             ServerState::VerifyClientIdentity(verify) => {
                 Self::VerifyClientIdentity(VerifyClientIdentity { inner, verify })
@@ -451,68 +451,7 @@ impl fmt::Debug for NeedsInput {
     }
 }
 
-/// Represents that a `ClientHello` message has been received.
-///
-/// The handshake can be progressed by choosing a [`ServerConfig`] based on
-/// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
-pub struct Accepted {
-    // invariant: `inner.core.state` is `Err(_)` and requires restoring
-    inner: QuicCommon<ServerSide>,
-    choose_config: Box<ChooseConfig>,
-}
-
-impl Accepted {
-    /// Get the [`ClientHello`] for this connection.
-    pub fn client_hello(&self) -> ClientHello<'_> {
-        self.choose_config.client_hello()
-    }
-
-    /// Choose a [`ServerConfig`] to progress the handshake.
-    ///
-    /// Resolves an [`Accepted`], providing the [`ServerConfig`] that should be used for
-    /// the session, and the TLS-encoded QUIC transport parameters to send.
-    ///
-    /// Returns an error if configuration-dependent validation of the received
-    /// `ClientHello` message fails.
-    ///
-    /// Events are appended to `output`.
-    pub fn choose_config(
-        mut self,
-        config: Arc<ServerConfig>,
-        params: Vec<u8>,
-        output: &mut Vec<QuicEvent>,
-    ) -> Result<ServerHandshake, Error> {
-        check_server_config(&config)?;
-
-        let mut tls = Vec::new();
-        self.inner.common.accepted(
-            self.choose_config,
-            ServerExtensionsInput {
-                transport_parameters: Some(match self.inner.quic.version {
-                    Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
-                }),
-            },
-            Some(&mut self.inner.quic),
-            config,
-            &mut tls,
-        )?;
-
-        // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
-        debug_assert!(tls.is_empty());
-        output.extend(self.inner.events());
-
-        ServerHandshake::try_from(self.inner)
-    }
-}
-
-impl fmt::Debug for Accepted {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("quic::Accepted")
-            .finish_non_exhaustive()
-    }
-}
-
-fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
+pub(crate) fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
     let suites = &config.provider.tls13_cipher_suites;
     if suites.is_empty() {
         return Err(ApiMisuse::QuicRequiresTls13Support.into());
@@ -689,7 +628,7 @@ impl<Side: SideData> DerefMut for QuicCommon<Side> {
 
 /// The QUIC transport: TLS handshake messages and key changes delivered as [`QuicEvent`]s.
 #[derive(Default)]
-pub(crate) struct Quic {
+pub struct Quic {
     pub(crate) version: Version,
     /// QUIC transport parameters received from the peer during the handshake
     pub(crate) params: Option<Vec<u8>>,
@@ -746,7 +685,9 @@ impl Quic {
     }
 }
 
-impl Transport for Quic {
+impl Transport for Quic {}
+
+impl crate::conn::sealed::Transport for Quic {
     fn quic(&mut self) -> Option<&mut dyn QuicOutput> {
         Some(self)
     }
