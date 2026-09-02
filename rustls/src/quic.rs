@@ -10,8 +10,8 @@ use crate::client::{ClientConfig, ClientSide};
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Output, Protocol};
 use crate::conn::{
-    ConnectionCommon, KeyingMaterialExporter, MessageIter, MessageIterMode, SideCommonOutput,
-    SideData, StateMachine, VerifyPeerIdentityInternal,
+    ConnectionCommon, Core, KeyingMaterialExporter, MessageIter, MessageIterMode, NeedsInputCore,
+    SideCommonOutput, SideData, StateMachine, Transport, VerifyPeerIdentityInternal,
 };
 use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
@@ -384,15 +384,13 @@ impl ServerHandshake {
     ///
     /// The returned object should be fed data from a single potential client.
     pub fn start(version: Version) -> NeedsInput {
-        NeedsInput {
-            inner: QuicCommon::new(
-                ConnectionCommon::for_acceptor(Protocol::Quic(version)),
-                QuicState {
-                    version,
-                    ..QuicState::default()
-                },
-            ),
-        }
+        NeedsInput(NeedsInputCore::new(Core::new(
+            ConnectionCommon::for_acceptor(Protocol::Quic(version)),
+            QuicState {
+                version,
+                ..QuicState::default()
+            },
+        )))
     }
 }
 
@@ -419,7 +417,8 @@ impl TryFrom<QuicCommon<ServerSide>> for ServerHandshake {
 
             state => {
                 inner.common.state = Ok(state);
-                Self::NeedsInput(NeedsInput { inner })
+                let QuicCommon { common, quic } = inner;
+                Self::NeedsInput(NeedsInput(NeedsInputCore::new(Core::new(common, quic))))
             }
         })
     }
@@ -431,9 +430,7 @@ impl TryFrom<QuicCommon<ServerSide>> for ServerHandshake {
 ///
 /// This type dereferences to [`ConnectionOutputs`]. Individual outputs are `None`
 /// until they are learned during the handshake.
-pub struct NeedsInput {
-    inner: QuicCommon<ServerSide>,
-}
+pub struct NeedsInput(NeedsInputCore<ServerSide, Quic>);
 
 impl NeedsInput {
     /// Return the TLS-encoded transport parameters received from the peer.
@@ -442,17 +439,22 @@ impl NeedsInput {
     /// they cannot be fully trusted until then. Reliance on them should be minimized.
     /// Any tampering with the parameters will cause the handshake to fail.
     pub fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.inner.quic_transport_parameters()
+        self.0
+            .0
+            .transport
+            .params
+            .as_ref()
+            .map(|x| x.as_ref())
     }
 
     /// Compute the keys for decrypting 0-RTT packets, if available.
     pub fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
-        self.inner.zero_rtt_keys()
+        zero_rtt_keys(&self.0.0.inner, &self.0.0.transport)
     }
 
     /// Retrieves the server name supplied by the client, if any.
     pub fn server_name(&self) -> Option<&DnsName<'_>> {
-        self.inner.common.side.server_name()
+        self.0.0.inner.side.server_name()
     }
 
     /// Progress the handshake by receiving further unencrypted TLS handshake data.
@@ -480,10 +482,18 @@ impl NeedsInput {
         input: &mut dyn TlsInputBuffer,
         output: &mut Vec<QuicEvent>,
     ) -> Result<ServerHandshake, Error> {
-        self.inner
-            .read_hs(input, MessageIterMode::Handshake)?;
-        output.extend(self.inner.events());
-        ServerHandshake::try_from(self.inner)
+        self.0
+            .receive()
+            .deframer
+            .input_quic(input.slice_mut())?;
+
+        let Core {
+            inner,
+            mut transport,
+        } = self.0.process(input, &mut Vec::new())?;
+
+        output.extend(transport.events());
+        ServerHandshake::try_from(QuicCommon::new(inner, transport))
     }
 }
 
@@ -491,7 +501,7 @@ impl Deref for NeedsInput {
     type Target = ConnectionOutputs;
 
     fn deref(&self) -> &Self::Target {
-        &self.inner
+        self.0.0.inner.deref()
     }
 }
 
@@ -670,6 +680,17 @@ impl fmt::Debug for VerifyClientIdentity {
     }
 }
 
+/// The QUIC transport: TLS handshake messages and key changes delivered as [`QuicEvent`]s.
+pub(crate) struct Quic;
+
+impl Transport for Quic {
+    type State = QuicState;
+
+    fn quic(state: &mut Self::State) -> Option<&mut dyn QuicOutput> {
+        Some(state)
+    }
+}
+
 /// QUIC events that should be handled by the caller.
 #[expect(clippy::large_enum_variant)]
 #[derive(Debug)]
@@ -701,25 +722,7 @@ impl<Side: SideData> QuicCommon<Side> {
     }
 
     fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
-        let suite = self
-            .common
-            .common
-            .negotiated_cipher_suite()
-            .and_then(|suite| match suite {
-                SupportedCipherSuite::Tls13(suite) => Some(suite),
-                _ => None,
-            })?;
-
-        let suite = Suite {
-            inner: suite,
-            quic: suite.quic?,
-        };
-
-        Some(DirectionalKeys::new(
-            suite,
-            self.quic.early_secret.as_ref()?,
-            self.quic.version,
-        ))
+        zero_rtt_keys(self.common.deref(), &self.quic)
     }
 
     fn read_hs(
@@ -774,6 +777,26 @@ impl<Side: SideData> DerefMut for QuicCommon<Side> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.common.common
     }
+}
+
+fn zero_rtt_keys(outputs: &ConnectionOutputs, quic: &QuicState) -> Option<DirectionalKeys> {
+    let suite = outputs
+        .negotiated_cipher_suite()
+        .and_then(|suite| match suite {
+            SupportedCipherSuite::Tls13(suite) => Some(suite),
+            _ => None,
+        })?;
+
+    let suite = Suite {
+        inner: suite,
+        quic: suite.quic?,
+    };
+
+    Some(DirectionalKeys::new(
+        suite,
+        quic.early_secret.as_ref()?,
+        quic.version,
+    ))
 }
 
 #[derive(Default)]
