@@ -611,22 +611,29 @@ pub struct VerifyClientIdentity {
 
 impl VerifyClientIdentity {
     /// Progress the handshake by calling the pre-configured certificate verification trait.
-    pub fn with_config(self) -> Result<ServerHandshake, Error> {
+    ///
+    /// Events are appended to `output`.
+    pub fn with_config(self, output: &mut Vec<QuicEvent>) -> Result<ServerHandshake, Error> {
         let Self { inner, verify } = self;
-        Self::next(inner, |output| verify.with_config(output))
+        Self::next(inner, |out| verify.with_config(out), output)
     }
 
     /// Progress the handshake by incorporating the result of an external verification.
     ///
     /// If `verification_result` is an error, this error is returned and the handshake terminates.
+    ///
+    /// Events are appended to `output`.
     pub fn continue_with(
         self,
         verification_result: Result<VerifiedIdentity<'static>, Error>,
+        output: &mut Vec<QuicEvent>,
     ) -> Result<ServerHandshake, Error> {
         let Self { inner, verify } = self;
-        Self::next(inner, |output| {
-            verification_result.and_then(|verified| verify.continue_with(verified, output))
-        })
+        Self::next(
+            inner,
+            |out| verification_result.and_then(|verified| verify.continue_with(verified, out)),
+            output,
+        )
     }
 
     /// Inspect the identity that the client has provided.
@@ -637,6 +644,7 @@ impl VerifyClientIdentity {
     fn next(
         mut inner: QuicCommon<ServerSide>,
         advance: impl FnOnce(&mut dyn Output<'_>) -> Result<ServerState, Error>,
+        output: &mut Vec<QuicEvent>,
     ) -> Result<ServerHandshake, Error> {
         let mut tls = Vec::new();
         let result = advance(&mut SideCommonOutput {
@@ -650,6 +658,7 @@ impl VerifyClientIdentity {
         debug_assert!(tls.is_empty());
 
         inner.common.state = result;
+        output.extend(inner.events());
         ServerHandshake::try_from(inner)
     }
 }
