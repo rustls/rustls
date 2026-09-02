@@ -215,6 +215,7 @@ impl<'a> WriteEarlyData<'a> {
     /// Yields the number of bytes of `plaintext` that were consumed.  This may be less than
     /// the length of `plaintext` if the server has limited the amount of early data that
     /// may be sent.
+    #[must_use]
     pub fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> usize {
         let state = &mut self.early_data;
         let plaintext = match state.state {
