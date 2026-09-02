@@ -550,17 +550,22 @@ pub struct VerifyClientIdentity {
 
 impl VerifyClientIdentity {
     /// Progress the handshake by calling the pre-configured certificate verification trait.
-    pub fn with_config(self) -> Result<ServerHandshake, Error> {
+    ///
+    /// Events are appended to `output`.
+    pub fn with_config(self, output: &mut Vec<QuicEvent>) -> Result<ServerHandshake, Error> {
         let verified = self.verify.verify_with_config();
-        self.continue_with(verified)
+        self.continue_with(verified, output)
     }
 
     /// Progress the handshake by incorporating the result of an external verification.
     ///
     /// If `verification_result` is an error, this error is returned and the handshake terminates.
+    ///
+    /// Events are appended to `output`.
     pub fn continue_with(
         self,
         verification_result: Result<VerifiedIdentity<'static>, Error>,
+        output: &mut Vec<QuicEvent>,
     ) -> Result<ServerHandshake, Error> {
         let Self { mut inner, verify } = self;
 
@@ -581,6 +586,7 @@ impl VerifyClientIdentity {
         debug_assert!(tls.is_empty());
 
         inner.common.state = result;
+        output.extend(inner.events());
         ServerHandshake::try_from(inner)
     }
 
