@@ -42,7 +42,7 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     /// This will fail if either the handshake is not complete yet (because we don't yet have the
     /// keys to encrypt application data) or if the send path has been closed by sending a
     /// `close_notify` alert.
-    fn write_tls(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error>;
+    fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error>;
 
     /// Returns true if the caller should call [`Self::process_new_packets()`] as soon as possible.
     fn wants_read(&self) -> bool;
@@ -117,7 +117,7 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
 
     /// Returns true if the connection is currently performing the TLS handshake.
     ///
-    /// During this time, [`Self::write_tls()`] will return an error.
+    /// During this time, [`Self::write()`] will return an error.
     fn is_handshaking(&self) -> bool;
 
     /// Return the FIPS validation status of the connection.
@@ -163,7 +163,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         MessageHandler::new(input, tls, self)
     }
 
-    pub(crate) fn write_tls(
+    pub(crate) fn write(
         &mut self,
         plaintext: OutboundPlain<'_>,
         tls: &mut Vec<u8>,

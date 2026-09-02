@@ -58,7 +58,7 @@ fn exercise_key_log_file_for_client() {
                 &mut server,
             );
             client
-                .write_tls(b"hello".into(), &mut client_output)
+                .write(b"hello".into(), &mut client_output)
                 .unwrap();
             transfer(&mut client_output, &mut server_input);
             server
@@ -95,7 +95,7 @@ fn exercise_key_log_file_for_server() {
                 &mut server,
             );
             client
-                .write_tls(b"hello".into(), &mut client_output)
+                .write(b"hello".into(), &mut client_output)
                 .unwrap();
             transfer(&mut client_output, &mut server_input);
             server

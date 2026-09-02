@@ -52,7 +52,7 @@ impl ClientConnection {
     /// This fails if:
     ///
     /// - the handshake is not complete. Check with [`Connection::is_handshaking()`].
-    /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write_tls()`].
+    /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write()`].
     pub fn split(self) -> Result<SplitConnection<ClientSide>, Error> {
         self.inner.split()
     }
@@ -112,8 +112,8 @@ impl ClientConnection {
 impl Connection for ClientConnection {
     type Side = ClientSide;
 
-    fn write_tls(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error> {
-        self.inner.write_tls(plaintext, tls)
+    fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error> {
+        self.inner.write(plaintext, tls)
     }
 
     fn wants_read(&self) -> bool {
@@ -204,7 +204,7 @@ impl ClientConnectionBuilder {
 ///
 /// "Early data" is also known as "0-RTT data".
 ///
-/// Use [`Self::write_tls()`] to encrypt early data into TLS records.
+/// Use [`Self::write()`] to encrypt early data into TLS records.
 pub struct WriteEarlyData<'a> {
     early_data: &'a mut EarlyData,
     common: &'a mut CommonState,
@@ -216,7 +216,7 @@ impl<'a> WriteEarlyData<'a> {
     /// Yields the number of bytes of `plaintext` that were consumed.  This may be less than
     /// the length of `plaintext` if the server has limited the amount of early data that
     /// may be sent.
-    pub fn write_tls(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> usize {
+    pub fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> usize {
         let state = &mut self.early_data;
         let plaintext = match state.state {
             EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted => {

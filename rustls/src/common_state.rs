@@ -48,8 +48,6 @@ impl CommonState {
     ///
     /// This informs the peer that the connection is being closed. Does nothing if any
     /// `close_notify` or fatal alert was already sent.
-    ///
-    /// [`Connection::write_tls`]: crate::Connection::write_tls
     pub fn send_close_notify(&mut self, tls: &mut Vec<u8>) {
         self.send.send_close_notify(tls)
     }

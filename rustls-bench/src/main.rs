@@ -514,7 +514,7 @@ fn bench_bulk_buffered(
     for _ in 0..rounds {
         time(&mut timings.server, || {
             server
-                .write_tls((&buf).into(), &mut server_buffers.tls)
+                .write((&buf).into(), &mut server_buffers.tls)
                 .unwrap();
         });
 
@@ -597,7 +597,7 @@ fn bench_memory(
     for client in clients.iter_mut() {
         client
             .2
-            .write_tls((&[0u8; 1024]).into(), &mut client.1.tls)
+            .write((&[0u8; 1024]).into(), &mut client.1.tls)
             .unwrap();
     }
 
