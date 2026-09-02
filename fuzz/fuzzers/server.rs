@@ -7,7 +7,7 @@ use std::io;
 use std::sync::Arc;
 
 use rustls::server::{Accepted, ServerHandshake};
-use rustls::{Connection, Error, ServerConfig, ServerConnection, VecInput};
+use rustls::{Connection, Error, ServerConfig, ServerConnection, Tcp, VecInput};
 
 fuzz_target!(|data: &[u8]| {
     match data.split_first() {
@@ -57,7 +57,7 @@ fn fuzz_handshake_api(data: &[u8]) {
     }
 }
 
-fn choose_config(accepted: Accepted, output: &mut Vec<u8>) -> Result<ServerHandshake, Error> {
+fn choose_config(accepted: Accepted<Tcp>, output: &mut Vec<u8>) -> Result<ServerHandshake, Error> {
     accepted.choose_config(
         Arc::new(
             ServerConfig::builder(rustls_fuzzing_provider::PROVIDER.into())

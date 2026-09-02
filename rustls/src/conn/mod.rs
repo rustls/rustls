@@ -25,7 +25,8 @@ use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 pub mod kernel;
 
 mod handshake;
-pub(crate) use handshake::{Core, Tcp, Transport};
+pub use handshake::{Accepted, Tcp, Transport};
+pub(crate) use handshake::{Core, sealed};
 
 mod receive;
 pub(crate) use receive::{
