@@ -494,7 +494,8 @@ mod client_hello {
             return Ok(false);
         }
 
-        let verify_schemes = client_auth.supported_verify_schemes();
+        let mut verify_schemes = client_auth.supported_verify_schemes();
+        verify_schemes.retain(|scheme| scheme.algorithm().is_some());
 
         let names = config
             .verifier
