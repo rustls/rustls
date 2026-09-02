@@ -24,6 +24,9 @@ use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 // pub so that it can be re-exported from the crate root
 pub mod kernel;
 
+mod handshake;
+pub(crate) use handshake::{Core, Tcp, Transport};
+
 mod receive;
 pub(crate) use receive::{
     DataKind, Input, MessageIter, MessageIterMode, ReceivePath, TrafficTemperCounters,
@@ -141,11 +144,13 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
 /// More data needs to be supplied to make progress.
 ///
 /// Provide the data to [`Self::process()`].
-pub struct NeedsInput<Side: SideData> {
-    pub(crate) inner: ConnectionCommon<Side>,
-}
+pub struct NeedsInput<Side: SideData>(Core<Side, Tcp>);
 
 impl<Side: SideData> NeedsInput<Side> {
+    pub(crate) fn new(inner: ConnectionCommon<Side>) -> Self {
+        Self(Core::new(inner, Tcp))
+    }
+
     /// Progress the handshake by receiving further data.
     ///
     /// The data is obtained via `input`.  Any output produced is appended to `tls` and
@@ -159,36 +164,11 @@ impl<Side: SideData> NeedsInput<Side> {
     /// the connection.  If this contains another [`NeedsInput`] object then obtaining more
     /// input (eg, from a socket or other source) is certainly necessary.
     pub fn process(
-        mut self,
+        self,
         input: &mut dyn TlsInputBuffer,
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
-        let mut iter = MessageIter::new(
-            input,
-            tls,
-            None,
-            &mut self.inner,
-            MessageIterMode::Handshake,
-        );
-
-        let result = loop {
-            match iter.next(false) {
-                Some(Ok(_)) => {}
-                Some(Err(e)) => break Err(e),
-                None => break Ok(()),
-            };
-        };
-
-        input.discard(
-            self.inner
-                .common
-                .recv
-                .deframer
-                .take_discard(),
-        );
-
-        result?;
-        Side::handshake_from_inner(self.inner)
+        Side::handshake_from_inner(self.0.process(input, tls)?.inner)
     }
 }
 
