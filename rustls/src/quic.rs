@@ -11,7 +11,7 @@ pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
 use crate::conn::{
     AcceptedCore, ConnectionCommon, Core, KeyingMaterialExporter, MessageIter, MessageIterMode,
-    SideCommonOutput, SideData, StateMachine, Transport, VerifySidePeerIdentity,
+    SideData, StateMachine, Transport, VerifyCore,
 };
 use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
@@ -353,7 +353,11 @@ impl TryFrom<QuicCommon<ServerSide>> for ServerHandshake {
             }
 
             ServerState::VerifyClientIdentity(verify) => {
-                Self::VerifyClientIdentity(VerifyClientIdentity { inner, verify })
+                let QuicCommon { common, quic } = inner;
+                Self::VerifyClientIdentity(VerifyClientIdentity(VerifyCore::new(
+                    Core::new(common, quic),
+                    verify,
+                )))
             }
 
             state if state.is_traffic() => {
@@ -557,18 +561,14 @@ fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
 /// [`ServerHandshake::NeedsInput`] which will accept and process further data.
 ///
 /// [`ClientVerifier::verify_identity()`]: crate::verify::ClientVerifier::verify_identity
-pub struct VerifyClientIdentity {
-    // invariant: `inner.state` is `Err(_)` and requires restoring
-    inner: QuicCommon<ServerSide>,
-    verify: Box<dyn VerifySidePeerIdentity<ServerSide>>,
-}
+pub struct VerifyClientIdentity(VerifyCore<ServerSide, Quic>);
 
 impl VerifyClientIdentity {
     /// Progress the handshake by calling the pre-configured certificate verification trait.
     ///
     /// Events are appended to `output`.
     pub fn with_config(self, output: &mut Vec<QuicEvent>) -> Result<ServerHandshake, Error> {
-        let verified = self.verify.verify_with_config();
+        let verified = self.0.verify_with_config();
         self.continue_with(verified, output)
     }
 
@@ -582,38 +582,35 @@ impl VerifyClientIdentity {
         verification_result: Result<VerifiedIdentity<'static>, Error>,
         output: &mut Vec<QuicEvent>,
     ) -> Result<ServerHandshake, Error> {
-        let Self { mut inner, verify } = self;
-
-        let mut tls = Vec::new();
-        let result = verification_result.and_then(|verified| {
-            verify.continue_with(
-                verified,
-                &mut SideCommonOutput {
-                    side: &mut inner.common.side,
-                    quic: Some(&mut inner.quic),
-                    common: &mut inner.common.common,
-                    tls: &mut tls,
-                },
-            )
-        });
-
-        // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
-        debug_assert!(tls.is_empty());
-
-        inner.common.state = result;
-        output.extend(inner.events());
-        ServerHandshake::try_from(inner)
+        Self::next(
+            self.0
+                .continue_with(verification_result, &mut Vec::new())?,
+            output,
+        )
     }
 
     /// Inspect the identity that the client has provided.
     pub fn presented_identity(&self) -> Result<ClientIdentity<'static, '_>, Error> {
-        self.verify.presented_identity()
+        self.0.presented_identity()
+    }
+
+    fn next(
+        core: Core<ServerSide, Quic>,
+        output: &mut Vec<QuicEvent>,
+    ) -> Result<ServerHandshake, Error> {
+        let Core {
+            inner,
+            mut transport,
+        } = core;
+
+        output.extend(transport.events());
+        ServerHandshake::try_from(QuicCommon::new(inner, transport))
     }
 }
 
 impl fmt::Debug for VerifyClientIdentity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("VerifyClientIdentity")
+        f.debug_struct("quic::VerifyClientIdentity")
             .finish_non_exhaustive()
     }
 }

@@ -10,9 +10,13 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use super::{ConnectionCommon, MessageIter, MessageIterMode, SideData};
+use super::{
+    ConnectionCommon, MessageIter, MessageIterMode, SideCommonOutput, SideData,
+    VerifySidePeerIdentity,
+};
 use crate::TlsInputBuffer;
 use crate::common_state::maybe_send_fatal_alert;
+use crate::crypto::VerifiedIdentity;
 use crate::error::Error;
 use crate::msgs::ServerExtensionsInput;
 use crate::quic::QuicOutput;
@@ -109,6 +113,67 @@ impl<T: Transport> AcceptedCore<T> {
 
         result?;
         Ok(Core { inner, transport })
+    }
+}
+
+pub(crate) struct VerifyCore<Side: SideData, T: Transport> {
+    // invariant: `core.inner.state` is `Err(_)` and requires restoring
+    core: Core<Side, T>,
+    verify_identity: Box<dyn VerifySidePeerIdentity<Side>>,
+}
+
+impl<Side: SideData, T: Transport> VerifyCore<Side, T> {
+    pub(crate) fn new(
+        core: Core<Side, T>,
+        verify_identity: Box<dyn VerifySidePeerIdentity<Side>>,
+    ) -> Self {
+        Self {
+            core,
+            verify_identity,
+        }
+    }
+
+    pub(crate) fn verify_with_config(&self) -> Result<VerifiedIdentity<'static>, Error> {
+        self.verify_identity
+            .verify_with_config()
+    }
+
+    pub(crate) fn continue_with(
+        self,
+        verification_result: Result<VerifiedIdentity<'static>, Error>,
+        tls: &mut Vec<u8>,
+    ) -> Result<Core<Side, T>, Error> {
+        let Self {
+            core: Core {
+                mut inner,
+                mut transport,
+            },
+            verify_identity,
+        } = self;
+
+        let result = verification_result.and_then(|verified| {
+            verify_identity.continue_with(
+                verified,
+                &mut SideCommonOutput {
+                    side: &mut inner.side,
+                    quic: T::quic(&mut transport),
+                    common: &mut inner.common,
+                    tls,
+                },
+            )
+        });
+
+        if let Err(err) = &result {
+            maybe_send_fatal_alert(&mut inner.common.send, err, tls);
+        }
+
+        inner.state = result;
+        Ok(Core { inner, transport })
+    }
+
+    pub(crate) fn presented_identity(&self) -> Result<Side::PeerIdentity<'_>, Error> {
+        self.verify_identity
+            .presented_identity()
     }
 }
 
