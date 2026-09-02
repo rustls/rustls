@@ -1,19 +1,18 @@
 use alloc::vec::Vec;
-use core::fmt;
 use core::ops::Deref;
+use core::{fmt, mem};
 
 use pki_types::{FipsStatus, ServerName};
 
 use super::config::ClientConfig;
-use super::hs::ClientHelloInput;
-use crate::TlsInputBuffer;
+use super::hs::{ClientHelloInput, ClientState};
 use crate::client::EchStatus;
 use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
     Connection, ConnectionCommon, KeyingMaterialExporter, MessageHandler, SideCommonOutput,
-    SideData,
+    SideData, StateMachine, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -25,6 +24,8 @@ use crate::quic::QuicOutput;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::tracing::trace;
+use crate::verify::ServerIdentity;
+use crate::{NeedsInput, TlsInputBuffer};
 
 /// This represents a single TLS client connection.
 pub struct ClientConnection {
@@ -197,6 +198,83 @@ impl ClientConnectionBuilder {
             )?,
         })
     }
+
+    /// Finalize the builder and create a [`ClientHandshake`].
+    ///
+    /// It is a fundamental fact of client TLS connections that the client writes first; this data
+    /// is written to `tls`.  The client then always reads the server's response, as represented
+    /// by the [`NeedsInput`] return value.
+    ///
+    /// You may wrap this in the [`ClientHandshake::NeedsInput`] variant to generalise the type to a
+    /// [`ClientHandshake`].
+    ///
+    /// The returned object should be fed data from a single potential client.
+    pub fn start_handshake(self, tls: &mut Vec<u8>) -> Result<NeedsInput<ClientSide>, Error> {
+        let Self {
+            config,
+            name,
+            alpn_protocols,
+        } = self;
+
+        let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
+        Ok(NeedsInput {
+            inner: ConnectionCommon::for_client(
+                config,
+                name,
+                ClientExtensionsInput::from_alpn(alpn_protocols),
+                None,
+                Protocol::Tcp,
+                tls,
+            )?,
+        })
+    }
+}
+
+/// An in-progress TLS client handshake.
+///
+/// Make one of these using [`ClientConnectionBuilder::start_handshake()`].
+#[non_exhaustive]
+#[derive(Debug)]
+pub enum ClientHandshake {
+    /// More data needs to be received to make progress.
+    NeedsInput(NeedsInput<ClientSide>),
+
+    /// The server's presented identity must be verified.
+    ///
+    /// See [`VerifyPeerIdentity`] for how to proceed.
+    VerifyServerIdentity(VerifyPeerIdentity<ClientSide>),
+
+    /// The handshake is complete.
+    ///
+    /// Now see [`SplitConnection`] to continue the connection.
+    Complete(SplitConnection<ClientSide>),
+}
+
+impl TryFrom<ConnectionCommon<ClientSide>> for ClientHandshake {
+    type Error = Error;
+
+    fn try_from(mut inner: ConnectionCommon<ClientSide>) -> Result<Self, Error> {
+        const MISUSED: Error = Error::Unreachable("forgot to restore state");
+
+        Ok(match mem::replace(&mut inner.state, Err(MISUSED))? {
+            ClientState::VerifyServerIdentity(verify_identity) => {
+                Self::VerifyServerIdentity(VerifyPeerIdentity {
+                    inner,
+                    verify_identity,
+                })
+            }
+
+            state if state.is_traffic() => {
+                inner.state = Ok(state);
+                Self::Complete(SplitConnection::try_from(inner)?)
+            }
+
+            state => {
+                inner.state = Ok(state);
+                Self::NeedsInput(NeedsInput { inner })
+            }
+        })
+    }
 }
 
 /// Allows writing of early data in resumed TLS 1.3 connections.
@@ -306,11 +384,19 @@ impl ConnectionCommon<ClientSide> {
 #[derive(Debug)]
 pub struct ClientSide;
 
-impl SideData for ClientSide {}
+impl SideData for ClientSide {
+    type Handshake = ClientHandshake;
+    type PeerIdentity<'a> = ServerIdentity<'static, 'a>;
+
+    #[expect(private_interfaces)]
+    fn handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error> {
+        ClientHandshake::try_from(common)
+    }
+}
 
 impl crate::conn::private::Side for ClientSide {
     type Data = ClientConnectionData;
-    type State = super::hs::ClientState;
+    type State = ClientState;
 }
 
 impl SideOutput for ClientConnectionData {

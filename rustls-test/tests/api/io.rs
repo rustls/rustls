@@ -9,11 +9,13 @@ use std::io::{self, BufRead, IoSlice, Read, Write};
 use std::sync::Arc;
 
 use pki_types::DnsName;
+use rustls::client::ClientHandshake;
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
 use rustls::server::ServerHandshake;
+use rustls::split::ReceiveTrafficState;
 use rustls::{
     ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection, SliceInput, VecInput,
 };
@@ -1962,6 +1964,160 @@ fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
 }
 
 #[test]
+fn test_client_handshake() {
+    for (client_config, server_config, _expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let mut client_output = Vec::new();
+        let mut client = client_config
+            .connect(server_name("localhost"))
+            .start_handshake(&mut client_output)
+            .unwrap();
+
+        let mut server = ServerConnection::new(server_config).unwrap();
+        let mut server_output = Vec::new();
+
+        let client = 'finished: loop {
+            server
+                .read_tls(&mut SliceInput::new(&mut client_output), &mut server_output)
+                .handle_all(&mut Vec::new())
+                .unwrap();
+            client_output.clear();
+
+            let mut client_input = SliceInput::new(&mut server_output);
+            let next = client
+                .process(&mut client_input, &mut client_output)
+                .unwrap();
+            let used = client_input.into_used();
+            server_output.drain(..used);
+
+            server
+                .read_tls(&mut SliceInput::new(&mut client_output), &mut server_output)
+                .handle_all(&mut Vec::new())
+                .unwrap();
+            client_output.clear();
+
+            let next = match next {
+                ClientHandshake::VerifyServerIdentity(verify) => verify
+                    .with_config(&mut client_output)
+                    .unwrap(),
+                next => next,
+            };
+
+            client = match next {
+                ClientHandshake::NeedsInput(client) => client,
+                ClientHandshake::Complete(complete) => break 'finished complete,
+                _ => panic!("unexpected state"),
+            };
+        };
+
+        println!("ok {:?}", client.outputs.handshake_kind());
+        assert!(!server.is_handshaking());
+    }
+}
+
+#[test]
+fn client_handshake_receives_half_rtt_data() {
+    let mut server_config = make_server_config(KeyType::default(), &provider::DEFAULT_PROVIDER);
+    server_config.send_half_rtt_data = true;
+    let server_config = Arc::new(server_config);
+    let client_config = Arc::new(make_client_config(
+        KeyType::default(),
+        &provider::DEFAULT_PROVIDER,
+    ));
+
+    let mut client_output = Vec::new();
+    let mut client = client_config
+        .connect(server_name("localhost"))
+        .start_handshake(&mut client_output)
+        .unwrap();
+
+    // The server consumes the `ClientHello`, emits its entire flight, and then -- without
+    // waiting for the client's `Finished` -- appends two 0.5-RTT application data records.
+    let mut server = ServerConnection::new(server_config).unwrap();
+    let mut server_output = Vec::new();
+    server
+        .read_tls(&mut SliceInput::new(&mut client_output), &mut server_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    client_output.clear();
+
+    let handshake_flight_len = server_output.len();
+    server
+        .write(b"first half-rtt message".into(), &mut server_output)
+        .unwrap();
+    server
+        .write(b"second half-rtt message".into(), &mut server_output)
+        .unwrap();
+
+    assert_eq!(
+        server.protocol_version(),
+        Some(ProtocolVersion::TLSv1_3),
+        "0.5-RTT data is a TLS1.3-only feature"
+    );
+    // the server has not seen the client's `Finished`: this really is 0.5-RTT.
+    assert!(server.is_handshaking());
+    assert!(server_output.len() > handshake_flight_len);
+
+    // Drive the client's handshake over that single buffer.
+    let split = loop {
+        let mut client_input = SliceInput::new(&mut server_output);
+        let next = client
+            .process(&mut client_input, &mut client_output)
+            .unwrap();
+        let used = client_input.into_used();
+        server_output.drain(..used);
+
+        let next = match next {
+            ClientHandshake::VerifyServerIdentity(verify) => verify
+                .with_config(&mut client_output)
+                .unwrap(),
+            next => next,
+        };
+
+        client = match next {
+            ClientHandshake::Complete(split) => break split,
+            ClientHandshake::NeedsInput(client) => {
+                assert!(used > 0, "handshake stalled with input remaining");
+                client
+            }
+            _ => panic!("unexpected state"),
+        };
+    };
+
+    // The handshake completed, and the client's `Finished` is in `client_output`.
+    assert_eq!(
+        split.outputs.protocol_version(),
+        Some(ProtocolVersion::TLSv1_3)
+    );
+
+    assert!(
+        !server_output.is_empty(),
+        "0.5-RTT data was consumed and dropped by the handshake loop"
+    );
+
+    let mut input = SliceInput::new(&mut server_output);
+    let state = split.receive.read(&mut input).unwrap();
+    let ReceiveTrafficState::Available(mut first) = state else {
+        panic!("expected application data, got {state:?}");
+    };
+    assert_eq!(first.data(), b"first half-rtt message",);
+
+    let receive = match first.into_next() {
+        ReceiveTrafficState::ReadMore(receive) => receive,
+        ReceiveTrafficState::FlushSender(flush) => match flush.into_next() {
+            ReceiveTrafficState::ReadMore(receive) => receive,
+            state => panic!("expected ReadMore, got {state:?}"),
+        },
+        state => panic!("expected ReadMore, got {state:?}"),
+    };
+
+    let state = receive.read(&mut input).unwrap();
+    let ReceiveTrafficState::Available(mut second) = state else {
+        panic!("expected second application data record, got {state:?}");
+    };
+    assert_eq!(second.data(), b"second half-rtt message");
+}
+
+#[test]
 fn test_full_server_handshake() {
     for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
         println!("expect: {expect:?}");
@@ -2015,7 +2171,7 @@ fn test_full_server_handshake() {
                 assert!(expect.client_auth);
                 println!("client identity {:?}", vci.presented_identity());
                 let ServerHandshake::NeedsInput(receive) = vci
-                    .use_verifier_trait(&mut server_output)
+                    .with_config(&mut server_output)
                     .unwrap()
                 else {
                     panic!("unexpected state");
@@ -2199,32 +2355,46 @@ fn test_acceptor_continues_tls13_hrr_with_compatibility_ccs() {
     else {
         panic!("unexpected state");
     };
-    let mut server = receive.into_buffered_connection();
-    let mut server_output = Vec::new();
 
-    let mut client_input = VecInput::default();
-    client_input
-        .read(&mut io::Cursor::new(output))
+    client
+        .read_tls(&mut SliceInput::new(&mut output), &mut client_output)
+        .handle_all(&mut Vec::new())
         .unwrap();
+    output.clear();
 
-    do_handshake(
-        &mut client_input,
-        &mut client_output,
-        &mut client,
-        &mut server_input,
-        &mut server_output,
-        &mut server,
-    );
+    let ServerHandshake::NeedsInput(receive) = receive
+        .process(&mut SliceInput::new(&mut client_output), &mut output)
+        .unwrap()
+    else {
+        panic!("unexpected state");
+    };
+    client_output.clear();
+
+    client
+        .read_tls(&mut SliceInput::new(&mut output), &mut client_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    output.clear();
+
+    let ServerHandshake::Complete(server) = receive
+        .process(&mut SliceInput::new(&mut client_output), &mut output)
+        .unwrap()
+    else {
+        panic!("unexpected state");
+    };
 
     assert_eq!(
         client.handshake_kind(),
         Some(HandshakeKind::FullWithHelloRetryRequest)
     );
     assert_eq!(
-        server.handshake_kind(),
+        server.outputs.handshake_kind(),
         Some(HandshakeKind::FullWithHelloRetryRequest)
     );
-    assert_eq!(server.protocol_version(), Some(ProtocolVersion::TLSv1_3));
+    assert_eq!(
+        server.outputs.protocol_version(),
+        Some(ProtocolVersion::TLSv1_3)
+    );
 }
 
 #[test]

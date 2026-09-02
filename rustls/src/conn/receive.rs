@@ -28,7 +28,7 @@ pub(crate) struct MessageIter<'a, 'm, Side: SideData, Send: SendOutput + 'a> {
     pub(super) recv: &'a mut ReceivePath,
     pub(super) state: &'a mut Result<Side::State, Error>,
     pub(super) output: JoinOutput<'a, Send>,
-    pub(super) advance: bool,
+    pub(super) mode: MessageIterMode,
 }
 
 impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
@@ -37,7 +37,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
         tls: &'a mut Vec<u8>,
         quic: Option<&'a mut dyn QuicOutput>,
         conn: &'a mut ConnectionCommon<Side>,
-        advance: bool,
+        mode: MessageIterMode,
     ) -> Self {
         Self {
             input,
@@ -50,7 +50,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
                 send: &mut conn.common.send,
                 side: &mut conn.side,
             },
-            advance,
+            mode,
         }
     }
 }
@@ -62,7 +62,7 @@ impl<'a, 'm, 's, Side: SideData> MessageIter<'a, 'm, Side, SendAdapter<'s>> {
         state: &'a mut Result<Side::State, Error>,
         recv: &'a mut ReceivePath,
         output: JoinOutput<'a, SendAdapter<'s>>,
-        advance: bool,
+        mode: MessageIterMode,
     ) -> Self {
         Self {
             input,
@@ -70,7 +70,7 @@ impl<'a, 'm, 's, Side: SideData> MessageIter<'a, 'm, Side, SendAdapter<'s>> {
             recv,
             state,
             output,
-            advance,
+            mode,
         }
     }
 }
@@ -161,11 +161,11 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
                 }
             }
 
-            if self.advance && !st.wants_input() {
-                st = match st.handle_without_input() {
+            if matches!(self.mode, MessageIterMode::Normal) && !st.wants_input() {
+                st = match st.handle_without_input(&mut output) {
                     Ok(st) => st,
                     Err(err) => {
-                        maybe_send_fatal_alert(self.output.send, &err, self.tls);
+                        maybe_send_fatal_alert(output.other.send, &err, output.tls);
                         *self.state = Err(err.clone());
                         return Some(Err(err));
                     }
@@ -191,15 +191,25 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
                 *self.state = Ok(st);
                 return Some(Ok(payload));
             }
+
+            if matches!(self.mode, MessageIterMode::Handshake) && st.is_traffic() {
+                break;
+            }
         }
 
         *self.state = Ok(st);
         None
     }
+}
 
-    pub(crate) fn state(&self) -> &Result<Side::State, Error> {
-        self.state
-    }
+pub(crate) enum MessageIterMode {
+    /// Iterate through all available messages.
+    Normal,
+
+    /// Handshake mode.
+    ///
+    /// Stop iteration when when external input is needed to progress handshake, or the handshake ends.
+    Handshake,
 }
 
 pub(crate) struct ReceivePath {
