@@ -247,7 +247,7 @@ impl OpenConnection {
         let mut received_plaintext = Vec::new();
         if let Err(err) = self
             .tls_conn
-            .process_new_packets(&mut self.input, &mut self.output)
+            .read_tls(&mut self.input, &mut self.output)
             .handle_all(&mut received_plaintext)
         {
             error!("cannot process packet: {err:?}");

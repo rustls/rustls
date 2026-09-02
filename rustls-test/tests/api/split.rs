@@ -398,7 +398,7 @@ fn read_invalid_data_and_send_alert() {
         .unwrap();
     assert_eq!(
         server
-            .process_new_packets(&mut server_input, &mut server_output)
+            .read_tls(&mut server_input, &mut server_output)
             .handle_all(&mut Vec::new())
             .err(),
         Some(Error::AlertReceived(AlertDescription::DecodeError))

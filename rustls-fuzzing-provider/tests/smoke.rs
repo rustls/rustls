@@ -102,7 +102,7 @@ fn test_version(provider: CryptoProvider) -> Transcript {
             .client_wrote
             .extend_from_slice(&client_output);
         server
-            .process_new_packets(&mut SliceInput::new(&mut client_output), &mut server_output)
+            .read_tls(&mut SliceInput::new(&mut client_output), &mut server_output)
             .handle_all(&mut Vec::new())
             .unwrap();
         client_output.clear();
@@ -111,7 +111,7 @@ fn test_version(provider: CryptoProvider) -> Transcript {
             .server_wrote
             .extend_from_slice(&server_output);
         client
-            .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
+            .read_tls(&mut SliceInput::new(&mut server_output), &mut client_output)
             .handle_all(&mut Vec::new())
             .unwrap();
         server_output.clear();
@@ -124,7 +124,7 @@ fn test_version(provider: CryptoProvider) -> Transcript {
         .client_wrote
         .extend_from_slice(&client_output);
     server
-        .process_new_packets(&mut SliceInput::new(&mut client_output), &mut server_output)
+        .read_tls(&mut SliceInput::new(&mut client_output), &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
     client_output.clear();
@@ -136,7 +136,7 @@ fn test_version(provider: CryptoProvider) -> Transcript {
         .server_wrote
         .extend_from_slice(&server_output);
     client
-        .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
+        .read_tls(&mut SliceInput::new(&mut server_output), &mut client_output)
         .handle_all(&mut Vec::new())
         .unwrap();
 

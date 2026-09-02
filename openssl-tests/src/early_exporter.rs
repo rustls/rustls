@@ -44,7 +44,7 @@ fn test_early_exporter() {
             // read clienthello and then inspect early_data status
             input.read(&mut tcp_stream).unwrap();
             server
-                .process_new_packets(&mut input, &mut output)
+                .read_tls(&mut input, &mut output)
                 .handle_all(&mut Vec::new())
                 .unwrap();
 

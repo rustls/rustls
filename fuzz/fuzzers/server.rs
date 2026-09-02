@@ -80,7 +80,7 @@ fn service_connection(
     loop {
         let rd = input.read(stream);
         if server
-            .process_new_packets(input, &mut Vec::new())
+            .read_tls(input, &mut Vec::new())
             .handle_all(&mut Vec::new())
             .is_err()
         {

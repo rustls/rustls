@@ -790,7 +790,7 @@ impl VecInput {
     ///
     /// Once the buffer contains 64 kB of data, we will not read any more bytes until some
     /// are consumed by reading from the buffer via
-    /// [`Connection::process_new_packets()`][super::Connection::process_new_packets()].
+    /// [`Connection::read_tls()`][super::Connection::read_tls()].
     pub fn read(&mut self, rd: &mut dyn Read) -> io::Result<usize> {
         if self.received_close_notify {
             return Ok(0);

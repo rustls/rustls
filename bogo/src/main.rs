@@ -519,7 +519,7 @@ fn after_read(
     conn: &mut net::TcpStream,
 ) -> Option<IoState> {
     let state = match sess
-        .process_new_packets(input, output)
+        .read_tls(input, output)
         .handle_all(buf)
     {
         Ok(state) => state,

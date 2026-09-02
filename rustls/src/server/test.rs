@@ -175,7 +175,7 @@ fn select_cipher_suite(
     let mut input = VecInput::default();
     input.read(&mut ch.into_wire_bytes().as_slice())?;
     let mut flight = vec![];
-    conn.process_new_packets(&mut input, &mut flight)
+    conn.read_tls(&mut input, &mut flight)
         .handle_all(&mut Vec::new())?;
     let mut r = Reader::new(&flight[HEADER_SIZE..]);
     let HandshakeMessagePayload(HandshakePayload::ServerHello(server_hello)) =
@@ -299,7 +299,7 @@ fn server_chooses_ffdhe_group_for_client_hello(
         .read(&mut ch.into_wire_bytes().as_slice())
         .unwrap();
     let mut flight = vec![];
-    conn.process_new_packets(&mut input, &mut flight)
+    conn.read_tls(&mut input, &mut flight)
         .handle_all(&mut Vec::new())
         .unwrap();
 
@@ -513,7 +513,7 @@ fn minimal_client_hello() -> ClientHelloPayload {
 }
 
 fn process(input: &mut VecInput, conn: &mut ServerConnection) -> Result<(), Error> {
-    conn.process_new_packets(input, &mut Vec::new())
+    conn.read_tls(input, &mut Vec::new())
         .handle_all(&mut Vec::new())?;
     Ok(())
 }

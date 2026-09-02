@@ -1084,7 +1084,7 @@ mod tests {
             .read(&mut hrr.into_wire_bytes().as_slice())
             .unwrap();
         let mut retry_flight = Vec::new();
-        conn.process_new_packets(&mut input, &mut retry_flight)
+        conn.read_tls(&mut input, &mut retry_flight)
             .handle_all(&mut Vec::new())
             .unwrap();
 

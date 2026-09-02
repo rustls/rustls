@@ -209,7 +209,7 @@ fn server_external_verifier_does_not_call_trait() {
         };
 
         client
-            .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
+            .read_tls(&mut SliceInput::new(&mut server_output), &mut client_output)
             .handle_all(&mut Vec::new())
             .unwrap();
         server_output.clear();
@@ -243,7 +243,7 @@ fn server_external_verifier_error_sends_alert() {
         server_output.extend(alert_output);
 
         let client_err = client
-            .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
+            .read_tls(&mut SliceInput::new(&mut server_output), &mut client_output)
             .handle_all(&mut Vec::new())
             .unwrap_err();
         assert_eq!(
@@ -281,7 +281,7 @@ fn server_external_verifier_test_setup(
     };
 
     client
-        .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
+        .read_tls(&mut SliceInput::new(&mut server_output), &mut client_output)
         .handle_all(&mut Vec::new())
         .unwrap();
     server_output.clear();

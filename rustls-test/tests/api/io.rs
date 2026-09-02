@@ -66,7 +66,7 @@ fn client_data_sent() {
             .unwrap();
         transfer(&mut client_output, &mut server_input);
         server
-            .process_new_packets(&mut server_input, &mut server_output)
+            .read_tls(&mut server_input, &mut server_output)
             .handle_all(&mut server_received)
             .unwrap();
 
@@ -110,7 +110,7 @@ fn server_data_sent() {
             .unwrap();
         transfer(&mut server_output, &mut client_input);
         client
-            .process_new_packets(&mut client_input, &mut client_output)
+            .read_tls(&mut client_input, &mut client_output)
             .handle_all(&mut client_received)
             .unwrap();
 
@@ -150,12 +150,12 @@ fn both_data_sent() {
 
         transfer(&mut server_output, &mut client_input);
         client
-            .process_new_packets(&mut client_input, &mut client_output)
+            .read_tls(&mut client_input, &mut client_output)
             .handle_all(&mut client_received)
             .unwrap();
         transfer(&mut client_output, &mut server_input);
         server
-            .process_new_packets(&mut server_input, &mut server_output)
+            .read_tls(&mut server_input, &mut server_output)
             .handle_all(&mut server_received)
             .unwrap();
 
@@ -248,7 +248,7 @@ fn buf_read() {
         .write(b"".into(), &mut client_output)
         .unwrap();
     transfer(&mut client_output, &mut server_input);
-    let mut iter = server.process_new_packets(&mut server_input, &mut server_output);
+    let mut iter = server.read_tls(&mut server_input, &mut server_output);
 
     let mut i = 0;
     while let Some(result) = iter.next_payload() {
@@ -272,7 +272,7 @@ fn new_server_returns_initial_io_state() {
     );
     let mut server_input = VecInput::default();
     let io_state = server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
     println!("IoState is Debug {io_state:?}");
@@ -291,7 +291,7 @@ fn new_client_returns_initial_io_state() {
     assert!(client_output.len() > 200);
     let mut client_input = VecInput::default();
     let io_state = client
-        .process_new_packets(&mut client_input, &mut client_output)
+        .read_tls(&mut client_input, &mut client_output)
         .handle_all(&mut Vec::new())
         .unwrap();
     println!("IoState is Debug {io_state:?}");
@@ -1316,7 +1316,7 @@ fn stream_write_respects_output_limit() {
     );
 
     transfer(&mut client_output, &mut server_input);
-    let iter = server.process_new_packets(&mut server_input, &mut server_output);
+    let iter = server.read_tls(&mut server_input, &mut server_output);
     check_iter(iter, &[b'a'; 48]);
 }
 
@@ -1423,7 +1423,7 @@ fn stream_write_vectored_respects_output_limit() {
     );
 
     transfer(&mut client_output, &mut server_input);
-    let iter = server.process_new_packets(&mut server_input, &mut server_output);
+    let iter = server.read_tls(&mut server_input, &mut server_output);
     let mut expected = vec![b'a'; 30];
     expected.extend_from_slice(&[b'b'; 18]);
     check_iter(iter, &expected);
@@ -1574,7 +1574,7 @@ fn server_appdata_record_layout() {
     transfer(&mut server_output, &mut client_input);
     let mut received = Vec::new();
     client
-        .process_new_packets(&mut client_input, &mut client_output)
+        .read_tls(&mut client_input, &mut client_output)
         .handle_all(&mut received)
         .unwrap();
     assert_eq!(&received, b"0123456789012345678901234567890123456789");
@@ -1612,7 +1612,7 @@ fn client_appdata_record_layout() {
     transfer(&mut client_output, &mut server_input);
     let mut received = Vec::new();
     server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut received)
         .unwrap();
     assert_eq!(&received, b"0123456789012345678901234567890123456789");
@@ -1635,7 +1635,7 @@ fn server_handshake_with_half_rtt_data() {
 
     transfer(&mut client_output, &mut server_input);
     server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
     server
@@ -1653,20 +1653,20 @@ fn server_handshake_with_half_rtt_data() {
     // The client decrypts the 0.5-RTT application data as part of this flight.
     let mut received = Vec::new();
     client
-        .process_new_packets(&mut client_input, &mut client_output)
+        .read_tls(&mut client_input, &mut client_output)
         .handle_all(&mut received)
         .unwrap();
     assert_eq!(&received, b"012345678901234567890123456789");
     transfer(&mut client_output, &mut server_input);
     server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
     // 2 tickets (in one flight)
     assert_eq!(server_output.len(), 184);
     transfer(&mut server_output, &mut client_input);
     client
-        .process_new_packets(&mut client_input, &mut client_output)
+        .read_tls(&mut client_input, &mut client_output)
         .handle_all(&mut Vec::new())
         .unwrap();
 
@@ -1687,7 +1687,7 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
 
     transfer(&mut client_output, &mut server_input);
     server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
 
@@ -1706,7 +1706,7 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
 
     // client second flight
     client
-        .process_new_packets(&mut client_input, &mut client_output)
+        .read_tls(&mut client_input, &mut client_output)
         .handle_all(&mut Vec::new())
         .unwrap();
     transfer(&mut client_output, &mut server_input);
@@ -1715,7 +1715,7 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
     // it to an unauthenticated peer. so it happens here, after the server's second
     // flight (42 and 32 are lengths of appdata sent below).
     server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
     server
@@ -1730,7 +1730,7 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
     transfer(&mut server_output, &mut client_input);
     let mut received = Vec::new();
     client
-        .process_new_packets(&mut client_input, &mut client_output)
+        .read_tls(&mut client_input, &mut client_output)
         .handle_all(&mut received)
         .unwrap();
     assert_eq!(&received, b"012345678901234567890123456789");
@@ -1773,13 +1773,13 @@ fn client_handshake_flights() {
     assert_eq!(record_lengths(&client_output).len(), 1); // only a client hello
     transfer(&mut client_output, &mut server_input);
     server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
 
     transfer(&mut server_output, &mut client_input);
     client
-        .process_new_packets(&mut client_input, &mut client_output)
+        .read_tls(&mut client_input, &mut client_output)
         .handle_all(&mut Vec::new())
         .unwrap();
     client
@@ -1795,7 +1795,7 @@ fn client_handshake_flights() {
     transfer(&mut client_output, &mut server_input);
     let mut received = Vec::new();
     server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut received)
         .unwrap();
     assert_eq!(&received, b"012345678901234567890123456789");
@@ -1838,7 +1838,7 @@ fn test_server_mtu_reduction() {
 
         transfer(&mut client_output, &mut server_input);
         server
-            .process_new_packets(&mut server_input, &mut server_output)
+            .read_tls(&mut server_input, &mut server_output)
             .handle_all(&mut Vec::new())
             .unwrap();
 
@@ -1856,12 +1856,12 @@ fn test_server_mtu_reduction() {
         }
 
         client
-            .process_new_packets(&mut client_input, &mut client_output)
+            .read_tls(&mut client_input, &mut client_output)
             .handle_all(&mut received)
             .unwrap();
         transfer(&mut client_output, &mut server_input);
         server
-            .process_new_packets(&mut server_input, &mut server_output)
+            .read_tls(&mut server_input, &mut server_output)
             .handle_all(&mut Vec::new())
             .unwrap();
         for length in record_lengths(&server_output) {
@@ -1871,7 +1871,7 @@ fn test_server_mtu_reduction() {
 
         if expect.version == ProtocolVersion::TLSv1_3 && !expect.client_auth {
             client
-                .process_new_packets(&mut client_input, &mut client_output)
+                .read_tls(&mut client_input, &mut client_output)
                 .handle_all(&mut received)
                 .unwrap();
             assert_eq!(received, big_data);
@@ -1947,7 +1947,7 @@ fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
                 .write((&pattern).into(), &mut server_output)
                 .unwrap();
             transfer(&mut server_output, &mut client_input);
-            let iter = client.process_new_packets(&mut client_input, &mut client_output);
+            let iter = client.read_tls(&mut client_input, &mut client_output);
             check_iter(iter, &pattern);
 
             // and client -> server
@@ -1955,7 +1955,7 @@ fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
                 .write((&pattern).into(), &mut client_output)
                 .unwrap();
             transfer(&mut client_output, &mut server_input);
-            let iter = server.process_new_packets(&mut server_input, &mut server_output);
+            let iter = server.read_tls(&mut server_input, &mut server_output);
             check_iter(iter, &pattern);
         }
     }
@@ -1994,7 +1994,7 @@ fn test_full_server_handshake() {
         // client receives server flight, producing its second flight
         let mut client_output = vec![];
         client
-            .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
+            .read_tls(&mut SliceInput::new(&mut server_output), &mut client_output)
             .handle_all(&mut Vec::new())
             .unwrap();
 
@@ -2031,7 +2031,7 @@ fn test_full_server_handshake() {
         };
 
         client
-            .process_new_packets(&mut SliceInput::new(&mut server_output), &mut client_output)
+            .read_tls(&mut SliceInput::new(&mut server_output), &mut client_output)
             .handle_all(&mut Vec::new())
             .unwrap();
 
@@ -2299,14 +2299,14 @@ fn server_close_notify() {
         server.send_close_notify(&mut server_output);
 
         transfer(&mut server_output, &mut client_input);
-        let iter = client.process_new_packets(&mut client_input, &mut client_output);
+        let iter = client.read_tls(&mut client_input, &mut client_output);
         let mut received = Vec::with_capacity(16);
         let state = iter.handle_all(&mut received).unwrap();
         assert_eq!(received, b"from-server!");
         assert!(state.peer_has_closed());
 
         transfer(&mut client_output, &mut server_input);
-        let iter = server.process_new_packets(&mut server_input, &mut server_output);
+        let iter = server.read_tls(&mut server_input, &mut server_output);
         check_iter(iter, b"from-client!");
     }
 }
@@ -2339,14 +2339,14 @@ fn client_close_notify() {
         client.send_close_notify(&mut client_output);
 
         transfer(&mut client_output, &mut server_input);
-        let iter = server.process_new_packets(&mut server_input, &mut server_output);
+        let iter = server.read_tls(&mut server_input, &mut server_output);
         let mut received = Vec::with_capacity(16);
         let state = iter.handle_all(&mut received).unwrap();
         assert_eq!(received, b"from-client!");
         assert!(state.peer_has_closed());
 
         transfer(&mut server_output, &mut client_input);
-        let iter = client.process_new_packets(&mut client_input, &mut client_output);
+        let iter = client.read_tls(&mut client_input, &mut client_output);
         check_iter(iter, b"from-server!");
     }
 }
@@ -2379,14 +2379,14 @@ fn server_closes_uncleanly() {
 
         transfer(&mut server_output, &mut client_input);
         transfer_eof(&mut client_input);
-        let iter = client.process_new_packets(&mut client_input, &mut client_output);
+        let iter = client.read_tls(&mut client_input, &mut client_output);
         let mut received = Vec::with_capacity(16);
         let state = iter.handle_all(&mut received).unwrap();
         assert!(!state.peer_has_closed());
 
         // may still transmit pending frames
         transfer(&mut client_output, &mut server_input);
-        let iter = server.process_new_packets(&mut server_input, &mut server_output);
+        let iter = server.read_tls(&mut server_input, &mut server_output);
         check_iter(iter, b"from-client!");
     }
 }
@@ -2419,7 +2419,7 @@ fn client_closes_uncleanly() {
 
         transfer(&mut client_output, &mut server_input);
         transfer_eof(&mut server_input);
-        let iter = server.process_new_packets(&mut server_input, &mut server_output);
+        let iter = server.read_tls(&mut server_input, &mut server_output);
         let mut received = Vec::with_capacity(16);
         let state = iter.handle_all(&mut received).unwrap();
         assert_eq!(&received, b"from-client!");
@@ -2427,7 +2427,7 @@ fn client_closes_uncleanly() {
 
         // may still transmit pending frames
         transfer(&mut server_output, &mut client_input);
-        let iter = client.process_new_packets(&mut client_input, &mut client_output);
+        let iter = client.read_tls(&mut client_input, &mut client_output);
         check_iter(iter, b"from-server!");
     }
 }
@@ -2501,7 +2501,7 @@ fn test_complete_io_with_no_io_needed() {
     client.send_close_notify(&mut client_output);
     transfer(&mut client_output, &mut server_input);
     server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
     server
@@ -2510,7 +2510,7 @@ fn test_complete_io_with_no_io_needed() {
     server.send_close_notify(&mut server_output);
     transfer(&mut server_output, &mut client_input);
     client
-        .process_new_packets(&mut client_input, &mut client_output)
+        .read_tls(&mut client_input, &mut client_output)
         .handle_all(&mut Vec::new())
         .unwrap();
 
@@ -2580,7 +2580,7 @@ fn test_junk_after_close_notify_received() {
     for _ in 0..2 {
         // check for desync
         server
-            .process_new_packets(&mut final_input, &mut server_output)
+            .read_tls(&mut final_input, &mut server_output)
             .handle_all(&mut received_data)
             .unwrap();
     }
@@ -2623,7 +2623,7 @@ fn test_data_after_close_notify_is_ignored() {
 
     let mut received_data = Vec::with_capacity(128);
     server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut received_data)
         .unwrap();
     assert_eq!(&received_data, b"before");
@@ -2655,7 +2655,7 @@ fn test_close_notify_sent_prior_to_handshake_complete() {
 
     assert_eq!(
         server
-            .process_new_packets(&mut server_input, &mut server_output)
+            .read_tls(&mut server_input, &mut server_output)
             .handle_all(&mut Vec::new())
             .err(),
         Some(PeerMisbehaved::IllegalWarningAlert(AlertDescription::CloseNotify).into())
@@ -2702,7 +2702,7 @@ fn test_second_close_notify_after_handshake() {
     client.send_close_notify(&mut client_output);
     assert!(transfer(&mut client_output, &mut server_input) > 0);
     server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
 
@@ -2733,7 +2733,7 @@ fn test_read_tls_artificial_eof_after_close_notify() {
     client.send_close_notify(&mut client_output);
     assert!(transfer(&mut client_output, &mut server_input) > 0);
     server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
 

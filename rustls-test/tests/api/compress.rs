@@ -250,7 +250,7 @@ fn test_cert_decompression_by_client_produces_invalid_cert_payload() {
     transfer(&mut client_output, &mut server_input);
     assert_eq!(
         server
-            .process_new_packets(&mut server_input, &mut server_output)
+            .read_tls(&mut server_input, &mut server_output)
             .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::AlertReceived(AlertDescription::BadCertificate),
@@ -288,7 +288,7 @@ fn test_cert_decompression_by_server_produces_invalid_cert_payload() {
     transfer(&mut server_output, &mut client_input);
     assert_eq!(
         client
-            .process_new_packets(&mut client_input, &mut client_output)
+            .read_tls(&mut client_input, &mut client_output)
             .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::AlertReceived(AlertDescription::BadCertificate),
@@ -325,7 +325,7 @@ fn test_cert_decompression_by_client_rejects_trailing_data() {
     transfer(&mut client_output, &mut server_input);
     assert_eq!(
         server
-            .process_new_packets(&mut server_input, &mut server_output)
+            .read_tls(&mut server_input, &mut server_output)
             .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::AlertReceived(AlertDescription::DecodeError),
@@ -363,7 +363,7 @@ fn test_cert_decompression_by_server_rejects_trailing_data() {
     transfer(&mut server_output, &mut client_input);
     assert_eq!(
         client
-            .process_new_packets(&mut client_input, &mut client_output)
+            .read_tls(&mut client_input, &mut client_output)
             .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::AlertReceived(AlertDescription::DecodeError),
@@ -401,7 +401,7 @@ fn test_cert_decompression_by_server_fails() {
     transfer(&mut server_output, &mut client_input);
     assert_eq!(
         client
-            .process_new_packets(&mut client_input, &mut client_output)
+            .read_tls(&mut client_input, &mut client_output)
             .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::AlertReceived(AlertDescription::BadCertificate),
@@ -451,7 +451,7 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
     transfer(&mut server_output, &mut client_input);
     assert_eq!(
         client
-            .process_new_packets(&mut client_input, &mut client_output)
+            .read_tls(&mut client_input, &mut client_output)
             .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::AlertReceived(AlertDescription::BadCertificate),

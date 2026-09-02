@@ -148,13 +148,12 @@ impl Connection for ServerConnection {
         self.inner.wants_read()
     }
 
-    fn process_new_packets<'a, 'm>(
+    fn read_tls<'a, 'm>(
         &'a mut self,
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
     ) -> MessageHandler<'a, 'm, ServerSide> {
-        self.inner
-            .process_new_packets(input, tls)
+        self.inner.read_tls(input, tls)
     }
 
     fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {

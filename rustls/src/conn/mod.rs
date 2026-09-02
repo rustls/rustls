@@ -44,11 +44,11 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     /// `close_notify` alert.
     fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error>;
 
-    /// Returns true if the caller should call [`Self::process_new_packets()`] as soon as possible.
+    /// Returns true if the caller should call [`Self::read_tls()`] as soon as possible.
     fn wants_read(&self) -> bool;
 
     /// Build a [`MessageHandler`] to process messages from the input buffer.
-    fn process_new_packets<'a, 'm>(
+    fn read_tls<'a, 'm>(
         &'a mut self,
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
@@ -155,7 +155,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         }
     }
 
-    pub(crate) fn process_new_packets<'a, 'm>(
+    pub(crate) fn read_tls<'a, 'm>(
         &'a mut self,
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
@@ -484,7 +484,7 @@ impl ConnectionRandoms {
     }
 }
 
-/// Values of this structure are returned from [`Connection::process_new_packets()`]
+/// Values of this structure are returned from [`Connection::read_tls()`]
 /// and tell the caller the current I/O state of the TLS connection.
 #[derive(Debug, Eq, PartialEq)]
 pub struct IoState {

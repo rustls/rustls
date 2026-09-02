@@ -145,7 +145,7 @@ impl TlsClient {
         // TLS protocol problems and are fatal.
         let mut iter = self
             .tls_conn
-            .process_new_packets(&mut self.input, &mut self.output);
+            .read_tls(&mut self.input, &mut self.output);
 
         // Having read some TLS data, and processed any new messages,
         // we might have new plaintext as a result.

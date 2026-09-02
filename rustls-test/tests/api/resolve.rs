@@ -526,7 +526,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
         transfer(&mut client_output, &mut server_input);
         assert_eq!(
             server
-                .process_new_packets(&mut server_input, &mut server_output)
+                .read_tls(&mut server_input, &mut server_output)
                 .handle_all(&mut Vec::new())
                 .unwrap_err(),
             Error::NoSuitableCertificate,

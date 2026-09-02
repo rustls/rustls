@@ -251,7 +251,7 @@ mod server {
             }
 
             input.read(&mut stream)?;
-            conn.process_new_packets(&mut input, &mut output)
+            conn.read_tls(&mut input, &mut output)
                 .handle_all(&mut received_plaintext)
                 .unwrap();
         }
