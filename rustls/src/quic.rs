@@ -10,8 +10,9 @@ use crate::client::{ClientConfig, ClientSide};
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Output, Protocol};
 use crate::conn::{
-    ConnectionCommon, Core, KeyingMaterialExporter, MessageIter, MessageIterMode, NeedsInputCore,
-    SideCommonOutput, SideData, StateMachine, Transport, VerifyPeerIdentityInternal,
+    AcceptedCore, ConnectionCommon, Core, KeyingMaterialExporter, MessageIter, MessageIterMode,
+    NeedsInputCore, SideCommonOutput, SideData, StateMachine, Transport,
+    VerifyPeerIdentityInternal,
 };
 use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
@@ -21,7 +22,7 @@ use crate::error::{ApiMisuse, Error};
 use crate::msgs::{
     ClientExtensionsInput, Message, MessagePayload, ServerExtensionsInput, TransportParameters,
 };
-use crate::server::{ChooseConfig, ClientHello, ServerConfig, ServerSide, ServerState};
+use crate::server::{ClientHello, ServerConfig, ServerSide, ServerState};
 use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
 use crate::tls13::Tls13CipherSuite;
@@ -401,10 +402,13 @@ impl TryFrom<QuicCommon<ServerSide>> for ServerHandshake {
         const MISUSED: Error = Error::Unreachable("forgot to restore state");
 
         Ok(match mem::replace(&mut inner.common.state, Err(MISUSED))? {
-            ServerState::ChooseConfig(choose_config) => Self::Accepted(Accepted {
-                inner,
-                choose_config,
-            }),
+            ServerState::ChooseConfig(choose_config) => {
+                let QuicCommon { common, quic } = inner;
+                Self::Accepted(Accepted(AcceptedCore::new(
+                    Core::new(common, quic),
+                    choose_config,
+                )))
+            }
 
             ServerState::VerifyClientIdentity(verify) => {
                 Self::VerifyClientIdentity(VerifyClientIdentity { inner, verify })
@@ -516,16 +520,12 @@ impl fmt::Debug for NeedsInput {
 ///
 /// The handshake can be progressed by choosing a [`ServerConfig`] based on
 /// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
-pub struct Accepted {
-    // invariant: `inner.core.state` is `Err(_)` and requires restoring
-    inner: QuicCommon<ServerSide>,
-    choose_config: Box<ChooseConfig>,
-}
+pub struct Accepted(AcceptedCore<Quic>);
 
 impl Accepted {
     /// Get the [`ClientHello`] for this connection.
     pub fn client_hello(&self) -> ClientHello<'_> {
-        self.choose_config.client_hello()
+        self.0.client_hello()
     }
 
     /// Choose a [`ServerConfig`] to progress the handshake.
@@ -538,31 +538,28 @@ impl Accepted {
     ///
     /// Events are appended to `output`.
     pub fn choose_config(
-        mut self,
+        self,
         config: Arc<ServerConfig>,
         params: Vec<u8>,
         output: &mut Vec<QuicEvent>,
     ) -> Result<ServerHandshake, Error> {
         check_server_config(&config)?;
 
-        let mut tls = Vec::new();
-        self.inner.common.accepted(
-            self.choose_config,
-            ServerExtensionsInput {
-                transport_parameters: Some(match self.inner.quic.version {
-                    Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
-                }),
-            },
-            Some(&mut self.inner.quic),
-            config,
-            &mut tls,
-        )?;
+        let exts = ServerExtensionsInput {
+            transport_parameters: Some(match self.0.core.transport.version {
+                Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
+            }),
+        };
 
-        // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
-        debug_assert!(tls.is_empty());
-        output.extend(self.inner.events());
+        let Core {
+            inner,
+            mut transport,
+        } = self
+            .0
+            .choose_config(config, exts, &mut Vec::new())?;
 
-        ServerHandshake::try_from(self.inner)
+        output.extend(transport.events());
+        ServerHandshake::try_from(QuicCommon::new(inner, transport))
     }
 }
 

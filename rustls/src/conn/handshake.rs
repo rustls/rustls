@@ -7,12 +7,17 @@
 //! The shims own the public signatures and documentation; the shared underlying logic lives
 //! here, parameterised by [`Transport`].
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use super::{ConnectionCommon, MessageIter, MessageIterMode, ReceivePath, SideData};
 use crate::TlsInputBuffer;
+use crate::common_state::maybe_send_fatal_alert;
 use crate::error::Error;
+use crate::msgs::ServerExtensionsInput;
 use crate::quic::QuicOutput;
+use crate::server::{ChooseConfig, ClientHello, ServerConfig, ServerSide};
+use crate::sync::Arc;
 
 pub(crate) struct NeedsInputCore<Side: SideData, T: Transport>(pub(crate) Core<Side, T>);
 
@@ -63,6 +68,52 @@ impl<Side: SideData, T: Transport> NeedsInputCore<Side, T> {
 
     pub(crate) fn receive(&mut self) -> &mut ReceivePath {
         &mut self.0.inner.common.recv
+    }
+}
+
+pub(crate) struct AcceptedCore<T: Transport> {
+    pub(crate) core: Core<ServerSide, T>,
+    choose_config: Box<ChooseConfig>,
+}
+
+impl<T: Transport> AcceptedCore<T> {
+    pub(crate) fn new(core: Core<ServerSide, T>, choose_config: Box<ChooseConfig>) -> Self {
+        Self {
+            core,
+            choose_config,
+        }
+    }
+
+    pub(crate) fn client_hello(&self) -> ClientHello<'_> {
+        self.choose_config.client_hello()
+    }
+
+    pub(crate) fn choose_config(
+        self,
+        config: Arc<ServerConfig>,
+        exts: ServerExtensionsInput,
+        tls: &mut Vec<u8>,
+    ) -> Result<Core<ServerSide, T>, Error> {
+        let Self {
+            core: Core {
+                mut inner,
+                mut transport,
+            },
+            choose_config,
+        } = self;
+
+        let result = {
+            let result = inner.accepted(choose_config, exts, T::quic(&mut transport), config, tls);
+
+            if let Err(err) = &result {
+                maybe_send_fatal_alert(&mut inner.common.send, err, tls);
+            }
+
+            result
+        };
+
+        result?;
+        Ok(Core { inner, transport })
     }
 }
 
