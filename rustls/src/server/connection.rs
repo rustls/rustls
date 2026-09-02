@@ -7,21 +7,19 @@ use std::io;
 use pki_types::{DnsName, FipsStatus};
 
 use super::config::{ClientHello, ServerConfig};
-use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side, maybe_send_fatal_alert,
-};
+use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Connection, ConnectionCommon, KeyingMaterialExporter, MessageHandler, NeedsInput, SideData,
-    StateMachine, TlsInputBuffer, VerifyPeerIdentity,
+    AcceptedCore, Connection, ConnectionCommon, Core, KeyingMaterialExporter, MessageHandler,
+    NeedsInput, SideData, StateMachine, Tcp, TlsInputBuffer, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
 use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::error::Error;
 use crate::msgs::ServerExtensionsInput;
-use crate::server::hs::{ChooseConfig, ExpectClientHello, ReadClientHello, ServerState};
+use crate::server::hs::{ExpectClientHello, ReadClientHello, ServerState};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::tracing::trace;
@@ -242,10 +240,9 @@ impl TryFrom<ConnectionCommon<ServerSide>> for ServerHandshake {
         const MISUSED: Error = Error::Unreachable("forgot to restore state");
 
         Ok(match mem::replace(&mut inner.state, Err(MISUSED))? {
-            ServerState::ChooseConfig(choose_config) => Self::Accepted(Accepted {
-                inner,
-                choose_config,
-            }),
+            ServerState::ChooseConfig(choose_config) => Self::Accepted(Accepted(
+                AcceptedCore::new(Core::new(inner, ()), choose_config),
+            )),
 
             ServerState::VerifyClientIdentity(verify_identity) => {
                 Self::VerifyClientIdentity(VerifyPeerIdentity {
@@ -271,16 +268,12 @@ impl TryFrom<ConnectionCommon<ServerSide>> for ServerHandshake {
 ///
 /// The handshake can be progressed by choosing a [`ServerConfig`] based on
 /// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
-pub struct Accepted {
-    // invariant: `inner.state` is `Err(_)` and requires restoring
-    inner: ConnectionCommon<ServerSide>,
-    choose_config: Box<ChooseConfig>,
-}
+pub struct Accepted(AcceptedCore<Tcp>);
 
 impl Accepted {
     /// Get the [`ClientHello`] for this connection.
     pub fn client_hello(&self) -> ClientHello<'_> {
-        let ch = self.choose_config.client_hello();
+        let ch = self.0.client_hello();
         trace!("Accepted::client_hello(): {ch:#?}");
         ch
     }
@@ -292,27 +285,15 @@ impl Accepted {
     ///
     /// Returns an error if configuration-dependent validation of the received `ClientHello` message fails.
     pub fn choose_config(
-        mut self,
+        self,
         config: Arc<ServerConfig>,
         tls: &mut Vec<u8>,
     ) -> Result<ServerHandshake, Error> {
-        let result = self.inner.accepted(
-            self.choose_config,
-            ServerExtensionsInput::default(),
-            None,
-            config,
-            tls,
-        );
+        let core = self
+            .0
+            .choose_config(config, ServerExtensionsInput::default(), tls)?;
 
-        let send_path = &mut self.inner.common.send;
-
-        if let Err(err) = &result {
-            maybe_send_fatal_alert(send_path, err, tls);
-        }
-
-        result?;
-
-        Ok(ServerHandshake::NeedsInput(NeedsInput::new(self.inner)))
+        Ok(ServerHandshake::NeedsInput(NeedsInput::new(core.inner)))
     }
 }
 
