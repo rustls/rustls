@@ -39,6 +39,8 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
 
     /// Writes the application data from `plaintext` into TLS records and appends them to `tls`.
     ///
+    /// Any data appended to `tls` should be sent to the peer.
+    ///
     /// This will fail if either the handshake is not complete yet (because we don't yet have the
     /// keys to encrypt application data) or if the send path has been closed by sending a
     /// `close_notify` alert.
@@ -47,7 +49,9 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     /// Returns true if the caller should call [`Self::read_tls()`] as soon as possible.
     fn wants_read(&self) -> bool;
 
-    /// Build a [`MessageHandler`] to process messages from the input buffer.
+    /// Build a [`MessageHandler`] to process messages from the `input` buffer.
+    ///
+    /// Any data appended to `tls` should be sent to the peer.
     fn read_tls<'a, 'm>(
         &'a mut self,
         input: &'m mut dyn TlsInputBuffer,
@@ -484,8 +488,9 @@ impl ConnectionRandoms {
     }
 }
 
-/// Values of this structure are returned from [`Connection::read_tls()`]
-/// and tell the caller the current I/O state of the TLS connection.
+/// Describes the current I/O state of a TLS connection.
+///
+/// Values of this structure are returned from operations on [`MessageHandler`]s.
 #[derive(Debug, Eq, PartialEq)]
 pub struct IoState {
     peer_has_closed: bool,
@@ -502,9 +507,6 @@ impl IoState {
     ///
     /// This is the TLS mechanism to securely half-close a TLS connection, and signifies that
     /// the peer will not send any further data on this connection.
-    ///
-    /// This is also signalled via returning `Ok(0)` from [`std::io::Read`], after all the
-    /// received bytes have been retrieved.
     pub fn peer_has_closed(&self) -> bool {
         self.peer_has_closed
     }
