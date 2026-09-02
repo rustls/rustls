@@ -10,7 +10,7 @@ use rustls::enums::ProtocolVersion;
 use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage, PeerMisbehaved};
 use rustls::server::{ServerHandshake, ServerSide};
 use rustls::{
-    ClientConfig, Connection, ServerConfig, ServerConnection, SliceInput, VecInput,
+    ClientConfig, Connection, ServerConfig, ServerConnection, SliceInput, Tcp, VecInput,
     VerifyPeerIdentity,
 };
 use rustls_test::{
@@ -260,7 +260,7 @@ fn server_external_verifier_test_setup(
     client_config: Arc<ClientConfig>,
     server_config: Arc<ServerConfig>,
 ) -> (
-    VerifyPeerIdentity<ServerSide>,
+    VerifyPeerIdentity<ServerSide, Tcp>,
     Vec<u8>,
     ClientConnection,
     Vec<u8>,

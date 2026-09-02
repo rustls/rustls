@@ -1,23 +1,27 @@
 //! Transport-generic handshake machinery.
 //!
-//! [`Accepted`] is public and generic over [`Transport`].
+//! [`Accepted`] and [`VerifyPeerIdentity`] are public and generic over [`Transport`].
 //!
-//! The remaining public handshake types (`rustls::{NeedsInput, VerifyPeerIdentity,
-//! ClientHandshake, ServerHandshake}` and their `rustls::quic` counterparts) are thin shims
-//! over the types in this module.  The shims own the public signatures and documentation; the
-//! shared underlying logic lives here, parameterised by [`Transport`].
+//! The remaining public handshake types (`rustls::{NeedsInput, ClientHandshake,
+//! ServerHandshake}` and their `rustls::quic` counterparts) are thin shims over the types
+//! in this module.  The shims own the public signatures and documentation; the shared
+//! underlying logic lives here, parameterised by [`Transport`].
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
 
-use super::{ConnectionCommon, MessageIter, MessageIterMode, NeedsInput, SideData};
+use super::{
+    ConnectionCommon, MessageIter, MessageIterMode, NeedsInput, SideCommonOutput, SideData,
+    VerifySidePeerIdentity,
+};
 use crate::TlsInputBuffer;
 use crate::common_state::maybe_send_fatal_alert;
+use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::Payload;
 use crate::error::Error;
 use crate::msgs::{ServerExtensionsInput, TransportParameters};
-use crate::quic::{self, Quic, QuicCommon, QuicEvent, QuicOutput};
+use crate::quic::{self, Quic, QuicEvent, QuicOutput};
 use crate::server::{ChooseConfig, ClientHello, ServerConfig, ServerHandshake, ServerSide};
 use crate::sync::Arc;
 use crate::tracing::trace;
@@ -166,21 +170,158 @@ impl Accepted<Quic> {
         };
 
         let mut tls = Vec::new();
-        let Core {
-            inner,
-            mut transport,
-        } = self.partial_choose_config(config, exts, &mut tls)?;
+        let core = self.partial_choose_config(config, exts, &mut tls)?;
 
         // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
         debug_assert!(tls.is_empty());
-        output.extend(transport.events());
-        quic::ServerHandshake::try_from(QuicCommon::new(inner, transport))
+        quic::ServerHandshake::from_core(core, output)
     }
 }
 
 impl<T: Transport> fmt::Debug for Accepted<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Accepted")
+            .finish_non_exhaustive()
+    }
+}
+
+/// The peer's presented identity must be verified.
+///
+/// The caller has three choices:
+///
+/// - Call [`Self::with_config()`].  This calls the configured verifier trait
+///   ([`ClientVerifier::verify_identity()`][] or [`ServerVerifier::verify_identity()`][])
+///   synchronously.
+///
+/// - Call [`Self::presented_identity()`] to obtain the peer's presented identity,
+///   verify that outside the library (perhaps asynchronously), and then continue the handshake with
+///   [`Self::continue_with()`].
+///
+///   If the verification fails, the error can be passed into [`Self::continue_with()`] to follow
+///   a uniform error handling path.
+///
+/// - Abandon the handshake by discarding this object.
+///
+/// The returned object is a further handshake state for this side.  Commonly this will
+/// contain a [`ServerHandshake::NeedsInput`][], [`ClientHandshake::NeedsInput`][] or [`quic::ServerHandshake::NeedsInput`][]
+/// which will accept and process further data.
+///
+/// [`ClientVerifier::verify_identity()`]: crate::verify::ClientVerifier::verify_identity
+/// [`ServerVerifier::verify_identity()`]: crate::verify::ServerVerifier::verify_identity
+/// [`ServerHandshake::NeedsInput`]: crate::server::ServerHandshake::NeedsInput
+/// [`ClientHandshake::NeedsInput`]: crate::client::ClientHandshake::NeedsInput
+/// [`quic::ServerHandshake::NeedsInput`]: crate::quic::ServerHandshake::NeedsInput
+pub struct VerifyPeerIdentity<Side: SideData, T: Transport> {
+    // invariant: `core.inner.state` is `Err(_)` and requires restoring
+    core: Core<Side, T>,
+    verify_identity: Box<dyn VerifySidePeerIdentity<Side>>,
+}
+
+impl<Side: SideData, T: Transport> VerifyPeerIdentity<Side, T> {
+    pub(crate) fn new(
+        core: Core<Side, T>,
+        verify_identity: Box<dyn VerifySidePeerIdentity<Side>>,
+    ) -> Self {
+        Self {
+            core,
+            verify_identity,
+        }
+    }
+
+    /// Inspect the identity that the peer has provided.
+    pub fn presented_identity(&self) -> Result<Side::PeerIdentity<'_>, Error> {
+        self.verify_identity
+            .presented_identity()
+    }
+}
+
+impl<Side: SideData> VerifyPeerIdentity<Side, Tcp> {
+    /// Progress the handshake by calling the pre-configured certificate verification trait.
+    pub fn with_config(self, tls: &mut Vec<u8>) -> Result<Side::Handshake, Error> {
+        let result = self
+            .verify_identity
+            .verify_with_config();
+        self.continue_with(result, tls)
+    }
+
+    /// Progress the handshake by incorporating the result of an external verification.
+    ///
+    /// Further data to send to the peer may be appended to `tls`.
+    ///
+    /// If `verification_result` is an error, this error is returned and the handshake terminates.
+    /// An alert may be appended to `tls` for sending to the peer.
+    pub fn continue_with(
+        self,
+        verification_result: Result<VerifiedIdentity<'static>, Error>,
+        tls: &mut Vec<u8>,
+    ) -> Result<Side::Handshake, Error> {
+        let core = self.partial_continue_with(verification_result, tls)?;
+        Side::tcp_handshake_from_inner(core.inner)
+    }
+}
+
+impl<Side: SideData> VerifyPeerIdentity<Side, Quic> {
+    /// Progress the handshake by calling the pre-configured certificate verification trait.
+    pub fn with_config(self, output: &mut Vec<QuicEvent>) -> Result<Side::QuicHandshake, Error> {
+        let result = self
+            .verify_identity
+            .verify_with_config();
+        self.continue_with(result, output)
+    }
+
+    /// Progress the handshake by incorporating the result of an external verification.
+    ///
+    /// If `verification_result` is an error, this error is returned and the handshake terminates.
+    ///
+    /// Events are appended to `output`.
+    pub fn continue_with(
+        self,
+        verification_result: Result<VerifiedIdentity<'static>, Error>,
+        output: &mut Vec<QuicEvent>,
+    ) -> Result<Side::QuicHandshake, Error> {
+        let core = self.partial_continue_with(verification_result, &mut Vec::new())?;
+        Side::quic_handshake_from_core(core, output)
+    }
+}
+
+impl<Side: SideData, T: Transport> VerifyPeerIdentity<Side, T> {
+    fn partial_continue_with(
+        self,
+        verification_result: Result<VerifiedIdentity<'static>, Error>,
+        tls: &mut Vec<u8>,
+    ) -> Result<Core<Side, T>, Error> {
+        let Self {
+            core: Core {
+                mut inner,
+                mut transport,
+            },
+            verify_identity,
+        } = self;
+
+        let result = verification_result.and_then(|verified| {
+            verify_identity.continue_with(
+                verified,
+                &mut SideCommonOutput {
+                    side: &mut inner.side,
+                    quic: T::quic(&mut transport),
+                    common: &mut inner.common,
+                    tls,
+                },
+            )
+        });
+
+        if let Err(err) = &result {
+            maybe_send_fatal_alert(&mut inner.common.send, err, tls);
+        }
+
+        inner.state = result;
+        Ok(Core { inner, transport })
+    }
+}
+
+impl<Side: SideData, T: Transport> fmt::Debug for VerifyPeerIdentity<Side, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VerifyPeerIdentity")
             .finish_non_exhaustive()
     }
 }
