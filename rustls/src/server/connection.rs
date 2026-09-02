@@ -12,7 +12,7 @@ use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
     AcceptedCore, Connection, ConnectionCommon, Core, KeyingMaterialExporter, MessageHandler,
-    NeedsInput, SideData, StateMachine, Tcp, TlsInputBuffer, VerifyPeerIdentity,
+    NeedsInput, SideData, StateMachine, Tcp, TlsInputBuffer, VerifyCore, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -245,10 +245,10 @@ impl TryFrom<ConnectionCommon<ServerSide>> for ServerHandshake {
             )),
 
             ServerState::VerifyClientIdentity(verify_identity) => {
-                Self::VerifyClientIdentity(VerifyPeerIdentity {
-                    inner,
+                Self::VerifyClientIdentity(VerifyPeerIdentity::from_core(VerifyCore::new(
+                    Core::new(inner, ()),
                     verify_identity,
-                })
+                )))
             }
 
             state if state.is_traffic() => {
