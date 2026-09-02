@@ -18,6 +18,7 @@ use crate::crypto;
 use crate::crypto::cipher::OutboundPlain;
 use crate::error::Error;
 use crate::msgs::ServerExtensionsInput;
+use crate::quic::{Quic, QuicEvent, ServerHandshake as QuicServerHandshake};
 use crate::server::hs::{ExpectClientHello, ReadClientHello, ServerState};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -242,7 +243,7 @@ pub enum ServerHandshake {
     /// The client's presented identity must be verified.
     ///
     /// See [`VerifyPeerIdentity`] for how to proceed.
-    VerifyClientIdentity(VerifyPeerIdentity<ServerSide>),
+    VerifyClientIdentity(VerifyPeerIdentity<ServerSide, Tcp>),
 
     /// The handshake is complete.
     ///
@@ -276,12 +277,9 @@ impl TryFrom<ConnectionCommon<ServerSide>> for ServerHandshake {
                 Self::Accepted(Accepted::new(Core::new(inner, Tcp), choose_config))
             }
 
-            ServerState::VerifyClientIdentity(verify_identity) => {
-                Self::VerifyClientIdentity(VerifyPeerIdentity {
-                    inner,
-                    verify_identity,
-                })
-            }
+            ServerState::VerifyClientIdentity(verify_identity) => Self::VerifyClientIdentity(
+                VerifyPeerIdentity::new(Core::new(inner, Tcp), verify_identity),
+            ),
 
             state if state.is_traffic() => {
                 inner.state = Ok(state);
@@ -303,12 +301,21 @@ pub struct ServerSide;
 
 impl SideData for ServerSide {
     type Handshake = ServerHandshake;
+    type QuicHandshake = QuicServerHandshake;
 
     type PeerIdentity<'a> = ClientIdentity<'static, 'a>;
 
     #[expect(private_interfaces)]
-    fn handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error> {
+    fn tcp_handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error> {
         ServerHandshake::try_from(common)
+    }
+
+    #[expect(private_interfaces)]
+    fn quic_handshake_from_core(
+        core: Core<Self, Quic>,
+        outputs: &mut Vec<QuicEvent>,
+    ) -> Result<Self::QuicHandshake, Error> {
+        QuicServerHandshake::from_core(core, outputs)
     }
 }
 

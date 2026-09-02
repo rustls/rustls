@@ -22,7 +22,7 @@ use rustls::error::{
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{
     ClientConfig, Connection, DistinguishedName, RootCertStore, ServerConfig, ServerConnection,
-    SliceInput, VecInput, VerifyPeerIdentity,
+    SliceInput, Tcp, VecInput, VerifyPeerIdentity,
 };
 use rustls_test::{
     ErrorFromPeer, KeyType, MockServerVerifier, MultiTest, certificate_error_expecting_name,
@@ -298,7 +298,7 @@ fn client_external_verifier_test_setup(
     client_config: Arc<ClientConfig>,
     server_config: Arc<ServerConfig>,
 ) -> (
-    VerifyPeerIdentity<ClientSide>,
+    VerifyPeerIdentity<ClientSide, Tcp>,
     Vec<u8>,
     ServerConnection,
     Vec<u8>,

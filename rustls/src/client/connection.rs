@@ -11,8 +11,8 @@ use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event,
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Connection, ConnectionCommon, KeyingMaterialExporter, MessageHandler, SideCommonOutput,
-    SideData, StateMachine, VerifyPeerIdentity,
+    Connection, ConnectionCommon, Core, KeyingMaterialExporter, MessageHandler, SideCommonOutput,
+    SideData, StateMachine, Tcp, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -300,7 +300,7 @@ pub enum ClientHandshake {
     /// The server's presented identity must be verified.
     ///
     /// See [`VerifyPeerIdentity`] for how to proceed.
-    VerifyServerIdentity(VerifyPeerIdentity<ClientSide>),
+    VerifyServerIdentity(VerifyPeerIdentity<ClientSide, Tcp>),
 
     /// The handshake is complete.
     ///
@@ -315,12 +315,9 @@ impl TryFrom<ConnectionCommon<ClientSide>> for ClientHandshake {
         const MISUSED: Error = Error::Unreachable("forgot to restore state");
 
         Ok(match mem::replace(&mut inner.state, Err(MISUSED))? {
-            ClientState::VerifyServerIdentity(verify_identity) => {
-                Self::VerifyServerIdentity(VerifyPeerIdentity {
-                    inner,
-                    verify_identity,
-                })
-            }
+            ClientState::VerifyServerIdentity(verify_identity) => Self::VerifyServerIdentity(
+                VerifyPeerIdentity::new(Core::new(inner, Tcp), verify_identity),
+            ),
 
             state if state.is_traffic() => {
                 inner.state = Ok(state);
@@ -444,11 +441,21 @@ pub struct ClientSide;
 
 impl SideData for ClientSide {
     type Handshake = ClientHandshake;
+    type QuicHandshake = ();
+
     type PeerIdentity<'a> = ServerIdentity<'static, 'a>;
 
     #[expect(private_interfaces)]
-    fn handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error> {
+    fn tcp_handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error> {
         ClientHandshake::try_from(common)
+    }
+
+    #[expect(private_interfaces)]
+    fn quic_handshake_from_core(
+        _core: Core<Self, Quic>,
+        _output: &mut Vec<quic::QuicEvent>,
+    ) -> Result<Self::QuicHandshake, Error> {
+        todo!("nyi")
     }
 }
 
