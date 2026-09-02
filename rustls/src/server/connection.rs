@@ -231,9 +231,7 @@ impl ServerHandshake {
     ///
     /// The returned object should be fed data from a single potential client.
     pub fn start() -> NeedsInput<ServerSide> {
-        NeedsInput {
-            inner: ConnectionCommon::for_acceptor(Protocol::Tcp),
-        }
+        NeedsInput::new(ConnectionCommon::for_acceptor(Protocol::Tcp))
     }
 }
 
@@ -263,7 +261,7 @@ impl TryFrom<ConnectionCommon<ServerSide>> for ServerHandshake {
 
             state => {
                 inner.state = Ok(state);
-                Self::NeedsInput(NeedsInput { inner })
+                Self::NeedsInput(NeedsInput::new(inner))
             }
         })
     }
@@ -314,9 +312,7 @@ impl Accepted {
 
         result?;
 
-        Ok(ServerHandshake::NeedsInput(NeedsInput {
-            inner: self.inner,
-        }))
+        Ok(ServerHandshake::NeedsInput(NeedsInput::new(self.inner)))
     }
 }
 
