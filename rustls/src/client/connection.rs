@@ -277,16 +277,14 @@ impl ClientConnectionBuilder {
         } = self;
 
         let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
-        Ok(NeedsInput {
-            inner: ConnectionCommon::for_client(
-                config,
-                name,
-                ClientExtensionsInput::from_alpn(alpn_protocols),
-                None,
-                Protocol::Tcp,
-                tls,
-            )?,
-        })
+        Ok(NeedsInput::new(ConnectionCommon::for_client(
+            config,
+            name,
+            ClientExtensionsInput::from_alpn(alpn_protocols),
+            None,
+            Protocol::Tcp,
+            tls,
+        )?))
     }
 }
 
@@ -331,7 +329,7 @@ impl TryFrom<ConnectionCommon<ClientSide>> for ClientHandshake {
 
             state => {
                 inner.state = Ok(state);
-                Self::NeedsInput(NeedsInput { inner })
+                Self::NeedsInput(NeedsInput::new(inner))
             }
         })
     }
