@@ -377,7 +377,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
             make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
         transfer(&mut client_output, &mut server_input);
         server
-            .process_new_packets(&mut server_input, &mut server_output)
+            .read_tls(&mut server_input, &mut server_output)
             .handle_all(&mut Vec::new())
             .unwrap();
 
@@ -392,7 +392,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
         make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
     transfer(&mut client_output, &mut server_input);
     server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
 
@@ -906,7 +906,7 @@ fn server_detects_excess_streamed_early_data() {
     );
     transfer(&mut client_output, &mut server_input);
     server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
 
@@ -931,7 +931,7 @@ fn server_detects_excess_streamed_early_data() {
     transfer(&mut client_output, &mut server_input);
     assert_eq!(
         server
-            .process_new_packets(&mut server_input, &mut server_output)
+            .read_tls(&mut server_input, &mut server_output)
             .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::PeerMisbehaved(PeerMisbehaved::TooMuchEarlyDataReceived)

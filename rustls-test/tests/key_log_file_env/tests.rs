@@ -62,7 +62,7 @@ fn exercise_key_log_file_for_client() {
                 .unwrap();
             transfer(&mut client_output, &mut server_input);
             server
-                .process_new_packets(&mut server_input, &mut server_output)
+                .read_tls(&mut server_input, &mut server_output)
                 .handle_all(&mut Vec::new())
                 .unwrap();
         }
@@ -99,7 +99,7 @@ fn exercise_key_log_file_for_server() {
                 .unwrap();
             transfer(&mut client_output, &mut server_input);
             server
-                .process_new_packets(&mut server_input, &mut server_output)
+                .read_tls(&mut server_input, &mut server_output)
                 .handle_all(&mut Vec::new())
                 .unwrap();
         }

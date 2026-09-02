@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
             }
 
             if let Err(e) = conn
-                .process_new_packets(&mut input, &mut output)
+                .read_tls(&mut input, &mut output)
                 .handle_all(&mut Vec::new())
             {
                 let _ignored = stream.write_all(&output);

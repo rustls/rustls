@@ -480,7 +480,7 @@ fn test_secret_extraction_fails_with_pending_send_data() {
             .unwrap();
         transfer(&mut client_output, &mut server_input);
         server
-            .process_new_packets(&mut server_input, &mut server_output)
+            .read_tls(&mut server_input, &mut server_output)
             .handle_all(&mut Vec::new())
             .unwrap();
         server
@@ -564,7 +564,7 @@ fn test_refresh_traffic_keys() {
             .write(b"to-client-1".into(), server_output)
             .unwrap();
         transfer(client_output, server_input);
-        let server_iter = server.process_new_packets(server_input, server_output);
+        let server_iter = server.read_tls(server_input, server_output);
 
         let mut buf = Vec::with_capacity(16);
         server_iter
@@ -573,7 +573,7 @@ fn test_refresh_traffic_keys() {
         assert_eq!(&buf, b"to-server-1");
 
         transfer(server_output, client_input);
-        let client_iter = client.process_new_packets(client_input, client_output);
+        let client_iter = client.read_tls(client_input, client_output);
 
         let mut buf = Vec::with_capacity(16);
         client_iter
@@ -691,14 +691,14 @@ fn test_refresh_traffic_keys_is_idempotent() {
         // left's request is received by right, enacted on next write,
         // right's response received by left
         right
-            .process_new_packets(right_input, right_output)
+            .read_tls(right_input, right_output)
             .handle_all(&mut Vec::new())
             .unwrap();
         right
             .write(b"yo".into(), right_output)
             .unwrap();
         assert!(transfer(right_output, left_input) > 0);
-        left.process_new_packets(left_input, left_output)
+        left.read_tls(left_input, left_output)
             .handle_all(&mut Vec::new())
             .unwrap();
 
@@ -745,7 +745,7 @@ fn test_automatic_refresh_traffic_keys() {
             .write(message.as_bytes().into(), &mut client_output)
             .unwrap();
         let transferred = transfer(&mut client_output, &mut server_input);
-        let iter = server.process_new_packets(&mut server_input, &mut server_output);
+        let iter = server.read_tls(&mut server_input, &mut server_output);
         let mut buf = Vec::with_capacity(32);
         let state = iter.handle_all(&mut buf).unwrap();
         println!("{}: {} -> {:?}", i, transferred, state);
@@ -772,7 +772,7 @@ fn test_automatic_refresh_traffic_keys() {
     println!(
         "F: {} -> {:?}",
         transferred,
-        client.process_new_packets(&mut client_input, &mut client_output)
+        client.read_tls(&mut client_input, &mut client_output)
     );
     assert_eq!(transferred, KEY_UPDATE_SIZE + encrypted_size(message.len()));
 }
@@ -814,7 +814,7 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
 
         let mut buf = Vec::new();
         let state = server
-            .process_new_packets(&mut server_input, &mut server_output)
+            .read_tls(&mut server_input, &mut server_output)
             .handle_all(&mut buf)
             .unwrap();
         println!("{}: {} -> {:?}", i, transferred, state);
@@ -868,7 +868,7 @@ fn test_wire_version_passed_to_aad() {
             transfer(&mut client_output, &mut server_input);
             let mut server_received = Vec::new();
             server
-                .process_new_packets(&mut server_input, &mut server_output)
+                .read_tls(&mut server_input, &mut server_output)
                 .handle_all(&mut server_received)
                 .unwrap();
             assert_eq!(server_received, b"hello");
@@ -881,7 +881,7 @@ fn test_wire_version_passed_to_aad() {
             transfer(&mut client_output, &mut server_input);
             assert_eq!(
                 server
-                    .process_new_packets(&mut server_input, &mut server_output)
+                    .read_tls(&mut server_input, &mut server_output)
                     .handle_all(&mut server_received)
                     .unwrap_err(),
                 Error::DecryptError

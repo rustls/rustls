@@ -922,12 +922,12 @@ pub fn do_handshake_collecting(
     while server.is_handshaking() || client.is_handshaking() {
         to_server += transfer(client_output, server_input);
         server
-            .process_new_packets(server_input, server_output)
+            .read_tls(server_input, server_output)
             .handle_all(server_received)
             .unwrap();
         to_client += transfer(server_output, client_input);
         client
-            .process_new_packets(client_input, client_output)
+            .read_tls(client_input, client_output)
             .handle_all(client_received)
             .unwrap();
     }
@@ -951,12 +951,12 @@ pub fn do_handshake_until_error(
     while server.is_handshaking() || client.is_handshaking() {
         transfer(client_output, server_input);
         server
-            .process_new_packets(server_input, server_output)
+            .read_tls(server_input, server_output)
             .handle_all(&mut Vec::new())
             .map_err(ErrorFromPeer::Server)?;
         transfer(server_output, client_input);
         client
-            .process_new_packets(client_input, client_output)
+            .read_tls(client_input, client_output)
             .handle_all(&mut Vec::new())
             .map_err(ErrorFromPeer::Client)?;
     }
@@ -984,7 +984,7 @@ pub fn do_handshake_until_both_error(
             let mut errors = vec![server_err];
             transfer(server_output, client_input);
             let client_err = client
-                .process_new_packets(client_input, client_output)
+                .read_tls(client_input, client_output)
                 .handle_all(&mut Vec::new())
                 .map_err(ErrorFromPeer::Client)
                 .expect_err("client didn't produce error after server error");
@@ -996,7 +996,7 @@ pub fn do_handshake_until_both_error(
             let mut errors = vec![client_err];
             transfer(client_output, server_input);
             let server_err = server
-                .process_new_packets(server_input, server_output)
+                .read_tls(server_input, server_output)
                 .handle_all(&mut Vec::new())
                 .map_err(ErrorFromPeer::Server)
                 .expect_err("server didn't produce error after client error");
@@ -1111,7 +1111,7 @@ pub fn do_suite_and_kx_test(
 
     transfer(&mut client_output, &mut server_input);
     server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
 
@@ -1144,7 +1144,7 @@ pub fn do_suite_and_kx_test(
 
     transfer(&mut server_output, &mut client_input);
     client
-        .process_new_packets(&mut client_input, &mut client_output)
+        .read_tls(&mut client_input, &mut client_output)
         .handle_all(&mut Vec::new())
         .unwrap();
 
@@ -1175,12 +1175,12 @@ pub fn do_suite_and_kx_test(
 
     transfer(&mut client_output, &mut server_input);
     server
-        .process_new_packets(&mut server_input, &mut server_output)
+        .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
     transfer(&mut server_output, &mut client_input);
     client
-        .process_new_packets(&mut client_input, &mut client_output)
+        .read_tls(&mut client_input, &mut client_output)
         .handle_all(&mut Vec::new())
         .unwrap();
 
@@ -1830,7 +1830,7 @@ impl<'a, C: Connection> OtherSession<'a, C> {
 
         let iter = self
             .sess
-            .process_new_packets(self.input, self.output);
+            .read_tls(self.input, self.output);
         match (iter.handle_all(&mut self.received), self.fail_ok) {
             (Ok(_), false) => (),
             (Err(error), true) => self.last_error = Some(error),

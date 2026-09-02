@@ -114,16 +114,16 @@
 //!
 //! ### Rustls provides encrypted pipes
 //! These are the [`ServerConnection`] and [`ClientConnection`] types.  You supply raw TLS traffic
-//! on the left (via the [`TlsInputBuffer`] supplied to [`process_new_packets()`], and [`write()`] methods)
+//! on the left (via the [`TlsInputBuffer`] supplied to [`read_tls()`], and [`write()`] methods)
 //! and then read/write the plaintext on the right:
 //!
 //! [`write()`]: Connection::write
-//! [`process_new_packets()`]: Connection::process_new_packets
+//! [`read_tls()`]: Connection::read_tls
 //!
 //! ```text
 //!          TLS                                   Plaintext
 //!          ===                                   =========
-//!  process_new_packets()  +-----------------------+      reader() as io::Read
+//!             read_tls()  +-----------------------+      reader() as io::Read
 //!                         |                       |
 //!               +--------->   ClientConnection    +--------->
 //!                         |          or           |
@@ -191,17 +191,17 @@
 //! ```
 //!
 //! Now you should do appropriate IO for the `client` object.  Operations that produce TLS
-//! data to send to the peer -- such as `build()` above and `client.process_new_packets()` --
+//! data to send to the peer -- such as `build()` above and `client.read_tls()` --
 //! append it to the `Vec<u8>` you pass; write those bytes to the underlying connection
 //! whenever it is able to send data.  If `client.wants_read()` yields true, you should
-//! call `client.process_new_packets()` with the data from the underlying connection.
+//! call `client.read_tls()` with the data from the underlying connection.
 //! You should continue doing this as long as the connection is valid.
 //!
-//! `process_new_packets()` will yield a [`MessageHandler`], which can be used to read all
+//! `read_tls()` will yield a [`MessageHandler`], which can be used to read all
 //! buffered messages at once (via [`MessageHandler::handle_all()`]) or one at a time (via
 //! [`MessageHandler::next_payload()`]). Any error returned from either of these methods is fatal
 //! to the connection, and will tell you why. For example, if the server's certificate is expired
-//! `process_new_packets()` will return `Err(InvalidCertificate(Expired))`. From this point on,
+//! `read_tls()` will return `Err(InvalidCertificate(Expired))`. From this point on,
 //! future calls to `MessageHandler` methods will do nothing and yield the same error.
 //!
 //! Newly received data is available by copying from the `Payload` data returned by
@@ -245,7 +245,7 @@
 //!     input.read(&mut socket).unwrap();
 //!     let mut plaintext = Vec::new();
 //!     client
-//!       .process_new_packets(&mut input, &mut output)
+//!       .read_tls(&mut input, &mut output)
 //!       .handle_all(&mut plaintext)
 //!       .unwrap();
 //!     io::stdout().write(&plaintext).unwrap();

@@ -1060,7 +1060,7 @@ fn transfer(
             Err(err) => panic!("error on transfer {offs}..{sz}: {err}"),
         }
 
-        let mut iter = right.process_new_packets(right_input, &mut right_buffers.tls);
+        let mut iter = right.read_tls(right_input, &mut right_buffers.tls);
         while let Some(result) = iter.next_payload() {
             let chunk = result.unwrap();
             if let Some(left) = &mut data_left {

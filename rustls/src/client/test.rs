@@ -645,7 +645,7 @@ fn client_receives_tls13_server_hello_with_raw_extension(
     input
         .read(&mut sh.into_wire_bytes().as_slice())
         .unwrap();
-    conn.process_new_packets(&mut input, &mut tls)
+    conn.read_tls(&mut input, &mut tls)
         .handle_all(&mut Vec::new())
         .map(|_| ())
 }
@@ -944,7 +944,7 @@ fn roots() -> RootCertStore {
 }
 
 fn process(input: &mut VecInput, conn: &mut ClientConnection) -> Result<(), Error> {
-    conn.process_new_packets(input, &mut Vec::new())
+    conn.read_tls(input, &mut Vec::new())
         .handle_all(&mut Vec::new())?;
     Ok(())
 }

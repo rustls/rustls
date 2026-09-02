@@ -429,7 +429,7 @@ pub(crate) mod transport {
         // Feed the data to rustls
         let in_memory_reader = &mut &buf[..length];
         while input.read(in_memory_reader)? != 0 {
-            let mut iter = conn.process_new_packets(input, output);
+            let mut iter = conn.read_tls(input, output);
             while let Some(result) = iter.next_payload() {
                 result?;
             }
@@ -478,7 +478,7 @@ pub(crate) mod transport {
                 chunk_buf_offset += read;
 
                 // Process packets to free space in the message buffer
-                let mut iter = client.process_new_packets(input, output);
+                let mut iter = client.read_tls(input, output);
                 let mut plaintext_bytes_read = 0;
                 while let Some(result) = iter.next_payload() {
                     let payload = result?;
