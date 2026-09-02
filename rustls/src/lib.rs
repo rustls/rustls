@@ -113,9 +113,9 @@
 //! [`tokio-rustls`]: https://github.com/rustls/tokio-rustls
 //!
 //! ### Rustls provides encrypted pipes
-//! These are the [`ServerConnection`] and [`ClientConnection`] types.  You supply raw TLS traffic
-//! on the left (via the [`TlsInputBuffer`] supplied to [`read_tls()`], and [`write()`] methods)
-//! and then read/write the plaintext on the right:
+//! These are the [`ServerConnection`] and [`ClientConnection`] types.  A connection can be viewed as two directions.
+//! In the _receive_ direction [`read_tls()`] takes received TLS data and yields application data.
+//! In the _send_ direction [`write()`] takes application data and yields TLS data to send.
 //!
 //! [`write()`]: Connection::write
 //! [`read_tls()`]: Connection::read_tls
@@ -123,13 +123,13 @@
 //! ```text
 //!          TLS                                   Plaintext
 //!          ===                                   =========
-//!             read_tls()  +-----------------------+      reader() as io::Read
+//!             read_tls()  +-----------------------+      MessageHandler
 //!                         |                       |
 //!               +--------->   ClientConnection    +--------->
 //!                         |          or           |
 //!               <---------+   ServerConnection    <---------+
 //!                         |                       |
-//!             write()     +-----------------------+      writer() as io::Write
+//!          &mut Vec<u8>   +-----------------------+      write()
 //! ```
 //!
 //! ### Rustls takes care of server certificate verification
@@ -197,11 +197,11 @@
 //! call `client.read_tls()` with the data from the underlying connection.
 //! You should continue doing this as long as the connection is valid.
 //!
-//! `read_tls()` will yield a [`MessageHandler`], which can be used to read all
+//! [`read_tls()`] will yield a [`MessageHandler`], which can be used to read all
 //! buffered messages at once (via [`MessageHandler::handle_all()`]) or one at a time (via
 //! [`MessageHandler::next_payload()`]). Any error returned from either of these methods is fatal
 //! to the connection, and will tell you why. For example, if the server's certificate is expired
-//! `read_tls()` will return `Err(InvalidCertificate(Expired))`. From this point on,
+//! `Err(InvalidCertificate(Expired))` will be returned. From this point on,
 //! future calls to `MessageHandler` methods will do nothing and yield the same error.
 //!
 //! Newly received data is available by copying from the `Payload` data returned by
