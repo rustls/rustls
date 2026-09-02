@@ -499,7 +499,7 @@ fn test_secret_extraction_fails_with_pending_send_data() {
     let mut server = server_with_queued_key_update();
     let mut server_output = Vec::new();
     server
-        .write_tls(b"flush".into(), &mut server_output)
+        .write(b"flush".into(), &mut server_output)
         .unwrap();
     server
         .dangerous_extract_secrets()
@@ -558,10 +558,10 @@ fn test_refresh_traffic_keys() {
         server: &mut ServerConnection,
     ) {
         client
-            .write_tls(b"to-server-1".into(), client_output)
+            .write(b"to-server-1".into(), client_output)
             .unwrap();
         server
-            .write_tls(b"to-client-1".into(), server_output)
+            .write(b"to-client-1".into(), server_output)
             .unwrap();
         transfer(client_output, server_input);
         let server_iter = server.process_new_packets(server_input, server_output);
@@ -695,7 +695,7 @@ fn test_refresh_traffic_keys_is_idempotent() {
             .handle_all(&mut Vec::new())
             .unwrap();
         right
-            .write_tls(b"yo".into(), right_output)
+            .write(b"yo".into(), right_output)
             .unwrap();
         assert!(transfer(right_output, left_input) > 0);
         left.process_new_packets(left_input, left_output)
@@ -742,7 +742,7 @@ fn test_automatic_refresh_traffic_keys() {
     for i in 0..(CONFIDENTIALITY_LIMIT + 16) {
         let message = format!("{i:08}");
         client
-            .write_tls(message.as_bytes().into(), &mut client_output)
+            .write(message.as_bytes().into(), &mut client_output)
             .unwrap();
         let transferred = transfer(&mut client_output, &mut server_input);
         let iter = server.process_new_packets(&mut server_input, &mut server_output);
@@ -765,7 +765,7 @@ fn test_automatic_refresh_traffic_keys() {
     // finally, server writes and pumps its key_update response
     let message = b"finished";
     server
-        .write_tls(message.into(), &mut server_output)
+        .write(message.into(), &mut server_output)
         .unwrap();
     let transferred = transfer(&mut server_output, &mut client_input);
 
@@ -808,7 +808,7 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
     for i in 0..CONFIDENTIALITY_LIMIT {
         let message = format!("{i:08}");
         client
-            .write_tls(message.as_bytes().into(), &mut client_output)
+            .write(message.as_bytes().into(), &mut client_output)
             .unwrap();
         let transferred = transfer(&mut client_output, &mut server_input);
 
@@ -863,7 +863,7 @@ fn test_wire_version_passed_to_aad() {
 
             // base case
             client
-                .write_tls(b"hello".into(), &mut client_output)
+                .write(b"hello".into(), &mut client_output)
                 .unwrap();
             transfer(&mut client_output, &mut server_input);
             let mut server_received = Vec::new();
@@ -875,7 +875,7 @@ fn test_wire_version_passed_to_aad() {
 
             // fail case
             client
-                .write_tls(b"world".into(), &mut client_output)
+                .write(b"world".into(), &mut client_output)
                 .unwrap();
             client_output[byte] ^= 0x01;
             transfer(&mut client_output, &mut server_input);

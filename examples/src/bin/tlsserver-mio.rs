@@ -317,7 +317,7 @@ impl OpenConnection {
             false => {
                 self.flush_pending();
                 self.tls_conn
-                    .write_tls(plaintext.into(), &mut self.output)
+                    .write(plaintext.into(), &mut self.output)
                     .unwrap();
             }
         }
@@ -331,7 +331,7 @@ impl OpenConnection {
 
         let pending = mem::take(&mut self.pending);
         self.tls_conn
-            .write_tls((&pending).into(), &mut self.output)
+            .write((&pending).into(), &mut self.output)
             .unwrap();
         if self.sent_http_response {
             self.tls_conn

@@ -51,7 +51,7 @@ fn test_rustls_server_with_ffdhe_kx(provider: CryptoProvider, iters: usize) {
             .unwrap();
 
             server
-                .write_tls(message.as_bytes().into(), &mut output)
+                .write(message.as_bytes().into(), &mut output)
                 .unwrap();
 
             complete_io(
@@ -169,7 +169,7 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
         .unwrap();
 
         client
-            .write_tls(message.as_bytes().into(), &mut output)
+            .write(message.as_bytes().into(), &mut output)
             .unwrap();
         client.send_close_notify(&mut output);
         tcp_stream.write_all(&output).unwrap();

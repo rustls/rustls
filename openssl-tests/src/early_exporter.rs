@@ -77,7 +77,7 @@ fn test_early_exporter() {
             .unwrap();
 
             server
-                .write_tls((&message).into(), &mut output)
+                .write((&message).into(), &mut output)
                 .unwrap();
 
             complete_io(

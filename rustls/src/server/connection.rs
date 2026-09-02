@@ -62,7 +62,7 @@ impl ServerConnection {
     /// This fails if:
     ///
     /// - the handshake is not complete. Check with [`Connection::is_handshaking()`].
-    /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write_tls()`].
+    /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write()`].
     pub fn split(self) -> Result<SplitConnection<ServerSide>, Error> {
         self.inner.split()
     }
@@ -140,8 +140,8 @@ impl ServerConnection {
 impl Connection for ServerConnection {
     type Side = ServerSide;
 
-    fn write_tls(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error> {
-        self.inner.write_tls(plaintext, tls)
+    fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error> {
+        self.inner.write(plaintext, tls)
     }
 
     fn wants_read(&self) -> bool {

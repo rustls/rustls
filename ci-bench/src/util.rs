@@ -505,7 +505,7 @@ pub(crate) mod transport {
         let iterations = plaintext_size / send_buf.len();
 
         for _ in 0..iterations {
-            server.write_tls((&send_buf).into(), output)?;
+            server.write((&send_buf).into(), output)?;
 
             // Empty the output buffer, so we can re-fill it in the next iteration
             writer.write_all(output).await?;

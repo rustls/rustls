@@ -674,14 +674,14 @@ fn early_data_is_available_on_resumption() {
         client
             .early_data()
             .unwrap()
-            .write_tls(b"".into(), &mut client_output),
+            .write(b"".into(), &mut client_output),
         0
     );
     assert_eq!(
         client
             .early_data()
             .unwrap()
-            .write_tls(b"hello".into(), &mut client_output),
+            .write(b"hello".into(), &mut client_output),
         5
     );
     let client_early_exporter = client
@@ -786,7 +786,7 @@ fn early_data_is_limited_on_client() {
         client
             .early_data()
             .unwrap()
-            .write_tls((&[0xaa; 1234 + 1]).into(), &mut client_output),
+            .write((&[0xaa; 1234 + 1]).into(), &mut client_output),
         1234
     );
     do_handshake(
@@ -861,7 +861,7 @@ fn server_detects_excess_early_data() {
         client
             .early_data()
             .unwrap()
-            .write_tls((&[0xaa; 2024]).into(), &mut client_output),
+            .write((&[0xaa; 2024]).into(), &mut client_output),
         2024
     );
     assert_eq!(
@@ -901,7 +901,7 @@ fn server_detects_excess_streamed_early_data() {
         client
             .early_data()
             .unwrap()
-            .write_tls((&[0xaa; 1024]).into(), &mut client_output),
+            .write((&[0xaa; 1024]).into(), &mut client_output),
         1024
     );
     transfer(&mut client_output, &mut server_input);
@@ -925,7 +925,7 @@ fn server_detects_excess_streamed_early_data() {
         client
             .early_data()
             .unwrap()
-            .write_tls((&[0xbb; 1000]).into(), &mut client_output),
+            .write((&[0xbb; 1000]).into(), &mut client_output),
         1000
     );
     transfer(&mut client_output, &mut server_input);

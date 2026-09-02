@@ -118,7 +118,7 @@ fn test_version(provider: CryptoProvider) -> Transcript {
     }
 
     client
-        .write_tls(b"hello from client".into(), &mut client_output)
+        .write(b"hello from client".into(), &mut client_output)
         .unwrap();
     transcript
         .client_wrote
@@ -130,7 +130,7 @@ fn test_version(provider: CryptoProvider) -> Transcript {
     client_output.clear();
 
     server
-        .write_tls(b"hello from server".into(), &mut server_output)
+        .write(b"hello from server".into(), &mut server_output)
         .unwrap();
     transcript
         .server_wrote

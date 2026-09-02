@@ -227,7 +227,7 @@ mod server {
             &mut conn,
         )?;
 
-        conn.write_tls(b"Hello from the server".into(), &mut output)
+        conn.write(b"Hello from the server".into(), &mut output)
             .unwrap();
         complete_io(
             &mut stream,

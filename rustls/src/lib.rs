@@ -114,10 +114,10 @@
 //!
 //! ### Rustls provides encrypted pipes
 //! These are the [`ServerConnection`] and [`ClientConnection`] types.  You supply raw TLS traffic
-//! on the left (via the [`TlsInputBuffer`] supplied to [`process_new_packets()`], and [`write_tls()`] methods)
+//! on the left (via the [`TlsInputBuffer`] supplied to [`process_new_packets()`], and [`write()`] methods)
 //! and then read/write the plaintext on the right:
 //!
-//! [`write_tls()`]: Connection::write_tls
+//! [`write()`]: Connection::write
 //! [`process_new_packets()`]: Connection::process_new_packets
 //!
 //! ```text
@@ -129,7 +129,7 @@
 //!                         |          or           |
 //!               <---------+   ServerConnection    <---------+
 //!                         |                       |
-//!         write_tls()     +-----------------------+      writer() as io::Write
+//!             write()     +-----------------------+      writer() as io::Write
 //! ```
 //!
 //! ### Rustls takes care of server certificate verification
@@ -206,7 +206,7 @@
 //!
 //! Newly received data is available by copying from the `Payload` data returned by
 //! `next_payload()` or written into the given buffer by `handle_all()`.  You can send data
-//! to the peer by calling `client.write_tls()`, which encrypts it into TLS records appended
+//! to the peer by calling `client.write()`, which encrypts it into TLS records appended
 //! to your output buffer.  Note that this is only possible once the handshake has completed.
 //!
 //! The following code uses a fictional socket IO API for illustration, and does not handle
@@ -252,7 +252,7 @@
 //!   }
 //!
 //!   if !sent_request && !client.is_handshaking() {
-//!     client.write_tls(b"GET / HTTP/1.0\r\n\r\n".into(), &mut output).unwrap();
+//!     client.write(b"GET / HTTP/1.0\r\n\r\n".into(), &mut output).unwrap();
 //!     sent_request = true;
 //!   }
 //!

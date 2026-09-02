@@ -42,7 +42,7 @@ fn client_data_sent() {
 
         assert_eq!(
             client
-                .write_tls(b"hello".into(), &mut client_output)
+                .write(b"hello".into(), &mut client_output)
                 .unwrap_err(),
             ApiMisuse::WriteTlsBeforeHandshakeComplete.into()
         );
@@ -62,7 +62,7 @@ fn client_data_sent() {
         );
 
         client
-            .write_tls(b"hello".into(), &mut client_output)
+            .write(b"hello".into(), &mut client_output)
             .unwrap();
         transfer(&mut client_output, &mut server_input);
         server
@@ -86,7 +86,7 @@ fn server_data_sent() {
 
         assert_eq!(
             server
-                .write_tls(b"hello".into(), &mut server_output)
+                .write(b"hello".into(), &mut server_output)
                 .unwrap_err(),
             ApiMisuse::WriteTlsBeforeHandshakeComplete.into()
         );
@@ -106,7 +106,7 @@ fn server_data_sent() {
         );
 
         server
-            .write_tls(b"hello".into(), &mut server_output)
+            .write(b"hello".into(), &mut server_output)
             .unwrap();
         transfer(&mut server_output, &mut client_input);
         client
@@ -142,10 +142,10 @@ fn both_data_sent() {
         );
 
         server
-            .write_tls(b"from-server!".into(), &mut server_output)
+            .write(b"from-server!".into(), &mut server_output)
             .unwrap();
         client
-            .write_tls(b"from-client!".into(), &mut client_output)
+            .write(b"from-client!".into(), &mut client_output)
             .unwrap();
 
         transfer(&mut server_output, &mut client_input);
@@ -235,17 +235,17 @@ fn buf_read() {
 
     // Write two separate messages ensuring that empty messages are not written
     client
-        .write_tls(b"".into(), &mut client_output)
+        .write(b"".into(), &mut client_output)
         .unwrap();
     client
-        .write_tls(b"hello".into(), &mut client_output)
+        .write(b"hello".into(), &mut client_output)
         .unwrap();
     transfer(&mut client_output, &mut server_input);
     client
-        .write_tls(b"world".into(), &mut client_output)
+        .write(b"world".into(), &mut client_output)
         .unwrap();
     client
-        .write_tls(b"".into(), &mut client_output)
+        .write(b"".into(), &mut client_output)
         .unwrap();
     transfer(&mut client_output, &mut server_input);
     let mut iter = server.process_new_packets(&mut server_input, &mut server_output);
@@ -397,10 +397,10 @@ fn client_complete_io_for_write() {
         );
 
         client
-            .write_tls(b"01234567890123456789".into(), &mut client_output)
+            .write(b"01234567890123456789".into(), &mut client_output)
             .unwrap();
         client
-            .write_tls(b"01234567890123456789".into(), &mut client_output)
+            .write(b"01234567890123456789".into(), &mut client_output)
             .unwrap();
         {
             let mut pipe = OtherSession::new(&mut server_input, &mut server_output, &mut server);
@@ -551,7 +551,7 @@ fn client_complete_io_with_nonblocking_io() {
 
     // write
     client
-        .write_tls(b"hello".into(), &mut client_output)
+        .write(b"hello".into(), &mut client_output)
         .unwrap();
 
     // no progress
@@ -609,10 +609,10 @@ fn buffered_client_complete_io_for_write() {
         );
 
         client
-            .write_tls(b"01234567890123456789".into(), &mut client_output)
+            .write(b"01234567890123456789".into(), &mut client_output)
             .unwrap();
         client
-            .write_tls(b"01234567890123456789".into(), &mut client_output)
+            .write(b"01234567890123456789".into(), &mut client_output)
             .unwrap();
         {
             let mut pipe =
@@ -654,7 +654,7 @@ fn client_complete_io_for_read() {
         );
 
         server
-            .write_tls(b"01234567890123456789".into(), &mut server_output)
+            .write(b"01234567890123456789".into(), &mut server_output)
             .unwrap();
         {
             let mut pipe = OtherSession::new(&mut server_input, &mut server_output, &mut server);
@@ -744,10 +744,10 @@ fn server_complete_io_for_write() {
         );
 
         server
-            .write_tls(b"01234567890123456789".into(), &mut server_output)
+            .write(b"01234567890123456789".into(), &mut server_output)
             .unwrap();
         server
-            .write_tls(b"01234567890123456789".into(), &mut server_output)
+            .write(b"01234567890123456789".into(), &mut server_output)
             .unwrap();
         {
             let mut pipe = OtherSession::new(&mut client_input, &mut client_output, &mut client);
@@ -788,7 +788,7 @@ fn server_complete_io_for_write_eof() {
 
         // Queue 20 bytes to write.
         server
-            .write_tls(b"01234567890123456789".into(), &mut server_output)
+            .write(b"01234567890123456789".into(), &mut server_output)
             .unwrap();
         {
             const BYTES_BEFORE_EOF: usize = 5;
@@ -865,7 +865,7 @@ fn server_complete_io_for_read() {
         );
 
         client
-            .write_tls(b"01234567890123456789".into(), &mut client_output)
+            .write(b"01234567890123456789".into(), &mut client_output)
             .unwrap();
         {
             let mut pipe = OtherSession::new(&mut client_input, &mut client_output, &mut client);
@@ -1055,7 +1055,7 @@ fn test_client_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
             &mut server,
         );
         server
-            .write_tls(data.into(), &mut server_output)
+            .write(data.into(), &mut server_output)
             .unwrap();
 
         {
@@ -1098,7 +1098,7 @@ fn test_server_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
             &mut server,
         );
         client
-            .write_tls(data.into(), &mut client_output)
+            .write(data.into(), &mut client_output)
             .unwrap();
 
         {
@@ -1174,7 +1174,7 @@ fn stream_write_reports_underlying_io_error_before_plaintext_processed() {
         after: 0,
     };
     client
-        .write_tls(b"hello".into(), &mut client_output)
+        .write(b"hello".into(), &mut client_output)
         .unwrap();
 
     let mut client_stream = Stream::new(
@@ -1217,7 +1217,7 @@ fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
         after: 1,
     };
     client
-        .write_tls(b"hello".into(), &mut client_output)
+        .write(b"hello".into(), &mut client_output)
         .unwrap();
 
     let mut client_stream = Stream::new(
@@ -1343,7 +1343,7 @@ fn stream_write_would_block_when_output_over_limit() {
     // buffer three 42-byte records
     for _ in 0..3 {
         client
-            .write_tls((&[b'a'; 20]).into(), &mut client_output)
+            .write((&[b'a'; 20]).into(), &mut client_output)
             .unwrap();
     }
     assert_eq!(client_output.len(), 126);
@@ -1564,10 +1564,10 @@ fn server_appdata_record_layout() {
     );
 
     server
-        .write_tls(b"01234567890123456789".into(), &mut server_output)
+        .write(b"01234567890123456789".into(), &mut server_output)
         .unwrap();
     server
-        .write_tls(b"01234567890123456789".into(), &mut server_output)
+        .write(b"01234567890123456789".into(), &mut server_output)
         .unwrap();
     assert_eq!(84, server_output.len());
     assert_eq!(record_lengths(&server_output), vec![42, 42]);
@@ -1602,10 +1602,10 @@ fn client_appdata_record_layout() {
     );
 
     client
-        .write_tls(b"01234567890123456789".into(), &mut client_output)
+        .write(b"01234567890123456789".into(), &mut client_output)
         .unwrap();
     client
-        .write_tls(b"01234567890123456789".into(), &mut client_output)
+        .write(b"01234567890123456789".into(), &mut client_output)
         .unwrap();
     assert_eq!(84, client_output.len());
     assert_eq!(record_lengths(&client_output), vec![42, 42]);
@@ -1639,10 +1639,10 @@ fn server_handshake_with_half_rtt_data() {
         .handle_all(&mut Vec::new())
         .unwrap();
     server
-        .write_tls(b"01234567890123456789".into(), &mut server_output)
+        .write(b"01234567890123456789".into(), &mut server_output)
         .unwrap();
     server
-        .write_tls(b"0123456789".into(), &mut server_output)
+        .write(b"0123456789".into(), &mut server_output)
         .unwrap();
 
     // don't assert exact sizes here, to avoid a brittle test
@@ -1694,7 +1694,7 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
     // 0.5-rtt data may not be sent at this point
     assert_eq!(
         server
-            .write_tls(b"01234567890123456789".into(), &mut server_output)
+            .write(b"01234567890123456789".into(), &mut server_output)
             .unwrap_err(),
         ApiMisuse::WriteTlsBeforeHandshakeComplete.into()
     );
@@ -1719,10 +1719,10 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
         .handle_all(&mut Vec::new())
         .unwrap();
     server
-        .write_tls(b"01234567890123456789".into(), &mut server_output)
+        .write(b"01234567890123456789".into(), &mut server_output)
         .unwrap();
     server
-        .write_tls(b"0123456789".into(), &mut server_output)
+        .write(b"0123456789".into(), &mut server_output)
         .unwrap();
     assert_eq!(server_output.len(), 258);
     let lengths = record_lengths(&server_output);
@@ -1783,10 +1783,10 @@ fn client_handshake_flights() {
         .handle_all(&mut Vec::new())
         .unwrap();
     client
-        .write_tls(b"01234567890123456789".into(), &mut client_output)
+        .write(b"01234567890123456789".into(), &mut client_output)
         .unwrap();
     client
-        .write_tls(b"0123456789".into(), &mut client_output)
+        .write(b"0123456789".into(), &mut client_output)
         .unwrap();
 
     // CCS, finished, then two application data records
@@ -1847,7 +1847,7 @@ fn test_server_mtu_reduction() {
             // The 0.5-RTT application data is delivered across the handshake flights (fragmented by
             // the reduced MTU), so accumulate everything the client decrypts.
             server
-                .write_tls((&big_data).into(), &mut server_output)
+                .write((&big_data).into(), &mut server_output)
                 .unwrap();
             for length in record_lengths(&server_output) {
                 assert!(length <= 64);
@@ -1944,7 +1944,7 @@ fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
             // check server -> client data flow
             let pattern = (0x00..=0xffu8).collect::<Vec<u8>>();
             server
-                .write_tls((&pattern).into(), &mut server_output)
+                .write((&pattern).into(), &mut server_output)
                 .unwrap();
             transfer(&mut server_output, &mut client_input);
             let iter = client.process_new_packets(&mut client_input, &mut client_output);
@@ -1952,7 +1952,7 @@ fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
 
             // and client -> server
             client
-                .write_tls((&pattern).into(), &mut client_output)
+                .write((&pattern).into(), &mut client_output)
                 .unwrap();
             transfer(&mut client_output, &mut server_input);
             let iter = server.process_new_packets(&mut server_input, &mut server_output);
@@ -2291,10 +2291,10 @@ fn server_close_notify() {
 
         // check that alerts don't overtake appdata
         server
-            .write_tls(b"from-server!".into(), &mut server_output)
+            .write(b"from-server!".into(), &mut server_output)
             .unwrap();
         client
-            .write_tls(b"from-client!".into(), &mut client_output)
+            .write(b"from-client!".into(), &mut client_output)
             .unwrap();
         server.send_close_notify(&mut server_output);
 
@@ -2331,10 +2331,10 @@ fn client_close_notify() {
 
         // check that alerts don't overtake appdata
         server
-            .write_tls(b"from-server!".into(), &mut server_output)
+            .write(b"from-server!".into(), &mut server_output)
             .unwrap();
         client
-            .write_tls(b"from-client!".into(), &mut client_output)
+            .write(b"from-client!".into(), &mut client_output)
             .unwrap();
         client.send_close_notify(&mut client_output);
 
@@ -2371,10 +2371,10 @@ fn server_closes_uncleanly() {
 
         // check that unclean EOF reporting does not overtake appdata
         server
-            .write_tls(b"from-server!".into(), &mut server_output)
+            .write(b"from-server!".into(), &mut server_output)
             .unwrap();
         client
-            .write_tls(b"from-client!".into(), &mut client_output)
+            .write(b"from-client!".into(), &mut client_output)
             .unwrap();
 
         transfer(&mut server_output, &mut client_input);
@@ -2411,10 +2411,10 @@ fn client_closes_uncleanly() {
 
         // check that unclean EOF reporting does not overtake appdata
         server
-            .write_tls(b"from-server!".into(), &mut server_output)
+            .write(b"from-server!".into(), &mut server_output)
             .unwrap();
         client
-            .write_tls(b"from-client!".into(), &mut client_output)
+            .write(b"from-client!".into(), &mut client_output)
             .unwrap();
 
         transfer(&mut client_output, &mut server_input);
@@ -2496,7 +2496,7 @@ fn test_complete_io_with_no_io_needed() {
     );
 
     client
-        .write_tls(b"hello".into(), &mut client_output)
+        .write(b"hello".into(), &mut client_output)
         .unwrap();
     client.send_close_notify(&mut client_output);
     transfer(&mut client_output, &mut server_input);
@@ -2505,7 +2505,7 @@ fn test_complete_io_with_no_io_needed() {
         .handle_all(&mut Vec::new())
         .unwrap();
     server
-        .write_tls(b"hello".into(), &mut server_output)
+        .write(b"hello".into(), &mut server_output)
         .unwrap();
     server.send_close_notify(&mut server_output);
     transfer(&mut server_output, &mut client_input);
@@ -2565,7 +2565,7 @@ fn test_junk_after_close_notify_received() {
         &mut server,
     );
     client
-        .write_tls(b"hello".into(), &mut client_output)
+        .write(b"hello".into(), &mut client_output)
         .unwrap();
     client.send_close_notify(&mut client_output);
 
@@ -2610,12 +2610,12 @@ fn test_data_after_close_notify_is_ignored() {
     );
 
     client
-        .write_tls(b"before".into(), &mut client_output)
+        .write(b"before".into(), &mut client_output)
         .unwrap();
     client.send_close_notify(&mut client_output);
     assert_eq!(
         client
-            .write_tls(b"after".into(), &mut client_output)
+            .write(b"after".into(), &mut client_output)
             .unwrap_err(),
         ApiMisuse::WriteTlsAfterSendPathClosed.into()
     );

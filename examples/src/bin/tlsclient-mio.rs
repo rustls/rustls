@@ -111,7 +111,7 @@ impl TlsClient {
 
         let pending = mem::take(&mut self.pending);
         self.tls_conn
-            .write_tls((&pending).into(), &mut self.output)
+            .write((&pending).into(), &mut self.output)
             .unwrap();
     }
 

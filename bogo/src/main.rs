@@ -203,7 +203,7 @@ fn exec(
                     let len = client(&mut sess)
                         .early_data()
                         .expect("0rtt not available")
-                        .write_tls(message.into(), &mut output);
+                        .write(message.into(), &mut output);
                     write_or_queue(&mut sess, &message[len..], &mut pending, &mut output).unwrap();
                 }
                 sent_message = true;
@@ -282,7 +282,7 @@ fn exec(
                     &mut export,
                 )
                 .unwrap();
-            sess.write_tls((&export).into(), &mut output)
+            sess.write((&export).into(), &mut output)
                 .unwrap();
             sent_exporter = true;
         }
@@ -293,14 +293,14 @@ fn exec(
                 secrets.client_traffic_secret.len(),
                 secrets.server_traffic_secret.len()
             );
-            sess.write_tls(
+            sess.write(
                 (&(secrets.client_traffic_secret.len() as u16).to_le_bytes()).into(),
                 &mut output,
             )
             .unwrap();
-            sess.write_tls((&secrets.server_traffic_secret).into(), &mut output)
+            sess.write((&secrets.server_traffic_secret).into(), &mut output)
                 .unwrap();
-            sess.write_tls((&secrets.client_traffic_secret).into(), &mut output)
+            sess.write((&secrets.client_traffic_secret).into(), &mut output)
                 .unwrap();
             sent_exporter = true;
         }
@@ -315,7 +315,7 @@ fn exec(
             println!("writing message and then only one byte of its tls frame");
             flush(&mut output, &mut conn);
 
-            sess.write_tls(b"hello".into(), &mut output)
+            sess.write(b"hello".into(), &mut output)
                 .unwrap();
             sent_message = true;
 
@@ -457,7 +457,7 @@ fn write_or_queue(
         return Ok(());
     }
 
-    match sess.write_tls(plaintext.into(), output) {
+    match sess.write(plaintext.into(), output) {
         Err(Error::ApiMisuse(ApiMisuse::WriteTlsBeforeHandshakeComplete)) => {
             pending.extend_from_slice(plaintext);
             Ok(())
@@ -531,7 +531,7 @@ fn after_read(
     };
 
     if !pending.is_empty() {
-        match sess.write_tls(pending.as_slice().into(), output) {
+        match sess.write(pending.as_slice().into(), output) {
             Ok(()) => pending.clear(),
             Err(Error::ApiMisuse(ApiMisuse::WriteTlsBeforeHandshakeComplete)) => {}
             Err(err) => panic!("cannot send queued plaintext: {err:?}"),

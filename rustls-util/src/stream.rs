@@ -191,7 +191,7 @@ where
         }
 
         self.conn
-            .write_tls((&buf[..len]).into(), self.output)
+            .write((&buf[..len]).into(), self.output)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
 
         // Try to write the underlying transport here, but don't let
@@ -231,7 +231,7 @@ where
         }
 
         self.conn
-            .write_tls(OutboundPlain::new(&slices), self.output)
+            .write(OutboundPlain::new(&slices), self.output)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
 
         // Try to write the underlying transport here, but don't let
