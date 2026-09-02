@@ -11,8 +11,8 @@ use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event,
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Connection, ConnectionCommon, KeyingMaterialExporter, MessageHandler, SideCommonOutput,
-    SideData, StateMachine, VerifyPeerIdentity,
+    Connection, ConnectionCommon, Core, KeyingMaterialExporter, MessageHandler, SideCommonOutput,
+    SideData, StateMachine, VerifyCore, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -256,10 +256,10 @@ impl TryFrom<ConnectionCommon<ClientSide>> for ClientHandshake {
 
         Ok(match mem::replace(&mut inner.state, Err(MISUSED))? {
             ClientState::VerifyServerIdentity(verify_identity) => {
-                Self::VerifyServerIdentity(VerifyPeerIdentity {
-                    inner,
+                Self::VerifyServerIdentity(VerifyPeerIdentity::from_core(VerifyCore::new(
+                    Core::new(inner, ()),
                     verify_identity,
-                })
+                )))
             }
 
             state if state.is_traffic() => {

@@ -10,9 +10,13 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use super::{ConnectionCommon, MessageIter, MessageIterMode, ReceivePath, SideData};
+use super::{
+    ConnectionCommon, MessageIter, MessageIterMode, ReceivePath, SideCommonOutput, SideData,
+    VerifyPeerIdentityInternal,
+};
 use crate::TlsInputBuffer;
-use crate::common_state::maybe_send_fatal_alert;
+use crate::common_state::{Output, maybe_send_fatal_alert};
+use crate::crypto::VerifiedIdentity;
 use crate::error::Error;
 use crate::msgs::ServerExtensionsInput;
 use crate::quic::QuicOutput;
@@ -113,6 +117,80 @@ impl<T: Transport> AcceptedCore<T> {
         };
 
         result?;
+        Ok(Core { inner, transport })
+    }
+}
+
+pub(crate) struct VerifyCore<Side: SideData, T: Transport> {
+    core: Core<Side, T>,
+    verify_identity: Box<dyn VerifyPeerIdentityInternal<Side>>,
+}
+
+impl<Side: SideData, T: Transport> VerifyCore<Side, T> {
+    pub(crate) fn new(
+        core: Core<Side, T>,
+        verify_identity: Box<dyn VerifyPeerIdentityInternal<Side>>,
+    ) -> Self {
+        Self {
+            core,
+            verify_identity,
+        }
+    }
+
+    pub(crate) fn with_config(self, tls: &mut Vec<u8>) -> Result<Core<Side, T>, Error> {
+        let Self {
+            core,
+            verify_identity,
+        } = self;
+
+        Self::advance(core, tls, |output| verify_identity.with_config(output))
+    }
+
+    pub(crate) fn continue_with(
+        self,
+        verification_result: Result<VerifiedIdentity<'static>, Error>,
+        tls: &mut Vec<u8>,
+    ) -> Result<Core<Side, T>, Error> {
+        let Self {
+            core,
+            verify_identity,
+        } = self;
+
+        Self::advance(core, tls, |output| {
+            verification_result.and_then(|verified| verify_identity.continue_with(verified, output))
+        })
+    }
+
+    pub(crate) fn presented_identity(&self) -> Result<Side::PeerIdentity<'_>, Error> {
+        self.verify_identity
+            .presented_identity()
+    }
+
+    fn advance(
+        core: Core<Side, T>,
+        tls: &mut Vec<u8>,
+        advance: impl FnOnce(&mut dyn Output<'_>) -> Result<Side::State, Error>,
+    ) -> Result<Core<Side, T>, Error> {
+        let Core {
+            mut inner,
+            mut transport,
+        } = core;
+
+        {
+            let result = advance(&mut SideCommonOutput {
+                side: &mut inner.side,
+                quic: T::quic(&mut transport),
+                common: &mut inner.common,
+                tls,
+            });
+
+            if let Err(err) = &result {
+                maybe_send_fatal_alert(&mut inner.common.send, err, tls);
+            }
+
+            inner.state = result;
+        }
+
         Ok(Core { inner, transport })
     }
 }
