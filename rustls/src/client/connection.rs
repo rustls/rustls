@@ -20,7 +20,9 @@ use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::enums::ApplicationProtocol;
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{ClientExtensionsInput, TransportParameters};
-use crate::quic::{self, ClientConnection as QuicClientConnection, Quic, QuicCommon, QuicOutput};
+use crate::quic::{
+    self, ClientConnection as QuicClientConnection, QuicCommon, QuicOutput, QuicState,
+};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::tracing::trace;
@@ -237,9 +239,9 @@ impl ClientConnectionBuilder {
             )
         };
 
-        let mut quic = Quic {
+        let mut quic = QuicState {
             version,
-            ..Quic::default()
+            ..QuicState::default()
         };
 
         let mut tls = Vec::new();
