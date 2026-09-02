@@ -109,9 +109,9 @@ impl ClientConnection {
             ..ClientExtensionsInput::from_alpn(alpn_protocols)
         };
 
-        let mut quic = Quic {
+        let mut quic = QuicState {
             version,
-            ..Quic::default()
+            ..QuicState::default()
         };
 
         let mut tls = Vec::new();
@@ -237,9 +237,9 @@ impl ServerConnection {
         let core = ConnectionCommon::for_server(config, exts, Protocol::Quic(version))?;
         let inner = QuicCommon::new(
             core,
-            Quic {
+            QuicState {
                 version,
-                ..Quic::default()
+                ..QuicState::default()
             },
         );
         Ok(Self { inner })
@@ -387,9 +387,9 @@ impl ServerHandshake {
         NeedsInput {
             inner: QuicCommon::new(
                 ConnectionCommon::for_acceptor(Protocol::Quic(version)),
-                Quic {
+                QuicState {
                     version,
-                    ..Quic::default()
+                    ..QuicState::default()
                 },
             ),
         }
@@ -676,11 +676,11 @@ pub enum QuicEvent {
 /// A shared interface for QUIC connections.
 struct QuicCommon<Side: SideData> {
     common: ConnectionCommon<Side>,
-    quic: Quic,
+    quic: QuicState,
 }
 
 impl<Side: SideData> QuicCommon<Side> {
-    fn new(common: ConnectionCommon<Side>, quic: Quic) -> Self {
+    fn new(common: ConnectionCommon<Side>, quic: QuicState) -> Self {
         Self { common, quic }
     }
 
@@ -768,7 +768,7 @@ impl<Side: SideData> DerefMut for QuicCommon<Side> {
 }
 
 #[derive(Default)]
-pub(crate) struct Quic {
+pub(crate) struct QuicState {
     pub(crate) version: Version,
     /// QUIC transport parameters received from the peer during the handshake
     pub(crate) params: Option<Vec<u8>>,
@@ -776,7 +776,7 @@ pub(crate) struct Quic {
     pub(crate) early_secret: Option<OkmBlock>,
 }
 
-impl Quic {
+impl QuicState {
     pub(crate) fn send_msg(&mut self, m: Message<'_>, _must_encrypt: bool) {
         if let MessagePayload::Alert(_) = m.payload {
             // alerts are sent out-of-band in QUIC mode
@@ -801,7 +801,7 @@ impl Quic {
     }
 }
 
-impl QuicOutput for Quic {
+impl QuicOutput for QuicState {
     fn transport_parameters(&mut self, params: Vec<u8>) {
         self.params = Some(params);
     }
