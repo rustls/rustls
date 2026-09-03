@@ -4,7 +4,6 @@ version = "0.1.0-dev.1"
 edition.workspace = true
 license = "Apache-2.0 OR ISC OR MIT"
 description = "Utilities for use with rustls"
-homepage = "https://github.com/rustls/rustls"
 repository = "https://github.com/rustls/rustls"
 
 [features]

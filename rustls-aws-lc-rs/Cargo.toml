@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version = "1.85"
 license = "Apache-2.0 OR ISC OR MIT"
 description = "An aws-lc-based crypto provider for rustls."
-homepage = "https://github.com/rustls/rustls"
 repository = "https://github.com/rustls/rustls"
 categories = ["network-programming", "cryptography"]
 autobenches = false
