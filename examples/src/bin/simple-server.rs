@@ -2,7 +2,7 @@
 //! it accepts the default configuration, loads a server certificate and private key,
 //! and then accepts a single client connection.
 //!
-//! Usage: cargo r --bin simpleserver <path/to/cert.pem> <path/to/privatekey.pem>
+//! Usage: cargo r --bin simple-server <path/to/cert.pem> <path/to/privatekey.pem>
 //!
 //! Note that `unwrap()` is used to deal with networking errors; this is not something
 //! that is sensible outside of example code.

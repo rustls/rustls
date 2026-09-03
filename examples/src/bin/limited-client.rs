@@ -1,4 +1,4 @@
-//! limitedclient: This example demonstrates usage of ClientConfig building
+//! limited-client: This example demonstrates usage of ClientConfig building
 //! so that unused cryptography in rustls can be discarded by the linker.  You can
 //! observe using `nm` that the binary of this program does not contain any AES code.
 

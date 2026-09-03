@@ -93,18 +93,18 @@ jobs:
         uses: seanmiddleditch/gha-setup-ninja@v6
 
       - name: Check simple client
-        run: cargo run --locked -p rustls-examples --bin simpleclient
+        run: cargo run --locked -p rustls-examples --bin simple-client
 
       - name: Check limited client
-        run: cargo run --locked -p rustls-examples --bin limitedclient
+        run: cargo run --locked -p rustls-examples --bin limited-client
 
       - name: Check simple 0rtt client
-        run: cargo run --locked -p rustls-examples --bin simple_0rtt_client
+        run: cargo run --locked -p rustls-examples --bin simple-0rtt-client
 
-      # Test the server_acceptor binary builds - we invoke with --help since it
+      # Test the server-acceptor binary builds - we invoke with --help since it
       # will run a server process that doesn't exit when invoked with no args
       - name: Check server acceptor
-        run: cargo run --locked -p rustls-examples --bin server_acceptor -- --help
+        run: cargo run --locked -p rustls-examples --bin server-acceptor -- --help
 
       - name: Check ech-client (research.cloudflare.com)
         run: >
@@ -125,7 +125,7 @@ jobs:
         run: cargo run --locked -p rustls-post-quantum --example client | grep 'kex=X25519MLKEM768'
 
       - name: Smoke test for secp256r1mlkem768 interop
-        run: cargo run --locked -p rustls-examples --bin tlsclient-mio -- --http --key-exchange secp256r1mlkem768 --verbose openquantumsafe.org
+        run: cargo run --locked -p rustls-examples --bin tls-client-mio -- --http --key-exchange secp256r1mlkem768 --verbose openquantumsafe.org
 
   feature-powerset:
     name: Feature Powerset

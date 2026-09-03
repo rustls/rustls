@@ -3,7 +3,7 @@
 //! Usage:
 //!
 //! ```
-//! cargo r --bin simple_0rtt_client --package rustls-examples [domain name] [port] [path/to/ca.cert]
+//! cargo r --bin simple-0rtt-client --package rustls-examples [domain name] [port] [path/to/ca.cert]
 //! ```
 //!
 //! You may set the `SSLKEYLOGFILE` env var when using this example to write a
