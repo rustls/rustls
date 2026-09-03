@@ -29,9 +29,7 @@ use rustls::crypto::{
     Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme, Signer, SigningKey,
     SingleCredential, VerifiedIdentity, WebPkiSupportedAlgorithms,
 };
-use rustls::enums::{
-    ApplicationProtocol, CertificateCompressionAlgorithm, CertificateType, ProtocolVersion,
-};
+use rustls::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use rustls::error::{
     AlertDescription, ApiMisuse, CertificateError, EncryptedClientHelloError, Error,
     InvalidMessage, PeerIncompatible, PeerMisbehaved,
@@ -45,7 +43,6 @@ use rustls::server::{
 };
 use rustls::{
     Connection, DistinguishedName, HandshakeKind, IoState, RootCertStore, TlsInputBuffer, VecInput,
-    compress,
 };
 use rustls_aws_lc_rs::{
     ECDSA_P256_SHA256, ECDSA_P256_SHA384, ECDSA_P256_SHA512, ECDSA_P384_SHA256, ECDSA_P384_SHA384,
@@ -60,8 +57,13 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, fmt};
 
+mod compress;
 mod opts;
+
+use compress::CompressionAlgs;
 use opts::Options;
+
+use crate::compress::{ExpandingAlgorithm, RandomAlgorithm, ShrinkingAlgorithm};
 
 pub fn main() {
     let mut args: Vec<_> = env::args().collect();
@@ -1731,142 +1733,6 @@ struct KeyLogMemoInner {
 enum Side {
     Client,
     Server,
-}
-
-#[derive(Debug, PartialEq)]
-enum CompressionAlgs {
-    None,
-    All,
-    One(u16),
-}
-
-#[derive(Debug)]
-struct ShrinkingAlgorithm;
-
-impl ShrinkingAlgorithm {
-    const ALGORITHM: u16 = 0xff01;
-}
-
-impl compress::CertDecompressor for ShrinkingAlgorithm {
-    fn algorithm(&self) -> CertificateCompressionAlgorithm {
-        CertificateCompressionAlgorithm(Self::ALGORITHM)
-    }
-
-    fn decompress(
-        &self,
-        input: &[u8],
-        output: &mut [u8],
-    ) -> Result<(), compress::DecompressionFailed> {
-        if output.len() != input.len() + 2 {
-            return Err(compress::DecompressionFailed);
-        }
-        output[..2].copy_from_slice(&[0, 0]);
-        output[2..].copy_from_slice(input);
-        Ok(())
-    }
-}
-
-impl compress::CertCompressor for ShrinkingAlgorithm {
-    fn algorithm(&self) -> CertificateCompressionAlgorithm {
-        CertificateCompressionAlgorithm(Self::ALGORITHM)
-    }
-
-    fn compress(
-        &self,
-        mut input: Vec<u8>,
-        _: compress::CompressionLevel,
-    ) -> Result<Vec<u8>, compress::CompressionFailed> {
-        assert_eq!(input[..2], [0, 0]);
-        input.drain(0..2);
-        Ok(input)
-    }
-}
-
-#[derive(Debug)]
-struct ExpandingAlgorithm;
-
-impl compress::CertDecompressor for ExpandingAlgorithm {
-    fn algorithm(&self) -> CertificateCompressionAlgorithm {
-        CertificateCompressionAlgorithm(0xff02)
-    }
-
-    fn decompress(
-        &self,
-        input: &[u8],
-        output: &mut [u8],
-    ) -> Result<(), compress::DecompressionFailed> {
-        if output.len() + 4 != input.len() {
-            return Err(compress::DecompressionFailed);
-        }
-        if input[..4] != [1, 2, 3, 4] {
-            return Err(compress::DecompressionFailed);
-        }
-        output.copy_from_slice(&input[4..]);
-        Ok(())
-    }
-}
-
-impl compress::CertCompressor for ExpandingAlgorithm {
-    fn algorithm(&self) -> CertificateCompressionAlgorithm {
-        CertificateCompressionAlgorithm(0xff02)
-    }
-
-    fn compress(
-        &self,
-        mut input: Vec<u8>,
-        _: compress::CompressionLevel,
-    ) -> Result<Vec<u8>, compress::CompressionFailed> {
-        input.insert(0, 1);
-        input.insert(1, 2);
-        input.insert(2, 3);
-        input.insert(3, 4);
-        Ok(input)
-    }
-}
-
-#[derive(Debug)]
-struct RandomAlgorithm;
-
-impl compress::CertDecompressor for RandomAlgorithm {
-    fn algorithm(&self) -> CertificateCompressionAlgorithm {
-        CertificateCompressionAlgorithm(0xff03)
-    }
-
-    fn decompress(
-        &self,
-        input: &[u8],
-        output: &mut [u8],
-    ) -> Result<(), compress::DecompressionFailed> {
-        if output.len() + 1 != input.len() {
-            return Err(compress::DecompressionFailed);
-        }
-        output.copy_from_slice(&input[1..]);
-        Ok(())
-    }
-}
-
-impl compress::CertCompressor for RandomAlgorithm {
-    fn algorithm(&self) -> CertificateCompressionAlgorithm {
-        CertificateCompressionAlgorithm(0xff03)
-    }
-
-    fn compress(
-        &self,
-        mut input: Vec<u8>,
-        _: compress::CompressionLevel,
-    ) -> Result<Vec<u8>, compress::CompressionFailed> {
-        let random_byte = {
-            let mut bytes = [0];
-            // nb. provider is irrelevant for this use
-            rustls_ring::DEFAULT_PROVIDER
-                .secure_random
-                .fill(&mut bytes)
-                .unwrap();
-            bytes[0]
-        };
-        input.insert(0, random_byte);
-        Ok(input)
-    }
 }
 
 static GREASE_HPKE_SUITE: &dyn Hpke = hpke::DH_KEM_X25519_HKDF_SHA256_AES_128;
