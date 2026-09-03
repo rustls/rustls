@@ -1,6 +1,5 @@
 #![warn(clippy::assertions_on_result_states)]
 
-#[cfg(feature = "ring")]
 #[path = "."]
 mod tests_with_ring {
     rustls_test::provider_ring!();
@@ -35,7 +34,6 @@ mod tests_with_ring {
     mod tests;
 }
 
-#[cfg(feature = "aws-lc-rs")]
 #[path = "."]
 mod tests_with_aws_lc_rs {
     rustls_test::provider_aws_lc_rs!();

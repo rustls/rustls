@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use pki_types::{DnsName, FipsStatus, SubjectPublicKeyInfoDer};
 use provider::cipher_suite;
-use rustls::client::Resumption;
+use rustls::client::{EchConfig, EchGreaseConfig, EchMode, Resumption};
 use rustls::crypto::cipher::{EncodableVersion, Payload, Record};
 use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{
@@ -18,6 +18,7 @@ use rustls::crypto::{
 };
 use rustls::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{AlertDescription, ApiMisuse, CertificateError, Error, PeerMisbehaved};
+use rustls::pki_types::EchConfigListBytes;
 use rustls::server::{
     ClientHello, ParsedCertificate, PreferServerOrder, ServerCredentialResolver, ServerHandshake,
 };
@@ -25,12 +26,6 @@ use rustls::{
     ClientConfig, ClientConnection, Connection as _, HandshakeKind, KeyingMaterialExporter,
     ServerConfig, ServerConnection, SliceInput, SupportedCipherSuite, VecInput,
 };
-#[cfg(feature = "aws-lc-rs")]
-use rustls::{
-    client::{EchConfig, EchGreaseConfig, EchMode},
-    pki_types::EchConfigListBytes,
-};
-#[cfg(feature = "aws-lc-rs")]
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls_test::{
     Altered, ClientConfigExt, ClientStorage, ClientStorageOp, CountingSubscriber, ErrorFromPeer,
@@ -1456,7 +1451,6 @@ fn test_no_warning_logging_during_successful_sessions() {
     }
 }
 
-#[cfg(all(feature = "ring", feature = "aws-lc-rs"))]
 #[test]
 fn test_explicit_provider_selection() {
     let client_config =
@@ -1732,7 +1726,6 @@ fn test_server_fips_service_indicator_includes_require_ems() {
     assert!(matches!(server_config.fips(), FipsStatus::Unvalidated));
 }
 
-#[cfg(feature = "aws-lc-rs")]
 #[test]
 fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
     if !provider_is_fips() {
