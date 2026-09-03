@@ -295,7 +295,7 @@ fn client_with_sni_disabled_does_not_send_sni() {
             .build(&mut client_output)
             .unwrap();
 
-        let mut server = ServerConnection::new(server_config.clone()).unwrap();
+        let mut server = ServerConnection::new(server_config).unwrap();
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let err = do_handshake_until_error(
@@ -519,7 +519,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
         server_config.cert_resolver = resolver.clone();
         let server_config = Arc::new(server_config);
 
-        let mut server = ServerConnection::new(server_config.clone()).unwrap();
+        let mut server = ServerConnection::new(server_config).unwrap();
         let mut client_output = Vec::new();
         let mut server_output = Vec::new();
         let _client = client_config

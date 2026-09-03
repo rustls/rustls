@@ -63,7 +63,7 @@ fn client_only_attempts_resumption_with_compatible_security() {
         let mut client_output = Vec::new();
         let mut server_output = Vec::new();
         let (mut client, mut server) = make_pair_for_configs(
-            client_config.clone(),
+            client_config,
             ServerConfig::clone(&server_config),
             &mut client_output,
         );
