@@ -1,0 +1,1046 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 1112.022 266.94199"
+   font-family="Helvetica, Arial, sans-serif"
+   version="1.1"
+   id="svg144"
+   sodipodi:docname="rustls-release-lines-0.23.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   inkscape:export-filename="rustlsreleaselines.png"
+   inkscape:export-xdpi="600"
+   inkscape:export-ydpi="600"
+   width="1112.022"
+   height="266.94199"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs148">
+    <rect
+       x="-11.023684"
+       y="233.19055"
+       width="880.83129"
+       height="78.925268"
+       id="rect394" />
+  </defs>
+  <sodipodi:namedview
+     id="namedview146"
+     pagecolor="#000000"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="1.4142136"
+     inkscape:cx="368.04907"
+     inkscape:cy="148.13887"
+     inkscape:window-width="3840"
+     inkscape:window-height="2091"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg144" />
+  <line
+     x1="4"
+     y1="180.75"
+     x2="1084"
+     y2="180.75"
+     stroke="#E2DFDA"
+     stroke-width="8"
+     stroke-linecap="round"
+     id="line8"
+     style="stroke:#ffffff;stroke-opacity:1" />
+  <line
+     x1="4"
+     y1="180.75"
+     x2="828"
+     y2="180.75"
+     stroke="#ce422b"
+     stroke-width="8"
+     stroke-linecap="round"
+     id="line10" />
+  <path
+     d="m 1084,168.75 24,12 -24,12 z"
+     fill="#E2DFDA"
+     id="path12"
+     style="fill:#ffffff;fill-opacity:1" />
+  <line
+     x1="44"
+     y1="190.75"
+     x2="44"
+     y2="246.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line18"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="44"
+     y="262.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text20"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:0;stroke-dasharray:none;stroke-opacity:1">0.1</text>
+  <line
+     x1="53"
+     y1="170.75"
+     x2="53"
+     y2="140.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line22"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="53"
+     y="128.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text24"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1">0.5</text>
+  <line
+     x1="116.2"
+     y1="190.75"
+     x2="116.2"
+     y2="246.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line26"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="116.2"
+     y="262.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text28"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:0;stroke-dasharray:none;stroke-opacity:1">0.6</text>
+  <line
+     x1="116.8"
+     y1="170.75"
+     x2="116.8"
+     y2="140.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line30"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="116.8"
+     y="128.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text32"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1">0.7</text>
+  <line
+     x1="118.5"
+     y1="190.75"
+     x2="166.2"
+     y2="246.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line34"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="166.2"
+     y="262.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text36"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:0;stroke-dasharray:none;stroke-opacity:1">0.8</text>
+  <line
+     x1="127.89999"
+     y1="170.75"
+     x2="166.8"
+     y2="140.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line38"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="166.8"
+     y="128.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text40"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1">0.9</text>
+  <line
+     x1="144.2"
+     y1="190.75"
+     x2="216.20001"
+     y2="246.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line42"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="216.20001"
+     y="262.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text44"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:0;stroke-dasharray:none;stroke-opacity:1">0.10</text>
+  <line
+     x1="148.8"
+     y1="170.75"
+     x2="216.79999"
+     y2="140.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line46"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="216.79999"
+     y="128.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text48"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1">0.11</text>
+  <line
+     x1="186.29999"
+     y1="190.75"
+     x2="266.20001"
+     y2="246.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line50"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="266.20001"
+     y="262.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text52"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:0;stroke-dasharray:none;stroke-opacity:1">0.12</text>
+  <line
+     x1="240.39999"
+     y1="170.75"
+     x2="266.79999"
+     y2="140.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line54"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="266.79999"
+     y="128.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text56"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1">0.13</text>
+  <line
+     x1="262.5"
+     y1="190.75"
+     x2="316.20001"
+     y2="246.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line58"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="316.20001"
+     y="262.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text60"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:0;stroke-dasharray:none;stroke-opacity:1">0.14</text>
+  <line
+     x1="294.60001"
+     y1="170.75"
+     x2="316.79999"
+     y2="140.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line62"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="316.79999"
+     y="128.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text64"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1">0.15</text>
+  <line
+     x1="352.20001"
+     y1="190.75"
+     x2="366.20001"
+     y2="246.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line66"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="366.20001"
+     y="262.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text68"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:0;stroke-dasharray:none;stroke-opacity:1">0.16</text>
+  <line
+     x1="408.39999"
+     y1="170.75"
+     x2="408.39999"
+     y2="140.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line70"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="408.39999"
+     y="128.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text72"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1">0.17</text>
+  <line
+     x1="446.29999"
+     y1="190.75"
+     x2="446.29999"
+     y2="246.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line74"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="446.29999"
+     y="262.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text76"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:0;stroke-dasharray:none;stroke-opacity:1">0.18</text>
+  <line
+     x1="486.59998"
+     y1="170.75"
+     x2="486.59998"
+     y2="140.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line78"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="486.59998"
+     y="128.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text80"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1">0.19</text>
+  <line
+     x1="574.59998"
+     y1="190.75"
+     x2="574.59998"
+     y2="246.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line82"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="574.59998"
+     y="262.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text84"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:0;stroke-dasharray:none;stroke-opacity:1">0.20</text>
+  <line
+     x1="731.59998"
+     y1="170.75"
+     x2="731.59998"
+     y2="140.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line86"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="731.59998"
+     y="128.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text88"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1">0.21</text>
+  <line
+     x1="802.5"
+     y1="190.75"
+     x2="802.5"
+     y2="246.75"
+     stroke="#C9C4BC"
+     stroke-width="1.5"
+     id="line90"
+     style="stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="802.5"
+     y="262.75"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text92"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:0;stroke-dasharray:none;stroke-opacity:1">0.22</text>
+  <circle
+     cx="44"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle94"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="53"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle96"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="116.2"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle98"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="116.8"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle100"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="118.5"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle102"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="127.89999"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle104"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="144.2"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle106"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="148.8"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle108"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="186.29999"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle110"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="240.39999"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle112"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="262.5"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle114"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="294.60001"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle116"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="352.20001"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle118"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="408.39999"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle120"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="446.29999"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle122"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="486.59998"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle124"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="574.59998"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle126"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="731.59998"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle128"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <circle
+     cx="802.5"
+     cy="180.75"
+     r="9"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="3"
+     id="circle130"
+     style="stroke-width:1;stroke-dasharray:none" />
+  <g
+     id="g142"
+     transform="translate(-76,-219.25)">
+    <line
+       x1="904"
+       y1="400"
+       x2="904"
+       y2="330"
+       stroke="#ce422b"
+       stroke-width="3"
+       id="line132" />
+    <circle
+       cx="904"
+       cy="400"
+       r="15"
+       fill="#ce422b"
+       stroke="#fafaf8"
+       stroke-width="4"
+       id="circle134"
+       style="stroke-width:2;stroke-dasharray:none" />
+    <rect
+       x="824"
+       y="220"
+       width="160"
+       height="110"
+       rx="12"
+       fill="#ffffff"
+       stroke="#e2dfda"
+       stroke-width="1.5"
+       id="rect136" />
+    <text
+       x="904"
+       y="268"
+       font-size="30px"
+       font-weight="700"
+       fill="#1a1a1a"
+       text-anchor="middle"
+       id="text138"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next'">0.23</text>
+    <text
+       x="904"
+       y="302"
+       font-size="20px"
+       font-weight="700"
+       fill="#ce422b"
+       text-anchor="middle"
+       id="text140"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next'">29 FEB 2024</text>
+  </g>
+  <text
+     x="1084"
+     y="260.75"
+     font-size="16px"
+     font-weight="700"
+     letter-spacing="1"
+     fill="#8a857d"
+     text-anchor="middle"
+     id="text4887"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next'"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next';fill:#ffffff;fill-opacity:1"
+       id="tspan5972">Today</tspan></text>
+  <circle
+     cx="828.20001"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="2.5"
+     id="circle4927"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="831.70001"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="2.5"
+     id="circle4929"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="833.70001"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="2.5"
+     id="circle4931"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="835.09998"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#fafaf8"
+     stroke-width="2.5"
+     id="circle4933"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="842.20001"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4935"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="850"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4937"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="850.29999"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4939"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="851.90002"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4941"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="855.09998"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4943"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="858"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4945"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="865.09998"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4947"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="869.40002"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4949"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="883.40002"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4951"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="890.20001"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4953"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="893.70001"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4955"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="897.09998"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4957"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="902.5"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4959"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="904.29999"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4961"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="905.70001"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4963"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="909.70001"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4965"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="918.20001"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4967"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="924"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4969"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="927.40002"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4971"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="937.09998"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4973"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="937.09998"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4975"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="944"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4977"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="951.19995"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4979"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="963.09998"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4981"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="970"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4983"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="974.90002"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4985"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="975.5"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4987"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="990.30005"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4989"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="998.30005"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4991"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="999.69995"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4993"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="1003.5"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4995"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="1021.2"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4997"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="1035.5"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle4999"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="1049"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle5001"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="1051.9"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle5003"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="1053.5"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle5005"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="1069.2"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle5007"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="1075.2"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle5009"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <circle
+     cx="1079.8"
+     cy="180.75"
+     r="6.5"
+     fill="#ce422b"
+     stroke="#FAFAF8"
+     stroke-width="2.5"
+     id="circle5011"
+     style="fill:#5f86d2;fill-opacity:1;stroke:#fffff3;stroke-width:1;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="894.25177"
+     y="224.31212"
+     font-size="19px"
+     font-weight="600"
+     fill="#1A1A1A"
+     text-anchor="middle"
+     id="text2632"
+     style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Bold';text-align:start;text-anchor:start;fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:0;stroke-dasharray:none;stroke-opacity:1"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next'"
+       id="tspan2923">43+ minor releases</tspan></text>
+  <text
+     xml:space="preserve"
+     id="text392"
+     style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-size:18.8976px;line-height:100%;font-family:'Atkinson Hyperlegible Next';-inkscape-font-specification:'Atkinson Hyperlegible Next Light';text-decoration-color:#000000;white-space:pre;shape-inside:url(#rect394);display:inline;fill:#5f86d2;fill-rule:evenodd;stroke:#fffff3;paint-order:markers stroke fill;stop-color:#000000" />
+</svg>
