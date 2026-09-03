@@ -606,7 +606,7 @@ impl IntoIterator for MultiTest {
                 match &self.client_auth {
                     ClientAuth::Yes => {
                         options.push((
-                            client_auth_config.clone(),
+                            client_auth_config,
                             Arc::new(make_server_config_with_mandatory_client_auth(
                                 *kt, &provider,
                             )),
@@ -619,7 +619,7 @@ impl IntoIterator for MultiTest {
                     }
                     ClientAuth::CustomClientVerifier(make_verifier) => {
                         options.push((
-                            client_auth_config.clone(),
+                            client_auth_config,
                             Arc::new(
                                 ServerConfig::builder(provider.clone())
                                     .with_client_cert_verifier(make_verifier(*kt, provider.clone()))

@@ -393,7 +393,7 @@ fn client_checks_server_certificate_with_given_ip_address() {
 
         // negative ipv6 case
         assert_eq!(
-            check_server_name(client_config.clone(), server_config.clone(), "2001:db8::2"),
+            check_server_name(client_config, server_config, "2001:db8::2"),
             Err(ErrorFromPeer::Client(Error::InvalidCertificate(
                 certificate_error_expecting_name("2001:db8::2")
             )))
@@ -410,7 +410,7 @@ fn client_checks_server_certificate_with_given_name() {
             .connect(server_name("not-the-right-hostname.com"))
             .build(&mut client_output)
             .unwrap();
-        let mut server = ServerConnection::new(server_config.clone()).unwrap();
+        let mut server = ServerConnection::new(server_config).unwrap();
 
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
@@ -454,7 +454,7 @@ fn client_check_server_certificate_ee_revoked() {
             .connect(server_name("localhost"))
             .build(&mut client_output)
             .unwrap();
-        let mut server = ServerConnection::new(server_config.clone()).unwrap();
+        let mut server = ServerConnection::new(server_config).unwrap();
 
         // We expect the handshake to fail since the server's EE certificate is revoked.
         let mut client_input = VecInput::default();
@@ -543,7 +543,7 @@ fn client_check_server_certificate_ee_unknown_revocation() {
             .connect(server_name("localhost"))
             .build(&mut client_output)
             .unwrap();
-        let mut server = ServerConnection::new(server_config.clone()).unwrap();
+        let mut server = ServerConnection::new(server_config).unwrap();
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake_until_error(
@@ -628,7 +628,7 @@ fn client_check_server_certificate_intermediate_revoked() {
             .connect(server_name("localhost"))
             .build(&mut client_output)
             .unwrap();
-        let mut server = ServerConnection::new(server_config.clone()).unwrap();
+        let mut server = ServerConnection::new(server_config).unwrap();
         // We expect the handshake to succeed when we use the verifier that only checks the EE certificate
         // revocation status. The revoked intermediate status should not be checked.
         let mut client_input = VecInput::default();
@@ -716,7 +716,7 @@ fn client_check_server_certificate_ee_crl_expired() {
             .connect(server_name("localhost"))
             .build(&mut client_output)
             .unwrap();
-        let mut server = ServerConnection::new(server_config.clone()).unwrap();
+        let mut server = ServerConnection::new(server_config).unwrap();
 
         // We expect the handshake to succeed when CRL expiration is ignored.
         let mut client_input = VecInput::default();
