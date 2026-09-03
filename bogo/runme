@@ -30,7 +30,7 @@ case ${BOGO_SHIM_PROVIDER:-aws-lc-rs} in
       ;;
 esac
 
-if [ ! -e bogo/ssl/test/runner/runner.test ] ; then
+if [ ! -e bogo/.git ] ; then
   mkdir -p bogo
   pushd bogo
 
@@ -43,14 +43,18 @@ ssl/test/runner
 util/testresult
 EOF
 
+  popd
+  cp -v keys/* bogo/
+fi
+
+if [ ! -e bogo/ssl/test/runner/runner.test ] ; then
+  pushd bogo
   # fix on a tested point of rustls-testing branch
   COMMIT=92b3d4e221b4b4690dc9c3f8ada7e92df843e987
   git fetch --depth=1 https://github.com/rustls/boringssl.git $COMMIT
   git checkout $COMMIT
   (cd ssl/test/runner && go test -c)
-
   popd
-  cp -v keys/* bogo/
 fi
 
 # Best effort on OS-X
