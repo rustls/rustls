@@ -3,7 +3,6 @@
 use std::env;
 use std::sync::Mutex;
 
-#[cfg(feature = "ring")]
 #[path = "."]
 mod tests_with_ring {
     use super::serialized;
@@ -14,7 +13,6 @@ mod tests_with_ring {
     mod tests;
 }
 
-#[cfg(feature = "aws-lc-rs")]
 #[path = "."]
 mod tests_with_aws_lc_rs {
     use super::serialized;
