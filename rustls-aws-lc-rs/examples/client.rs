@@ -1,5 +1,5 @@
 //! This is the simplest possible client using post-quantum algorithms, based on
-//! `simpleclient.rs`.
+//! `simple-client.rs`.
 //!
 //! It sends a HTTP request to pq.cloudflareresearch.com and prints the response to
 //! stdout.  Observe in that output: `kex=X25519MLKEM768`

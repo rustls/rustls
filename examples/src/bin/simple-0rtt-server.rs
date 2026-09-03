@@ -1,8 +1,8 @@
 //! This is an example server that streams 0-RTT early data from the client.
 //!
-//! Usage: cargo r --bin simple_0rtt_server --package rustls-examples <path/to/cert.pem> <path/to/privatekey.pem>
+//! Usage: cargo r --bin simple-0rtt-server --package rustls-examples <path/to/cert.pem> <path/to/privatekey.pem>
 //!
-//! You can test interaction either with simple_0rtt_client or with OpenSSL:
+//! You can test interaction either with simple-0rtt-client or with OpenSSL:
 //!
 //! `openssl s_client -connect localhost:4443 -sess_out sess.pem`
 //!

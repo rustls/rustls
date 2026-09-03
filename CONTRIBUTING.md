@@ -499,8 +499,8 @@ enough to have an impact on the size of a final program.
 ### Small mandatory API
 
 We should try to keep the API for achieving the most common goals
-as simple as possible.  Good models for this are `simpleclient` and
-`simpleserver`.  The purpose of this is to allow people interacting
+as simple as possible.  Good models for this are `simple-client` and
+`simple-server`.  The purpose of this is to allow people interacting
 with the library for the first time to make progress.
 
 ### Safe and sensible defaults

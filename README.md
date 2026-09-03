@@ -148,12 +148,12 @@ diving in to the more complex MIO examples.
 
 ## Client example program
 
-The MIO client example program is named `tlsclient-mio`.
+The MIO client example program is named `tls-client-mio`.
 
 Some sample runs:
 
 ```
-$ cargo run --bin tlsclient-mio -- --http jbp.io
+$ cargo run --bin tls-client-mio -- --http jbp.io
 HTTP/1.1 200 OK
 Date: Tue, 23 Jun 2026 16:13:40 GMT
 Content-Type: text/html; charset=utf-8
@@ -161,14 +161,14 @@ Connection: close
 (...)
 ```
 
-Run `cargo run --bin tlsclient-mio -- --help` for more options.
+Run `cargo run --bin tls-client-mio -- --help` for more options.
 
 ## Server example program
 
-The MIO server example program is named `tlsserver-mio`.
+The MIO server example program is named `tls-server-mio`.
 
 Here's a sample run; we start a TLS echo server, then connect to it with
-`openssl` and `tlsclient-mio`:
+`openssl` and `tls-client-mio`:
 
 ```
 $ cargo run --bin tlsserver-mio -- --certs test-ca/rsa-2048/end.fullchain --key test-ca/rsa-2048/end.key -p 8443 echo &
@@ -177,7 +177,7 @@ depth=2 CN = ponytown RSA CA
 verify error:num=19:self signed certificate in certificate chain
 hello world
 ^C
-$ echo hello world | cargo run --bin tlsclient-mio -- --cafile test-ca/rsa-2048/ca.cert --port 8443 localhost
+$ echo hello world | cargo run --bin tls-client-mio -- --cafile test-ca/rsa-2048/ca.cert --port 8443 localhost
 hello world
 ^C
 ```

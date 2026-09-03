@@ -1,7 +1,7 @@
-//! Check that `limitedclient` is successful in its goal of not linking in any
+//! Check that `limited-client` is successful in its goal of not linking in any
 //! AES code.
 //!
-//! We also check `simpleclient` (which includes everything) as a baseline to
+//! We also check `simple-client` (which includes everything) as a baseline to
 //! detect errors in the test code.
 
 // Don't assume binutils are available everywhere, or that `nm` has a
@@ -14,10 +14,10 @@ use std::process::Command;
 fn limited_no_aes_symbols() {
     let aws_aes =
         |sym: &str| sym.starts_with("aws_lc_") && sym.ends_with("_EVP_aead_aes_128_gcm_tls13");
-    let expected = find_symbols_in_executable(aws_aes, env!("CARGO_BIN_EXE_simpleclient"));
+    let expected = find_symbols_in_executable(aws_aes, env!("CARGO_BIN_EXE_simple-client"));
     assert!(!expected.is_empty());
 
-    let limited = env!("CARGO_BIN_EXE_limitedclient");
+    let limited = env!("CARGO_BIN_EXE_limited-client");
     let mut unexpected = find_symbols_in_executable(aws_aes, limited);
     unexpected.retain(|sym| !sym.starts_with("aws_lc_fips_"));
     assert!(
@@ -29,10 +29,10 @@ fn limited_no_aes_symbols() {
 #[ignore] // XXX: pending runtime binding of state machine states
 #[test]
 fn limited_no_tls12_symbols() {
-    let expected = find_symbols_in_executable(tls12, env!("CARGO_BIN_EXE_simpleclient"));
+    let expected = find_symbols_in_executable(tls12, env!("CARGO_BIN_EXE_simple-client"));
     assert!(!expected.is_empty());
 
-    let limited = env!("CARGO_BIN_EXE_limitedclient");
+    let limited = env!("CARGO_BIN_EXE_limited-client");
     let unexpected = find_symbols_in_executable(tls12, limited);
     assert!(
         unexpected.is_empty(),

@@ -4,11 +4,11 @@ use std::process;
 use regex::Regex;
 
 pub(super) fn tlsserver_find() -> &'static str {
-    "../target/debug/tlsserver-mio"
+    "../target/debug/tls-server-mio"
 }
 
 pub(super) fn tlsclient_find() -> &'static str {
-    "../target/debug/tlsclient-mio"
+    "../target/debug/tls-client-mio"
 }
 
 pub(super) struct TlsClient {
