@@ -8,9 +8,10 @@ use rustls::enums::ProtocolVersion;
 use rustls::pki_types::{EchConfigListBytes, ServerName};
 use rustls::{DistinguishedName, HandshakeKind};
 
+use super::client::OcspValidation;
 use super::{
-    BOGO_NACK, CompressionAlgs, Credential, CredentialSet, OcspValidation, SelectedProvider, Side,
-    align_time, lookup_scheme,
+    BOGO_NACK, CompressionAlgs, Credential, CredentialSet, SelectedProvider, Side, align_time,
+    lookup_scheme,
 };
 
 #[derive(Debug)]
