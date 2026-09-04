@@ -7,6 +7,7 @@ use alloc::vec::Vec;
 pub(crate) use aws_lc_rs as ring_like;
 use pki_types::PrivateKeyDer;
 use webpki::aws_lc_rs as webpki_algs;
+use zeroize::Zeroizing;
 
 use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
 use crate::enums::SignatureScheme;
@@ -86,7 +87,7 @@ impl KeyProvider for AwsLcRs {
         &self,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<Arc<dyn SigningKey>, Error> {
-        sign::any_supported_type(&key_der)
+        sign::any_supported_type(&Zeroizing::new(key_der))
     }
 
     fn fips(&self) -> bool {
