@@ -48,6 +48,7 @@ use rustls::crypto::{
 use rustls::error::{ApiMisuse, Error, OtherError};
 #[cfg(feature = "std")]
 use rustls::ticketer::TicketRotator;
+use zeroize::Zeroizing;
 
 /// Hybrid public key encryption (HPKE).
 pub mod hpke;
@@ -152,20 +153,21 @@ impl KeyProvider for AwsLcRs {
         &self,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<Box<dyn SigningKey>, Error> {
-        if let Ok(rsa) = RsaSigningKey::try_from(&key_der) {
+        let key_der = Zeroizing::new(key_der);
+        if let Ok(rsa) = RsaSigningKey::try_from(&*key_der) {
             return Ok(Box::new(rsa));
         }
 
-        if let Ok(ecdsa) = EcdsaSigner::try_from(&key_der) {
+        if let Ok(ecdsa) = EcdsaSigner::try_from(&*key_der) {
             return Ok(Box::new(ecdsa));
         }
 
-        if let PrivateKeyDer::Pkcs8(pkcs8) = key_der {
-            if let Ok(eddsa) = Ed25519Signer::try_from(&pkcs8) {
+        if let PrivateKeyDer::Pkcs8(pkcs8) = &*key_der {
+            if let Ok(eddsa) = Ed25519Signer::try_from(pkcs8) {
                 return Ok(Box::new(eddsa));
             }
 
-            if let Ok(pqdsa) = PqdsaSigningKey::from_pkcs8(&pkcs8) {
+            if let Ok(pqdsa) = PqdsaSigningKey::from_pkcs8(pkcs8) {
                 return Ok(Box::new(pqdsa));
             }
         }
