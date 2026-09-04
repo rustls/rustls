@@ -18,10 +18,6 @@ case ${BOGO_SHIM_PROVIDER:-aws-lc-rs} in
       cpp -P -DAWS_LC_RS -DFIPS config.json.in > config.json
       cargo run --features fips -- -print-rustls-provider
       ;;
-  post-quantum)
-      cpp -P -DAWS_LC_RS -DPOST_QUANTUM config.json.in > config.json
-      cargo run --features post-quantum -- -print-rustls-provider
-      ;;
   existing)
       ;;
   *)
@@ -30,9 +26,35 @@ case ${BOGO_SHIM_PROVIDER:-aws-lc-rs} in
       ;;
 esac
 
-if [ ! -e bogo/ssl/test/runner/runner.test ] ; then
-  ./fetch-and-build
+if [ ! -e bogo/.git ] ; then
+  mkdir -p bogo
+  pushd bogo
+
+  git init --initial-branch main
+  git config core.sparsecheckout 1
+  cat << EOF > .git/info/sparse-checkout
+go.mod
+go.sum
+ssl/test/runner
+util/testresult
+EOF
+
+  popd
   cp -v keys/* bogo/
+fi
+
+# fix on a tested point of rustls-testing branch
+COMMIT=9389a4af2c6c47a59ec39bfb51e4da2fe971d1bc
+changed=$([ "$(git -C bogo rev-parse HEAD)" != "$COMMIT" ] && echo true || echo false)
+if $changed ; then
+  pushd bogo
+  git fetch --depth=1 https://github.com/rustls/boringssl.git $COMMIT
+  git checkout $COMMIT
+  popd
+fi
+
+if $changed || [ ! -e bogo/ssl/test/runner/runner.test ] ; then
+  (cd bogo/ssl/test/runner && go test -c)
 fi
 
 # Best effort on OS-X

@@ -4,9 +4,12 @@ use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 use alloc::{format, vec};
+use aws_lc_rs::signature::{PqdsaKeyPair, PqdsaSigningAlgorithm};
 use core::fmt::{self, Debug, Formatter};
 
-use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer, alg_id};
+use pki_types::{
+    AlgorithmIdentifier, PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer, alg_id,
+};
 
 use super::ring_like::rand::SystemRandom;
 use super::ring_like::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
@@ -29,6 +32,10 @@ pub fn any_supported_type(der: &PrivateKeyDer<'_>) -> Result<Arc<dyn SigningKey>
     if let PrivateKeyDer::Pkcs8(pkcs8) = der {
         if let Ok(eddsa) = any_eddsa_type(pkcs8) {
             return Ok(eddsa);
+        }
+
+        if let Ok(pqdsa) = PqdsaSigningKey::from_pkcs8(pkcs8) {
+            return Ok(Arc::new(pqdsa));
         }
     }
 
@@ -271,7 +278,9 @@ impl SigningKey for EcdsaSigningKey {
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
-        self.scheme.algorithm()
+        self.scheme
+            .algorithm()
+            .unwrap_or(SignatureAlgorithm::Unknown(0))
     }
 }
 
@@ -307,6 +316,134 @@ impl Debug for EcdsaSigner {
         f.debug_struct("EcdsaSigner")
             .field("scheme", &self.scheme)
             .finish()
+    }
+}
+
+pub(crate) struct PqdsaSigningKey {
+    kind: PqdsaKeyKind,
+    inner: Arc<PqdsaKeyPair>,
+}
+
+impl PqdsaSigningKey {
+    pub(crate) fn from_pkcs8(pkcs8: &PrivatePkcs8KeyDer<'_>) -> Result<Self, Error> {
+        for kind in PqdsaKeyKind::iter() {
+            let Ok(key_pair) = PqdsaKeyPair::from_pkcs8(kind.to_alg(), pkcs8.secret_pkcs8_der())
+            else {
+                continue;
+            };
+
+            return Ok(Self {
+                kind,
+                inner: Arc::new(key_pair),
+            });
+        }
+
+        Err(Error::General(
+            "failed to parse private key as ML-DSA".into(),
+        ))
+    }
+}
+
+impl SigningKey for PqdsaSigningKey {
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
+        if !offered.contains(&self.kind.scheme()) {
+            return None;
+        }
+
+        Some(Box::new(PqdsaSigner {
+            key: self.inner.clone(),
+            kind: self.kind,
+        }))
+    }
+
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+        Some(public_key_to_spki(
+            &self.kind.alg_id(),
+            self.inner.public_key(),
+        ))
+    }
+
+    fn algorithm(&self) -> SignatureAlgorithm {
+        SignatureAlgorithm::Unknown(0)
+    }
+}
+
+impl Debug for PqdsaSigningKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PqdsaSigningKey")
+            .field("scheme", &self.kind.scheme())
+            .finish_non_exhaustive()
+    }
+}
+
+struct PqdsaSigner {
+    key: Arc<PqdsaKeyPair>,
+    kind: PqdsaKeyKind,
+}
+
+impl Signer for PqdsaSigner {
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
+        let expected_sig_len = self.key.algorithm().signature_len();
+        let mut sig = vec![0; expected_sig_len];
+        let actual_sig_len = self
+            .key
+            .sign(message, &mut sig)
+            .map_err(|_| Error::General("signing failed".into()))?;
+
+        if actual_sig_len != expected_sig_len {
+            return Err(Error::General("unexpected signature length".into()));
+        }
+
+        Ok(sig)
+    }
+
+    fn scheme(&self) -> SignatureScheme {
+        self.kind.scheme()
+    }
+}
+
+impl Debug for PqdsaSigner {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PqdsaSigner")
+            .field("scheme", &self.kind.scheme())
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Copy)]
+enum PqdsaKeyKind {
+    MlDsa44,
+    MlDsa65,
+    MlDsa87,
+}
+
+impl PqdsaKeyKind {
+    fn iter() -> impl Iterator<Item = Self> {
+        [Self::MlDsa44, Self::MlDsa65, Self::MlDsa87].into_iter()
+    }
+
+    fn to_alg(self) -> &'static PqdsaSigningAlgorithm {
+        match self {
+            Self::MlDsa44 => &signature::ML_DSA_44_SIGNING,
+            Self::MlDsa65 => &signature::ML_DSA_65_SIGNING,
+            Self::MlDsa87 => &signature::ML_DSA_87_SIGNING,
+        }
+    }
+
+    fn scheme(&self) -> SignatureScheme {
+        match self {
+            Self::MlDsa44 => SignatureScheme::ML_DSA_44,
+            Self::MlDsa65 => SignatureScheme::ML_DSA_65,
+            Self::MlDsa87 => SignatureScheme::ML_DSA_87,
+        }
+    }
+
+    fn alg_id(&self) -> AlgorithmIdentifier {
+        match self {
+            Self::MlDsa44 => alg_id::ML_DSA_44,
+            Self::MlDsa65 => alg_id::ML_DSA_65,
+            Self::MlDsa87 => alg_id::ML_DSA_87,
+        }
     }
 }
 
@@ -359,7 +496,9 @@ impl SigningKey for Ed25519SigningKey {
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
-        self.scheme.algorithm()
+        self.scheme
+            .algorithm()
+            .unwrap_or(SignatureAlgorithm::Unknown(0))
     }
 }
 
@@ -401,6 +540,7 @@ mod tests {
     use pki_types::{PrivatePkcs1KeyDer, PrivateSec1KeyDer};
 
     use super::*;
+    use crate::pki_types::PrivateKeyDer;
 
     #[test]
     fn can_load_ecdsa_nistp256_pkcs8() {

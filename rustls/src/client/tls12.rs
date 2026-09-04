@@ -756,6 +756,15 @@ impl State<ClientConnectionData> for ExpectCertificateRequest<'_> {
         // We ignore certreq.certtypes as a result, since the information it contains
         // is entirely duplicated in certreq.sigschemes.
 
+        // Filter out signature schemes that don't have an associated `SignatureAlgorithm`;
+        // we use this to select only signature schemes that are allowed on 1.2.
+        let signature_schemes = certreq
+            .sigschemes
+            .iter()
+            .copied()
+            .filter(|scheme| scheme.algorithm().is_some())
+            .collect::<Vec<_>>();
+
         const NO_CONTEXT: Option<Vec<u8>> = None; // TLS 1.2 doesn't use a context.
         let no_compression = None; // or compression
         let client_auth = ClientAuthDetails::resolve(
@@ -763,7 +772,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest<'_> {
                 .client_auth_cert_resolver
                 .as_ref(),
             Some(&certreq.canames),
-            &certreq.sigschemes,
+            &signature_schemes,
             NO_CONTEXT,
             no_compression,
         );
@@ -889,22 +898,30 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         // Build up the contents of the signed message.
         // It's ClientHello.random || ServerHello.random || ServerKeyExchange.params
         let sig_verified = {
+            // Check the signature is compatible with the ciphersuite.
+            let sig = &st.server_kx.kx_sig;
+            let Some(sig_alg) = sig.scheme.algorithm() else {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::SignedKxWithWrongAlgorithm,
+                ));
+            };
+
             let mut message = Vec::new();
             message.extend_from_slice(&st.randoms.client);
             message.extend_from_slice(&st.randoms.server);
             message.extend_from_slice(&st.server_kx.kx_params);
 
-            // Check the signature is compatible with the ciphersuite.
-            let sig = &st.server_kx.kx_sig;
-            if !SupportedCipherSuite::from(suite)
-                .usable_for_signature_algorithm(sig.scheme.algorithm())
-            {
+            if !SupportedCipherSuite::from(suite).usable_for_signature_algorithm(sig_alg) {
                 warn!(
                     "peer signed kx with wrong algorithm (got {:?} expect {:?})",
                     sig.scheme.algorithm(),
                     suite.sign
                 );
-                return Err(PeerMisbehaved::SignedKxWithWrongAlgorithm.into());
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::SignedKxWithWrongAlgorithm,
+                ));
             }
 
             st.config

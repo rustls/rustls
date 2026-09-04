@@ -2481,7 +2481,8 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
 /// Only supports OCSP
 #[derive(Clone, Debug)]
 pub(crate) struct CertificateStatus<'a> {
-    pub(crate) ocsp_response: PayloadU24<'a>,
+    /// `opaque OCSPResponse<1..2^24-1>;`
+    pub(crate) ocsp_response: PayloadU24<'a, NonEmpty>,
 }
 
 impl<'a> Codec<'a> for CertificateStatus<'a> {
@@ -2505,7 +2506,7 @@ impl<'a> Codec<'a> for CertificateStatus<'a> {
 impl<'a> CertificateStatus<'a> {
     pub(crate) fn new(ocsp: &'a [u8]) -> Self {
         CertificateStatus {
-            ocsp_response: PayloadU24(Payload::Borrowed(ocsp)),
+            ocsp_response: PayloadU24::from(Payload::Borrowed(ocsp)),
         }
     }
 
@@ -2558,7 +2559,7 @@ impl CompressedCertificatePayload<'_> {
         CompressedCertificatePayload {
             alg: self.alg,
             uncompressed_len: self.uncompressed_len,
-            compressed: PayloadU24(Payload::Borrowed(self.compressed.0.bytes())),
+            compressed: PayloadU24::from(Payload::Borrowed(self.compressed.0.bytes())),
         }
     }
 }
