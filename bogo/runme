@@ -49,14 +49,15 @@ fi
 
 # fix on a tested point of rustls-testing branch
 COMMIT=92b3d4e221b4b4690dc9c3f8ada7e92df843e987
-if [ "$(git -C bogo rev-parse HEAD)" != "$COMMIT" ] ; then
+changed=$([ "$(git -C bogo rev-parse HEAD)" != "$COMMIT" ] && echo true || echo false)
+if $changed ; then
   pushd bogo
   git fetch --depth=1 https://github.com/rustls/boringssl.git $COMMIT
   git checkout $COMMIT
   popd
 fi
 
-if [ ! -e bogo/ssl/test/runner/runner.test ] ; then
+if $changed || [ ! -e bogo/ssl/test/runner/runner.test ] ; then
   (cd bogo/ssl/test/runner && go test -c)
 fi
 
