@@ -1381,7 +1381,12 @@ const MAX_MESSAGE_SIZE: usize = 0xffff + 5;
 
 fn after_read(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream) {
     if let Err(err) = sess.process_new_packets() {
-        flush(sess, conn); /* send any alerts before exiting */
+        // Send any alerts before exiting, but don't swallow `err` if we can't.
+        while sess.wants_write() {
+            if sess.write_tls(conn).is_err() {
+                break;
+            }
+        }
         orderly_close(conn);
         handle_err(opts, err);
     }
