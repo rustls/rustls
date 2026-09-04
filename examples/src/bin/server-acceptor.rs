@@ -2,7 +2,7 @@
 //! CRL information can be retrieved per-client connection to use for revocation checking of
 //! client certificates.
 //!
-//! For a more complete server demonstration, see `tlsserver-mio.rs`.
+//! For a more complete server demonstration, see `tls-server-mio.rs`.
 
 use core::ops::Add;
 use core::time::Duration;
