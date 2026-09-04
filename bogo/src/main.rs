@@ -519,7 +519,9 @@ fn after_read(
     {
         Ok(state) => state,
         Err(error) => {
-            flush(output, conn); /* send any alerts before exiting */
+            // Send any alerts before exiting, but don't swallow `error` if we can't.
+            let _ = conn.write_all(output);
+            output.clear();
             orderly_close(conn);
             handle_err(opts, error);
         }
