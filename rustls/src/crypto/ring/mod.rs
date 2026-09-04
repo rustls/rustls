@@ -1,6 +1,7 @@
 use pki_types::PrivateKeyDer;
 pub(crate) use ring as ring_like;
 use webpki::ring as webpki_algs;
+use zeroize::Zeroizing;
 
 use crate::Error;
 use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
@@ -57,7 +58,7 @@ impl KeyProvider for Ring {
         &self,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<Arc<dyn SigningKey>, Error> {
-        sign::any_supported_type(&key_der)
+        sign::any_supported_type(&Zeroizing::new(key_der))
     }
 }
 
