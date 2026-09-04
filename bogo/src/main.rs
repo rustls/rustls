@@ -137,7 +137,19 @@ struct Options {
 
 impl Options {
     fn new() -> Self {
-        let selected_provider = SelectedProvider::from_env();
+        let selected_provider = match env::var("BOGO_SHIM_PROVIDER")
+            .ok()
+            .as_deref()
+        {
+            None | Some("aws-lc-rs") => SelectedProvider::AwsLcRs,
+            #[cfg(feature = "fips")]
+            Some("aws-lc-rs-fips") => SelectedProvider::AwsLcRsFips,
+            #[cfg(feature = "post-quantum")]
+            Some("post-quantum") => SelectedProvider::PostQuantum,
+            Some("ring") => SelectedProvider::Ring,
+            Some(other) => panic!("unrecognised value for BOGO_SHIM_PROVIDER: {other:?}"),
+        };
+
         Self {
             port: 0,
             shim_id: 0,
@@ -326,21 +338,6 @@ enum SelectedProvider {
 }
 
 impl SelectedProvider {
-    fn from_env() -> Self {
-        match env::var("BOGO_SHIM_PROVIDER")
-            .ok()
-            .as_deref()
-        {
-            None | Some("aws-lc-rs") => Self::AwsLcRs,
-            #[cfg(feature = "fips")]
-            Some("aws-lc-rs-fips") => Self::AwsLcRsFips,
-            #[cfg(feature = "post-quantum")]
-            Some("post-quantum") => Self::PostQuantum,
-            Some("ring") => Self::Ring,
-            Some(other) => panic!("unrecognised value for BOGO_SHIM_PROVIDER: {other:?}"),
-        }
-    }
-
     fn provider(&self) -> CryptoProvider {
         match self {
             Self::AwsLcRs | Self::AwsLcRsFips | Self::PostQuantum => {
@@ -432,15 +429,14 @@ impl DummyClientAuth {
         trusted_cert_file: &str,
         mandatory: bool,
         root_hint_subjects: Vec<DistinguishedName>,
+        provider: Arc<CryptoProvider>,
     ) -> Self {
         Self {
             mandatory,
             root_hint_subjects,
             parent: WebPkiClientVerifier::builder_with_provider(
                 load_root_certs(trusted_cert_file),
-                SelectedProvider::from_env()
-                    .provider()
-                    .into(),
+                provider,
             )
             .build()
             .unwrap(),
@@ -508,13 +504,12 @@ impl DummyServerAuth {
         trusted_cert_file: &str,
         ocsp: OcspValidation,
         expect_server_names: Vec<ServerName<'static>>,
+        provider: Arc<CryptoProvider>,
     ) -> Self {
         Self {
             parent: WebPkiServerVerifier::builder_with_provider(
                 load_root_certs(trusted_cert_file),
-                SelectedProvider::from_env()
-                    .provider()
-                    .into(),
+                provider,
             )
             .build()
             .unwrap(),
@@ -813,12 +808,23 @@ impl server::StoresServerSessions for ServerCacheWithResumptionDelay {
 }
 
 fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfig> {
+    let mut provider = opts.provider.clone();
+
+    if let Some(groups) = &opts.groups {
+        provider
+            .kx_groups
+            .retain(|kxg| groups.contains(&kxg.name()));
+    }
+
+    let provider = Arc::new(provider);
+
     let client_auth =
         if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
             Arc::new(DummyClientAuth::new(
                 &opts.trusted_cert_file,
                 opts.require_any_client_cert,
                 opts.root_hint_subjects.clone(),
+                provider.clone(),
             ))
         } else {
             WebPkiClientVerifier::no_client_auth()
@@ -831,15 +837,7 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     let cred = &opts.credentials.default;
     let (certs, key) = cred.load_from_file();
 
-    let mut provider = opts.provider.clone();
-
-    if let Some(groups) = &opts.groups {
-        provider
-            .kx_groups
-            .retain(|kxg| groups.contains(&kxg.name()));
-    }
-
-    let mut cfg = ServerConfig::builder_with_provider(provider.into())
+    let mut cfg = ServerConfig::builder_with_provider(provider)
         .with_protocol_versions(&opts.supported_versions())
         .unwrap()
         .with_client_cert_verifier(client_auth)
@@ -1019,6 +1017,7 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
             &opts.trusted_cert_file,
             opts.ocsp,
             opts.expected_server_names(),
+            provider.clone(),
         )));
 
     let mut cfg = match opts.credentials.configured() {
