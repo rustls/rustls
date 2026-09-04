@@ -223,6 +223,18 @@ impl Options {
         }
     }
 
+    pub(crate) fn provider(&self) -> CryptoProvider {
+        let mut provider = self.provider.clone();
+
+        if let Some(groups) = &self.groups {
+            provider
+                .kx_groups
+                .retain(|kxg| groups.contains(&kxg.name()));
+        }
+
+        provider
+    }
+
     fn version_allowed(&self, vers: ProtocolVersion) -> bool {
         (self.min_version.is_none() || u16::from(vers) >= u16::from(self.min_version.unwrap()))
             && (self.max_version.is_none()
@@ -808,15 +820,7 @@ impl server::StoresServerSessions for ServerCacheWithResumptionDelay {
 }
 
 fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfig> {
-    let mut provider = opts.provider.clone();
-
-    if let Some(groups) = &opts.groups {
-        provider
-            .kx_groups
-            .retain(|kxg| groups.contains(&kxg.name()));
-    }
-
-    let provider = Arc::new(provider);
+    let provider = Arc::new(opts.provider());
 
     let client_auth =
         if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
@@ -975,15 +979,7 @@ impl Debug for ClientCacheWithSpecificKxHints {
 }
 
 fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfig> {
-    let mut provider = opts.provider.clone();
-
-    if let Some(groups) = &opts.groups {
-        provider
-            .kx_groups
-            .retain(|kxg| groups.contains(&kxg.name()));
-    }
-
-    let provider = Arc::new(provider);
+    let provider = Arc::new(opts.provider());
     let cfg = ClientConfig::builder_with_provider(provider.clone());
 
     let cfg = if opts.selected_provider.supports_ech() {
