@@ -9,7 +9,12 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{fmt, mem};
 
+#[cfg(feature = "aws_lc_rs")]
+use pki_types::PrivateKeyDer;
 use pki_types::{CertificateDer, IpAddr, ServerName, UnixTime};
+use rcgen::{
+    CertificateParams, CertifiedIssuer, ExtendedKeyUsagePurpose, IsCa, KeyPair, KeyUsagePurpose,
+};
 use rustls::client::{
     ResolvesClientCert, Resumption, TicketRequest, verify_server_cert_signed_by_trust_anchor,
 };
@@ -1946,6 +1951,12 @@ fn default_signature_schemes(version: ProtocolVersion) -> Vec<SignatureScheme> {
             SignatureScheme::RSA_PKCS1_SHA512,
             SignatureScheme::RSA_PKCS1_SHA384,
             SignatureScheme::RSA_PKCS1_SHA256,
+        ]);
+    } else if provider_is_aws_lc_rs() {
+        v.extend_from_slice(&[
+            SignatureScheme::ML_DSA_44,
+            SignatureScheme::ML_DSA_65,
+            SignatureScheme::ML_DSA_87,
         ]);
     }
 
@@ -8434,4 +8445,52 @@ fn tls13_ticket_request_not_sent_when_none() {
         .filter(|op| matches!(op, ClientStorageOp::InsertTls13Ticket(_)))
         .count();
     assert_eq!(ticket_inserts, 2);
+}
+
+#[cfg(feature = "aws_lc_rs")]
+#[test]
+fn ml_dsa() {
+    if !provider_is_aws_lc_rs() {
+        return;
+    }
+
+    let ca_key = KeyPair::generate_for(&rcgen::PKCS_ML_DSA_44).unwrap();
+    let mut ca_params = CertificateParams::new(vec!["Test CA".into()]).unwrap();
+    ca_params.is_ca = IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+    ca_params.key_usages = vec![
+        KeyUsagePurpose::DigitalSignature,
+        KeyUsagePurpose::KeyCertSign,
+    ];
+    ca_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+    let issuer = CertifiedIssuer::self_signed(ca_params, ca_key).unwrap();
+
+    let ee_key = KeyPair::generate_for(&rcgen::PKCS_ML_DSA_87).unwrap();
+    let ee_params = CertificateParams::new(vec!["localhost".into()]).unwrap();
+    let ee_cert = ee_params
+        .signed_by(&ee_key, &issuer)
+        .unwrap();
+
+    let provider = Arc::new(provider::default_provider());
+    let server_config = ServerConfig::builder_with_provider(provider.clone())
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(
+            vec![ee_cert.der().clone()],
+            PrivateKeyDer::try_from(ee_key.serialize_der()).unwrap(),
+        )
+        .unwrap();
+
+    let mut roots = RootCertStore::empty();
+    roots.add(issuer.der().clone()).unwrap();
+    let client_config = ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+
+    let mut client =
+        ClientConnection::new(Arc::new(client_config), "localhost".try_into().unwrap()).unwrap();
+    let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+    do_handshake(&mut client, &mut server);
 }

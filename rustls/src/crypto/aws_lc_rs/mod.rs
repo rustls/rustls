@@ -176,6 +176,9 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
         webpki_algs::RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS,
         webpki_algs::RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS,
         webpki_algs::RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS,
+        webpki_algs::ML_DSA_44,
+        webpki_algs::ML_DSA_65,
+        webpki_algs::ML_DSA_87,
     ],
     mapping: &[
         // Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
@@ -228,6 +231,9 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
             SignatureScheme::RSA_PKCS1_SHA256,
             &[webpki_algs::RSA_PKCS1_2048_8192_SHA256],
         ),
+        (SignatureScheme::ML_DSA_44, &[webpki_algs::ML_DSA_44]),
+        (SignatureScheme::ML_DSA_65, &[webpki_algs::ML_DSA_65]),
+        (SignatureScheme::ML_DSA_87, &[webpki_algs::ML_DSA_87]),
     ],
 };
 
