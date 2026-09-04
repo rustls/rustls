@@ -904,7 +904,10 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
                     sig.scheme.algorithm(),
                     suite.sign
                 );
-                return Err(PeerMisbehaved::SignedKxWithWrongAlgorithm.into());
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::SignedKxWithWrongAlgorithm,
+                ));
             }
 
             st.config
