@@ -6,7 +6,6 @@ use crate::common_state::Protocol;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{CipherSuite, SignatureScheme, hash};
-use crate::enums::ProtocolVersion;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 
@@ -122,8 +121,6 @@ pub(crate) trait Suite: fmt::Debug {
     }
 
     fn common(&self) -> &CipherSuiteCommon;
-
-    const VERSION: ProtocolVersion;
 }
 
 /// Secrets for transmitting/receiving data over a TLS session.

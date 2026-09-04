@@ -45,9 +45,9 @@ impl SendPath {
 
             // Close connection once we start to run out of sequence space.
             Some(PreEncryptAction::RefreshOrClose) => {
-                match self.negotiated_version {
+                match self.version() {
                     // driven by caller, as we don't have the `State` here
-                    Some(ProtocolVersion::TLSv1_3) => {
+                    ProtocolVersion::TLSv1_3 => {
                         self.key_update_local = KeyUpdateLocal::Requested;
                         Ok(())
                     }
@@ -168,11 +168,21 @@ impl SendPath {
             return Err(Error::HandshakeNotComplete);
         };
 
-        self.send_msg(Message::build_key_update_request(), true, tls);
+        self.send_msg(Message::build_key_update_request(self.version()), true, tls);
         ks.update_encrypter(self);
         self.key_update_local = KeyUpdateLocal::Outstanding;
         self.tls13_key_schedule = Some(ks);
         Ok(())
+    }
+
+    fn version(&self) -> ProtocolVersion {
+        if let Some(version) = self.negotiated_version {
+            version
+        } else {
+            // If the negotiated version has not been set yet, then we are early in the handshake
+            // and will behave as though doing TLS 1.2 for backward compatibility
+            ProtocolVersion::TLSv1_2
+        }
     }
 }
 
@@ -186,7 +196,8 @@ impl SendOutput for SendPath {
             return;
         }
 
-        let record = Record::<Payload<'static>>::from(Message::build_key_update_notify());
+        let record =
+            Record::<Payload<'static>>::from(Message::build_key_update_notify(self.version()));
         let mut queued = Vec::new();
         self.encrypt_state
             .encrypt_outgoing(record.borrow_outbound(), &mut queued);
@@ -221,7 +232,7 @@ impl SendOutput for SendPath {
         };
 
         self.send_msg(
-            Message::build_alert(level, desc),
+            Message::build_alert(level, desc, self.version()),
             self.encrypt_state.is_encrypting(),
             tls,
         );

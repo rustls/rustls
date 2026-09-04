@@ -12,7 +12,6 @@ use crate::crypto::cipher::{AeadKey, RecordDecrypter, RecordEncrypter, Tls12Aead
 use crate::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::crypto::tls12::PrfSecret;
 use crate::crypto::{self, SignatureScheme, hash};
-use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error, InvalidMessage};
 use crate::msgs::{Codec, HandshakeAlignedProof, KxDecode, Reader};
 use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, Suite, SupportedCipherSuite};
@@ -123,8 +122,6 @@ impl Suite for Tls12CipherSuite {
     fn common(&self) -> &CipherSuiteCommon {
         &self.common
     }
-
-    const VERSION: ProtocolVersion = ProtocolVersion::TLSv1_2;
 }
 
 impl From<&'static Tls12CipherSuite> for SupportedCipherSuite {
