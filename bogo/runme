@@ -48,7 +48,7 @@ EOF
 fi
 
 # fix on a tested point of rustls-testing branch
-COMMIT=b6a09c71d983cf1ad7b729a7b1b287064bc6fae0
+COMMIT=9389a4af2c6c47a59ec39bfb51e4da2fe971d1bc
 changed=$([ "$(git -C bogo rev-parse HEAD)" != "$COMMIT" ] && echo true || echo false)
 if $changed ; then
   pushd bogo
