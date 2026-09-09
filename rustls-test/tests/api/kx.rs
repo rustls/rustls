@@ -539,6 +539,8 @@ fn hybrid_kx_component_share_offered_but_server_chooses_something_else() {
         .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
+    // client_1 requires its own `session_id` back, not client_2's
+    encoding::echo_session_id(&client_1_output, &mut server_output);
     transfer(&mut server_output, &mut client_1_input);
     assert_eq!(
         client_1
