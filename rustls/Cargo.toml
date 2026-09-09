@@ -24,8 +24,6 @@ zlib = ["dep:zlib-rs"]
 brotli = { workspace = true, optional = true }
 brotli-decompressor = { workspace = true, optional = true }
 hashbrown = { workspace = true, optional = true }
-# only required for no-std
-once_cell = { workspace = true, features = ["std"] }
 subtle = { workspace = true }
 tracing = { workspace = true, optional = true }
 webpki = { workspace = true, optional = true }
