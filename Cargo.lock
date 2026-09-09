@@ -1759,7 +1759,6 @@ dependencies = [
  "brotli-decompressor",
  "graviola",
  "hashbrown",
- "once_cell",
  "rcgen",
  "rustls-pki-types",
  "rustls-test",
