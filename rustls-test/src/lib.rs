@@ -2361,6 +2361,40 @@ pub mod encoding {
         handshake_framing(HandshakeType::ServerHello, out)
     }
 
+    /// Copy the `legacy_session_id` of the `ClientHello` at the front of `client_flight`
+    /// into the `ServerHello` at the front of `server_flight`.
+    ///
+    /// TLS1.3 requires a server to echo that value, so a `ServerHello` that was recorded,
+    /// synthesized, or produced for a different `ClientHello` needs adjusting before a
+    /// client accepts it.
+    pub fn echo_session_id(client_flight: &[u8], server_flight: &mut Vec<u8>) {
+        // record header, handshake header, legacy_version, then random
+        const LEN_OFFSET: usize = 5 + 4 + 2 + 32;
+
+        assert_eq!(client_flight[5], u8::from(HandshakeType::ClientHello));
+        assert_eq!(server_flight[5], u8::from(HandshakeType::ServerHello));
+
+        let client_len = usize::from(client_flight[LEN_OFFSET]);
+        let server_len = usize::from(server_flight[LEN_OFFSET]);
+
+        // the ids may differ in length, so the record and handshake lengths move too
+        let adjust = |len: usize| len + client_len - server_len;
+        let record_len = u16::from_be_bytes([server_flight[3], server_flight[4]]);
+        let record_len = adjust(usize::from(record_len)) as u16;
+        server_flight[3..5].copy_from_slice(&record_len.to_be_bytes());
+        let handshake_len =
+            u32::from_be_bytes([0, server_flight[6], server_flight[7], server_flight[8]]);
+        let handshake_len = adjust(handshake_len as usize) as u32;
+        server_flight[6..9].copy_from_slice(&handshake_len.to_be_bytes()[1..]);
+
+        server_flight.splice(
+            LEN_OFFSET..LEN_OFFSET + 1 + server_len,
+            client_flight[LEN_OFFSET..LEN_OFFSET + 1 + client_len]
+                .iter()
+                .copied(),
+        );
+    }
+
     /// Apply handshake framing to `body`.
     ///
     /// This does not do fragmentation.
