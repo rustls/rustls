@@ -10,7 +10,7 @@ publish = false
 asn1 = { workspace = true }
 base64 = { workspace = true }
 num-bigint = { workspace = true }
-once_cell = { workspace = true }
+once_cell = { workspace = true, features = ["std"] }
 rustls = { path = "../rustls" }
 rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs" }
 rustls-util = { path = "../rustls-util" }
