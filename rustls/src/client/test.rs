@@ -220,6 +220,55 @@ fn test_client_rejects_hrr_with_varied_session_id() {
 }
 
 #[test]
+fn test_client_rejects_server_hello_with_varied_session_id() {
+    let config = ClientConfig::builder(Arc::new(tls13_only(TEST_PROVIDER.clone())))
+        .with_root_certificates(roots())
+        .with_no_client_auth()
+        .unwrap();
+    let mut tls = Vec::new();
+    let mut conn = Arc::new(config)
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build(&mut tls)
+        .unwrap();
+
+    // server replies with an otherwise-acceptable ServerHello, but does not
+    // echo `session_id` as required.
+    let sh = Message {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
+            ServerHelloPayload {
+                random: Random([0; 32]),
+                compression_method: Compression::Null,
+                cipher_suite: TLS13_TEST_SUITE.suite(),
+                legacy_version: ProtocolVersion::TLSv1_3,
+                session_id: SessionId::empty(),
+                extensions: Box::new(ServerExtensions {
+                    key_share: Some(KeyShareEntry {
+                        group: KEY_EXCHANGE_GROUP.name(),
+                        payload: KEY_EXCHANGE_GROUP
+                            .start()
+                            .unwrap()
+                            .pub_key()
+                            .to_vec()
+                            .into(),
+                    }),
+                    ..ServerExtensions::default()
+                }),
+            },
+        ))),
+    };
+
+    let mut input = VecInput::default();
+    input
+        .read(&mut sh.into_wire_bytes().as_slice())
+        .unwrap();
+    assert_eq!(
+        process(&mut input, &mut conn).unwrap_err(),
+        PeerMisbehaved::ServerHelloWithWrongSessionId.into()
+    );
+}
+
+#[test]
 fn test_client_rejects_no_extended_main_secret_extension_when_require_ems_or_fips() {
     let mut config = ClientConfig::builder(Arc::new(TEST_PROVIDER.clone()))
         .with_root_certificates(roots())
@@ -522,7 +571,7 @@ fn client_requiring_rpk_receives_server_ee(
                 compression_method: Compression::Null,
                 cipher_suite: TLS13_TEST_SUITE.suite(),
                 legacy_version: ProtocolVersion::TLSv1_3,
-                session_id: SessionId::empty(),
+                session_id: client_hello_in(&tls).session_id,
                 extensions: Box::new(ServerExtensions {
                     key_share: Some(KeyShareEntry {
                         group: KEY_EXCHANGE_GROUP.name(),
@@ -849,8 +898,11 @@ fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPaylo
     Arc::new(config)
         .connect(ServerName::try_from("localhost").unwrap())
         .build(&mut bytes)?;
+    Ok(client_hello_in(&bytes))
+}
 
-    let record = Record::<Payload<'_>>::read(&mut Reader::new(&bytes))
+fn client_hello_in(flight: &[u8]) -> ClientHelloPayload {
+    let record = Record::<Payload<'_>>::read(&mut Reader::new(flight))
         .unwrap()
         .into_owned();
     match Message::try_from(&record).unwrap() {
@@ -861,7 +913,7 @@ fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPaylo
                     ..
                 },
             ..
-        } => Ok(ch),
+        } => ch,
         other => panic!("unexpected message {other:?}"),
     }
 }

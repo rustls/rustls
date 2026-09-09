@@ -1226,6 +1226,7 @@ pub enum PeerMisbehaved {
     SelectedUnofferedPsk,
     ServerEchoedCompatibilitySessionId,
     ServerHelloMustOfferUncompressedEcPoints,
+    ServerHelloWithWrongSessionId,
     ServerNameDifferedOnRetry,
     ServerNameMustContainOneHostName,
     SignedKxWithWrongAlgorithm,

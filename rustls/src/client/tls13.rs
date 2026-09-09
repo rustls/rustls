@@ -123,6 +123,14 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             return Err(PeerMisbehaved::UnexpectedCleartextExtension.into());
         }
 
+        // > A client which receives a legacy_session_id_echo field that does not
+        // > match what it sent in the ClientHello MUST abort the handshake with an
+        // > "illegal_parameter" alert.
+        // <https://www.rfc-editor.org/rfc/rfc9846#section-4.1.3>
+        if server_hello.session_id != st.input.session_id {
+            return Err(PeerMisbehaved::ServerHelloWithWrongSessionId.into());
+        }
+
         let their_key_share = server_hello
             .key_share
             .as_ref()

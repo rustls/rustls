@@ -930,9 +930,10 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::EarlyDataOfferedWithVariedCipherSuite) => {
             quit(":CIPHER_MISMATCH_ON_EARLY_DATA:")
         }
-        Error::PeerMisbehaved(PeerMisbehaved::ServerEchoedCompatibilitySessionId) => {
-            quit(":SERVER_ECHOED_INVALID_SESSION_ID:")
-        }
+        Error::PeerMisbehaved(
+            PeerMisbehaved::ServerEchoedCompatibilitySessionId
+            | PeerMisbehaved::ServerHelloWithWrongSessionId,
+        ) => quit(":SERVER_ECHOED_INVALID_SESSION_ID:"),
         Error::PeerMisbehaved(PeerMisbehaved::TooManyEmptyFragments) => {
             quit(":TOO_MANY_EMPTY_FRAGMENTS:")
         }

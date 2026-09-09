@@ -1959,9 +1959,11 @@ fn tls13_packed_handshake() {
         .connect(server_name("localhost"))
         .build(&mut client_output)
         .unwrap();
+    let mut first_flight = include_bytes!("../data/bug2040-message-1.bin").to_vec();
+    // the recording predates this connection's `session_id`
+    encoding::echo_session_id(&client_output, &mut first_flight);
     client_output.clear();
 
-    let mut first_flight = include_bytes!("../data/bug2040-message-1.bin").to_vec();
     client
         .read_tls(&mut SliceInput::new(&mut first_flight), &mut client_output)
         .handle_all(&mut Vec::new())
