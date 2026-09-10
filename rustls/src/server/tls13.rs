@@ -171,6 +171,17 @@ mod client_hello {
                 return Err(PeerMisbehaved::EarlyDataAttemptedInSecondClientHello.into());
             }
 
+            // RFC 9846 section 4.2.2 allows the second ClientHello to update a PreSharedKey
+            // offer (binders, incompatible PSKs), but not to withdraw it altogether
+            if st.offered_psk_before_retry
+                && input
+                    .client_hello
+                    .preshared_key_offer
+                    .is_none()
+            {
+                return Err(PeerMisbehaved::MissingPskExtensionInSecondClientHello.into());
+            }
+
             // See if there is a KeyShare for the selected kx group.
             let chosen_share_and_kxg = shares_ext
                 .iter()
@@ -203,6 +214,10 @@ mod client_hello {
                     session_id: SessionId::empty(),
                     using_ems: false,
                     done_retry: true,
+                    offered_psk_before_retry: input
+                        .client_hello
+                        .preshared_key_offer
+                        .is_some(),
                     ..st
                 });
                 return if early_data_requested {

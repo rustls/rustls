@@ -486,6 +486,7 @@ pub(crate) struct ExpectClientHello {
     pub(super) resumption_data: Vec<u8>,
     pub(super) using_ems: bool,
     pub(super) done_retry: bool,
+    pub(super) offered_psk_before_retry: bool,
     pub(super) send_tickets: usize,
 }
 
@@ -512,6 +513,7 @@ impl ExpectClientHello {
             resumption_data,
             using_ems: false,
             done_retry: false,
+            offered_psk_before_retry: false,
             send_tickets: 0,
         }
     }
