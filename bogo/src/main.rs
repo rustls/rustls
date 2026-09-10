@@ -1271,9 +1271,10 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             quit(":ECH_REJECTED:")
         }
         Error::PeerIncompatible(_) => quit(":INCOMPATIBLE:"),
-        Error::PeerMisbehaved(PeerMisbehaved::MissingPskModesExtension) => {
-            quit(":MISSING_EXTENSION:")
-        }
+        Error::PeerMisbehaved(
+            PeerMisbehaved::MissingPskExtensionInSecondClientHello
+            | PeerMisbehaved::MissingPskModesExtension,
+        ) => quit(":MISSING_EXTENSION:"),
         Error::PeerMisbehaved(PeerMisbehaved::TooMuchEarlyDataReceived) => {
             quit(":TOO_MUCH_READ_EARLY_DATA:")
         }

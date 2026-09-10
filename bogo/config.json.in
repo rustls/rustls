@@ -125,7 +125,6 @@
     "OmitExtensions-ClientHello-TLS12": "we require signature algorithms ext",
     "EmptyExtensions-ClientHello-TLS12": "we require signature algorithms ext",
     "Resume-Server-CipherNotPreferred": "first connection requires an unimplemented CBC-mode cs (note the TLS1.3 version of this test passes)",
-    "Resume-Server-OmitAllPSKsOnSecondClientHello": "TODO: we do not reject a second ClientHello that drops all PSKs",
     "FallbackSCSV*": "fallback countermeasure not yet implemented",
     "RequireAnyClientCertificate-TLS12": "we don't send an alert in this case",
     "ServerBogusVersion": "we ignore legacy_version if there's an extension",
