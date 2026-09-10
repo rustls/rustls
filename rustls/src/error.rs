@@ -267,6 +267,7 @@ pub enum PeerMisbehaved {
     MessageInterleavedWithHandshakeMessage,
     MissingBinderInPskExtension,
     MissingKeyShare,
+    MissingPskExtensionInSecondClientHello,
     MissingPskModesExtension,
     MissingQuicTransportParameters,
     OfferedDuplicateCertificateCompressions,

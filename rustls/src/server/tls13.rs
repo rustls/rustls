@@ -71,6 +71,7 @@ mod client_hello {
         pub(in crate::server) suite: &'static Tls13CipherSuite,
         pub(in crate::server) randoms: ConnectionRandoms,
         pub(in crate::server) done_retry: bool,
+        pub(in crate::server) offered_psk_before_retry: bool,
         pub(in crate::server) send_tickets: usize,
         pub(in crate::server) extra_exts: ServerExtensionsInput<'static>,
     }
@@ -202,6 +203,19 @@ mod client_hello {
                 });
             }
 
+            // RFC 9846 section 4.2.2 allows the second ClientHello to update a PreSharedKey
+            // offer (binders, incompatible PSKs), but not to withdraw it altogether
+            if self.offered_psk_before_retry
+                && client_hello
+                    .preshared_key_offer
+                    .is_none()
+            {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::MissingExtension,
+                    PeerMisbehaved::MissingPskExtensionInSecondClientHello,
+                ));
+            }
+
             // See if there is a KeyShare for the selected kx group.
             let chosen_share_and_kxg = shares_ext.iter().find_map(|share| {
                 (share.group == selected_kxg.name()).then_some((share, selected_kxg))
@@ -238,6 +252,9 @@ mod client_hello {
                     #[cfg(feature = "tls12")]
                     using_ems: false,
                     done_retry: true,
+                    offered_psk_before_retry: client_hello
+                        .preshared_key_offer
+                        .is_some(),
                     send_tickets: self.send_tickets,
                     extra_exts: self.extra_exts,
                 });
