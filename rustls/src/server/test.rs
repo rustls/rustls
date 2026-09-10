@@ -23,11 +23,11 @@ use crate::crypto::{
     SingleCredential, TEST_PROVIDER, TLS13_TEST_SUITE, tls12, tls12_only,
 };
 use crate::enums::{CertificateType, ProtocolVersion};
-use crate::error::{Error, PeerIncompatible};
+use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::{
     ClientExtensions, ClientHelloPayload, Codec, Compression, HEADER_SIZE, HandshakeMessagePayload,
-    HandshakePayload, KeyShareEntry, Message, MessagePayload, Random, Reader, SessionId,
-    SupportedProtocolVersions,
+    HandshakePayload, KeyShareEntry, Message, MessagePayload, PresharedKeyIdentity,
+    PresharedKeyOffer, PskKeyExchangeModes, Random, Reader, SessionId, SupportedProtocolVersions,
 };
 use crate::pki_types::pem::PemObject;
 use crate::pki_types::{CertificateDer, FipsStatus, PrivateKeyDer};
@@ -321,6 +321,60 @@ fn server_chooses_ffdhe_group_for_client_hello(
 
     skx.unwrap_given_kxa(KeyExchangeAlgorithm::DHE)
         .expect("DHE not used");
+}
+
+#[test]
+fn second_client_hello_cannot_withdraw_psk_offer() {
+    // Per RFC 9846 section 4.2.2, dropping a PreSharedKey offer is not one of the
+    // changes a client may make after a HelloRetryRequest.
+    let config = ServerConfig::builder(TEST_PROVIDER.clone().into())
+        .with_no_client_auth()
+        .with_single_cert(server_identity(), server_key())
+        .unwrap();
+    let mut conn = ServerConnection::new(config.into()).unwrap();
+    let mut input = VecInput::default();
+
+    let encode = |hello| {
+        Message {
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ClientHello(hello),
+            )),
+        }
+        .into_wire_bytes()
+    };
+
+    // this hello offers a PSK, but no key share for a group we support, so
+    // it draws a HelloRetryRequest.
+    let mut first = minimal_client_hello();
+    first.extensions.key_shares = Some(vec![]);
+    first.extensions.preshared_key_modes = Some(PskKeyExchangeModes {
+        psk_dhe: true,
+        psk: false,
+    });
+    first.extensions.preshared_key_offer = Some(PresharedKeyOffer::new(
+        PresharedKeyIdentity::new(vec![0u8; 16], 0),
+        vec![0u8; 32],
+    ));
+    input
+        .read(&mut encode(first).as_slice())
+        .unwrap();
+    process(&mut input, &mut conn).unwrap();
+
+    // the second hello follows the retry, but drops the PSK offer entirely.
+    let mut second = minimal_client_hello();
+    second.extensions.preshared_key_modes = Some(PskKeyExchangeModes {
+        psk_dhe: true,
+        psk: false,
+    });
+    input
+        .read(&mut encode(second).as_slice())
+        .unwrap();
+
+    assert_eq!(
+        process(&mut input, &mut conn).unwrap_err(),
+        PeerMisbehaved::MissingPskExtensionInSecondClientHello.into(),
+    );
 }
 
 #[test]

@@ -1199,6 +1199,7 @@ pub enum PeerMisbehaved {
     MessageInterleavedWithHandshakeMessage,
     MissingBinderInPskExtension,
     MissingKeyShare,
+    MissingPskExtensionInSecondClientHello,
     MissingPskModesExtension,
     MissingQuicTransportParameters,
     NoCertificatesPresented,
@@ -1270,6 +1271,7 @@ impl From<PeerMisbehaved> for AlertDescription {
             | PeerMisbehaved::SelectedUnofferedCertCompression => Self::BadCertificate,
 
             PeerMisbehaved::MissingKeyShare
+            | PeerMisbehaved::MissingPskExtensionInSecondClientHello
             | PeerMisbehaved::MissingPskModesExtension
             | PeerMisbehaved::MissingQuicTransportParameters => Self::MissingExtension,
 

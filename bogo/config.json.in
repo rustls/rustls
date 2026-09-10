@@ -93,7 +93,6 @@
     "RequireAnyClientCertificate-TLS12": "we don't send an alert in this case",
     "Resume-Client-CipherMismatch": "tries to vary to unimplemented CBC-mode cs",
     "Resume-Server-CipherNotPreferred": "first connection requires an unimplemented CBC-mode cs (note the TLS1.3 version of this test passes)",
-    "Resume-Server-OmitAllPSKsOnSecondClientHello": "TODO: we do not reject a second ClientHello that drops all PSKs",
     "RetainOnlySHA256-*": "test for SSL_CTX_set_retain_only_sha256_of_client_certs api",
     "SendClientVersion-RSA": "no rsa kem",
     "SendFallbackSCSV": "fallback scsv not implemented",
