@@ -315,6 +315,7 @@ pub(super) struct ExpectClientHello {
     pub(super) using_ems: bool,
     pub(super) done_retry: bool,
     pub(super) offered_psk_before_retry: bool,
+    pub(super) suite_before_retry: Option<CipherSuite>,
     pub(super) send_tickets: usize,
 }
 
@@ -339,6 +340,7 @@ impl ExpectClientHello {
             using_ems: false,
             done_retry: false,
             offered_psk_before_retry: false,
+            suite_before_retry: None,
             send_tickets: 0,
         }
     }
@@ -471,6 +473,17 @@ impl ExpectClientHello {
                 cx.common
                     .send_fatal_alert(AlertDescription::HandshakeFailure, incompat)
             })?;
+
+        // RFC 9846 section 4.2.4: the server must negotiate the same cipher suite it
+        // named in its HelloRetryRequest
+        if let Some(before_retry) = self.suite_before_retry {
+            if before_retry != suite.suite() {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::CipherSuiteDifferedOnRetry,
+                ));
+            }
+        }
 
         debug!("decided upon suite {suite:?}");
         cx.common.suite = Some(suite);
