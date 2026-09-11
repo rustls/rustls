@@ -369,7 +369,10 @@ fn test_quic_acceptor() {
                 assert!(expect.client_auth);
                 println!("{verify:?}");
                 println!("identity: {:?}", verify.presented_identity());
-                let ServerHandshake::NeedsInput(server) = verify.with_config().unwrap() else {
+                let ServerHandshake::NeedsInput(server) = verify
+                    .with_config(&mut server_flight)
+                    .unwrap()
+                else {
                     panic!("unexpected state");
                 };
                 let ServerHandshake::Complete(server) = server
@@ -501,7 +504,10 @@ fn test_quic_acceptor_external_verifier_rejects_client_cert() {
         };
 
         let err = verify_client
-            .continue_with(Err(CertificateError::UnknownIssuer.into()))
+            .continue_with(
+                Err(CertificateError::UnknownIssuer.into()),
+                &mut server_flight,
+            )
             .unwrap_err();
         assert_eq!(err, CertificateError::UnknownIssuer.into());
         assert_eq!(
