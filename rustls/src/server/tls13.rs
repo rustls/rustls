@@ -255,6 +255,7 @@ mod client_hello {
                     offered_psk_before_retry: client_hello
                         .preshared_key_offer
                         .is_some(),
+                    suite_before_retry: Some(self.suite.common.suite),
                     send_tickets: self.send_tickets,
                     extra_exts: self.extra_exts,
                 });
