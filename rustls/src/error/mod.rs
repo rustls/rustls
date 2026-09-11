@@ -1163,6 +1163,7 @@ impl From<InvalidMessage> for AlertDescription {
 pub enum PeerMisbehaved {
     AttemptedDowngradeToTls12WhenTls13IsSupported,
     BadCertChainExtensions,
+    CipherSuiteDifferedOnRetry,
     DisallowedEncryptedExtension,
     DuplicateClientHelloExtensions,
     DuplicateEncryptedExtensions,

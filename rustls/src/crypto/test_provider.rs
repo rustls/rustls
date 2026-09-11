@@ -81,6 +81,19 @@ pub(crate) const TLS13_TEST_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {
     quic: None,
 };
 
+/// Differs from `TLS13_TEST_SUITE` only in its code point: same hash, same everything else.
+pub(crate) const TLS13_TEST_SUITE_ALT: &Tls13CipherSuite = &Tls13CipherSuite {
+    common: CipherSuiteCommon {
+        suite: CipherSuite(0xff14),
+        hash_provider: FAKE_HASH,
+        confidentiality_limit: u64::MAX,
+    },
+    protocol_version: crate::version::TLS13_VERSION,
+    hkdf_provider: &tls13::HkdfUsingHmac(FAKE_HMAC),
+    aead_alg: &Aead,
+    quic: None,
+};
+
 pub(crate) const TLS_TEST_SUITE: &Tls12CipherSuite = &Tls12CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite(0xff12),

@@ -17,7 +17,9 @@ use crate::crypto::kx::{
     ActiveKeyExchange, KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange,
     SupportedKxGroup,
 };
-use crate::crypto::test_provider::{FAKE_HASH, FAKE_HMAC, KEY_EXCHANGE_GROUP, TLS_TEST_SUITE};
+use crate::crypto::test_provider::{
+    FAKE_HASH, FAKE_HMAC, KEY_EXCHANGE_GROUP, TLS_TEST_SUITE, TLS13_TEST_SUITE_ALT,
+};
 use crate::crypto::{
     CertificateIdentity, CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme,
     SingleCredential, TEST_PROVIDER, TLS13_TEST_SUITE, tls12, tls12_only,
@@ -374,6 +376,56 @@ fn second_client_hello_cannot_withdraw_psk_offer() {
     assert_eq!(
         process(&mut input, &mut conn).unwrap_err(),
         PeerMisbehaved::MissingPskExtensionInSecondClientHello.into(),
+    );
+}
+
+#[test]
+fn second_client_hello_cannot_change_cipher_suite() {
+    // RFC 9846 section 4.2.4 requires the server to negotiate the same cipher suite it
+    // named in its HelloRetryRequest, and section 4.2.2 does not let the client vary its
+    // offer, so a second hello that withdraws the retried suite cannot be honoured.
+    let provider = CryptoProvider {
+        tls13_cipher_suites: Cow::Borrowed(&[TLS13_TEST_SUITE, TLS13_TEST_SUITE_ALT]),
+        ..TEST_PROVIDER.clone()
+    };
+    let config = ServerConfig::builder(provider.into())
+        .with_no_client_auth()
+        .with_single_cert(server_identity(), server_key())
+        .unwrap();
+    let mut conn = ServerConnection::new(config.into()).unwrap();
+    let mut input = VecInput::default();
+
+    let encode = |hello| {
+        Message {
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ClientHello(hello),
+            )),
+        }
+        .into_wire_bytes()
+    };
+
+    // this hello has no key share for a group we support, so it draws a
+    // HelloRetryRequest naming `TLS13_TEST_SUITE`.
+    let mut first = minimal_client_hello();
+    first.cipher_suites = vec![TLS13_TEST_SUITE.common.suite];
+    first.extensions.key_shares = Some(vec![]);
+    input
+        .read(&mut encode(first).as_slice())
+        .unwrap();
+    process(&mut input, &mut conn).unwrap();
+
+    // the second hello follows the retry, but offers only a different suite. It shares
+    // the retried suite's hash, so the transcript stays valid and nothing else objects.
+    let mut second = minimal_client_hello();
+    second.cipher_suites = vec![TLS13_TEST_SUITE_ALT.common.suite];
+    input
+        .read(&mut encode(second).as_slice())
+        .unwrap();
+
+    assert_eq!(
+        process(&mut input, &mut conn).unwrap_err(),
+        PeerMisbehaved::CipherSuiteDifferedOnRetry.into(),
     );
 }
 
