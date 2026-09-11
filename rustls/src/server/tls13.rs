@@ -218,6 +218,7 @@ mod client_hello {
                         .client_hello
                         .preshared_key_offer
                         .is_some(),
+                    suite_before_retry: Some(suite.common.suite),
                     ..st
                 });
                 return if early_data_requested {

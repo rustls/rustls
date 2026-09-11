@@ -487,6 +487,7 @@ pub(crate) struct ExpectClientHello {
     pub(super) using_ems: bool,
     pub(super) done_retry: bool,
     pub(super) offered_psk_before_retry: bool,
+    pub(super) suite_before_retry: Option<CipherSuite>,
     pub(super) send_tickets: usize,
 }
 
@@ -514,6 +515,7 @@ impl ExpectClientHello {
             using_ems: false,
             done_retry: false,
             offered_psk_before_retry: false,
+            suite_before_retry: None,
             send_tickets: 0,
         }
     }
@@ -632,6 +634,14 @@ impl ExpectClientHello {
                 .unwrap_or_default(),
             &input.client_hello.cipher_suites,
         )?;
+
+        // RFC 9846 section 4.2.4: the server must negotiate the same cipher suite it
+        // named in its HelloRetryRequest
+        if let Some(before_retry) = self.suite_before_retry {
+            if before_retry != suite.suite() {
+                return Err(PeerMisbehaved::CipherSuiteDifferedOnRetry.into());
+            }
+        }
 
         debug!("decided upon suite {suite:?}");
         output.output(OutputEvent::CipherSuite(suite.into()));
