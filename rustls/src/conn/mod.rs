@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::fmt::{self, Debug};
+use core::fmt;
 use core::ops::{Deref, DerefMut};
 
 use kernel::KernelConnection;
@@ -8,7 +8,9 @@ use pki_types::FipsStatus;
 
 use crate::common_state::{
     CommonState, ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent,
+    maybe_send_fatal_alert,
 };
+use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
@@ -23,7 +25,7 @@ use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 pub mod kernel;
 
 mod receive;
-pub(crate) use receive::{Input, MessageIter, ReceivePath, TrafficTemperCounters};
+pub(crate) use receive::{Input, MessageIter, MessageIterMode, ReceivePath, TrafficTemperCounters};
 pub use receive::{SliceInput, TlsInputBuffer, VecInput};
 
 mod send;
@@ -33,7 +35,7 @@ pub(crate) mod split;
 use split::SplitConnection;
 
 /// A trait generalizing over buffered client or server connections.
-pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
+pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
     /// The side (client or server) that this type implements.
     type Side: SideData;
 
@@ -132,6 +134,176 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     ///
     /// [`CryptoProvider::fips()`]: crate::crypto::CryptoProvider::fips()
     fn fips(&self) -> FipsStatus;
+}
+
+/// More data needs to be supplied to make progress.
+///
+/// Provide the data to [`Self::process()`].
+pub struct NeedsInput<Side: SideData> {
+    pub(crate) inner: ConnectionCommon<Side>,
+}
+
+impl<Side: SideData> NeedsInput<Side> {
+    /// Progress the handshake by receiving further data.
+    ///
+    /// The data is obtained via `input`.  Any output produced is appended to `output` and
+    /// should be sent to the peer (including if this function returns an error, because
+    /// the `output` may contain an alert.)
+    ///
+    /// An error from this function is otherwise fatal to the connection, as it consumes
+    /// the [`NeedsInput`] object.
+    ///
+    /// On success, this returns a handshake object specifying what to do to progress
+    /// the connection.  If this contains another [`NeedsInput`] object then obtaining more
+    /// input (eg, from a socket or other source) is certainly necessary.
+    pub fn process(
+        mut self,
+        input: &mut dyn TlsInputBuffer,
+        tls: &mut Vec<u8>,
+    ) -> Result<Side::Handshake, Error> {
+        let mut iter = MessageIter::new(
+            input,
+            tls,
+            None,
+            &mut self.inner,
+            MessageIterMode::Handshake,
+        );
+        let r = loop {
+            match iter.next() {
+                Some(Ok(_)) => {}
+                Some(Err(e)) => break Err(e),
+                None => break Ok(()),
+            };
+        };
+
+        input.discard(
+            self.inner
+                .common
+                .recv
+                .deframer
+                .take_discard(),
+        );
+
+        r?;
+        Side::handshake_from_inner(self.inner)
+    }
+}
+
+impl<S: SideData> fmt::Debug for NeedsInput<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NeedsInput")
+            .finish_non_exhaustive()
+    }
+}
+
+/// The peer's presented identity must be verified.
+///
+/// The caller has three choices:
+///
+/// - Call [`Self::with_config()`].  This calls the configured verifier trait
+///   ([`ClientVerifier::verify_identity()`][] or [`ServerVerifier::verify_identity()`][])
+///   synchronously.
+///
+/// - Call [`Self::presented_identity()`] to obtain the peer's presented identity,
+///   verify that outside the library (perhaps asynchronously), and then continue the handshake with
+///   [`Self::continue_with()`].
+///
+///   If the verification fails, the error can be passed into [`Self::continue_with()`] to follow
+///   a uniform error handling path.
+///
+/// - Abandon the handshake by discarding this object.
+///
+/// The returned object is a further handshake state for this side.  Commonly this will
+/// contain a [`NeedsInput`] which will accept and process further data.
+///
+/// [`ClientVerifier::verify_identity()`]: crate::verify::ClientVerifier::verify_identity
+/// [`ServerVerifier::verify_identity()`]: crate::verify::ServerVerifier::verify_identity
+pub struct VerifyPeerIdentity<Side: SideData> {
+    // invariant: `inner.state` is `Err(_)` and requires restoring
+    pub(crate) inner: ConnectionCommon<Side>,
+    pub(crate) verify_identity: Box<dyn VerifyPeerIdentityInternal<Side>>,
+}
+
+impl<Side: SideData> VerifyPeerIdentity<Side> {
+    /// Progress the handshake by calling the pre-configured certificate verification trait.
+    pub fn with_config(self, tls: &mut Vec<u8>) -> Result<Side::Handshake, Error> {
+        let Self {
+            inner,
+            verify_identity,
+        } = self;
+
+        Self::next(inner, |output| verify_identity.with_config(output), tls)
+    }
+
+    /// Progress the handshake by incorporating the result of an external verification.
+    ///
+    /// Further data to send to the peer may be appended to `tls`.
+    ///
+    /// If `verification_result` is an error, this error is returned and the handshake terminates.
+    /// An alert may be appended to `tls` for sending to the peer.
+    pub fn continue_with(
+        self,
+        verification_result: Result<VerifiedIdentity<'static>, Error>,
+        tls: &mut Vec<u8>,
+    ) -> Result<Side::Handshake, Error> {
+        let Self {
+            inner,
+            verify_identity,
+        } = self;
+
+        Self::next(
+            inner,
+            |output| {
+                verification_result
+                    .and_then(|verified| verify_identity.continue_with(verified, output))
+            },
+            tls,
+        )
+    }
+
+    /// Inspect the identity that the peer has provided.
+    pub fn presented_identity(&self) -> Result<Side::PeerIdentity<'_>, Error> {
+        self.verify_identity
+            .presented_identity()
+    }
+
+    fn next(
+        mut inner: ConnectionCommon<Side>,
+        advance: impl FnOnce(&mut dyn Output<'_>) -> Result<Side::State, Error>,
+        tls: &mut Vec<u8>,
+    ) -> Result<Side::Handshake, Error> {
+        let result = advance(&mut SideCommonOutput {
+            side: &mut inner.side,
+            quic: None,
+            common: &mut inner.common,
+            tls,
+        });
+
+        if let Err(err) = &result {
+            maybe_send_fatal_alert(&mut inner.common.send, err, tls);
+        }
+
+        inner.state = result;
+        Side::handshake_from_inner(inner)
+    }
+}
+
+impl<Side: SideData> fmt::Debug for VerifyPeerIdentity<Side> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VerifyPeerIdentity")
+            .finish_non_exhaustive()
+    }
+}
+
+/// Trait to maintain static unreachablity of per-protocol-version code.
+pub(crate) trait VerifyPeerIdentityInternal<Side: SideData>: Send + Sync {
+    fn presented_identity(&self) -> Result<Side::PeerIdentity<'_>, Error>;
+    fn with_config(self: Box<Self>, output: &mut dyn Output<'_>) -> Result<Side::State, Error>;
+    fn continue_with(
+        self: Box<Self>,
+        verified: VerifiedIdentity<'static>,
+        output: &mut dyn Output<'_>,
+    ) -> Result<Side::State, Error>;
 }
 
 /// TLS connection state with side-specific data (`Side`).
@@ -334,7 +506,7 @@ impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
         core: &'a mut ConnectionCommon<Side>,
     ) -> Self {
         Self {
-            iter: MessageIter::new(input, tls, None, core, true),
+            iter: MessageIter::new(input, tls, None, core, MessageIterMode::Normal),
             done: false,
         }
     }
@@ -400,7 +572,7 @@ impl<'a, 'm, Side: SideData + private::Side> Drop for MessageHandler<'a, 'm, Sid
     }
 }
 
-impl<S: SideData> Debug for MessageHandler<'_, '_, S> {
+impl<S: SideData> fmt::Debug for MessageHandler<'_, '_, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MessageHandler")
             .field("done", &self.done)
@@ -446,7 +618,7 @@ impl KeyingMaterialExporter {
     }
 }
 
-impl Debug for KeyingMaterialExporter {
+impl fmt::Debug for KeyingMaterialExporter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("KeyingMaterialExporter")
             .finish_non_exhaustive()
@@ -569,12 +741,22 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
 
 /// Data specific to the peer's side (client or server).
 #[expect(private_bounds)]
-pub trait SideData: private::Side {}
+pub trait SideData: private::Side + Sized {
+    /// Type representing an in-progress handshake.
+    type Handshake;
+
+    /// Type representing the peer's identity.
+    type PeerIdentity<'a>;
+
+    #[doc(hidden)]
+    #[expect(private_interfaces)]
+    fn handshake_from_inner(common: ConnectionCommon<Self>) -> Result<Self::Handshake, Error>;
+}
 
 pub(crate) mod private {
     use super::*;
 
-    pub(crate) trait Side: Debug {
+    pub(crate) trait Side: fmt::Debug {
         /// Data storage type.
         type Data: SideOutput;
         /// State machine type.
@@ -595,10 +777,10 @@ pub(crate) trait StateMachine: Sized {
     /// Return true if the current state requires input to be provided via `handle()`.
     fn wants_input(&self) -> bool;
 
-    /// Advance the state machine using no input if possible.
+    /// Advance the state machine using no input, emitting data to `output`.
     ///
-    /// This should return `Ok(self)` otherwise.
-    fn handle_without_input(self) -> Result<Self, Error>;
+    /// This should return `Ok(self)` if the current state requires input.
+    fn handle_without_input(self, output: &mut dyn Output<'_>) -> Result<Self, Error>;
 
     fn is_traffic(&self) -> bool;
     fn handle_decrypt_error(&mut self);

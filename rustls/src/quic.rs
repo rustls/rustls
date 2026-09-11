@@ -8,8 +8,11 @@ use pki_types::{DnsName, FipsStatus, ServerName};
 use crate::TlsInputBuffer;
 use crate::client::{ClientConfig, ClientSide};
 pub use crate::common_state::Side;
-use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
-use crate::conn::{ConnectionCommon, KeyingMaterialExporter, MessageIter, SideData, StateMachine};
+use crate::common_state::{CommonState, ConnectionOutputs, Output, Protocol};
+use crate::conn::{
+    ConnectionCommon, KeyingMaterialExporter, MessageIter, MessageIterMode, SideCommonOutput,
+    SideData, StateMachine, VerifyPeerIdentityInternal,
+};
 use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
@@ -18,9 +21,7 @@ use crate::error::{ApiMisuse, Error};
 use crate::msgs::{
     ClientExtensionsInput, Message, MessagePayload, ServerExtensionsInput, TransportParameters,
 };
-use crate::server::{
-    ChooseConfig, ClientHello, HandshakeVerifyClientIdentity, ServerConfig, ServerSide, ServerState,
-};
+use crate::server::{ChooseConfig, ClientHello, ServerConfig, ServerSide, ServerState};
 use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
 use crate::tls13::Tls13CipherSuite;
@@ -183,7 +184,8 @@ impl Connection for ClientConnection {
     }
 
     fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
-        self.inner.read_hs(input, true)
+        self.inner
+            .read_hs(input, MessageIterMode::Normal)
     }
 
     fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
@@ -321,7 +323,8 @@ impl Connection for ServerConnection {
     }
 
     fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
-        self.inner.read_hs(input, true)
+        self.inner
+            .read_hs(input, MessageIterMode::Normal)
     }
 
     fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
@@ -477,7 +480,8 @@ impl NeedsInput {
         input: &mut dyn TlsInputBuffer,
         output: &mut Vec<QuicEvent>,
     ) -> Result<ServerHandshake, Error> {
-        self.inner.read_hs(input, false)?;
+        self.inner
+            .read_hs(input, MessageIterMode::Handshake)?;
         output.extend(self.inner.events());
         ServerHandshake::try_from(self.inner)
     }
@@ -583,7 +587,7 @@ fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
 ///
 /// The caller has three choices:
 ///
-/// - Call [`Self::use_verifier_trait()`].  This calls [`ClientVerifier::verify_identity()`][]
+/// - Call [`Self::with_config()`].  This calls [`ClientVerifier::verify_identity()`][]
 ///   synchronously.
 ///
 /// - Call [`Self::presented_identity()`] to obtain the peer's presented identity,
@@ -602,13 +606,14 @@ fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
 pub struct VerifyClientIdentity {
     // invariant: `inner.state` is `Err(_)` and requires restoring
     inner: QuicCommon<ServerSide>,
-    verify: HandshakeVerifyClientIdentity,
+    verify: Box<dyn VerifyPeerIdentityInternal<ServerSide>>,
 }
 
 impl VerifyClientIdentity {
     /// Progress the handshake by calling the pre-configured certificate verification trait.
-    pub fn use_verifier_trait(self) -> Result<ServerHandshake, Error> {
-        Self::next(self.inner, self.verify.use_verifier_trait())
+    pub fn with_config(self) -> Result<ServerHandshake, Error> {
+        let Self { inner, verify } = self;
+        Self::next(inner, |output| verify.with_config(output))
     }
 
     /// Progress the handshake by incorporating the result of an external verification.
@@ -618,10 +623,10 @@ impl VerifyClientIdentity {
         self,
         verification_result: Result<VerifiedIdentity<'static>, Error>,
     ) -> Result<ServerHandshake, Error> {
-        Self::next(
-            self.inner,
-            verification_result.and_then(|verified| self.verify.continue_with(verified)),
-        )
+        let Self { inner, verify } = self;
+        Self::next(inner, |output| {
+            verification_result.and_then(|verified| verify.continue_with(verified, output))
+        })
     }
 
     /// Inspect the identity that the client has provided.
@@ -631,8 +636,19 @@ impl VerifyClientIdentity {
 
     fn next(
         mut inner: QuicCommon<ServerSide>,
-        result: Result<ServerState, Error>,
+        advance: impl FnOnce(&mut dyn Output<'_>) -> Result<ServerState, Error>,
     ) -> Result<ServerHandshake, Error> {
+        let mut tls = Vec::new();
+        let result = advance(&mut SideCommonOutput {
+            side: &mut inner.common.side,
+            quic: Some(&mut inner.quic),
+            common: &mut inner.common.common,
+            tls: &mut tls,
+        });
+
+        // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
+        debug_assert!(tls.is_empty());
+
         inner.common.state = result;
         ServerHandshake::try_from(inner)
     }
@@ -697,7 +713,11 @@ impl<Side: SideData> QuicCommon<Side> {
         ))
     }
 
-    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer, advance: bool) -> Result<(), Error> {
+    fn read_hs(
+        &mut self,
+        input: &mut dyn TlsInputBuffer,
+        mode: MessageIterMode,
+    ) -> Result<(), Error> {
         self.common
             .common
             .recv
@@ -710,7 +730,7 @@ impl<Side: SideData> QuicCommon<Side> {
             &mut tls,
             Some(&mut self.quic),
             &mut self.common,
-            advance,
+            mode,
         );
         let result = match iter.next() {
             Some(Ok(_)) | None => Ok(()),

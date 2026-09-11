@@ -10,11 +10,12 @@ use pki_types::ServerName;
 use super::config::{ClientSessionKey, Tls12Resumption};
 use super::ech::{EchMode, EchState, EchStatus};
 use super::{
-    ClientHelloDetails, ClientSessionCommon, Retrieved, Tls12Session, Tls13Session, tls12, tls13,
+    ClientHelloDetails, ClientSessionCommon, ClientSide, Retrieved, Tls12Session, Tls13Session,
+    tls12, tls13,
 };
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{EarlyDataEvent, Event, Output, OutputEvent, Protocol};
-use crate::conn::{Input, StateMachine};
+use crate::conn::{Input, StateMachine, VerifyPeerIdentityInternal};
 use crate::crypto::cipher::{EncodableVersion, Payload};
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
@@ -44,6 +45,10 @@ use crate::{ClientConfig, bs_debug};
 pub(crate) enum ClientState {
     ServerHello(Box<ExpectServerHello>),
     ServerHelloOrHelloRetryRequest(Box<ExpectServerHelloOrHelloRetryRequest>),
+
+    /// Verifying the server's presented certificate chain.
+    VerifyServerIdentity(Box<dyn VerifyPeerIdentityInternal<ClientSide>>),
+
     Tls12(tls12::Tls12State),
     Tls13(tls13::Tls13State),
 }
@@ -53,17 +58,23 @@ impl StateMachine for ClientState {
         match self {
             Self::ServerHello(e) => e.handle(input, output),
             Self::ServerHelloOrHelloRetryRequest(e) => e.handle(input, output),
+            Self::VerifyServerIdentity(_) => {
+                Err(Error::Unreachable("state cannot process a message"))
+            }
             Self::Tls12(sm) => sm.handle(input, output),
             Self::Tls13(sm) => sm.handle(input, output),
         }
     }
 
     fn wants_input(&self) -> bool {
-        true
+        !matches!(self, Self::VerifyServerIdentity(_))
     }
 
-    fn handle_without_input(self) -> Result<Self, Error> {
-        Ok(self)
+    fn handle_without_input(self, output: &mut dyn Output<'_>) -> Result<Self, Error> {
+        match self {
+            Self::VerifyServerIdentity(vsi) => vsi.with_config(output),
+            _ => Ok(self),
+        }
     }
 
     fn is_traffic(&self) -> bool {
