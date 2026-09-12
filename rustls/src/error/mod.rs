@@ -1694,14 +1694,6 @@ pub enum ApiMisuse {
     /// [`ClientConnection::split()`]: crate::client::ClientConnection::split()
     SplitDuringHandshake,
 
-    /// An output buffer provided for encryption was too small.
-    EncryptBufferTooSmall {
-        /// The minimum required buffer length
-        required: usize,
-        /// The buffer length actually provided
-        provided: usize,
-    },
-
     /// Plaintext cannot be encrypted before the handshake is complete.
     WriteTlsBeforeHandshakeComplete,
 

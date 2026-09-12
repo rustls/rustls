@@ -3,10 +3,10 @@ use alloc::vec::Vec;
 use core::cmp::min;
 
 use crate::crypto::cipher::{
-    InboundOpaque, OutboundPlain, Record, RecordDecrypter, RecordEncrypter, encode_record_header,
+    InboundOpaque, OutboundPlain, Record, RecordDecrypter, RecordEncrypter,
 };
 use crate::error::Error;
-use crate::msgs::{HEADER_SIZE, HandshakeAlignedProof};
+use crate::msgs::HandshakeAlignedProof;
 use crate::tracing::trace;
 
 /// Record layer that tracks encryption keys.
@@ -37,63 +37,14 @@ impl EncryptionState {
         plain: Record<OutboundPlain<'_>>,
         output: &mut Vec<u8>,
     ) {
-        // Contents are fully overwritten below, so zeroing is pure cost.
-        // A fresh buffer gets pre-zeroed memory straight from the allocator
-        // while a reused one zeroes only what `resize` grows.
-        let needed = HEADER_SIZE + self.encrypted_len(plain.payload.len());
-        let start = output.len();
-        output.resize(start + needed, 0);
-        let written = self.encrypt_outgoing_into(plain, &mut output[start..]);
-        debug_assert_eq!(
-            written, needed,
-            "RecordEncrypter::encrypt() returned wrong length"
-        );
-        output.truncate(start + written);
-    }
-
-    /// Encrypt a TLS record directly into `out`, returning the encoded
-    /// record's length.
-    ///
-    /// The record, header included, is written to the front of `out`,
-    /// which must be at least `HEADER_SIZE` plus
-    /// [`Self::encrypted_len()`](Self::encrypted_len) bytes long.
-    ///
-    /// This function panics if the requisite keying material hasn't been
-    /// established yet.
-    pub(crate) fn encrypt_outgoing_into(
-        &mut self,
-        plain: Record<OutboundPlain<'_>>,
-        out: &mut [u8],
-    ) -> usize {
         assert!(self.pre_encrypt_action(0) != Some(PreEncryptAction::Refuse));
-        let encrypter = self.record_encrypter.as_mut().unwrap();
-
         let seq = self.write_seq;
         self.write_seq += 1;
-
-        #[cfg(debug_assertions)]
-        let (out_ptr, out_len) = (out.as_ptr(), out.len());
-        let encrypted = encrypter
-            .encrypt(plain, seq, &mut out[HEADER_SIZE..])
+        self.record_encrypter
+            .as_mut()
+            .unwrap()
+            .encrypt(plain, seq, output)
             .unwrap();
-
-        #[cfg(debug_assertions)]
-        {
-            // `RecordEncrypter::encrypt()` requires the returned payload to be
-            // the written prefix of the passed-in buffer. Try to catch misbehaving
-            // implementations in debug mode. In release builds a violation would corrupt
-            // the sent stream.
-            debug_assert_eq!(
-                encrypted.payload.as_ptr(),
-                out_ptr.wrapping_add(HEADER_SIZE)
-            );
-            debug_assert!(encrypted.payload.len() <= out_len - HEADER_SIZE);
-        }
-
-        let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
-        debug_assert!(len <= usize::from(u16::MAX));
-        out[..HEADER_SIZE].copy_from_slice(&encode_record_header(typ, version, len as u16));
-        HEADER_SIZE + len
     }
 
     /// Set and start using the given `RecordEncrypter` for future outgoing

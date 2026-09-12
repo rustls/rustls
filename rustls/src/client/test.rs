@@ -11,9 +11,7 @@ use pki_types::{CertificateDer, FipsStatus, ServerName, UnixTime};
 
 use super::{Tls12Session, Tls13ClientSessionInput, Tls13Session};
 use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
-use crate::crypto::cipher::{
-    EncodableVersion, Payload, Record, RecordEncrypter, encode_record_header,
-};
+use crate::crypto::cipher::{EncodableVersion, Payload, Record, RecordEncrypter};
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::test_provider::{FakeKeyExchangeGroup, KEY_EXCHANGE_GROUP, TLS_TEST_SUITE};
 use crate::crypto::tls13::OkmBlock;
@@ -25,7 +23,7 @@ use crate::enums::{CertificateType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::{
     CertificateChain, ClientHelloPayload, Codec, Compression, ECCurveType, EcParameters,
-    EncryptedExtensions, ExtensionType, HEADER_SIZE, HandshakeMessagePayload, HandshakePayload,
+    EncryptedExtensions, ExtensionType, HandshakeMessagePayload, HandshakePayload,
     HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, LengthPrefixedBuffer,
     ListLength, MaybeEmpty, Message, MessagePayload, NewSessionTicketExtensions,
     NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams, ServerExtensions,
@@ -554,18 +552,10 @@ fn client_requiring_rpk_receives_server_ee(
     let mut encrypter = fake_server_crypto.server_handshake_encrypter();
     let ee = Record::<Payload<'_>>::from(ee);
     let ee = ee.borrow_outbound();
-    let mut enc_ee = vec![0u8; HEADER_SIZE + encrypter.encrypted_payload_len(ee.payload.len())];
-    let encrypted = encrypter
-        .encrypt(ee, 0, &mut enc_ee[HEADER_SIZE..])
+    let mut enc_ee = Vec::new();
+    encrypter
+        .encrypt(ee, 0, &mut enc_ee)
         .unwrap();
-
-    let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
-    enc_ee.truncate(HEADER_SIZE + len);
-    enc_ee[..HEADER_SIZE].copy_from_slice(&encode_record_header(
-        typ,
-        version,
-        u16::try_from(len).unwrap(),
-    ));
 
     input
         .read(&mut enc_ee.as_slice())
