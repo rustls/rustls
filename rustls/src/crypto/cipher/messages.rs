@@ -5,7 +5,7 @@ use core::{fmt, slice};
 use crate::Protocol;
 use crate::crypto::cipher::EncryptionState;
 use crate::enums::{ContentType, ProtocolVersion};
-use crate::error::{ApiMisuse, Error, InvalidMessage, PeerMisbehaved};
+use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::{Codec, HEADER_SIZE, MAX_FRAGMENT_LEN, Reader, hex, read_record_header};
 
 /// A TLS record with encoded (but not necessarily encrypted) payload.
@@ -374,84 +374,6 @@ impl<'a> From<&'a Vec<u8>> for OutboundPlain<'a> {
     }
 }
 
-/// A fixed-size buffer into which a [`RecordEncrypter`][] writes an encrypted record payload.
-///
-/// This wraps the output buffer passed to [`RecordEncrypter::encrypt()`][], tracking how
-/// much of it has been written as the append methods fill it front-to-back. It writes
-/// into caller-owned memory and cannot grow. [`Self::new()`] checks that the caller's
-/// buffer can hold the `len` bytes the encrypter declared, and the append methods then
-/// panic if the writes exceed that length.
-///
-/// Such a panic always indicates a bug in the `RecordEncrypter` implementation, not a
-/// runtime condition the caller can handle. The same implementation declares the total
-/// length up front (via [`RecordEncrypter::encrypted_payload_len()`]) and performs the
-/// writes, so overflowing the buffer means the two disagree. The record layer also
-/// relies on that declared length for framing, so there is no way to recover from the
-/// mismatch after the fact.
-///
-/// [`RecordEncrypter`]: crate::crypto::cipher::RecordEncrypter
-/// [`RecordEncrypter::encrypt()`]: crate::crypto::cipher::RecordEncrypter::encrypt()
-/// [`RecordEncrypter::encrypted_payload_len()`]: crate::crypto::cipher::RecordEncrypter::encrypted_payload_len()
-pub struct EncryptBuffer<'a> {
-    buf: &'a mut [u8],
-    used: usize,
-}
-
-impl<'a> EncryptBuffer<'a> {
-    /// Wrap the first `len` bytes of `out`, all of which are as yet unwritten.
-    ///
-    /// Returns [`ApiMisuse::EncryptBufferTooSmall`] if `out` is shorter than `len` bytes.
-    pub fn new(out: &'a mut [u8], len: usize) -> Result<Self, Error> {
-        let provided = out.len();
-        match out.get_mut(..len) {
-            Some(buf) => Ok(Self { buf, used: 0 }),
-            None => Err(ApiMisuse::EncryptBufferTooSmall {
-                required: len,
-                provided,
-            }
-            .into()),
-        }
-    }
-
-    /// Append bytes from an `OutboundPlain`'s chunks.
-    ///
-    /// Panics if the write would extend beyond the `len` given to [`Self::new()`],
-    /// which indicates a bug in the calling `RecordEncrypter` implementation (see
-    /// the type-level documentation).
-    pub fn extend_from_chunks(&mut self, chunks: &OutboundPlain<'_>) {
-        match chunks {
-            // for the common case with a single chunk we want to avoid iteration overhead.
-            OutboundPlain::Single(chunk) => self.extend_from_slice(chunk),
-            chunks => {
-                for chunk in chunks.chunks() {
-                    self.extend_from_slice(chunk);
-                }
-            }
-        }
-    }
-
-    /// Append bytes from a slice.
-    ///
-    /// Panics if the write would extend beyond the `len` given to [`Self::new()`],
-    /// which indicates a bug in the calling `RecordEncrypter` implementation (see
-    /// the type-level documentation).
-    pub fn extend_from_slice(&mut self, slice: &[u8]) {
-        self.buf[self.used..self.used + slice.len()].copy_from_slice(slice);
-        self.used += slice.len();
-    }
-
-    /// Consume this value, returning the written prefix of the wrapped buffer.
-    pub fn into_written(self) -> &'a [u8] {
-        &self.buf[..self.used]
-    }
-}
-
-impl AsMut<[u8]> for EncryptBuffer<'_> {
-    fn as_mut(&mut self) -> &mut [u8] {
-        &mut self.buf[..self.used]
-    }
-}
-
 /// An externally length'd payload
 ///
 /// When encountered in an [`Record`], it represents a plaintext payload. It can be
@@ -635,30 +557,6 @@ mod tests {
 
     use super::*;
     use crate::quic;
-
-    #[test]
-    fn encrypt_buffer_appends() {
-        let mut space = [0u8; 8];
-        let mut buf = EncryptBuffer::new(&mut space[..], 6).unwrap();
-        buf.extend_from_slice(&[1, 2]);
-        buf.extend_from_chunks(&OutboundPlain::new(&[&[3u8, 4][..], &[5][..]]));
-        buf.extend_from_slice(&[6]);
-        assert_eq!(buf.as_mut(), &mut [1, 2, 3, 4, 5, 6]);
-        assert_eq!(buf.into_written(), &[1, 2, 3, 4, 5, 6]);
-        assert_eq!(space, [1, 2, 3, 4, 5, 6, 0, 0]);
-    }
-
-    #[test]
-    fn encrypt_buffer_rejects_short_buffer() {
-        let mut space = [0u8; 4];
-        assert!(matches!(
-            EncryptBuffer::new(&mut space[..], 5),
-            Err(Error::ApiMisuse(ApiMisuse::EncryptBufferTooSmall {
-                required: 5,
-                provided: 4,
-            }))
-        ));
-    }
 
     #[test]
     fn chunks_iteration() {
