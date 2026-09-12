@@ -3,21 +3,18 @@ use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
 
-use pki_types::{DnsName, FipsStatus, ServerName};
+use pki_types::{DnsName, FipsStatus};
 
 use crate::TlsInputBuffer;
-use crate::client::{ClientConfig, ClientSide};
+use crate::client::ClientSide;
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
 use crate::conn::{ConnectionCommon, KeyingMaterialExporter, MessageIter, SideData, StateMachine};
 use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
-use crate::enums::ApplicationProtocol;
 use crate::error::{ApiMisuse, Error};
-use crate::msgs::{
-    ClientExtensionsInput, Message, MessagePayload, ServerExtensionsInput, TransportParameters,
-};
+use crate::msgs::{Message, MessagePayload, ServerExtensionsInput, TransportParameters};
 use crate::server::{
     ChooseConfig, ClientHello, HandshakeVerifyClientIdentity, ServerConfig, ServerSide, ServerState,
 };
@@ -66,70 +63,6 @@ pub struct ClientConnection {
 }
 
 impl ClientConnection {
-    /// Make a new QUIC ClientConnection.
-    ///
-    /// This differs from `ClientConnection::new()` in that it takes an extra `params` argument,
-    /// which contains the TLS-encoded transport parameters to send.
-    pub fn new(
-        config: Arc<ClientConfig>,
-        quic_version: Version,
-        name: ServerName<'static>,
-        params: Vec<u8>,
-    ) -> Result<Self, Error> {
-        let alpn_protocols = config.alpn_protocols.clone();
-        Self::new_with_alpn(config, quic_version, name, params, alpn_protocols)
-    }
-
-    /// Make a new QUIC ClientConnection with custom ALPN protocols.
-    pub fn new_with_alpn(
-        config: Arc<ClientConfig>,
-        version: Version,
-        name: ServerName<'static>,
-        params: Vec<u8>,
-        alpn_protocols: Vec<ApplicationProtocol<'static>>,
-    ) -> Result<Self, Error> {
-        let suites = &config.provider().tls13_cipher_suites;
-        if suites.is_empty() {
-            return Err(ApiMisuse::QuicRequiresTls13Support.into());
-        }
-
-        if !suites
-            .iter()
-            .any(|scs| scs.quic.is_some())
-        {
-            return Err(ApiMisuse::NoQuicCompatibleCipherSuites.into());
-        }
-
-        let exts = ClientExtensionsInput {
-            transport_parameters: Some(match version {
-                Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
-            }),
-
-            ..ClientExtensionsInput::from_alpn(alpn_protocols)
-        };
-
-        let mut quic = Quic {
-            version,
-            ..Quic::default()
-        };
-
-        let mut tls = Vec::new();
-        let inner = ConnectionCommon::for_client(
-            config,
-            name,
-            exts,
-            Some(&mut quic),
-            Protocol::Quic(version),
-            &mut tls,
-        )?;
-
-        // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
-        debug_assert!(tls.is_empty());
-        Ok(Self {
-            inner: QuicCommon::new(inner, quic),
-        })
-    }
-
     /// Return the FIPS validation status of the connection.
     pub fn fips(&self) -> FipsStatus {
         self.inner.fips
@@ -207,6 +140,12 @@ impl fmt::Debug for ClientConnection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("quic::ClientConnection")
             .finish_non_exhaustive()
+    }
+}
+
+impl From<QuicCommon<ClientSide>> for ClientConnection {
+    fn from(inner: QuicCommon<ClientSide>) -> Self {
+        Self { inner }
     }
 }
 
@@ -658,13 +597,13 @@ pub enum QuicEvent {
 }
 
 /// A shared interface for QUIC connections.
-struct QuicCommon<Side: SideData> {
+pub(crate) struct QuicCommon<Side: SideData> {
     common: ConnectionCommon<Side>,
     quic: Quic,
 }
 
 impl<Side: SideData> QuicCommon<Side> {
-    fn new(common: ConnectionCommon<Side>, quic: Quic) -> Self {
+    pub(crate) fn new(common: ConnectionCommon<Side>, quic: Quic) -> Self {
         Self { common, quic }
     }
 
