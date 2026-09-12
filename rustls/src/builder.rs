@@ -122,7 +122,6 @@ use crate::{ClientConfig, ServerConfig};
 /// [`ConfigBuilder<ServerConfig, WantsVerifier>`]: struct.ConfigBuilder.html#impl-6
 /// [`WantsClientCert`]: crate::client::WantsClientCert
 /// [`WantsServerCert`]: crate::server::WantsServerCert
-/// [`CryptoProvider::get_default`]: crate::crypto::CryptoProvider::get_default
 /// [`DangerousClientConfigBuilder::with_custom_certificate_verifier`]: crate::client::danger::DangerousClientConfigBuilder::with_custom_certificate_verifier
 #[derive(Clone)]
 pub struct ConfigBuilder<Side: ConfigSide, State> {
