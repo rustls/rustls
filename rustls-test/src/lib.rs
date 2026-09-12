@@ -1533,32 +1533,11 @@ impl RawTls {
     }
 
     pub fn encrypt_and_send(&mut self, msg: &Record<Payload<'_>>, peer_input: &mut VecInput) {
-        /// The length of a TLS record header: 1 byte type, 2 bytes version, 2 bytes length.
-        const HEADER_SIZE: usize = 5;
-
         let msg = msg.borrow_outbound();
-        let mut record = vec![
-            0u8;
-            HEADER_SIZE
-                + self
-                    .encrypter
-                    .encrypted_payload_len(msg.payload.len())
-        ];
-        let encrypted = self
-            .encrypter
-            .encrypt(msg, self.enc_seq, &mut record[HEADER_SIZE..])
+        let mut record = vec![];
+        self.encrypter
+            .encrypt(msg, self.enc_seq, &mut record)
             .unwrap();
-
-        // Encode the TLS record header: 1 byte type, 2 bytes version, 2 bytes length
-        let (typ, version, len) = (
-            encrypted.typ,
-            encrypted.version.encode(),
-            encrypted.payload.len(),
-        );
-        record.truncate(HEADER_SIZE + len);
-        record[0] = typ.into();
-        record[1..3].copy_from_slice(&version.to_array());
-        record[3..5].copy_from_slice(&(len as u16).to_be_bytes());
 
         self.enc_seq += 1;
         peer_input
@@ -1977,8 +1956,8 @@ pub fn certificate_error_expecting_name(expected: &str) -> CertificateError {
 mod plaintext {
     use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
-        AeadKey, EncryptBuffer, InboundOpaque, Iv, OutboundPlain, RecordDecrypter, RecordEncrypter,
-        Tls13AeadAlgorithm, UnsupportedOperationError,
+        AeadKey, InboundOpaque, Iv, OutboundPlain, RecordDecrypter, RecordEncrypter,
+        Tls13AeadAlgorithm, UnsupportedOperationError, encode_record_header,
     };
 
     use super::*;
@@ -2010,20 +1989,22 @@ mod plaintext {
     struct Encrypter;
 
     impl RecordEncrypter for Encrypter {
-        fn encrypt<'a>(
+        fn encrypt(
             &mut self,
             record: Record<OutboundPlain<'_>>,
             _seq: u64,
-            out: &'a mut [u8],
-        ) -> Result<Record<&'a [u8]>, Error> {
-            let mut payload = EncryptBuffer::new(out, record.payload.len())?;
-            payload.extend_from_chunks(&record.payload);
+            out: &mut Vec<u8>,
+        ) -> Result<(), Error> {
+            out.extend_from_slice(&encode_record_header(
+                ContentType::ApplicationData,
+                record.version,
+                record.payload.len() as u16,
+            ));
+            for ch in record.payload.chunks() {
+                out.extend_from_slice(ch);
+            }
 
-            Ok(Record {
-                typ: ContentType::ApplicationData,
-                version: record.version,
-                payload: payload.into_written(),
-            })
+            Ok(())
         }
 
         fn encrypted_payload_len(&self, payload_len: usize) -> usize {

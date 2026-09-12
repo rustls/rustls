@@ -1,12 +1,13 @@
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 use pki_types::FipsStatus;
 use ring::hkdf::{self, KeyType};
 use ring::{aead, hmac};
 use rustls::crypto::CipherSuite;
 use rustls::crypto::cipher::{
-    AeadKey, EncryptBuffer, InboundOpaque, Iv, Nonce, OutboundPlain, Record, RecordDecrypter,
-    RecordEncrypter, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, InboundOpaque, Iv, Nonce, OutboundPlain, Record, RecordDecrypter, RecordEncrypter,
+    Tls13AeadAlgorithm, UnsupportedOperationError, encode_record_header, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::enums::ContentType;
@@ -208,34 +209,30 @@ struct Tls13RecordDecrypter {
 }
 
 impl RecordEncrypter for Tls13RecordEncrypter {
-    fn encrypt<'a>(
+    fn encrypt(
         &mut self,
         record: Record<OutboundPlain<'_>>,
         seq: u64,
-        out: &'a mut [u8],
-    ) -> Result<Record<&'a [u8]>, Error> {
+        out: &mut Vec<u8>,
+    ) -> Result<(), Error> {
         let total_len = self.encrypted_payload_len(record.payload.len());
-        let mut payload = EncryptBuffer::new(out, total_len)?;
-
         let typ = ContentType::ApplicationData;
+        let header = encode_record_header(typ, record.version, total_len as u16);
+        out.reserve(header.len() + total_len);
+        out.extend_from_slice(&header);
+
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
         let aad = aead::Aad::from(make_tls13_aad(typ, record.version.encode(), total_len));
-        payload.extend_from_chunks(&record.payload);
-        payload.extend_from_slice(&record.typ.to_array());
+        let start = out.len();
+        record.payload.copy_to_vec(out);
+        out.extend_from_slice(&record.typ.to_array());
 
-        match self
+        let tag = self
             .enc_key
-            .seal_in_place_separate_tag(nonce, aad, payload.as_mut())
-        {
-            Ok(tag) => payload.extend_from_slice(tag.as_ref()),
-            Err(_) => return Err(Error::EncryptError),
-        }
-
-        Ok(Record {
-            typ,
-            version: record.version,
-            payload: payload.into_written(),
-        })
+            .seal_in_place_separate_tag(nonce, aad, &mut out[start..])
+            .map_err(|_| Error::EncryptError)?;
+        out.extend_from_slice(tag.as_ref());
+        Ok(())
     }
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
