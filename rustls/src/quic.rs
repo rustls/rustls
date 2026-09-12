@@ -66,70 +66,6 @@ pub struct ClientConnection {
 }
 
 impl ClientConnection {
-    /// Make a new QUIC ClientConnection.
-    ///
-    /// This differs from `ClientConnection::new()` in that it takes an extra `params` argument,
-    /// which contains the TLS-encoded transport parameters to send.
-    pub fn new(
-        config: Arc<ClientConfig>,
-        quic_version: Version,
-        name: ServerName<'static>,
-        params: Vec<u8>,
-    ) -> Result<Self, Error> {
-        let alpn_protocols = config.alpn_protocols.clone();
-        Self::new_with_alpn(config, quic_version, name, params, alpn_protocols)
-    }
-
-    /// Make a new QUIC ClientConnection with custom ALPN protocols.
-    pub fn new_with_alpn(
-        config: Arc<ClientConfig>,
-        version: Version,
-        name: ServerName<'static>,
-        params: Vec<u8>,
-        alpn_protocols: Vec<ApplicationProtocol<'static>>,
-    ) -> Result<Self, Error> {
-        let suites = &config.provider().tls13_cipher_suites;
-        if suites.is_empty() {
-            return Err(ApiMisuse::QuicRequiresTls13Support.into());
-        }
-
-        if !suites
-            .iter()
-            .any(|scs| scs.quic.is_some())
-        {
-            return Err(ApiMisuse::NoQuicCompatibleCipherSuites.into());
-        }
-
-        let exts = ClientExtensionsInput {
-            transport_parameters: Some(match version {
-                Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
-            }),
-
-            ..ClientExtensionsInput::from_alpn(alpn_protocols)
-        };
-
-        let mut quic = Quic {
-            version,
-            ..Quic::default()
-        };
-
-        let mut tls = Vec::new();
-        let inner = ConnectionCommon::for_client(
-            config,
-            name,
-            exts,
-            Some(&mut quic),
-            Protocol::Quic(version),
-            &mut tls,
-        )?;
-
-        // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
-        debug_assert!(tls.is_empty());
-        Ok(Self {
-            inner: QuicCommon::new(inner, quic),
-        })
-    }
-
     /// Return the FIPS validation status of the connection.
     pub fn fips(&self) -> FipsStatus {
         self.inner.fips
@@ -207,6 +143,75 @@ impl fmt::Debug for ClientConnection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("quic::ClientConnection")
             .finish_non_exhaustive()
+    }
+}
+
+/// Builder for [`ClientConnection`] values.
+///
+/// Create one with [`ClientConfig::connect_quic()`].
+pub struct ClientConnectionBuilder {
+    pub(crate) config: Arc<ClientConfig>,
+    pub(crate) version: Version,
+    pub(crate) params: Vec<u8>,
+    pub(crate) name: ServerName<'static>,
+    pub(crate) alpn_protocols: Option<Vec<ApplicationProtocol<'static>>>,
+}
+
+impl ClientConnectionBuilder {
+    /// Specify the ALPN protocols to use for this connection.
+    pub fn with_alpn(mut self, alpn_protocols: Vec<ApplicationProtocol<'static>>) -> Self {
+        self.alpn_protocols = Some(alpn_protocols);
+        self
+    }
+
+    /// Finalize the builder and create the `ClientConnection`.
+    pub fn build(self) -> Result<ClientConnection, Error> {
+        let suites = &self
+            .config
+            .provider()
+            .tls13_cipher_suites;
+        if suites.is_empty() {
+            return Err(ApiMisuse::QuicRequiresTls13Support.into());
+        }
+
+        if !suites
+            .iter()
+            .any(|scs| scs.quic.is_some())
+        {
+            return Err(ApiMisuse::NoQuicCompatibleCipherSuites.into());
+        }
+
+        let exts = ClientExtensionsInput {
+            transport_parameters: Some(match self.version {
+                Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(self.params)),
+            }),
+
+            ..ClientExtensionsInput::from_alpn(
+                self.alpn_protocols
+                    .unwrap_or_else(|| self.config.alpn_protocols.clone()),
+            )
+        };
+
+        let mut quic = Quic {
+            version: self.version,
+            ..Quic::default()
+        };
+
+        let mut tls = Vec::new();
+        let inner = ConnectionCommon::for_client(
+            self.config,
+            self.name,
+            exts,
+            Some(&mut quic),
+            Protocol::Quic(self.version),
+            &mut tls,
+        )?;
+
+        // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
+        debug_assert!(tls.is_empty());
+        Ok(ClientConnection {
+            inner: QuicCommon::new(inner, quic),
+        })
     }
 }
 
