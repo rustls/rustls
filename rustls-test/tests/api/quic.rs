@@ -67,13 +67,14 @@ fn test_quic_handshake() {
     let server_params = &b"server params"[..];
 
     // full handshake
-    let mut client = quic::ClientConnection::new(
-        client_config.clone(),
-        quic::Version::V1,
-        server_name("localhost"),
-        client_params.into(),
-    )
-    .unwrap();
+    let mut client = client_config
+        .connect_quic(
+            server_name("localhost"),
+            quic::Version::V1,
+            client_params.into(),
+        )
+        .build()
+        .unwrap();
     assert_eq!(client.fips(), client_config.fips());
 
     let mut server = quic::ServerConnection::new(
@@ -117,13 +118,14 @@ fn test_quic_handshake() {
     assert_eq!(client.tls13_tickets_received(), 2);
 
     // 0-RTT handshake
-    let mut client = quic::ClientConnection::new(
-        client_config.clone(),
-        quic::Version::V1,
-        server_name("localhost"),
-        client_params.into(),
-    )
-    .unwrap();
+    let mut client = client_config
+        .connect_quic(
+            server_name("localhost"),
+            quic::Version::V1,
+            client_params.into(),
+        )
+        .build()
+        .unwrap();
     assert!(
         client
             .negotiated_cipher_suite()
@@ -153,13 +155,14 @@ fn test_quic_handshake() {
     assert!(client.is_early_data_accepted());
 
     // failed handshake
-    let mut client = quic::ClientConnection::new(
-        client_config,
-        quic::Version::V1,
-        server_name("example.com"),
-        client_params.into(),
-    )
-    .unwrap();
+    let mut client = client_config
+        .connect_quic(
+            server_name("example.com"),
+            quic::Version::V1,
+            client_params.into(),
+        )
+        .build()
+        .unwrap();
 
     let mut server =
         quic::ServerConnection::new(server_config, quic::Version::V1, server_params.into())
@@ -227,13 +230,14 @@ fn test_quic_handshake_with_hello_retry_request() {
         &provider,
     );
 
-    let mut client = quic::ClientConnection::new(
-        Arc::new(client_config),
-        quic::Version::V1,
-        server_name("localhost"),
-        b"client params".to_vec(),
-    )
-    .unwrap();
+    let mut client = Arc::new(client_config)
+        .connect_quic(
+            server_name("localhost"),
+            quic::Version::V1,
+            b"client params".to_vec(),
+        )
+        .build()
+        .unwrap();
     let mut server = quic::ServerConnection::new(
         Arc::new(server_config),
         quic::Version::V1,
@@ -279,13 +283,14 @@ fn test_quic_acceptor() {
         let client_params = &b"client params"[..];
         let server_params = &b"server params"[..];
 
-        let mut client = quic::ClientConnection::new(
-            client_config,
-            quic::Version::V1,
-            server_name("localhost"),
-            client_params.into(),
-        )
-        .unwrap();
+        let mut client = client_config
+            .connect_quic(
+                server_name("localhost"),
+                quic::Version::V1,
+                client_params.into(),
+            )
+            .build()
+            .unwrap();
         assert_eq!(client.fips(), client_fips);
 
         let needs_input = ServerHandshake::start(quic::Version::V1);
@@ -413,13 +418,14 @@ fn test_quic_acceptor_exposes_zero_rtt_keys_before_completion() {
     let client_params: &[u8] = b"client params";
     let server_params: &[u8] = b"server params";
 
-    let mut client = quic::ClientConnection::new(
-        client_config.clone(),
-        quic::Version::V1,
-        server_name("localhost"),
-        client_params.to_vec(),
-    )
-    .unwrap();
+    let mut client = client_config
+        .connect_quic(
+            server_name("localhost"),
+            quic::Version::V1,
+            client_params.into(),
+        )
+        .build()
+        .unwrap();
     let mut server = quic::ServerConnection::new(
         server_config.clone(),
         quic::Version::V1,
@@ -431,13 +437,14 @@ fn test_quic_acceptor_exposes_zero_rtt_keys_before_completion() {
     quic_transfer(&mut client, &mut server).unwrap();
     assert!(client.tls13_tickets_received() > 0);
 
-    let mut client = quic::ClientConnection::new(
-        client_config,
-        quic::Version::V1,
-        server_name("localhost"),
-        client_params.to_vec(),
-    )
-    .unwrap();
+    let mut client = client_config
+        .connect_quic(
+            server_name("localhost"),
+            quic::Version::V1,
+            client_params.into(),
+        )
+        .build()
+        .unwrap();
 
     let mut client_initial = flatten_events(&mut client);
     assert!(client.zero_rtt_keys().is_some());
@@ -464,13 +471,14 @@ fn test_quic_acceptor_external_verifier_rejects_client_cert() {
     for (client_config, server_config, _) in
         MultiTest::new(provider::DEFAULT_TLS13_PROVIDER).require_client_auth()
     {
-        let mut client = quic::ClientConnection::new(
-            client_config,
-            quic::Version::V1,
-            server_name("localhost"),
-            b"client params".into(),
-        )
-        .unwrap();
+        let mut client = client_config
+            .connect_quic(
+                server_name("localhost"),
+                quic::Version::V1,
+                b"client params".into(),
+            )
+            .build()
+            .unwrap();
 
         let needs_input = ServerHandshake::start(quic::Version::V1);
 
@@ -531,13 +539,14 @@ fn test_quic_acceptor_continues_with_server_config_chosen_from_client_hello() {
     let client_params = &b"client params"[..];
     let server_params = &b"server params"[..];
 
-    let mut client = quic::ClientConnection::new(
-        client_config,
-        quic::Version::V1,
-        server_name("localhost"),
-        client_params.into(),
-    )
-    .unwrap();
+    let mut client = client_config
+        .connect_quic(
+            server_name("localhost"),
+            quic::Version::V1,
+            client_params.into(),
+        )
+        .build()
+        .unwrap();
 
     let needs_input = ServerHandshake::start(quic::Version::V1);
     let mut client_initial = flatten_events(&mut client);
@@ -613,13 +622,14 @@ fn test_quic_acceptor_invalid_early_data_size() {
     server_config.max_early_data_size = 5;
     let client_params = &b"client params"[..];
 
-    let mut client = quic::ClientConnection::new(
-        client_config,
-        quic::Version::V1,
-        server_name("localhost"),
-        client_params.into(),
-    )
-    .unwrap();
+    let mut client = client_config
+        .connect_quic(
+            server_name("localhost"),
+            quic::Version::V1,
+            client_params.into(),
+        )
+        .build()
+        .unwrap();
 
     let needs_input = ServerHandshake::start(quic::Version::V1);
     let mut client_initial = flatten_events(&mut client);
@@ -677,13 +687,14 @@ fn test_quic_rejects_missing_alpn() {
         server_config.alpn_protocols = vec![b"foo".into()];
         let server_config = Arc::new(server_config);
 
-        let mut client = quic::ClientConnection::new(
-            client_config,
-            quic::Version::V1,
-            server_name("localhost"),
-            client_params.into(),
-        )
-        .unwrap();
+        let mut client = client_config
+            .connect_quic(
+                server_name("localhost"),
+                quic::Version::V1,
+                client_params.into(),
+            )
+            .build()
+            .unwrap();
         let mut server =
             quic::ServerConnection::new(server_config, quic::Version::V1, server_params.into())
                 .unwrap();
@@ -707,13 +718,14 @@ fn test_quic_no_tls13_error() {
     let client_config = Arc::new(client_config);
 
     assert_eq!(
-        quic::ClientConnection::new(
-            client_config,
-            quic::Version::V1,
-            server_name("localhost"),
-            b"client params".to_vec(),
-        )
-        .err(),
+        client_config
+            .connect_quic(
+                server_name("localhost"),
+                quic::Version::V1,
+                b"client params".into(),
+            )
+            .build()
+            .err(),
         Some(ApiMisuse::QuicRequiresTls13Support.into())
     );
 
@@ -862,15 +874,12 @@ fn test_quic_server_rejects_tls12_hello() {
 
 #[test]
 fn test_quic_client_rejects_tls12_server() {
-    let mut client = quic::ClientConnection::new(
-        Arc::new(make_client_config(
-            KeyType::EcdsaP256,
-            &provider::DEFAULT_PROVIDER,
-        )),
-        quic::Version::V2,
-        "hello.com".try_into().unwrap(),
-        vec![],
-    )
+    let mut client = Arc::new(make_client_config(
+        KeyType::EcdsaP256,
+        &provider::DEFAULT_PROVIDER,
+    ))
+    .connect_quic("hello.com".try_into().unwrap(), quic::Version::V2, vec![])
+    .build()
     .unwrap();
     let _ = client.events();
     assert_eq!(
@@ -1033,13 +1042,14 @@ fn test_quic_resumption_data_0rtt() {
         .unwrap();
     assert_eq!(server1.received_resumption_data(), None);
 
-    let mut client1 = quic::ClientConnection::new(
-        client_config.clone(),
-        quic::Version::V1,
-        server_name("localhost"),
-        client_params.to_vec(),
-    )
-    .unwrap();
+    let mut client1 = client_config
+        .connect_quic(
+            server_name("localhost"),
+            quic::Version::V1,
+            client_params.into(),
+        )
+        .build()
+        .unwrap();
 
     do_quic_handshake(&mut client1, &mut server1);
 
@@ -1053,13 +1063,14 @@ fn test_quic_resumption_data_0rtt() {
         quic::ServerConnection::new(server_config, quic::Version::V1, server_params.to_vec())
             .unwrap();
 
-    let mut client2 = quic::ClientConnection::new(
-        client_config,
-        quic::Version::V1,
-        server_name("localhost"),
-        client_params.to_vec(),
-    )
-    .unwrap();
+    let mut client2 = client_config
+        .connect_quic(
+            server_name("localhost"),
+            quic::Version::V1,
+            client_params.into(),
+        )
+        .build()
+        .unwrap();
 
     // Check negotiated cipher suite for potential 0-RTT
     assert!(
@@ -1285,13 +1296,10 @@ fn test_quic_exporter() {
 
         let mut server =
             quic::ServerConnection::new(server_config.into(), quic::Version::V2, vec![]).unwrap();
-        let mut client = quic::ClientConnection::new(
-            client_config.into(),
-            quic::Version::V2,
-            server_name("localhost"),
-            vec![],
-        )
-        .unwrap();
+        let mut client = Arc::new(client_config)
+            .connect_quic(server_name("localhost"), quic::Version::V2, vec![])
+            .build()
+            .unwrap();
 
         assert_eq!(Some(Error::HandshakeNotComplete), client.exporter().err());
         assert_eq!(Some(Error::HandshakeNotComplete), server.exporter().err());
@@ -1327,13 +1335,14 @@ fn test_fragmented_append() {
     // Create a QUIC client connection.
     let client_config = make_client_config(KeyType::default(), &provider::DEFAULT_TLS13_PROVIDER);
     let client_config = Arc::new(client_config);
-    let mut client = quic::ClientConnection::new(
-        client_config,
-        quic::Version::V1,
-        server_name("localhost"),
-        b"client params"[..].into(),
-    )
-    .unwrap();
+    let mut client = client_config
+        .connect_quic(
+            server_name("localhost"),
+            quic::Version::V1,
+            b"client params"[..].into(),
+        )
+        .build()
+        .unwrap();
 
     // Construct a message that is too large to fit in a single QUIC packet.
     // We want the partial pieces to be large enough to overflow the deframer's
@@ -1399,13 +1408,10 @@ fn client_rejects_server_choosing_non_quic_suite() {
         kx_groups: Cow::Owned(vec![provider::kx_group::SECP256R1]),
         ..provider::DEFAULT_PROVIDER
     };
-    let mut client = quic::ClientConnection::new(
-        Arc::new(make_client_config(KeyType::EcdsaP256, &provider)),
-        quic::Version::V2,
-        "hello.com".try_into().unwrap(),
-        vec![],
-    )
-    .unwrap();
+    let mut client = Arc::new(make_client_config(KeyType::EcdsaP256, &provider))
+        .connect_quic("hello.com".try_into().unwrap(), quic::Version::V2, vec![])
+        .build()
+        .unwrap();
     let _ = client.events();
     assert_eq!(
         client
@@ -1511,13 +1517,10 @@ fn quic_client_ignores_stored_session_with_non_quic_suite() {
     };
     let mut client_config = make_client_config(KeyType::default(), &quic_provider);
     client_config.resumption = Resumption::store(storage);
-    let mut client = quic::ClientConnection::new(
-        Arc::new(client_config),
-        quic::Version::V2,
-        "localhost".try_into().unwrap(),
-        vec![],
-    )
-    .unwrap();
+    let mut client = Arc::new(client_config)
+        .connect_quic("localhost".try_into().unwrap(), quic::Version::V2, vec![])
+        .build()
+        .unwrap();
     let mut server = quic::ServerConnection::new(
         Arc::new(make_server_config(KeyType::EcdsaP256, &quic_provider)),
         quic::Version::V2,

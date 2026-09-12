@@ -23,6 +23,7 @@ use crate::crypto::{Credentials, Identity, SingleCredential};
 use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error};
 use crate::key_log::NoKeyLog;
+use crate::quic::{ClientConnectionBuilder as QuicClientConnectionBuilder, Version as QuicVersion};
 use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
 use crate::time_provider::{DefaultTimeProvider, TimeProvider};
@@ -229,6 +230,26 @@ impl ClientConfig {
             config: self.clone(),
             name: server_name,
             alpn_protocols: None,
+        }
+    }
+
+    /// Create a new QUIC client connection builder for the given server name.
+    ///
+    /// This differs from `ClientConnection::new()` in that it takes an extra `params` argument,
+    /// which contains the TLS-encoded transport parameters to send, and an extra `version`
+    /// argument, specifying the QUIC protocol version.
+    pub fn connect_quic(
+        self: &Arc<Self>,
+        server_name: ServerName<'static>,
+        version: QuicVersion,
+        params: Vec<u8>,
+    ) -> QuicClientConnectionBuilder {
+        QuicClientConnectionBuilder {
+            config: self.clone(),
+            name: server_name,
+            alpn_protocols: None,
+            version,
+            params,
         }
     }
 
