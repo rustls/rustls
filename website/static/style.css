@@ -1,3 +1,6 @@
+:root {
+  --page-width: 60em;
+}
 @font-face {
   font-family: 'GeneralSans-Variable';
   src: url('GeneralSans-Variable.woff2') format('woff2');
@@ -13,10 +16,17 @@ body {
 * {
   color: white;
 }
+a.home {
+  display: block;
+  max-width: var(--page-width);
+  margin-left: auto;
+  margin-right: auto;
+}
 img#baby-logo {
   filter: drop-shadow(0px 0.1em 0.2em rgba(0, 0, 0, 0.2));
   max-height: 10%;
-  max-width: 20%;
+  width: 20%;
+  max-width: 14em;
   display: block;
   margin-left: 1em;
   margin-top: 1em;
@@ -47,6 +57,11 @@ div.box {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
+}
+div.box.reading {
+  max-width: var(--page-width);
+  margin-left: auto;
+  margin-right: auto;
 }
 div.link {
   flex: 1 1 5em;
