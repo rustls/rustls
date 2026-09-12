@@ -114,6 +114,7 @@ pub(crate) struct ExpectServerHello {
 impl ExpectServerHello {
     fn with_version<T: Suite + 'static>(
         mut self,
+        version: ProtocolVersion,
         server_hello: &ServerHelloPayload,
         input: &Input<'_>,
         output: &mut dyn Output<'_>,
@@ -135,10 +136,10 @@ impl ExpectServerHello {
             return Err(PeerMisbehaved::UnsolicitedServerHelloExtension.into());
         }
 
-        output.output(OutputEvent::ProtocolVersion(T::VERSION));
+        output.output(OutputEvent::ProtocolVersion(version));
 
         // Extract ALPN protocol
-        if T::VERSION != ProtocolVersion::TLSv1_3 {
+        if version != ProtocolVersion::TLSv1_3 {
             process_alpn_protocol(
                 output,
                 &self.input.hello.alpn_protocols,
@@ -218,7 +219,12 @@ impl ExpectServerHello {
             ProtocolVersion::TLSv1_3
                 if config.supports_version(ProtocolVersion::TLSv1_3, self.input.protocol) =>
             {
-                self.with_version::<Tls13CipherSuite>(server_hello, &input, output)
+                self.with_version::<Tls13CipherSuite>(
+                    ProtocolVersion::TLSv1_3,
+                    server_hello,
+                    &input,
+                    output,
+                )
             }
             ProtocolVersion::TLSv1_2
                 if config.supports_version(ProtocolVersion::TLSv1_2, self.input.protocol) =>
@@ -233,7 +239,12 @@ impl ExpectServerHello {
                     return Err(PeerMisbehaved::SelectedTls12UsingTls13VersionExtension.into());
                 }
 
-                self.with_version::<Tls12CipherSuite>(server_hello, &input, output)
+                self.with_version::<Tls12CipherSuite>(
+                    ProtocolVersion::TLSv1_2,
+                    server_hello,
+                    &input,
+                    output,
+                )
             }
             _ => {
                 let reason = match server_version {
@@ -323,7 +334,9 @@ impl ExpectServerHelloOrHelloRetryRequest {
         let Some(ProtocolVersion::TLSv1_3) = hrr.supported_versions else {
             return Err(PeerMisbehaved::IllegalHelloRetryRequestWithUnsupportedVersion.into());
         };
-        output.output(OutputEvent::ProtocolVersion(ProtocolVersion::TLSv1_3));
+        // If handling a HelloRetryRequest, we can only negotiate TLS 1.3
+        let negotiated_version = ProtocolVersion::TLSv1_3;
+        output.output(OutputEvent::ProtocolVersion(negotiated_version));
 
         // Or asks us to use a ciphersuite we didn't offer.
         let Some(cs) = config.find_cipher_suite(hrr.cipher_suite) else {
@@ -359,7 +372,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         let transcript = self
             .next
             .transcript_buffer
-            .start_hash(cs.hash_provider());
+            .start_hash(cs.hash_provider(), negotiated_version);
         let mut transcript_buffer = transcript.into_hrr_buffer(&proof);
         transcript_buffer.add_message(&input.message);
 
@@ -373,7 +386,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             Some(group) if group != offered_key_share.share.group() => {
                 let Some(skxg) = config
                     .provider()
-                    .find_kx_group(group, ProtocolVersion::TLSv1_3)
+                    .find_kx_group(group, negotiated_version)
                 else {
                     return Err(
                         PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedNamedGroup.into(),
