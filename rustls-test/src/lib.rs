@@ -2334,6 +2334,25 @@ pub mod encoding {
         handshake_framing(HandshakeType::ServerHello, out)
     }
 
+    /// Copy the `legacy_session_id` of the `ClientHello` at the front of `client_flight`
+    /// into the `ServerHello` at the front of `server_flight`.
+    ///
+    /// TLS1.3 requires a server to echo that value, so a `ServerHello` that was recorded,
+    /// or produced for a different `ClientHello`, needs adjusting before a client accepts it.
+    pub fn echo_session_id(client_flight: &[u8], server_flight: &mut [u8]) {
+        // record header, handshake header, legacy_version, then random
+        const LEN_OFFSET: usize = 5 + 4 + 2 + 32;
+
+        assert_eq!(client_flight[5], u8::from(HandshakeType::ClientHello));
+        assert_eq!(server_flight[5], u8::from(HandshakeType::ServerHello));
+
+        let len = usize::from(client_flight[LEN_OFFSET]);
+        assert_eq!(usize::from(server_flight[LEN_OFFSET]), len);
+
+        let body = LEN_OFFSET + 1..LEN_OFFSET + 1 + len;
+        server_flight[body.clone()].copy_from_slice(&client_flight[body]);
+    }
+
     /// Apply handshake framing to `body`.
     ///
     /// This does not do fragmentation.
