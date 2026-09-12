@@ -206,9 +206,9 @@ impl ClientVerifierBuilder {
 /// ```no_run
 /// # use rustls::RootCertStore;
 /// # use rustls::server::WebPkiClientVerifier;
-/// # let DEFAULT_PROVIDER = rustls::crypto::CryptoProvider::get_default().unwrap();
+/// # let provider: std::sync::Arc<rustls::crypto::CryptoProvider> = unreachable!();
 /// # let roots = RootCertStore::empty();
-/// let client_verifier = WebPkiClientVerifier::builder(roots.into(), &DEFAULT_PROVIDER)
+/// let client_verifier = WebPkiClientVerifier::builder(roots.into(), &provider)
 ///   .build()
 ///   .unwrap();
 /// ```
@@ -218,9 +218,9 @@ impl ClientVerifierBuilder {
 /// ```no_run
 /// # use rustls::RootCertStore;
 /// # use rustls::server::WebPkiClientVerifier;
-/// # let DEFAULT_PROVIDER = rustls::crypto::CryptoProvider::get_default().unwrap();
+/// # let provider: std::sync::Arc<rustls::crypto::CryptoProvider> = unreachable!();
 /// # let roots = RootCertStore::empty();
-/// let client_verifier = WebPkiClientVerifier::builder(roots.into(), &DEFAULT_PROVIDER)
+/// let client_verifier = WebPkiClientVerifier::builder(roots.into(), &provider)
 ///   .allow_unauthenticated()
 ///   .build()
 ///   .unwrap();
@@ -239,10 +239,10 @@ impl ClientVerifierBuilder {
 /// ```no_run
 /// # use rustls::RootCertStore;
 /// # use rustls::server::WebPkiClientVerifier;
-/// # let DEFAULT_PROVIDER = rustls::crypto::CryptoProvider::get_default().unwrap();
+/// # let provider: std::sync::Arc<rustls::crypto::CryptoProvider> = unreachable!();
 /// # let roots = RootCertStore::empty();
 /// # let crls = Vec::new();
-/// let client_verifier = WebPkiClientVerifier::builder(roots.into(), &DEFAULT_PROVIDER)
+/// let client_verifier = WebPkiClientVerifier::builder(roots.into(), &provider)
 ///   .with_crls(crls)
 ///   .build()
 ///   .unwrap();

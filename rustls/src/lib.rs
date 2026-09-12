@@ -157,9 +157,9 @@
 //! and use it for all connections made by that process.
 //!
 //! ```rust,no_run
-//! # let DEFAULT_PROVIDER = rustls::crypto::CryptoProvider::get_default().unwrap().clone();
+//! # let provider: std::sync::Arc<rustls::crypto::CryptoProvider> = unreachable!();
 //! # let root_store: rustls::RootCertStore = panic!();
-//! let config = rustls::ClientConfig::builder(DEFAULT_PROVIDER)
+//! let config = rustls::ClientConfig::builder(provider)
 //!     .with_root_certificates(root_store)
 //!     .with_no_client_auth()
 //!     .unwrap();
@@ -172,13 +172,13 @@
 //! # use rustls;
 //! # use webpki;
 //! # use std::sync::Arc;
-//! # let DEFAULT_PROVIDER = rustls::crypto::CryptoProvider::get_default().unwrap().clone();
+//! # let provider: Arc<rustls::crypto::CryptoProvider> = unreachable!();
 //! # let root_store = rustls::RootCertStore::from_iter(
 //! #  webpki_roots::TLS_SERVER_ROOTS
 //! #      .iter()
 //! #      .cloned(),
 //! # );
-//! # let client_config = Arc::new(rustls::ClientConfig::builder(DEFAULT_PROVIDER)
+//! # let client_config = Arc::new(rustls::ClientConfig::builder(provider)
 //! #     .with_root_certificates(root_store)
 //! #     .with_no_client_auth()
 //! #     .unwrap());

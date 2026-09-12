@@ -70,26 +70,6 @@ pub use crate::suites::CipherSuiteCommon;
 /// This structure provides defaults. Everything in it can be overridden at
 /// runtime by replacing field values as needed.
 ///
-/// # Using the per-process default `CryptoProvider`
-///
-/// If it is hard to pass a specific `CryptoProvider` to all callers that need to establish
-/// TLS connections, you can store a per-process `CryptoProvider` default via
-/// [`CryptoProvider::install_default()`]. When initializing a `ClientConfig` or `ServerConfig` via
-/// [`ClientConfig::builder()`] or [`ServerConfig::builder()`], you can obtain the installed
-/// provider via [`CryptoProvider::get_default()`].
-///
-/// The intention is that an application can specify the [`CryptoProvider`] they wish to use
-/// once, and have that apply to the variety of places where their application does TLS
-/// (which may be wrapped inside other libraries).
-/// They should do this by calling [`CryptoProvider::install_default()`] early on.
-///
-/// To achieve this goal:
-///
-/// - _libraries_ should use [`ClientConfig::builder()`]/[`ServerConfig::builder()`]
-///   or otherwise rely on the [`CryptoProvider::get_default()`] provider.
-/// - _applications_ should call [`CryptoProvider::install_default()`] early
-///   in their `fn main()`.
-///
 /// # Using a specific `CryptoProvider`
 ///
 /// Supply the provider when constructing your [`ClientConfig`] or [`ServerConfig`]:
@@ -210,25 +190,6 @@ pub struct CryptoProvider {
 }
 
 impl CryptoProvider {
-    /// Sets this `CryptoProvider` as the default for this process.
-    ///
-    /// This can be called successfully at most once in any process execution.
-    ///
-    /// After calling this, other callers can obtain a reference to the installed
-    /// default via [`CryptoProvider::get_default()`].
-    pub fn install_default(self) -> Result<(), Arc<Self>> {
-        static_default::install_default(self)
-    }
-}
-
-impl CryptoProvider {
-    /// Returns the default `CryptoProvider` for this process.
-    ///
-    /// This will be `None` if no default has been set yet.
-    pub fn get_default() -> Option<&'static Arc<Self>> {
-        static_default::get_default()
-    }
-
     /// Return the FIPS validation status for this `CryptoProvider`.
     ///
     /// This covers only the cryptographic parts of FIPS approval.  There are
@@ -634,25 +595,6 @@ pub trait TicketProducer: Debug + Send + Sync {
     /// The objective is to limit damage to forward secrecy caused
     /// by tickets, not just limiting their lifetime.
     fn lifetime(&self) -> Duration;
-}
-
-mod static_default {
-    use std::sync::OnceLock;
-
-    use super::CryptoProvider;
-    use crate::sync::Arc;
-
-    pub(crate) fn install_default(
-        default_provider: CryptoProvider,
-    ) -> Result<(), Arc<CryptoProvider>> {
-        PROCESS_DEFAULT_PROVIDER.set(Arc::new(default_provider))
-    }
-
-    pub(crate) fn get_default() -> Option<&'static Arc<CryptoProvider>> {
-        PROCESS_DEFAULT_PROVIDER.get()
-    }
-
-    static PROCESS_DEFAULT_PROVIDER: OnceLock<Arc<CryptoProvider>> = OnceLock::new();
 }
 
 #[cfg(test)]
