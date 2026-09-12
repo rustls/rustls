@@ -1,7 +1,7 @@
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 pub(crate) fn verify_openssl3_available() {
-    static VERIFIED: Lazy<()> = Lazy::new(verify_openssl3_available_internal);
+    static VERIFIED: LazyLock<()> = LazyLock::new(verify_openssl3_available_internal);
     *VERIFIED
 }
 
