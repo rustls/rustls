@@ -17,11 +17,11 @@ use crate::conn::{
 };
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::cipher::OutboundPlain;
+use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::enums::ApplicationProtocol;
-use crate::error::Error;
-use crate::msgs::ClientExtensionsInput;
-use crate::quic::QuicOutput;
+use crate::error::{ApiMisuse, Error};
+use crate::msgs::{ClientExtensionsInput, TransportParameters};
+use crate::quic::{self, ClientConnection as QuicClientConnection, Quic, QuicCommon, QuicOutput};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::tracing::trace;
@@ -196,6 +196,64 @@ impl ClientConnectionBuilder {
                 tls,
             )?,
         })
+    }
+
+    /// Finalize the builder and create a QUIC `ClientConnection`.
+    ///
+    /// This differs from `ClientConnectionBuilder::build()` in that it takes an extra `params`
+    /// argument, which contains the TLS-encoded transport parameters to send, and an extra
+    /// `version` argument, specifying the QUIC protocol version.
+    pub fn build_quic(
+        self,
+        version: quic::Version,
+        params: Vec<u8>,
+    ) -> Result<QuicClientConnection, Error> {
+        let suites = &self
+            .config
+            .provider()
+            .tls13_cipher_suites;
+        if suites.is_empty() {
+            return Err(ApiMisuse::QuicRequiresTls13Support.into());
+        }
+
+        if !suites
+            .iter()
+            .any(|scs| scs.quic.is_some())
+        {
+            return Err(ApiMisuse::NoQuicCompatibleCipherSuites.into());
+        }
+
+        let exts = ClientExtensionsInput {
+            transport_parameters: Some(match version {
+                quic::Version::V1 | quic::Version::V2 => {
+                    TransportParameters::Quic(Payload::new(params))
+                }
+            }),
+
+            ..ClientExtensionsInput::from_alpn(
+                self.alpn_protocols
+                    .unwrap_or_else(|| self.config.alpn_protocols.clone()),
+            )
+        };
+
+        let mut quic = Quic {
+            version,
+            ..Quic::default()
+        };
+
+        let mut tls = Vec::new();
+        let inner = ConnectionCommon::for_client(
+            self.config,
+            self.name,
+            exts,
+            Some(&mut quic),
+            Protocol::Quic(version),
+            &mut tls,
+        )?;
+
+        // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
+        debug_assert!(tls.is_empty());
+        Ok(QuicClientConnection::from(QuicCommon::new(inner, quic)))
     }
 }
 
