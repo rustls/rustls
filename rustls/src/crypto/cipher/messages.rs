@@ -166,7 +166,7 @@ impl Record<OutboundPlain<'_>> {
 /// Encode a TLS record header.
 ///
 /// `typ`, `version` and `len` describe the record's payload.
-pub(crate) fn encode_record_header(
+pub fn encode_record_header(
     typ: ContentType,
     version: EncodableVersion,
     len: u16,
