@@ -11,9 +11,9 @@ use crate::msgs::{put_u16, put_u64};
 use crate::suites::ConnectionTrafficSecrets;
 
 mod messages;
-pub(crate) use messages::encode_record_header;
 pub use messages::{
     EncodableVersion, EncryptBuffer, InboundOpaque, OutboundPlain, Payload, Record, RecordError,
+    encode_record_header,
 };
 
 /// Factory trait for building [`RecordEncrypter`] and [`RecordDecrypter`] for a TLS1.3 cipher suite.
