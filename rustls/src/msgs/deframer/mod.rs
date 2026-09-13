@@ -328,12 +328,12 @@ impl Deframer {
         self.discard = discard;
     }
 
-    /// We are "aligned" if there is no partial fragments of a handshake message.
+    /// We are "aligned" if there are no pending handshake messages, complete or partial.
     pub(crate) fn aligned(&self) -> Option<HandshakeAlignedProof> {
-        self.spans
-            .iter()
-            .all(|span| span.is_complete())
-            .then_some(HandshakeAlignedProof(()))
+        // If we have any handshake spans, either:
+        // - it is a full pending handshake message, or
+        // - it is not, which means it's a partial fragment
+        (!self.is_active()).then_some(HandshakeAlignedProof(()))
     }
 
     /// Do we have any message data, partial or otherwise?
