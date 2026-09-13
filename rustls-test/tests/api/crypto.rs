@@ -3,19 +3,23 @@
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
 use std::borrow::Cow;
+use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
+use rustls::crypto::cipher::{AeadKey, EncodableVersion, InboundOpaque, Iv, Payload, Record};
+use rustls::crypto::tls13::{HkdfExpander, OkmBlock, expand};
 use rustls::crypto::{Credentials, CryptoProvider};
-use rustls::error::ApiMisuse;
+use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
+use rustls::error::{ApiMisuse, PeerMisbehaved};
 use rustls::{
     ClientConfig, ClientConnection, Connection, ConnectionTrafficSecrets, Error, KeyLog,
-    ServerConfig, ServerConnection, SupportedCipherSuite, VecInput,
+    ServerConfig, ServerConnection, SupportedCipherSuite, Tls13CipherSuite, VecInput,
 };
 use rustls_test::{
-    ClientConfigExt, KeyType, MultiTest, ServerConfigExt,
-    aes_128_gcm_with_1024_confidentiality_limit, do_handshake, make_client_config, make_pair,
-    make_pair_for_arc_configs, make_pair_for_configs, make_server_config, provider_with_one_suite,
-    transfer,
+    ClientConfigExt, ErrorFromPeer, KeyType, MultiTest, ServerConfigExt,
+    aes_128_gcm_with_1024_confidentiality_limit, do_handshake, do_handshake_until_error, encoding,
+    make_client_config, make_pair, make_pair_for_arc_configs, make_pair_for_configs,
+    make_server_config, provider_with_one_suite, transfer,
 };
 
 use super::provider;
@@ -888,6 +892,169 @@ fn test_wire_version_passed_to_aad() {
             );
         }
     }
+}
+
+/// A TLS1.3 client must not accept `EncryptedExtensions` carried in the same
+/// plaintext record as `ServerHello`.
+///
+/// The server's first flight is rewritten so the complete `EncryptedExtensions`
+/// message follows `ServerHello` in its unprotected record, and the remaining
+/// handshake messages are re-encrypted under the server handshake traffic secret.
+/// The transcript is unchanged, so only the key change alignment check can
+/// catch this.
+#[test]
+fn client_rejects_encrypted_extensions_in_server_hello_record() {
+    let suite = cipher_suite::TLS13_AES_128_GCM_SHA256;
+    let provider: Arc<CryptoProvider> = provider_with_one_suite(
+        &provider::DEFAULT_PROVIDER,
+        SupportedCipherSuite::Tls13(suite),
+    )
+    .into();
+    let kt = KeyType::default();
+
+    let key_log = Arc::new(KeyLogToVec::new("server"));
+    let mut server_config = ServerConfig::builder(provider.clone()).finish(kt);
+    server_config.key_log = key_log.clone();
+    let client_config = ClientConfig::builder(provider).finish(kt);
+
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+
+    transfer(&mut client_output, &mut server_input);
+    server
+        .read_tls(&mut server_input, &mut server_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+
+    let secret = key_log
+        .take()
+        .into_iter()
+        .find(|item| item.label == "SERVER_HANDSHAKE_TRAFFIC_SECRET")
+        .unwrap()
+        .secret;
+    let flight = move_encrypted_extensions_into_server_hello(&server_output, suite, &secret);
+    client_input
+        .read(&mut Cursor::new(&flight))
+        .unwrap();
+    server_output.clear();
+
+    assert_eq!(
+        do_handshake_until_error(
+            &mut client_input,
+            &mut client_output,
+            &mut client,
+            &mut server_input,
+            &mut server_output,
+            &mut server,
+        )
+        .unwrap_err(),
+        ErrorFromPeer::Client(PeerMisbehaved::KeyEpochWithPendingFragment.into())
+    );
+}
+
+fn move_encrypted_extensions_into_server_hello(
+    flight: &[u8],
+    suite: &Tls13CipherSuite,
+    secret: &[u8],
+) -> Vec<u8> {
+    let expander = suite
+        .hkdf_provider
+        .expander_for_okm(&OkmBlock::new(secret));
+    let traffic_key = || -> (AeadKey, Iv) {
+        (
+            hkdf_expand_label::<AeadKey, 16>(&*expander, b"key"),
+            hkdf_expand_label::<Iv, 12>(&*expander, b"iv"),
+        )
+    };
+
+    let mut records = Vec::new();
+    let mut rest = flight;
+    while !rest.is_empty() {
+        let len = u16::from_be_bytes([rest[3], rest[4]]) as usize;
+        records.push(rest[..5 + len].to_vec());
+        rest = &rest[5 + len..];
+    }
+
+    let (key, iv) = traffic_key();
+    let mut decrypter = suite.aead_alg.decrypter(key, iv);
+    let mut handshake = Vec::new();
+    for (seq, record) in records
+        .iter_mut()
+        .filter(|record| record[0] == u8::from(ContentType::ApplicationData))
+        .enumerate()
+    {
+        let decrypted = decrypter
+            .decrypt(
+                Record {
+                    typ: ContentType::ApplicationData,
+                    version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+                    payload: InboundOpaque(&mut record[5..]),
+                },
+                seq as u64,
+            )
+            .unwrap();
+        assert_eq!(decrypted.typ, ContentType::Handshake);
+        handshake.extend_from_slice(decrypted.payload);
+    }
+
+    assert_eq!(handshake[0], HandshakeType::EncryptedExtensions.0);
+    let ee_len = 4 + u32::from_be_bytes([0, handshake[1], handshake[2], handshake[3]]) as usize;
+    let (encrypted_extensions, remainder) = handshake.split_at(ee_len);
+
+    let mut output = Vec::new();
+    for record in records
+        .iter()
+        .filter(|record| record[0] != u8::from(ContentType::ApplicationData))
+    {
+        let mut body = record[5..].to_vec();
+        if record[0] == u8::from(ContentType::Handshake) {
+            assert_eq!(body[0], HandshakeType::ServerHello.0);
+            body.extend_from_slice(encrypted_extensions);
+        }
+        output.extend(encoding::record_framing(
+            ContentType::from(record[0]),
+            ProtocolVersion::TLSv1_2,
+            body,
+        ));
+    }
+
+    let (key, iv) = traffic_key();
+    let mut encrypter = suite.aead_alg.encrypter(key, iv);
+    let remainder = Record {
+        typ: ContentType::Handshake,
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        payload: Payload::Borrowed(remainder),
+    };
+    let mut encrypted = vec![0u8; encrypter.encrypted_payload_len(remainder.payload.bytes().len())];
+    let encrypted = encrypter
+        .encrypt(remainder.borrow_outbound(), 0, &mut encrypted)
+        .unwrap();
+    output.extend(encoding::record_framing(
+        encrypted.typ,
+        ProtocolVersion::TLSv1_2,
+        encrypted.payload.to_vec(),
+    ));
+    output
+}
+
+fn hkdf_expand_label<T: From<[u8; N]>, const N: usize>(
+    expander: &dyn HkdfExpander,
+    label: &[u8],
+) -> T {
+    expand(
+        expander,
+        &[
+            &(N as u16).to_be_bytes(),
+            &[(b"tls13 ".len() + label.len()) as u8],
+            b"tls13 ",
+            label,
+            &[0],
+        ],
+    )
 }
 
 const CONFIDENTIALITY_LIMIT: u64 = 1024;

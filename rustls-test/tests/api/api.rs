@@ -2081,6 +2081,103 @@ fn excess_client_hello_acceptor() {
 }
 
 #[test]
+fn client_hello_acceptor_rejects_record_containing_subsequent_messages() {
+    let mut hello = encoding::basic_client_hello(vec![]);
+    hello.extend(encoding::handshake_framing(
+        HandshakeType::EncryptedExtensions,
+        vec![0, 0],
+    ));
+    hello.extend(encoding::handshake_framing(
+        HandshakeType::Finished,
+        vec![0; 32],
+    ));
+    let mut hello =
+        encoding::record_framing(ContentType::Handshake, ProtocolVersion::TLSv1_2, hello);
+
+    let receive = ServerHandshake::start();
+    let mut output = vec![];
+    let error = receive
+        .process(&mut SliceInput::new(&mut hello), &mut output)
+        .unwrap_err();
+    assert_eq!(error, PeerMisbehaved::KeyEpochWithPendingFragment.into());
+    assert_eq!(
+        output,
+        encoding::alert(AlertDescription::UnexpectedMessage, &[])
+    );
+}
+
+#[test]
+fn client_connection_rejects_record_containing_subsequent_messages() {
+    let mut server_flight = encoding::server_hello(
+        ProtocolVersion::TLSv1_2,
+        &[b'a'; 32],
+        &[0],
+        CipherSuite::TLS13_AES_128_GCM_SHA256,
+        vec![
+            encoding::Extension::new_versions_server_tls13(),
+            encoding::Extension::new_dummy_key_share_server(),
+        ],
+    );
+    server_flight.extend(encoding::handshake_framing(
+        HandshakeType::EncryptedExtensions,
+        vec![0, 0],
+    ));
+    server_flight.extend(encoding::handshake_framing(
+        HandshakeType::Finished,
+        vec![0; 32],
+    ));
+    let mut server_flight = encoding::record_framing(
+        ContentType::Handshake,
+        ProtocolVersion::TLSv1_2,
+        server_flight,
+    );
+
+    let (mut client, _) = make_pair(
+        KeyType::default(),
+        &CryptoProvider {
+            kx_groups: Cow::Owned(vec![provider::kx_group::SECP256R1]),
+            ..provider::DEFAULT_PROVIDER
+        },
+        &mut Vec::new(),
+    );
+    assert_eq!(
+        client
+            .read_tls(&mut SliceInput::new(&mut server_flight), &mut Vec::new())
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        PeerMisbehaved::KeyEpochWithPendingFragment.into()
+    );
+}
+
+#[test]
+fn server_connection_rejects_record_containing_subsequent_messages() {
+    let mut client_flight = encoding::basic_client_hello(vec![]);
+    client_flight.extend(encoding::handshake_framing(
+        HandshakeType::Finished,
+        vec![0; 32],
+    ));
+
+    let mut client_flight = encoding::record_framing(
+        ContentType::Handshake,
+        ProtocolVersion::TLSv1_2,
+        client_flight,
+    );
+
+    let (_, mut server) = make_pair(
+        KeyType::default(),
+        &provider::DEFAULT_PROVIDER,
+        &mut Vec::new(),
+    );
+    assert_eq!(
+        server
+            .read_tls(&mut SliceInput::new(&mut client_flight), &mut Vec::new())
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        PeerMisbehaved::KeyEpochWithPendingFragment.into()
+    );
+}
+
+#[test]
 fn server_invalid_sni_policy() {
     const SERVER_NAME_GOOD: &str = "LXXXxxxXXXR";
     const SERVER_NAME_BAD: &str = "[XXXxxxXXX]";
