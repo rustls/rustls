@@ -962,13 +962,16 @@ impl<Data> ConnectionCore<Data> {
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Option<InboundPlainMessage<'b>> {
-        self.hs_deframer
+        let message = self
+            .hs_deframer
             .iter(buffer)
             .next()
             .map(|(message, discard)| {
                 buffer_progress.add_discard(discard);
                 message
-            })
+            });
+        self.common_state.aligned_handshake = self.hs_deframer.is_aligned();
+        message
     }
 
     fn process_more_input<'b>(

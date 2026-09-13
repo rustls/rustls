@@ -91,12 +91,12 @@ impl HandshakeDeframer {
         !self.spans.is_empty()
     }
 
-    /// We are "aligned" if there is no partial fragment of a handshake
-    /// message.
+    /// We are "aligned" if there are no pending handshake messages, complete or partial.
     pub(crate) fn is_aligned(&self) -> bool {
-        self.spans
-            .iter()
-            .all(|span| span.is_complete())
+        // If we have any handshake spans, either:
+        // - it is a full pending handshake message, or
+        // - it is not, which means it's a partial fragment
+        !self.is_active()
     }
 
     /// Iterate over the complete messages.
