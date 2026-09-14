@@ -52,6 +52,7 @@ mod client_hello {
         SessionId,
     };
     use crate::server::common::ActiveCertifiedKey;
+    use crate::server::hs::PreviousClientHello;
     use crate::sign;
     use crate::tls13::key_schedule::{
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
@@ -70,8 +71,7 @@ mod client_hello {
         pub(in crate::server) transcript: HandshakeHash,
         pub(in crate::server) suite: &'static Tls13CipherSuite,
         pub(in crate::server) randoms: ConnectionRandoms,
-        pub(in crate::server) done_retry: bool,
-        pub(in crate::server) offered_psk_before_retry: bool,
+        pub(in crate::server) previous_hello: Option<PreviousClientHello>,
         pub(in crate::server) send_tickets: usize,
         pub(in crate::server) extra_exts: ServerExtensionsInput<'static>,
     }
@@ -193,27 +193,29 @@ mod client_hello {
                 .early_data_request
                 .is_some();
 
-            // EarlyData extension is illegal in second ClientHello
-            if self.done_retry && early_data_requested {
-                return Err({
-                    cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::EarlyDataAttemptedInSecondClientHello,
-                    )
-                });
-            }
+            if let Some(prior) = &self.previous_hello {
+                // EarlyData extension is illegal in second ClientHello
+                if early_data_requested {
+                    return Err({
+                        cx.common.send_fatal_alert(
+                            AlertDescription::IllegalParameter,
+                            PeerMisbehaved::EarlyDataAttemptedInSecondClientHello,
+                        )
+                    });
+                }
 
-            // RFC 9846 section 4.2.2 allows the second ClientHello to update a PreSharedKey
-            // offer (binders, incompatible PSKs), but not to withdraw it altogether
-            if self.offered_psk_before_retry
-                && client_hello
-                    .preshared_key_offer
-                    .is_none()
-            {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::MissingExtension,
-                    PeerMisbehaved::MissingPskExtensionInSecondClientHello,
-                ));
+                // RFC 9846 section 4.2.2 allows the second ClientHello to update a PreSharedKey
+                // offer (binders, incompatible PSKs), but not to withdraw it altogether
+                if prior.offered_psk
+                    && client_hello
+                        .preshared_key_offer
+                        .is_none()
+                {
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::MissingExtension,
+                        PeerMisbehaved::MissingPskExtensionInSecondClientHello,
+                    ));
+                }
             }
 
             // See if there is a KeyShare for the selected kx group.
@@ -226,7 +228,7 @@ mod client_hello {
                 // for the mutually_preferred_group.
                 self.transcript.add_message(chm);
 
-                if self.done_retry {
+                if self.previous_hello.is_some() {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
                         PeerMisbehaved::RefusedToFollowHelloRetryRequest,
@@ -251,11 +253,12 @@ mod client_hello {
                     session_id: SessionId::empty(),
                     #[cfg(feature = "tls12")]
                     using_ems: false,
-                    done_retry: true,
-                    offered_psk_before_retry: client_hello
-                        .preshared_key_offer
-                        .is_some(),
-                    suite_before_retry: Some(self.suite.common.suite),
+                    previous_hello: Some(PreviousClientHello {
+                        offered_psk: client_hello
+                            .preshared_key_offer
+                            .is_some(),
+                        suite: self.suite.common.suite,
+                    }),
                     send_tickets: self.send_tickets,
                     extra_exts: self.extra_exts,
                 });
@@ -387,7 +390,7 @@ mod client_hello {
                     .map(|x| &x.master_secret.0[..]),
                 &self.config,
             )?;
-            if !self.done_retry {
+            if !self.previous_hello.is_some() {
                 emit_fake_ccs(cx.common);
             }
 

@@ -313,9 +313,7 @@ pub(super) struct ExpectClientHello {
     pub(super) session_id: SessionId,
     #[cfg(feature = "tls12")]
     pub(super) using_ems: bool,
-    pub(super) done_retry: bool,
-    pub(super) offered_psk_before_retry: bool,
-    pub(super) suite_before_retry: Option<CipherSuite>,
+    pub(super) previous_hello: Option<PreviousClientHello>,
     pub(super) send_tickets: usize,
 }
 
@@ -338,9 +336,7 @@ impl ExpectClientHello {
             session_id: SessionId::empty(),
             #[cfg(feature = "tls12")]
             using_ems: false,
-            done_retry: false,
-            offered_psk_before_retry: false,
-            suite_before_retry: None,
+            previous_hello: None,
             send_tickets: 0,
         }
     }
@@ -359,7 +355,7 @@ impl ExpectClientHello {
         let tls12_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_2, cx.common.protocol)
-            && !self.done_retry;
+            && !self.previous_hello.is_some();
 
         // Are we doing TLS1.3?
         let version = if let Some(versions) = &client_hello.supported_versions {
@@ -477,7 +473,11 @@ impl ExpectClientHello {
 
         // RFC 9846 section 4.2.4: the server must negotiate the same cipher suite it
         // named in its HelloRetryRequest
-        if let Some(before_retry) = self.suite_before_retry {
+        if let Some(PreviousClientHello {
+            suite: before_retry,
+            ..
+        }) = self.previous_hello
+        {
             if before_retry != suite.suite() {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
@@ -518,8 +518,7 @@ impl ExpectClientHello {
                 transcript,
                 suite,
                 randoms,
-                done_retry: self.done_retry,
-                offered_psk_before_retry: self.offered_psk_before_retry,
+                previous_hello: self.previous_hello,
                 send_tickets: self.send_tickets,
                 extra_exts: self.extra_exts,
             }
@@ -676,6 +675,11 @@ impl ExpectClientHello {
     }
 }
 
+pub(super) struct PreviousClientHello {
+    pub(super) offered_psk: bool,
+    pub(super) suite: CipherSuite,
+}
+
 impl State<ServerConnectionData> for ExpectClientHello {
     fn handle<'m>(
         self: Box<Self>,
@@ -685,7 +689,8 @@ impl State<ServerConnectionData> for ExpectClientHello {
     where
         Self: 'm,
     {
-        let (client_hello, sig_schemes) = process_client_hello(&m, self.done_retry, cx)?;
+        let (client_hello, sig_schemes) =
+            process_client_hello(&m, self.previous_hello.is_some(), cx)?;
         self.with_certified_key(sig_schemes, client_hello, &m, cx)
     }
 
