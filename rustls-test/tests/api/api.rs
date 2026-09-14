@@ -17,7 +17,9 @@ use rustls::crypto::{
     SignatureScheme, Signer, SigningKey,
 };
 use rustls::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
-use rustls::error::{AlertDescription, ApiMisuse, CertificateError, Error, PeerMisbehaved};
+use rustls::error::{
+    AlertDescription, ApiMisuse, CertificateError, Error, PeerIncompatible, PeerMisbehaved,
+};
 use rustls::pki_types::EchConfigListBytes;
 use rustls::server::{
     ClientHello, ParsedCertificate, PreferServerOrder, ServerCredentialResolver, ServerHandshake,
@@ -388,7 +390,7 @@ fn server_does_not_negotiate_tls12_after_hrr() {
             .read_tls(&mut SliceInput::new(&mut input), &mut server_output)
             .handle_all(&mut Vec::new())
             .unwrap_err(),
-        PeerMisbehaved::CipherSuiteDifferedOnRetry.into(),
+        PeerIncompatible::SupportedVersionsExtensionRequired.into()
     );
 }
 
