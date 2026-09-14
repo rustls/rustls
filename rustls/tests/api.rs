@@ -398,7 +398,6 @@ fn versions() {
     );
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn server_does_not_negotiate_tls12_after_hrr() {
     let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
@@ -451,7 +450,7 @@ fn server_does_not_negotiate_tls12_after_hrr() {
         server
             .process_new_packets()
             .unwrap_err(),
-        PeerMisbehaved::CipherSuiteDifferedOnRetry.into(),
+        PeerIncompatible::SupportedVersionsExtensionRequired.into()
     );
 }
 
