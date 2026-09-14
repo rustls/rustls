@@ -341,6 +341,63 @@ fn versions() {
 }
 
 #[test]
+fn server_does_not_negotiate_tls12_after_hrr() {
+    let (_, mut server) = make_pair(
+        KeyType::Rsa2048,
+        &provider::DEFAULT_PROVIDER,
+        &mut Vec::new(),
+    );
+
+    // first client hello requires a HRR
+    let mut server_output = Vec::new();
+    let mut input = encoding::record_framing(
+        ContentType::Handshake,
+        ProtocolVersion::TLSv1_2,
+        encoding::client_hello_with_extensions(vec![
+            encoding::Extension::new_sig_algs(),
+            encoding::Extension::new_kx_groups(),
+            encoding::Extension::new_versions(),
+            encoding::Extension {
+                typ: encoding::Extension::KEY_SHARE,
+                body: vec![0, 0],
+            },
+        ]),
+    );
+    server
+        .read_tls(&mut SliceInput::new(&mut input), &mut server_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+
+    assert!(
+        &server_output[11..43] == HRR_RANDOM_VALUE,
+        "server didn't reply with a HRR"
+    );
+    server_output.clear();
+
+    // second client hello only offers TLS1.2
+    let mut input = encoding::record_framing(
+        ContentType::Handshake,
+        ProtocolVersion::TLSv1_2,
+        encoding::client_hello_with_extensions(vec![
+            encoding::Extension::new_sig_algs(),
+            encoding::Extension::new_kx_groups(),
+        ]),
+    );
+    assert_eq!(
+        server
+            .read_tls(&mut SliceInput::new(&mut input), &mut server_output)
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        PeerMisbehaved::CipherSuiteDifferedOnRetry.into(),
+    );
+}
+
+const HRR_RANDOM_VALUE: &[u8] = &[
+    0xcf, 0x21, 0xad, 0x74, 0xe5, 0x9a, 0x61, 0x11, 0xbe, 0x1d, 0x8c, 0x02, 0x1e, 0x65, 0xb8, 0x91,
+    0xc2, 0xa2, 0x11, 0x16, 0x7a, 0xbb, 0x8c, 0x5e, 0x07, 0x9e, 0x09, 0xe2, 0xc8, 0xa8, 0x33, 0x9c,
+];
+
+#[test]
 fn config_builder_for_client_rejects_empty_kx_groups() {
     assert_eq!(
         ClientConfig::builder(
