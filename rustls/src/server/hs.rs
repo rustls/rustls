@@ -485,9 +485,7 @@ pub(crate) struct ExpectClientHello {
     pub(super) sni: Option<DnsName<'static>>,
     pub(super) resumption_data: Vec<u8>,
     pub(super) using_ems: bool,
-    pub(super) done_retry: bool,
-    pub(super) offered_psk_before_retry: bool,
-    pub(super) suite_before_retry: Option<CipherSuite>,
+    pub(super) previous_hello: Option<PreviousClientHello>,
     pub(super) send_tickets: usize,
 }
 
@@ -513,9 +511,7 @@ impl ExpectClientHello {
             sni: None,
             resumption_data,
             using_ems: false,
-            done_retry: false,
-            offered_psk_before_retry: false,
-            suite_before_retry: None,
+            previous_hello: None,
             send_tickets: 0,
         }
     }
@@ -532,7 +528,7 @@ impl ExpectClientHello {
         let tls12_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_2, self.protocol)
-            && !self.done_retry;
+            && !self.previous_hello.is_some();
 
         // Are we doing TLS1.3?
         if let Some(versions) = &input.client_hello.supported_versions {
@@ -575,7 +571,7 @@ impl ExpectClientHello {
             .accept(input.client_hello.server_name.as_ref())?;
         output.emit(Event::ReceivedServerName(sni.clone()));
 
-        if self.done_retry {
+        if self.previous_hello.is_some() {
             let ch_sni = input
                 .client_hello
                 .server_name
@@ -638,7 +634,11 @@ impl ExpectClientHello {
 
         // RFC 9846 section 4.2.4: the server must negotiate the same cipher suite it
         // named in its HelloRetryRequest
-        if let Some(before_retry) = self.suite_before_retry {
+        if let Some(PreviousClientHello {
+            suite: before_retry,
+            ..
+        }) = self.previous_hello
+        {
             if before_retry != suite.suite() {
                 return Err(PeerMisbehaved::CipherSuiteDifferedOnRetry.into());
             }
@@ -798,6 +798,11 @@ impl From<Box<ExpectClientHello>> for ServerState {
     fn from(value: Box<ExpectClientHello>) -> Self {
         Self::ClientHello(value)
     }
+}
+
+pub(crate) struct PreviousClientHello {
+    pub(super) offered_psk: bool,
+    pub(super) suite: CipherSuite,
 }
 
 pub(crate) struct VerifyClientIdentity {

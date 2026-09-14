@@ -92,7 +92,9 @@ mod client_hello {
     use crate::quic;
     use crate::sealed::Sealed;
     use crate::server::Tls13ServerSessionValue;
-    use crate::server::hs::{ClientHelloInput, ExpectClientHello, ServerHandler, Tls13Extensions};
+    use crate::server::hs::{
+        ClientHelloInput, ExpectClientHello, PreviousClientHello, ServerHandler, Tls13Extensions,
+    };
     use crate::tls13::Tls13ProtocolSuite;
     use crate::tls13::key_schedule::{
         KeyScheduleEarlyServer, KeyScheduleHandshake, KeySchedulePreHandshake,
@@ -166,20 +168,22 @@ mod client_hello {
                 .early_data_request
                 .is_some();
 
-            // EarlyData extension is illegal in second ClientHello
-            if st.done_retry && early_data_requested {
-                return Err(PeerMisbehaved::EarlyDataAttemptedInSecondClientHello.into());
-            }
+            if let Some(prior) = &st.previous_hello {
+                // EarlyData extension is illegal in second ClientHello
+                if early_data_requested {
+                    return Err(PeerMisbehaved::EarlyDataAttemptedInSecondClientHello.into());
+                }
 
-            // RFC 9846 section 4.2.2 allows the second ClientHello to update a PreSharedKey
-            // offer (binders, incompatible PSKs), but not to withdraw it altogether
-            if st.offered_psk_before_retry
-                && input
-                    .client_hello
-                    .preshared_key_offer
-                    .is_none()
-            {
-                return Err(PeerMisbehaved::MissingPskExtensionInSecondClientHello.into());
+                // RFC 9846 section 4.2.2 allows the second ClientHello to update a PreSharedKey
+                // offer (binders, incompatible PSKs), but not to withdraw it altogether
+                if prior.offered_psk
+                    && input
+                        .client_hello
+                        .preshared_key_offer
+                        .is_none()
+                {
+                    return Err(PeerMisbehaved::MissingPskExtensionInSecondClientHello.into());
+                }
             }
 
             // See if there is a KeyShare for the selected kx group.
@@ -192,7 +196,7 @@ mod client_hello {
                 // for the mutually_preferred_group.
                 transcript.add_message(input.message);
 
-                if st.done_retry {
+                if st.previous_hello.is_some() {
                     return Err(PeerMisbehaved::RefusedToFollowHelloRetryRequest.into());
                 }
 
@@ -213,12 +217,13 @@ mod client_hello {
                     transcript: HandshakeHashOrBuffer::Hash(transcript),
                     session_id: SessionId::empty(),
                     using_ems: false,
-                    done_retry: true,
-                    offered_psk_before_retry: input
-                        .client_hello
-                        .preshared_key_offer
-                        .is_some(),
-                    suite_before_retry: Some(suite.common.suite),
+                    previous_hello: Some(PreviousClientHello {
+                        offered_psk: input
+                            .client_hello
+                            .preshared_key_offer
+                            .is_some(),
+                        suite: suite.common.suite,
+                    }),
                     ..st
                 });
                 return if early_data_requested {
@@ -288,12 +293,12 @@ mod client_hello {
                 &input.proof,
                 &st.config,
             )?;
-            if !st.done_retry && !st.protocol.is_quic() {
+            if !st.previous_hello.is_some() && !st.protocol.is_quic() {
                 emit_fake_ccs(output);
             }
 
             output.output(OutputEvent::HandshakeKind(
-                match (full_handshake, st.done_retry) {
+                match (full_handshake, st.previous_hello.is_some()) {
                     (true, true) => HandshakeKind::FullWithHelloRetryRequest,
                     (true, false) => HandshakeKind::Full,
                     (false, true) => HandshakeKind::ResumedWithHelloRetryRequest,
