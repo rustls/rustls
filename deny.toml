@@ -11,8 +11,3 @@ allow = [
   "Zlib",
 ]
 private = { ignore = true }
-
-[advisories]
-ignore = [
-  "RUSTSEC-2024-0436", # Unmaintained paste via macro_rules_attributes; dev-dependency only
-]
