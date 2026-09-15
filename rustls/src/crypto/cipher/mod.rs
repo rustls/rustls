@@ -383,11 +383,10 @@ impl AeadKey {
     }
 
     pub(crate) fn with_length(self, len: usize) -> Self {
-        assert!(len <= self.used);
-        Self {
-            buf: self.buf,
-            used: len,
-        }
+        let Self { mut buf, used } = self;
+        assert!(len <= used);
+        buf[len..used].zeroize();
+        Self { buf, used: len }
     }
 
     /// Largest possible AEAD key in the ciphersuites we support.
@@ -397,7 +396,7 @@ impl AeadKey {
 impl Drop for AeadKey {
     #[inline(never)]
     fn drop(&mut self) {
-        self.buf.zeroize();
+        self.buf[..self.used].zeroize();
     }
 }
 
