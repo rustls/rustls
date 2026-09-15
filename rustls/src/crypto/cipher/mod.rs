@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::string::ToString;
+use alloc::vec::Vec;
 use core::{array, fmt};
 
 use pki_types::FipsStatus;
@@ -11,9 +12,9 @@ use crate::msgs::{put_u16, put_u64};
 use crate::suites::ConnectionTrafficSecrets;
 
 mod messages;
-pub(crate) use messages::encode_record_header;
 pub use messages::{
-    EncodableVersion, EncryptBuffer, InboundOpaque, OutboundPlain, Payload, Record, RecordError,
+    EncodableVersion, InboundOpaque, OutboundPlain, Payload, Record, RecordError,
+    encode_record_header,
 };
 
 mod record_layer;
@@ -158,25 +159,19 @@ pub trait RecordDecrypter: Send + Sync {
 
 /// Objects with this trait can encrypt TLS records.
 pub trait RecordEncrypter: Send + Sync {
-    /// Encrypt the given TLS record into `out`, using the sequence number
-    /// `seq` which can be used to derive a unique [`Nonce`].
+    /// Encrypt the given TLS record into `out`.
     ///
-    /// The encrypted payload including all framing the ciphersuite requires, such
-    /// as any explicit nonce, padding and/or authentication tag, is written to the
-    /// front of `out`. `out` must be at least [`Self::encrypted_payload_len()`] bytes
-    /// long. See [`EncryptBuffer`] for a convenient wrapper.
+    /// `seq` is the sequence number of this record, which can be used to derive a unique [`Nonce`].
     ///
-    /// The return value describes the resulting record: its payload borrows the
-    /// written prefix of `out`, and its `typ` and `version` are what the record
-    /// header should carry on the wire. Encoding the record header is the caller's
-    /// responsibility and implementations of the `RecordEncrypter` trait must not
-    /// write it to `out` themselves.
-    fn encrypt<'a>(
+    /// A full wire-format TLS record, including all framing the ciphersuite requires,
+    /// such as any explicit nonce, padding and/or authentication tag, must be appended to `out`.
+    /// Any existing data on the front of `out` must be left alone.
+    fn encrypt(
         &mut self,
         record: Record<OutboundPlain<'_>>,
         seq: u64,
-        out: &'a mut [u8],
-    ) -> Result<Record<&'a [u8]>, Error>;
+        out: &mut Vec<u8>,
+    ) -> Result<(), Error>;
 
     /// Return the length of the ciphertext that results from encrypting plaintext of length `payload_len`.
     ///
