@@ -3,11 +3,14 @@ use alloc::vec::Vec;
 use core::mem;
 
 use crate::crypto::{HashAlgorithm, hash};
+use crate::enums::ProtocolVersion;
 use crate::msgs::{Codec, HandshakeAlignedProof, HandshakeMessagePayload, Message, MessagePayload};
 
 /// Early stage buffering of handshake payloads.
 ///
-/// Before we know the hash algorithm to use to verify the handshake, we just buffer the messages.
+/// Before we know the hash algorithm to use to verify the handshake or the negotiated protocol
+/// version, we just buffer the messages.
+///
 /// During the handshake, we may restart the transcript due to a HelloRetryRequest, reverting
 /// from the `HandshakeHash` to a `HandshakeHashBuffer` again.
 #[derive(Clone)]
@@ -48,16 +51,20 @@ impl HandshakeHashBuffer {
     pub(crate) fn hash_given(
         &self,
         provider: &'static dyn hash::Hash,
+        version: ProtocolVersion,
         extra: &[u8],
     ) -> hash::Output {
-        let mut ctx = provider.start();
-        ctx.update(&self.buffer);
-        ctx.update(extra);
-        ctx.finish()
+        self.clone()
+            .start_hash(provider, version)
+            .hash_given(extra)
     }
 
     /// We now know what hash function the verify_data will use.
-    pub(crate) fn start_hash(self, provider: &'static dyn hash::Hash) -> HandshakeHash {
+    pub(crate) fn start_hash(
+        self,
+        provider: &'static dyn hash::Hash,
+        version: ProtocolVersion,
+    ) -> HandshakeHash {
         let mut ctx = provider.start();
         ctx.update(&self.buffer);
         HandshakeHash {
@@ -67,6 +74,7 @@ impl HandshakeHashBuffer {
                 true => Some(self.buffer),
                 false => None,
             },
+            version,
         }
     }
 }
@@ -84,6 +92,9 @@ pub(crate) struct HandshakeHash {
 
     /// buffer for client-auth.
     client_auth: Option<Vec<u8>>,
+
+    /// The protocol version negotiated for the handshake.
+    version: ProtocolVersion,
 }
 
 impl HandshakeHash {
@@ -166,6 +177,11 @@ impl HandshakeHash {
     pub(crate) fn algorithm(&self) -> HashAlgorithm {
         self.provider.algorithm()
     }
+
+    /// The protocol version in use.
+    pub(crate) fn version(&self) -> ProtocolVersion {
+        self.version
+    }
 }
 
 impl Clone for HandshakeHash {
@@ -174,6 +190,7 @@ impl Clone for HandshakeHash {
             provider: self.provider,
             ctx: self.ctx.fork(),
             client_auth: self.client_auth.clone(),
+            version: self.version,
         }
     }
 }
@@ -191,7 +208,7 @@ mod tests {
         let mut hhb = HandshakeHashBuffer::new();
         hhb.add_raw(b"hello");
         assert_eq!(hhb.buffer.len(), 5);
-        let mut hh = hhb.start_hash(SHA256);
+        let mut hh = hhb.start_hash(SHA256, ProtocolVersion::TLSv1_2);
         assert!(hh.client_auth.is_none());
         hh.add_raw(b"world");
         let h = hh.current_hash();
@@ -229,7 +246,7 @@ mod tests {
         hhb.add_message(&end_of_early_data_flight);
 
         assert_eq!(
-            hhb.start_hash(SHA256)
+            hhb.start_hash(SHA256, ProtocolVersion::TLSv1_2)
                 .current_hash()
                 .as_ref(),
             SHA256
@@ -238,7 +255,7 @@ mod tests {
         );
 
         // non-buffered mode
-        let mut hh = HandshakeHashBuffer::new().start_hash(SHA256);
+        let mut hh = HandshakeHashBuffer::new().start_hash(SHA256, ProtocolVersion::TLSv1_2);
         hh.add_message(&server_hello_done_message);
         hh.add_message(&app_data_ignored);
         hh.add_message(&end_of_early_data_flight);
@@ -257,7 +274,7 @@ mod tests {
         hhb.add_raw(b"hello");
         assert_eq!(hhb.buffer.len(), 5);
 
-        let mut hh = hhb.start_hash(SHA256);
+        let mut hh = hhb.start_hash(SHA256, ProtocolVersion::TLSv1_2);
         assert_eq!(
             hh.client_auth
                 .as_ref()
@@ -290,7 +307,7 @@ mod tests {
         hhb.add_raw(b"hello");
         assert_eq!(hhb.buffer.len(), 5);
 
-        let mut hh = hhb.start_hash(SHA256);
+        let mut hh = hhb.start_hash(SHA256, ProtocolVersion::TLSv1_2);
         assert_eq!(
             hh.client_auth
                 .as_ref()
@@ -328,7 +345,7 @@ mod tests {
         assert_eq!(hhb_prime.buffer.len(), 10);
         assert_ne!(hhb.buffer, hhb_prime.buffer);
 
-        let hh = hhb.start_hash(SHA256);
+        let hh = hhb.start_hash(SHA256, ProtocolVersion::TLSv1_2);
         let hh_hash = hh.current_hash();
         let hh_hash = hh_hash.as_ref();
 

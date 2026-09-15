@@ -4,7 +4,6 @@ use pki_types::FipsStatus;
 
 use crate::common_state::Protocol;
 use crate::crypto::{self, SignatureScheme, hash};
-use crate::enums::ProtocolVersion;
 use crate::quic;
 use crate::suites::{CipherSuiteCommon, Suite, SupportedCipherSuite};
 use crate::version::Tls13Version;
@@ -126,8 +125,6 @@ impl Suite for Tls13CipherSuite {
     fn common(&self) -> &CipherSuiteCommon {
         &self.common
     }
-
-    const VERSION: ProtocolVersion = ProtocolVersion::TLSv1_3;
 }
 
 impl From<&'static Tls13CipherSuite> for SupportedCipherSuite {

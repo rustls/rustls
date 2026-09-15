@@ -337,7 +337,7 @@ impl ReceivePath {
             //   expect any plaintext.
             // * The payload size is indicative of a plaintext alert message.
             ContentType::Alert
-                if matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+                if self.version() == ProtocolVersion::TLSv1_3
                     && !self.decrypt_state.has_decrypted()
                     && record.payload.len() <= 2 =>
             {
@@ -422,9 +422,7 @@ impl ReceivePath {
     }
 
     fn drop_tls13_ccs(&mut self, record: &Record<&'_ [u8]>) -> Result<bool, Error> {
-        if self.may_receive_application_data
-            || !matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
-        {
+        if self.may_receive_application_data || self.version() != ProtocolVersion::TLSv1_3 {
             return Ok(false);
         }
 
@@ -446,9 +444,7 @@ impl ReceivePath {
         tls: &mut Vec<u8>,
         send: &mut dyn SendOutput,
     ) -> Result<bool, Error> {
-        if !self.may_receive_application_data
-            || matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
-        {
+        if !self.may_receive_application_data || self.version() == ProtocolVersion::TLSv1_3 {
             return Ok(false);
         }
 
@@ -487,7 +483,7 @@ impl ReceivePath {
         if alert.level == AlertLevel::Warning {
             self.temper_counters
                 .received_warning_alert()?;
-            if matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+            if self.version() == ProtocolVersion::TLSv1_3
                 && alert.description != AlertDescription::UserCanceled
             {
                 return Err(PeerMisbehaved::IllegalWarningAlert(alert.description).into());
@@ -503,6 +499,16 @@ impl ReceivePath {
         }
 
         Err(err)
+    }
+
+    fn version(&self) -> ProtocolVersion {
+        if let Some(version) = self.negotiated_version {
+            version
+        } else {
+            // If the negotiated version has not been set yet, then we are early in the handshake
+            // and will behave as though doing TLS 1.2 for backward compatibility
+            ProtocolVersion::TLSv1_2
+        }
     }
 }
 
