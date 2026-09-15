@@ -10,7 +10,10 @@ use std::vec;
 use pki_types::{CertificateDer, FipsStatus, ServerName, UnixTime};
 
 use super::{Tls12Session, Tls13ClientSessionInput, Tls13Session};
-use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
+use crate::client::{
+    ClientConfig, ClientConnection, ClientSessionKey, ClientSessionMemoryCache, ClientSessionStore,
+    Resumption, Tls12Resumption,
+};
 use crate::crypto::cipher::{
     EncodableVersion, Payload, Record, RecordEncrypter, encode_record_header,
 };
@@ -216,6 +219,127 @@ fn test_client_rejects_hrr_with_varied_session_id() {
     assert_eq!(
         process(&mut input, &mut conn).unwrap_err(),
         PeerMisbehaved::IllegalHelloRetryRequestWithWrongSessionId.into()
+    );
+}
+
+#[test]
+fn test_client_rejects_server_hello_with_varied_session_id() {
+    let config = ClientConfig::builder(Arc::new(tls13_only(TEST_PROVIDER.clone())))
+        .with_root_certificates(roots())
+        .with_no_client_auth()
+        .unwrap();
+    let mut tls = Vec::new();
+    let mut conn = Arc::new(config)
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build(&mut tls)
+        .unwrap();
+
+    // server replies with an otherwise-acceptable ServerHello, but does not
+    // echo `session_id` as required.
+    let sh = Message {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
+            ServerHelloPayload {
+                random: Random([0; 32]),
+                compression_method: Compression::Null,
+                cipher_suite: TLS13_TEST_SUITE.suite(),
+                legacy_version: ProtocolVersion::TLSv1_3,
+                session_id: SessionId::empty(),
+                extensions: Box::new(ServerExtensions {
+                    key_share: Some(KeyShareEntry {
+                        group: KEY_EXCHANGE_GROUP.name(),
+                        payload: KEY_EXCHANGE_GROUP
+                            .start()
+                            .unwrap()
+                            .pub_key()
+                            .to_vec()
+                            .into(),
+                    }),
+                    ..ServerExtensions::default()
+                }),
+            },
+        ))),
+    };
+
+    let mut input = VecInput::default();
+    input
+        .read(&mut sh.into_wire_bytes().as_slice())
+        .unwrap();
+    assert_eq!(
+        process(&mut input, &mut conn).unwrap_err(),
+        PeerMisbehaved::ServerHelloWithWrongSessionId.into()
+    );
+}
+
+#[test]
+fn test_client_rejects_tls12_server_hello_echoing_compatibility_session_id() {
+    let config = ClientConfig::builder(Arc::new(TEST_PROVIDER.clone()))
+        .with_root_certificates(roots())
+        .with_no_client_auth()
+        .unwrap();
+    let store = Arc::new(ClientSessionMemoryCache::new(256));
+    let config = Arc::new(ClientConfig {
+        resumption: Resumption::store(store.clone()),
+        ..config
+    });
+
+    // a cached TLS 1.3 ticket is not a TLS 1.2 session, so the client still
+    // sends a compatibility `session_id` a TLS 1.2 server cannot know.
+    let server_name = ServerName::try_from("localhost").unwrap();
+    store.insert_tls13_ticket(
+        ClientSessionKey {
+            config_hash: config.config_hash(),
+            server_name: server_name.clone(),
+        },
+        Tls13Session::new(
+            &NewSessionTicketPayloadTls13::new(
+                Duration::from_secs(1800),
+                0x1234_5678,
+                [0u8; 32],
+                b"ticket".to_vec(),
+            ),
+            Tls13ClientSessionInput {
+                suite: Tls13ProtocolSuite::Tcp(TEST_PROVIDER.tls13_cipher_suites[0]),
+                peer_identity: VerifiedIdentity::assertion(Identity::RawPublicKey(
+                    pki_types::SubjectPublicKeyInfoDer::from(&b"spki"[..]),
+                )),
+                quic_params: None,
+            },
+            &[0x55; 32],
+            UnixTime::now(),
+        ),
+    );
+
+    let mut tls = Vec::new();
+    let mut conn = config
+        .connect(server_name)
+        .build(&mut tls)
+        .unwrap();
+
+    let sh = Message {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
+            ServerHelloPayload {
+                random: Random([0; 32]),
+                compression_method: Compression::Null,
+                cipher_suite: TLS_TEST_SUITE.suite(),
+                legacy_version: ProtocolVersion::TLSv1_2,
+                session_id: client_hello_in(&tls).session_id,
+                extensions: Box::new(ServerExtensions {
+                    extended_main_secret_ack: Some(()),
+                    ..ServerExtensions::default()
+                }),
+            },
+        ))),
+    };
+
+    let mut input = VecInput::default();
+    input
+        .read(&mut sh.into_wire_bytes().as_slice())
+        .unwrap();
+    assert_eq!(
+        process(&mut input, &mut conn).unwrap_err(),
+        PeerMisbehaved::ServerEchoedCompatibilitySessionId.into()
     );
 }
 
@@ -522,7 +646,7 @@ fn client_requiring_rpk_receives_server_ee(
                 compression_method: Compression::Null,
                 cipher_suite: TLS13_TEST_SUITE.suite(),
                 legacy_version: ProtocolVersion::TLSv1_3,
-                session_id: SessionId::empty(),
+                session_id: client_hello_in(&tls).session_id,
                 extensions: Box::new(ServerExtensions {
                     key_share: Some(KeyShareEntry {
                         group: KEY_EXCHANGE_GROUP.name(),
@@ -849,8 +973,11 @@ fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPaylo
     Arc::new(config)
         .connect(ServerName::try_from("localhost").unwrap())
         .build(&mut bytes)?;
+    Ok(client_hello_in(&bytes))
+}
 
-    let record = Record::<Payload<'_>>::read(&mut Reader::new(&bytes))
+fn client_hello_in(flight: &[u8]) -> ClientHelloPayload {
+    let record = Record::<Payload<'_>>::read(&mut Reader::new(flight))
         .unwrap()
         .into_owned();
     match Message::try_from(&record).unwrap() {
@@ -861,7 +988,7 @@ fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPaylo
                     ..
                 },
             ..
-        } => Ok(ch),
+        } => ch,
         other => panic!("unexpected message {other:?}"),
     }
 }
