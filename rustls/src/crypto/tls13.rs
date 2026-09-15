@@ -238,9 +238,10 @@ impl OkmBlock {
     pub fn new(bytes: &[u8]) -> Self {
         let mut tag = Self {
             buf: [0u8; Self::MAX_LEN],
-            used: bytes.len(),
+            used: 0,
         };
         tag.buf[..bytes.len()].copy_from_slice(bytes);
+        tag.used = bytes.len();
         tag
     }
 
@@ -251,7 +252,7 @@ impl OkmBlock {
 impl Drop for OkmBlock {
     #[inline(never)]
     fn drop(&mut self) {
-        self.buf.zeroize();
+        self.buf[..self.used].zeroize();
     }
 }
 
