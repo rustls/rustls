@@ -2118,6 +2118,84 @@ fn client_handshake_receives_half_rtt_data() {
 }
 
 #[test]
+fn client_handshake_sends_early_data() {
+    for (client_config, server_config, _expect) in MultiTest::new(provider::DEFAULT_TLS13_PROVIDER)
+    {
+        let mut server_config = Arc::unwrap_or_clone(server_config);
+        server_config.max_early_data_size = 0xffff;
+        let server_config = Arc::new(server_config);
+        let mut client_config = Arc::unwrap_or_clone(client_config);
+        client_config.enable_early_data = true;
+        let client_config = Arc::new(client_config);
+
+        // warm up
+        let mut client_output = Vec::new();
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+        let mut server_output = Vec::new();
+        do_handshake(
+            &mut VecInput::default(),
+            &mut client_output,
+            &mut client,
+            &mut VecInput::default(),
+            &mut server_output,
+            &mut server,
+        );
+        client
+            .read_tls(&mut SliceInput::new(&mut server_output), &mut Vec::new())
+            .handle_all(&mut Vec::new())
+            .unwrap();
+
+        let mut client_output = Vec::new();
+        let mut client = client_config
+            .connect(server_name("localhost"))
+            .start_handshake(&mut client_output)
+            .unwrap();
+
+        let mut early_data = client
+            .early_data()
+            .expect("early data not available");
+        early_data.exporter().unwrap();
+        assert_eq!(
+            early_data.write(b"early hello world".into(), &mut client_output),
+            17
+        );
+        assert_eq!(early_data.bytes_left(), 0xffff - 17);
+
+        let mut server = ServerConnection::new(server_config).unwrap();
+        let mut server_output = Vec::new();
+        server
+            .read_tls(&mut SliceInput::new(&mut client_output), &mut server_output)
+            .handle_all(&mut Vec::new())
+            .unwrap();
+        let mut received = Vec::new();
+        server
+            .early_data()
+            .unwrap()
+            .read_to_end(&mut received)
+            .unwrap();
+        assert_eq!(received, b"early hello world");
+
+        client_output.clear();
+        let ClientHandshake::Complete(split) = client
+            .process(&mut SliceInput::new(&mut server_output), &mut client_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+        server
+            .read_tls(&mut SliceInput::new(&mut client_output), &mut server_output)
+            .handle_all(&mut Vec::new())
+            .unwrap();
+        assert!(
+            split
+                .side_outputs
+                .is_early_data_accepted()
+        );
+    }
+}
+
+#[test]
 fn test_full_server_handshake() {
     for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
         println!("expect: {expect:?}");

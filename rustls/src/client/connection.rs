@@ -309,6 +309,31 @@ impl TryFrom<Core<ClientSide, Tcp>> for ClientHandshake {
     }
 }
 
+impl NeedsInput<ClientSide> {
+    /// Returns an object you can use to send TLS1.3 early data (a.k.a. "0-RTT data")
+    /// to the server.
+    ///
+    /// This returns None in many circumstances when the capability to
+    /// send early data is not available, including but not limited to:
+    ///
+    /// - The server hasn't been talked to previously.
+    /// - The server does not support resumption.
+    /// - The server does not support early data.
+    /// - The resumption data for the server has expired.
+    ///
+    /// The server specifies a maximum amount of early data.  You can
+    /// learn this limit through the returned object, and writes through
+    /// it will process only this many bytes.
+    ///
+    /// The server can choose not to accept any sent early data --
+    /// in this case the data is lost but the connection continues.  You
+    /// can tell this happened using `is_early_data_accepted`.
+    pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
+        let ConnectionCommon { side, common, .. } = &mut self.0.inner;
+        WriteEarlyData::new(&mut side.early_data, common)
+    }
+}
+
 /// Allows writing of early data in resumed TLS 1.3 connections.
 ///
 /// "Early data" is also known as "0-RTT data".
