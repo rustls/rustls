@@ -61,7 +61,7 @@ impl ClientConnection {
         self.inner.split()
     }
 
-    /// Allows reading TLS1.3 0RTT/"early" data received from a client.
+    /// Allows writing TLS1.3 0RTT/"early" data.
     ///
     /// This returns None in many circumstances when the capability to
     /// send early data is not available, including but not limited to:
