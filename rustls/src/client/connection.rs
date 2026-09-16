@@ -61,8 +61,7 @@ impl ClientConnection {
         self.inner.split()
     }
 
-    /// Returns an `io::Write` implementer you can write bytes to
-    /// to send TLS1.3 early data (a.k.a. "0-RTT data") to the server.
+    /// Allows reading TLS1.3 0RTT/"early" data received from a client.
     ///
     /// This returns None in many circumstances when the capability to
     /// send early data is not available, including but not limited to:
