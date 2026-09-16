@@ -28,6 +28,9 @@ use crate::verify::ServerIdentity;
 use crate::{NeedsInput, TlsInputBuffer};
 
 /// This represents a single TLS client connection.
+///
+/// Encrypt data destined for the peer using [`Connection::write()`].
+/// Process received data from the peer using [`Connection::read_tls()`].
 pub struct ClientConnection {
     inner: ConnectionCommon<ClientSide>,
 }

@@ -30,8 +30,8 @@ use crate::verify::ClientIdentity;
 
 /// This represents a single TLS server connection.
 ///
-/// Send TLS-protected data to the peer using the `io::Write` trait implementation.
-/// Read data from the peer using the `io::Read` trait implementation.
+/// Encrypt data destined for the peer using [`Connection::write()`].
+/// Process received data from the peer using [`Connection::read_tls()`].
 pub struct ServerConnection {
     pub(super) inner: ConnectionCommon<ServerSide>,
 }
