@@ -80,13 +80,7 @@ impl ClientConnection {
     /// can tell this happened using `is_early_data_accepted`.
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
         let ConnectionCommon { side, common, .. } = &mut self.inner;
-        let early_data = side.early_data.as_mut()?;
-        match early_data.state {
-            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted => {
-                Some(WriteEarlyData { early_data, common })
-            }
-            _ => None,
-        }
+        WriteEarlyData::new(&mut side.early_data, common)
     }
 
     /// Returns the number of TLS1.3 tickets that have been received.
@@ -326,6 +320,19 @@ pub struct WriteEarlyData<'a> {
 }
 
 impl<'a> WriteEarlyData<'a> {
+    fn new(early_data: &'a mut Option<EarlyData>, common: &'a mut CommonState) -> Option<Self> {
+        let Some(early_data) = early_data else {
+            return None;
+        };
+
+        match early_data.state {
+            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted => {
+                Some(WriteEarlyData { early_data, common })
+            }
+            _ => None,
+        }
+    }
+
     /// Encrypt early data as TLS records and encode them into `tls`.
     ///
     /// Yields the number of bytes of `plaintext` that were consumed.  This may be less than
