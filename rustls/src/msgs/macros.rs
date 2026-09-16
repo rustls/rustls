@@ -30,6 +30,7 @@ macro_rules! enum_builder {
         /// known named items.  Unknown values are formatted in hexadecimal.
         #[allow(missing_docs, clippy::exhaustive_structs)]
         #[derive(PartialEq, Eq, Clone, Copy, Hash)]
+        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         $struct_vis struct $struct_name($inner_vis $uint);
 
         #[allow(missing_docs, non_upper_case_globals, clippy::upper_case_acronyms)]

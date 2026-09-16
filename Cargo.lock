@@ -1763,6 +1763,7 @@ dependencies = [
  "rustls-pki-types",
  "rustls-test",
  "rustls-webpki 0.104.0-alpha.7",
+ "serde",
  "subtle",
  "time",
  "tracing",

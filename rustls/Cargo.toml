@@ -14,8 +14,9 @@ autotests = false
 exclude = ["src/testdata", "tests/**"]
 
 [features]
-default = ["tracing", "webpki"]
+default = ["tracing", "webpki", "serde"]
 brotli = ["dep:brotli", "dep:brotli-decompressor"]
+serde = ["dep:serde"]
 tracing = ["dep:tracing"]
 webpki = ["dep:webpki"]
 zlib = ["dep:zlib-rs"]
@@ -25,6 +26,7 @@ brotli = { workspace = true, optional = true }
 brotli-decompressor = { workspace = true, optional = true }
 hashbrown = { workspace = true, optional = true }
 subtle = { workspace = true }
+serde = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
 webpki = { workspace = true, optional = true }
 pki-types = { workspace = true, features = ["std"] }
