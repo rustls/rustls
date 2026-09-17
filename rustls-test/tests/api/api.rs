@@ -1035,8 +1035,14 @@ fn do_exporter_test(
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
-    assert_eq!(Some(Error::HandshakeNotComplete), client.exporter().err());
-    assert_eq!(Some(Error::HandshakeNotComplete), server.exporter().err());
+    assert_eq!(
+        client.exporter().err(),
+        Some(ApiMisuse::ExporterNotAvailable.into())
+    );
+    assert_eq!(
+        server.exporter().err(),
+        Some(ApiMisuse::ExporterNotAvailable.into())
+    );
     do_handshake(
         &mut client_input,
         &mut client_output,
