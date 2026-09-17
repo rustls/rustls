@@ -697,7 +697,7 @@ fn early_data_is_available_on_resumption() {
             .unwrap()
             .exporter()
             .err(),
-        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+        Some(Error::ApiMisuse(ApiMisuse::ExporterNotAvailable)),
     );
     do_handshake(
         &mut client_input,
@@ -729,7 +729,7 @@ fn early_data_is_available_on_resumption() {
             .unwrap()
             .exporter()
             .err(),
-        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+        Some(Error::ApiMisuse(ApiMisuse::ExporterNotAvailable)),
     );
 
     // check exporters agree

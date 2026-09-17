@@ -1051,11 +1051,11 @@ fn do_exporter_test(
 
     assert_eq!(
         client.exporter().err(),
-        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+        Some(Error::ApiMisuse(ApiMisuse::ExporterNotAvailable)),
     );
     assert_eq!(
         server.exporter().err(),
-        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+        Some(Error::ApiMisuse(ApiMisuse::ExporterNotAvailable)),
     );
 
     client_exporter

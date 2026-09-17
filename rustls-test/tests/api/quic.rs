@@ -1305,11 +1305,11 @@ fn test_quic_exporter() {
 
         assert_eq!(
             client.exporter().err(),
-            Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+            Some(Error::ApiMisuse(ApiMisuse::ExporterNotAvailable)),
         );
         assert_eq!(
             server.exporter().err(),
-            Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+            Some(Error::ApiMisuse(ApiMisuse::ExporterNotAvailable)),
         );
 
         let mut client_secret = [0u8; 64];

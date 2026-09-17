@@ -389,7 +389,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         match self.common.exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None if self.common.is_handshaking() => Err(Error::HandshakeNotComplete),
-            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
+            None => Err(ApiMisuse::ExporterNotAvailable.into()),
         }
     }
 }
