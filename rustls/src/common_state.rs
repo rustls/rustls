@@ -37,13 +37,6 @@ impl CommonState {
         }
     }
 
-    pub(crate) fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        match self.early_exporter.take() {
-            Some(inner) => Ok(KeyingMaterialExporter { inner }),
-            None => Err(ApiMisuse::ExporterNotAvailable.into()),
-        }
-    }
-
     /// Writes a `close_notify` warning alert to into the `tls` buffer.
     ///
     /// This informs the peer that the connection is being closed. Does nothing if any
@@ -167,6 +160,14 @@ impl ConnectionOutputs {
     /// handshake occurred.
     pub fn handshake_kind(&self) -> Option<HandshakeKind> {
         self.handshake_kind
+    }
+
+    #[doc = include_str!("doc/early_exporter.md")]
+    pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        match self.early_exporter.take() {
+            Some(inner) => Ok(KeyingMaterialExporter { inner }),
+            None => Err(ApiMisuse::ExporterNotAvailable.into()),
+        }
     }
 
     pub(super) fn into_kernel_parts(self) -> Option<(ProtocolVersion, SupportedCipherSuite)> {

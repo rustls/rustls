@@ -549,7 +549,7 @@ fn resume_with_early_data(index: usize) -> (Option<u16>, bool) {
 
     (
         server_hello.extensions.preshared_key,
-        conn.early_data().is_some(),
+        conn.early_exporter().is_ok(),
     )
 }
 

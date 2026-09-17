@@ -761,17 +761,9 @@ fn early_data_is_available_on_resumption() {
     );
 
     assert_eq!(&received_early_data[..], b"hello");
-    let server_early_exporter = server
-        .early_data()
-        .unwrap()
-        .exporter()
-        .unwrap();
+    let server_early_exporter = server.early_exporter().unwrap();
     assert_eq!(
-        server
-            .early_data()
-            .unwrap()
-            .exporter()
-            .err(),
+        server.early_exporter().err(),
         Some(Error::ApiMisuse(ApiMisuse::ExporterNotAvailable)),
     );
 
@@ -792,7 +784,16 @@ fn early_data_not_available_on_server_before_client_hello() {
         &provider::DEFAULT_PROVIDER,
     )))
     .unwrap();
-    assert!(server.early_data().is_none());
+    assert!(
+        server
+            .read_tls(&mut VecInput::default(), &mut Vec::new())
+            .next_early_data()
+            .is_none()
+    );
+    assert_eq!(
+        server.early_exporter().unwrap_err(),
+        ApiMisuse::ExporterNotAvailable.into(),
+    );
 }
 
 #[test]
@@ -1008,7 +1009,6 @@ fn early_data_and_traffic_are_kept_separate() {
         (Vec::new(), Vec::new())
     );
     assert!(server.is_handshaking());
-    assert!(server.early_data().is_some());
 
     // The client finishes its handshake and immediately sends traffic data.
     transfer(&mut server_output, &mut client_input);
@@ -1063,11 +1063,7 @@ fn early_data_and_traffic_are_kept_separate() {
     );
 
     // The early exporter remains available after the early data phase.
-    server
-        .early_data()
-        .unwrap()
-        .exporter()
-        .unwrap();
+    server.early_exporter().unwrap();
 }
 
 #[test]
@@ -1102,7 +1098,6 @@ fn unread_early_data_is_dropped() {
         .handle_all(&mut traffic)
         .unwrap();
     assert!(traffic.is_empty());
-    assert!(server.early_data().is_some());
 
     transfer(&mut server_output, &mut client_input);
     client
@@ -1209,17 +1204,18 @@ fn next_early_data_yields_nothing_without_early_data() {
         server_read(&mut server, &mut server_input, &mut server_output),
         (Vec::new(), Vec::new())
     );
-    assert!(server.early_data().is_none());
-    do_handshake(
+    let mut received_early_data = Vec::new();
+    do_handshake_collecting_early_data(
         &mut client_input,
         &mut client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
         &mut server,
+        &mut received_early_data,
     );
     assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
-    assert!(server.early_data().is_none());
+    assert!(received_early_data.is_empty());
 
     client
         .write(b"normal".into(), &mut client_output)
@@ -1258,20 +1254,21 @@ fn rejected_early_data_is_skipped() {
         server_read(&mut server, &mut server_input, &mut server_output),
         (Vec::new(), Vec::new())
     );
-    assert!(server.early_data().is_none());
 
-    do_handshake(
+    let mut received_early_data = Vec::new();
+    do_handshake_collecting_early_data(
         &mut client_input,
         &mut client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
         &mut server,
+        &mut received_early_data,
     );
     assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
     assert!(!client.data().is_early_data_accepted());
     assert!(client.early_data().is_none());
-    assert!(server.early_data().is_none());
+    assert!(received_early_data.is_empty());
 
     client
         .write(b"normal".into(), &mut client_output)
