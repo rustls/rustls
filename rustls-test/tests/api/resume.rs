@@ -747,7 +747,7 @@ fn early_data_is_available_on_resumption() {
             .unwrap()
             .exporter()
             .err(),
-        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+        Some(Error::ApiMisuse(ApiMisuse::ExporterNotAvailable)),
     );
     let mut received_early_data = Vec::new();
     do_handshake_collecting_early_data(
@@ -772,7 +772,7 @@ fn early_data_is_available_on_resumption() {
             .unwrap()
             .exporter()
             .err(),
-        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+        Some(Error::ApiMisuse(ApiMisuse::ExporterNotAvailable)),
     );
 
     // check exporters agree
