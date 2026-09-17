@@ -256,7 +256,7 @@ fn smoke() {
         Error::InconsistentKeys(InconsistentKeys::Unknown),
         Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
         Error::Unreachable("smoke"),
-        super::ApiMisuse::ExporterAlreadyUsed.into(),
+        super::ApiMisuse::ExporterNotAvailable.into(),
         Error::Other(OtherError::new(TestError)),
     ];
 

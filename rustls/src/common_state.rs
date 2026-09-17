@@ -40,7 +40,7 @@ impl CommonState {
     pub(crate) fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         match self.early_exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
-            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
+            None => Err(ApiMisuse::ExporterNotAvailable.into()),
         }
     }
 
