@@ -10,8 +10,8 @@ use crate::common_state::{CommonState, ConnectionOutputs, Event, Protocol, Side}
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Accepted, Connection, ConnectionCommon, Core, KeyingMaterialExporter, MessageHandler,
-    NeedsInput, ServerNext, SideData, Tcp, TlsInputBuffer, VerifyPeerIdentity,
+    Accepted, Connection, ConnectionCommon, Core, MessageHandler, NeedsInput, ServerNext, SideData,
+    Tcp, TlsInputBuffer, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -102,10 +102,6 @@ impl Connection for ServerConnection {
         tls: &'a mut Vec<u8>,
     ) -> MessageHandler<'a, 'm, ServerSide> {
         self.inner.read_tls(input, tls)
-    }
-
-    fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.exporter()
     }
 
     fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {

@@ -162,6 +162,23 @@ impl ConnectionOutputs {
         self.handshake_kind
     }
 
+    /// Returns an object that can derive key material from the agreed connection secrets.
+    ///
+    /// See [RFC 5705][] for more details on what this is for.
+    ///
+    /// This function will error:
+    ///
+    /// - if called prior to the handshake completing;
+    /// - if called more than once per connection.
+    ///
+    /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
+    pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        match self.exporter.take() {
+            Some(inner) => Ok(KeyingMaterialExporter { inner }),
+            None => Err(ApiMisuse::ExporterNotAvailable.into()),
+        }
+    }
+
     /// Returns the "early" exporter that can derive key material for use in early data
     ///
     /// See [RFC 5705][] for general details on what exporters are, and [RFC 9846 S7.5][] for
@@ -175,12 +192,11 @@ impl ConnectionOutputs {
     /// if called more than once per connection or prior to the early exporter being available.
     ///
     /// If you are looking for the normal exporter, this is available from
-    /// [`Connection::exporter()`].
+    /// [`Self::exporter()`].
     ///
     /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
     /// [RFC 9846 S7.5]: https://datatracker.ietf.org/doc/html/rfc9846#section-7.5
     /// [RFC 9846 appendix F.5.1]: https://datatracker.ietf.org/doc/html/rfc9846#appendix-F.5.1
-    /// [`Connection::exporter()`]: crate::conn::Connection::exporter()
     pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         match self.early_exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
