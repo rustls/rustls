@@ -49,16 +49,15 @@ fn test_early_exporter() {
                 .unwrap();
 
             let message = if let Some(mut early) = server.early_data() {
-                let secret = early
-                    .exporter()
-                    .unwrap()
-                    .derive(b"label", Some(b"context"), [0u8; 64])
-                    .unwrap();
-
                 let mut buf = b"early data: ".to_vec();
                 early.read_to_end(&mut buf).unwrap();
                 buf.push(b'\n');
 
+                let secret = server
+                    .early_exporter()
+                    .unwrap()
+                    .derive(b"label", Some(b"context"), [0u8; 64])
+                    .unwrap();
                 buf.extend_from_slice(b"exported: ");
                 buf.extend_from_slice(format!("{:02x?}", secret).as_bytes());
                 buf.push(b'\n');

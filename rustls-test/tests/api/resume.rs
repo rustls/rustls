@@ -686,17 +686,9 @@ fn early_data_is_available_on_resumption() {
             .write(b"hello".into(), &mut client_output),
         5
     );
-    let client_early_exporter = client
-        .early_data()
-        .unwrap()
-        .exporter()
-        .unwrap();
+    let client_early_exporter = client.early_exporter().unwrap();
     assert_eq!(
-        client
-            .early_data()
-            .unwrap()
-            .exporter()
-            .err(),
+        client.early_exporter().err(),
         Some(Error::ApiMisuse(ApiMisuse::ExporterNotAvailable)),
     );
     do_handshake(
@@ -718,17 +710,9 @@ fn early_data_is_available_on_resumption() {
         5
     );
     assert_eq!(&received_early_data[..], b"hello");
-    let server_early_exporter = server
-        .early_data()
-        .unwrap()
-        .exporter()
-        .unwrap();
+    let server_early_exporter = server.early_exporter().unwrap();
     assert_eq!(
-        server
-            .early_data()
-            .unwrap()
-            .exporter()
-            .err(),
+        server.early_exporter().err(),
         Some(Error::ApiMisuse(ApiMisuse::ExporterNotAvailable)),
     );
 

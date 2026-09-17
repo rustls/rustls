@@ -169,6 +169,11 @@ impl<Side: SideData> NeedsInput<Side> {
     ) -> Result<Side::Handshake, Error> {
         Side::handshake_from_core(self.0.process(input, tls)?)
     }
+
+    /// Access the connection outputs.
+    pub fn outputs_mut(&mut self) -> &mut ConnectionOutputs {
+        &mut self.0.inner
+    }
 }
 
 impl<S: SideData> fmt::Debug for NeedsInput<S> {
