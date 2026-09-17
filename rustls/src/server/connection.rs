@@ -79,30 +79,9 @@ impl ServerConnection {
         }
     }
 
-    /// Returns a handle to TLS1.3 0RTT/"early" data facilities if the client's early
-    /// data offer was accepted.
-    ///
-    /// The early data itself is read via [`MessageHandler::next_early_data()`] while
-    /// processing input; this handle gives access to the "early" keying material exporter.
-    ///
-    /// This returns `None` in many circumstances, such as :
-    ///
-    /// - Early data is disabled if [`ServerConfig::max_early_data_size`] is zero (the default).
-    /// - The session negotiated with the client is not TLS1.3.
-    /// - The client just doesn't support early data.
-    /// - The connection doesn't resume an existing session.
-    /// - The client hasn't sent a full ClientHello yet.
-    pub fn early_data(&mut self) -> Option<ReadEarlyData<'_>> {
-        if self
-            .inner
-            .side
-            .early_data
-            .was_accepted()
-        {
-            Some(ReadEarlyData::new(&mut self.inner))
-        } else {
-            None
-        }
+    #[doc = include_str!("../doc/early_exporter.md")]
+    pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        self.inner.common.early_exporter()
     }
 
     /// Returns data learned during the connection, specific to being a server.
@@ -342,27 +321,6 @@ impl fmt::Debug for ServerData {
     }
 }
 
-/// Access to early data facilities in resumed TLS1.3 connections.
-///
-/// "Early data" is also known as "0-RTT data".
-///
-/// The early data itself is read via [`MessageHandler::next_early_data()`]; this
-/// type provides the matching "early" keying material exporter.
-pub struct ReadEarlyData<'a> {
-    common: &'a mut ConnectionCommon<ServerSide>,
-}
-
-impl<'a> ReadEarlyData<'a> {
-    fn new(common: &'a mut ConnectionCommon<ServerSide>) -> Self {
-        ReadEarlyData { common }
-    }
-
-    #[doc = include_str!("../doc/early_exporter.md")]
-    pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.common.common.early_exporter()
-    }
-}
-
 #[derive(Debug, Default)]
 pub(super) enum EarlyDataState {
     #[default]
@@ -373,9 +331,5 @@ pub(super) enum EarlyDataState {
 impl EarlyDataState {
     fn accept(&mut self) {
         *self = Self::Accepted;
-    }
-
-    fn was_accepted(&self) -> bool {
-        matches!(self, Self::Accepted)
     }
 }
