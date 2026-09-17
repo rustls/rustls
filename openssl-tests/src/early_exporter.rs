@@ -50,7 +50,9 @@ fn test_early_exporter() {
 
             let message = if let Some(mut early) = server.early_data() {
                 let mut buf = b"early data: ".to_vec();
-                early.read_to_end(&mut buf).unwrap();
+                while let Some(chunk) = early.take() {
+                    buf.extend(chunk);
+                }
                 buf.push(b'\n');
 
                 let secret = server

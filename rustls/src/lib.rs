@@ -368,7 +368,6 @@ mod hash_hs;
 mod limited_cache;
 mod tls12;
 mod tls13;
-mod vecbuf;
 mod verify;
 mod x509;
 #[macro_use]

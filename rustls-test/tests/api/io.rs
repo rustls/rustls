@@ -2171,11 +2171,10 @@ fn client_handshake_sends_early_data() {
             .read_tls(&mut SliceInput::new(&mut client_output), &mut server_output)
             .handle_all(&mut Vec::new())
             .unwrap();
-        let mut received = Vec::new();
-        server
+        let received = server
             .early_data()
             .unwrap()
-            .read_to_end(&mut received)
+            .take()
             .unwrap();
         assert_eq!(received, b"early hello world");
 

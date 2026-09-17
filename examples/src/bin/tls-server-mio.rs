@@ -262,9 +262,9 @@ impl OpenConnection {
         // Handle any 0-RTT early data.
         if let Some(mut early_data) = self.tls_conn.early_data() {
             let mut buf = Vec::new();
-            early_data
-                .read_to_end(&mut buf)
-                .unwrap();
+            while let Some(item) = early_data.take() {
+                buf.extend(item);
+            }
 
             if !buf.is_empty() {
                 debug!("early data read {:?}", buf.len());

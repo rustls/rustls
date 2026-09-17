@@ -1,8 +1,8 @@
 use alloc::boxed::Box;
+use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::fmt;
 use core::ops::{Deref, DerefMut};
-use std::io;
 
 use pki_types::{DnsName, FipsStatus};
 
@@ -23,7 +23,6 @@ use crate::server::hs::{ExpectClientHello, ReadClientHello, ServerState};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::tracing::trace;
-use crate::vecbuf::ChunkVecBuffer;
 use crate::verify::ClientIdentity;
 
 /// This represents a single TLS server connection.
@@ -81,8 +80,7 @@ impl ServerConnection {
         }
     }
 
-    /// Returns an `io::Read` implementer you can read bytes from that are
-    /// received from a client as TLS1.3 0RTT/"early" data, during the handshake.
+    /// Allows reading TLS1.3 0RTT/"early" data received from a client.
     ///
     /// This returns `None` in many circumstances, such as :
     ///
@@ -92,16 +90,7 @@ impl ServerConnection {
     /// - The connection doesn't resume an existing session.
     /// - The client hasn't sent a full ClientHello yet.
     pub fn early_data(&mut self) -> Option<ReadEarlyData<'_>> {
-        if self
-            .inner
-            .side
-            .early_data
-            .was_accepted()
-        {
-            Some(ReadEarlyData::new(&mut self.inner))
-        } else {
-            None
-        }
+        ReadEarlyData::new(&mut self.inner.side.early_data)
     }
 
     /// Returns data learned during the connection, specific to being a server.
@@ -271,21 +260,27 @@ impl fmt::Debug for Accepted {
 /// Allows reading of early data in resumed TLS1.3 connections.
 ///
 /// "Early data" is also known as "0-RTT data".
-///
-/// This type implements [`io::Read`].
 pub struct ReadEarlyData<'a> {
-    common: &'a mut ConnectionCommon<ServerSide>,
+    received: &'a mut VecDeque<Vec<u8>>,
 }
 
 impl<'a> ReadEarlyData<'a> {
-    fn new(common: &'a mut ConnectionCommon<ServerSide>) -> Self {
-        ReadEarlyData { common }
+    fn new(early_data: &'a mut EarlyDataState) -> Option<Self> {
+        match early_data {
+            EarlyDataState::Accepted { received, .. } => Some(ReadEarlyData { received }),
+            _ => None,
+        }
     }
-}
 
-impl io::Read for ReadEarlyData<'_> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.common.side.early_data.read(buf)
+    /// Obtain received early data.
+    ///
+    /// The data is received in arbitrary-sized chunks.  Avoid writing your application to be
+    /// sensitive to the boundaries.
+    ///
+    /// Returns `None` if no more data is currently available.
+    #[must_use]
+    pub fn take(&mut self) -> Option<Vec<u8>> {
+        self.received.pop_front()
     }
 }
 
@@ -294,42 +289,15 @@ pub(super) enum EarlyDataState {
     #[default]
     New,
     Accepted {
-        received: ChunkVecBuffer,
+        received: VecDeque<Vec<u8>>,
     },
 }
 
 impl EarlyDataState {
     fn accept(&mut self) {
         *self = Self::Accepted {
-            received: ChunkVecBuffer::new(),
+            received: VecDeque::new(),
         };
-    }
-
-    fn was_accepted(&self) -> bool {
-        matches!(self, Self::Accepted { .. })
-    }
-
-    #[expect(dead_code)]
-    fn peek(&self) -> Option<&[u8]> {
-        match self {
-            Self::Accepted { received, .. } => received.peek(),
-            _ => None,
-        }
-    }
-
-    #[expect(dead_code)]
-    fn pop(&mut self) -> Option<Vec<u8>> {
-        match self {
-            Self::Accepted { received, .. } => received.pop(),
-            _ => None,
-        }
-    }
-
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Self::Accepted { received, .. } => Ok(received.read(buf)),
-            _ => Err(io::Error::from(io::ErrorKind::BrokenPipe)),
-        }
     }
 
     fn take_received_plaintext(&mut self, bytes: Payload<'_>) {
@@ -337,7 +305,9 @@ impl EarlyDataState {
             return;
         };
 
-        received.append(bytes.into_vec());
+        if !bytes.bytes().is_empty() {
+            received.push_back(bytes.into_vec());
+        }
     }
 }
 
@@ -457,16 +427,20 @@ impl crate::conn::private::Side for ServerSide {
 
 #[cfg(test)]
 mod tests {
-    use std::format;
+    use alloc::vec;
 
     use super::*;
 
-    // these branches not reachable externally, unless something else goes wrong.
     #[test]
-    fn test_read_in_new_state() {
-        assert_eq!(
-            format!("{:?}", EarlyDataState::default().read(&mut [0u8; 5])),
-            "Err(Kind(BrokenPipe))"
-        );
+    fn empty_early_data_dropped() {
+        let mut e = EarlyDataState::default();
+        e.accept();
+        e.take_received_plaintext(Payload::Borrowed(b""));
+        e.take_received_plaintext(Payload::Borrowed(b"hello"));
+        e.take_received_plaintext(Payload::Borrowed(b""));
+        let EarlyDataState::Accepted { received } = e else {
+            panic!("unexpected internal state");
+        };
+        assert_eq!(received, vec![b"hello".to_vec()]);
     }
 }
