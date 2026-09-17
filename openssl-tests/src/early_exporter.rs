@@ -48,7 +48,7 @@ fn test_early_exporter() {
                 .handle_all(&mut Vec::new())
                 .unwrap();
 
-            let message = if let Some(mut early) = server.early_data() {
+            let message = if let Some(mut early) = server.server_data_mut().early_data() {
                 let mut buf = b"early data: ".to_vec();
                 while let Some(chunk) = early.take() {
                     buf.extend(chunk);

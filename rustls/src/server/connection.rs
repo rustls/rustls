@@ -80,22 +80,14 @@ impl ServerConnection {
         }
     }
 
-    /// Allows reading TLS1.3 0RTT/"early" data received from a client.
-    ///
-    /// This returns `None` in many circumstances, such as :
-    ///
-    /// - Early data is disabled if [`ServerConfig::max_early_data_size`] is zero (the default).
-    /// - The session negotiated with the client is not TLS1.3.
-    /// - The client just doesn't support early data.
-    /// - The connection doesn't resume an existing session.
-    /// - The client hasn't sent a full ClientHello yet.
-    pub fn early_data(&mut self) -> Option<ReadEarlyData<'_>> {
-        ReadEarlyData::new(&mut self.inner.side.early_data)
-    }
-
-    /// Returns data learned during the connection, specific to being a server.
+    /// Data learned during the connection, specific to being a server.
     pub fn server_data(&self) -> &ServerConnectionData {
         &self.inner.side
+    }
+
+    /// Data learned during the connection, specific to being a server.
+    pub fn server_data_mut(&mut self) -> &mut ServerConnectionData {
+        &mut self.inner.side
     }
 }
 
@@ -214,6 +206,18 @@ impl TryFrom<Core<ServerSide, Tcp>> for ServerHandshake {
 
             ServerNext::Complete(core) => Self::Complete(SplitConnection::try_from(core.inner)?),
         })
+    }
+}
+
+impl NeedsInput<ServerSide> {
+    /// Data learned during the connection, specific to being a server.
+    pub fn server_data(&self) -> &ServerConnectionData {
+        &self.0.inner.side
+    }
+
+    /// Data learned during the connection, specific to being a server.
+    pub fn server_data_mut(&mut self) -> &mut ServerConnectionData {
+        &mut self.0.inner.side
     }
 }
 
@@ -387,6 +391,19 @@ impl ServerConnectionData {
     /// The server name is also used to match sessions during session resumption.
     pub fn server_name(&self) -> Option<&DnsName<'static>> {
         self.sni.as_ref()
+    }
+
+    /// Allows reading TLS1.3 0RTT/"early" data received from a client.
+    ///
+    /// This returns `None` in many circumstances, such as :
+    ///
+    /// - Early data is disabled if [`ServerConfig::max_early_data_size`] is zero (the default).
+    /// - The session negotiated with the client is not TLS1.3.
+    /// - The client just doesn't support early data.
+    /// - The connection doesn't resume an existing session.
+    /// - The client hasn't sent a full ClientHello yet.
+    pub fn early_data(&mut self) -> Option<ReadEarlyData<'_>> {
+        ReadEarlyData::new(&mut self.early_data)
     }
 }
 

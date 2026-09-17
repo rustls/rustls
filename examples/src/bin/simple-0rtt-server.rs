@@ -91,7 +91,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
                 return Err(io::Error::new(io::ErrorKind::InvalidData, e).into());
             };
 
-            if let Some(mut early_data) = conn.early_data() {
+            if let Some(mut early_data) = conn.server_data_mut().early_data() {
                 if !did_early_data {
                     println!("Receiving early data from client");
                     did_early_data = true;

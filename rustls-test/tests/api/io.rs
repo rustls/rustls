@@ -2172,6 +2172,7 @@ fn client_handshake_sends_early_data() {
             .handle_all(&mut Vec::new())
             .unwrap();
         let received = server
+            .server_data_mut()
             .early_data()
             .unwrap()
             .take()

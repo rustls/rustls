@@ -706,9 +706,30 @@ fn early_data_is_available_on_resumption() {
         &mut server,
     );
 
-    assert_eq!(server.early_data().unwrap().take(), Some(b"hello".to_vec()));
-    assert_eq!(server.early_data().unwrap().take(), Some(b"world".to_vec()));
-    assert_eq!(server.early_data().unwrap().take(), None);
+    assert_eq!(
+        server
+            .server_data_mut()
+            .early_data()
+            .unwrap()
+            .take(),
+        Some(b"hello".to_vec())
+    );
+    assert_eq!(
+        server
+            .server_data_mut()
+            .early_data()
+            .unwrap()
+            .take(),
+        Some(b"world".to_vec())
+    );
+    assert_eq!(
+        server
+            .server_data_mut()
+            .early_data()
+            .unwrap()
+            .take(),
+        None
+    );
     let server_early_exporter = server.early_exporter().unwrap();
     assert_eq!(
         server.early_exporter().err(),
@@ -732,7 +753,12 @@ fn early_data_not_available_on_server_before_client_hello() {
         &provider::DEFAULT_PROVIDER,
     )))
     .unwrap();
-    assert!(server.early_data().is_none());
+    assert!(
+        server
+            .server_data_mut()
+            .early_data()
+            .is_none()
+    );
 }
 
 #[test]
@@ -783,8 +809,22 @@ fn early_data_is_limited_on_client() {
         &mut server,
     );
 
-    assert_eq!(server.early_data().unwrap().take(), Some(vec![0xaa; 1234]));
-    assert_eq!(server.early_data().unwrap().take(), None);
+    assert_eq!(
+        server
+            .server_data_mut()
+            .early_data()
+            .unwrap()
+            .take(),
+        Some(vec![0xaa; 1234])
+    );
+    assert_eq!(
+        server
+            .server_data_mut()
+            .early_data()
+            .unwrap()
+            .take(),
+        None
+    );
 }
 
 fn early_data_configs_allowing_client_to_send_excess_data() -> (Arc<ClientConfig>, Arc<ServerConfig>)
@@ -887,8 +927,22 @@ fn server_detects_excess_streamed_early_data() {
         .handle_all(&mut Vec::new())
         .unwrap();
 
-    assert_eq!(server.early_data().unwrap().take(), Some(vec![0xaa; 1024]));
-    assert_eq!(server.early_data().unwrap().take(), None);
+    assert_eq!(
+        server
+            .server_data_mut()
+            .early_data()
+            .unwrap()
+            .take(),
+        Some(vec![0xaa; 1024])
+    );
+    assert_eq!(
+        server
+            .server_data_mut()
+            .early_data()
+            .unwrap()
+            .take(),
+        None
+    );
 
     assert_eq!(
         client

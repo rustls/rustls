@@ -244,7 +244,9 @@ fn exec(
 
         if opts.side == Side::Server
             && opts.enable_early_data
-            && let Some(ed) = &mut server(&mut sess).early_data()
+            && let Some(ed) = &mut server(&mut sess)
+                .server_data_mut()
+                .early_data()
         {
             let mut data = ed.take().unwrap_or_default();
 

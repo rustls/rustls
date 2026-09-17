@@ -260,7 +260,11 @@ impl OpenConnection {
         }
 
         // Handle any 0-RTT early data.
-        if let Some(mut early_data) = self.tls_conn.early_data() {
+        if let Some(mut early_data) = self
+            .tls_conn
+            .server_data_mut()
+            .early_data()
+        {
             let mut buf = Vec::new();
             while let Some(item) = early_data.take() {
                 buf.extend(item);
