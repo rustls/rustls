@@ -49,7 +49,7 @@ use crate::{ConnectionTrafficSecrets, compress};
 
 mod client_hello {
     use super::*;
-    use crate::common_state::{EarlyDataEvent, Protocol};
+    use crate::common_state::Protocol;
     use crate::compress::CertCompressor;
     use crate::crypto::cipher::{EncodableVersion, Payload};
     use crate::crypto::kx::SupportedKxGroup;
@@ -340,9 +340,7 @@ mod client_hello {
                         &input.proof,
                     );
                 }
-                EarlyDataDecision::Accepted { .. } => {
-                    output.emit(Event::EarlyData(EarlyDataEvent::Accepted));
-                }
+                EarlyDataDecision::Accepted { .. } => {}
             }
 
             let key_schedule_traffic = emit_finished_tls13(

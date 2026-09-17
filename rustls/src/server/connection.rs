@@ -6,7 +6,7 @@ use core::ops::{Deref, DerefMut};
 use pki_types::{DnsName, FipsStatus};
 
 use super::config::ServerConfig;
-use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
+use crate::common_state::{CommonState, ConnectionOutputs, Event, Protocol, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
@@ -76,32 +76,6 @@ impl ServerConnection {
         match &mut self.inner.state {
             Ok(st) => st.set_resumption_data(data),
             Err(e) => Err(e.clone()),
-        }
-    }
-
-    /// Returns a handle to TLS1.3 0RTT/"early" data facilities if the client's early
-    /// data offer was accepted.
-    ///
-    /// The early data itself is read via [`MessageHandler::next_early_data()`] while
-    /// processing input; this handle gives access to the "early" keying material exporter.
-    ///
-    /// This returns `None` in many circumstances, such as :
-    ///
-    /// - Early data is disabled if [`ServerConfig::max_early_data_size`] is zero (the default).
-    /// - The session negotiated with the client is not TLS1.3.
-    /// - The client just doesn't support early data.
-    /// - The connection doesn't resume an existing session.
-    /// - The client hasn't sent a full ClientHello yet.
-    pub fn early_data(&mut self) -> Option<ReadEarlyData<'_>> {
-        if self
-            .inner
-            .side
-            .early_data
-            .was_accepted()
-        {
-            Some(ReadEarlyData::new(&mut self.inner))
-        } else {
-            None
         }
     }
 
@@ -298,7 +272,6 @@ impl crate::conn::private::Side for ServerSide {
 pub struct ServerData {
     sni: Option<DnsName<'static>>,
     received_resumption_data: Option<Vec<u8>>,
-    early_data: EarlyDataState,
 }
 
 impl ServerData {
@@ -331,7 +304,6 @@ impl ServerData {
 impl SideOutput for ServerData {
     fn emit(&mut self, ev: Event) {
         match ev {
-            Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accept(),
             Event::ReceivedServerName(sni) => self.sni = sni,
             Event::ResumptionData(data) => self.received_resumption_data = Some(data),
             _ => unreachable!(),
@@ -343,63 +315,6 @@ impl fmt::Debug for ServerData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ServerData")
             .field("sni", &self.sni)
-            .field("early_data", &self.early_data)
             .finish_non_exhaustive()
-    }
-}
-
-/// Access to early data facilities in resumed TLS1.3 connections.
-///
-/// "Early data" is also known as "0-RTT data".
-///
-/// The early data itself is read via [`MessageHandler::next_early_data()`]; this
-/// type provides the matching "early" keying material exporter.
-pub struct ReadEarlyData<'a> {
-    common: &'a mut ConnectionCommon<ServerSide>,
-}
-
-impl<'a> ReadEarlyData<'a> {
-    fn new(common: &'a mut ConnectionCommon<ServerSide>) -> Self {
-        ReadEarlyData { common }
-    }
-
-    /// Returns the "early" exporter that can derive key material for use in early data
-    ///
-    /// See [RFC 5705][] for general details on what exporters are, and [RFC 9846 S7.5][] for
-    /// specific details on the "early" exporter.
-    ///
-    /// **Beware** that the early exporter requires care, as it is subject to the same
-    /// potential for replay as early data itself.  See [RFC 9846 appendix F.5.1][] for
-    /// more detail.
-    ///
-    /// This function can be called at most once per connection. This function will error:
-    /// if called more than once per connection.
-    ///
-    /// If you are looking for the normal exporter, this is available from
-    /// [`Connection::exporter()`].
-    ///
-    /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
-    /// [RFC 9846 S7.5]: https://datatracker.ietf.org/doc/html/rfc9846#section-7.5
-    /// [RFC 9846 appendix F.5.1]: https://datatracker.ietf.org/doc/html/rfc9846#appendix-F.5.1
-    /// [`Connection::exporter()`]: crate::conn::Connection::exporter()
-    pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.common.common.early_exporter()
-    }
-}
-
-#[derive(Debug, Default)]
-pub(super) enum EarlyDataState {
-    #[default]
-    New,
-    Accepted,
-}
-
-impl EarlyDataState {
-    fn accept(&mut self) {
-        *self = Self::Accepted;
-    }
-
-    fn was_accepted(&self) -> bool {
-        matches!(self, Self::Accepted)
     }
 }
