@@ -213,7 +213,7 @@ impl ConnectionCommon<ServerSide> {
                 protocol,
             ))
             .into(),
-            ServerConnectionData::default(),
+            ServerData::default(),
             common,
         ))
     }
@@ -221,7 +221,7 @@ impl ConnectionCommon<ServerSide> {
     pub(crate) fn for_acceptor(protocol: Protocol) -> Self {
         Self::new(
             ReadClientHello::new(protocol).into(),
-            ServerConnectionData::default(),
+            ServerData::default(),
             CommonState::new(Side::Server, FipsStatus::Unvalidated),
         )
     }
@@ -308,19 +308,19 @@ impl SideData for ServerSide {
 }
 
 impl crate::conn::private::Side for ServerSide {
-    type Data = ServerConnectionData;
+    type Data = ServerData;
     type State = ServerState;
 }
 
 /// State associated with a server connection.
 #[derive(Default)]
-pub(crate) struct ServerConnectionData {
+pub(crate) struct ServerData {
     sni: Option<DnsName<'static>>,
     received_resumption_data: Option<Vec<u8>>,
     early_data: EarlyDataState,
 }
 
-impl ServerConnectionData {
+impl ServerData {
     pub(crate) fn received_resumption_data(&self) -> Option<&[u8]> {
         self.received_resumption_data.as_deref()
     }
@@ -330,7 +330,7 @@ impl ServerConnectionData {
     }
 }
 
-impl SideOutput for ServerConnectionData {
+impl SideOutput for ServerData {
     fn emit(&mut self, ev: Event) {
         match ev {
             Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accept(),
