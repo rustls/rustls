@@ -2165,35 +2165,75 @@ fn client_handshake_sends_early_data() {
         );
         assert_eq!(early_data.bytes_left(), 0xffff - 17);
 
-        let mut server = ServerConnection::new(server_config).unwrap();
-        let mut server_output = Vec::new();
-        server
-            .read_tls(&mut SliceInput::new(&mut client_output), &mut server_output)
-            .handle_all(&mut Vec::new())
+        let mut server_input = VecInput::default();
+        server_input
+            .read(&mut client_output.as_slice())
             .unwrap();
-        let received = server
+        client_output.clear();
+
+        let mut server_output = Vec::new();
+        let ServerHandshake::Accepted(accepted) = ServerHandshake::start()
+            .process(&mut server_input, &mut server_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+        let ServerHandshake::NeedsInput(mut server) = accepted
+            .choose_config(server_config, &mut server_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+        assert_eq!(
+            server
+                .server_data_mut()
+                .early_data()
+                .expect("early data not accepted")
+                .take(),
+            None
+        );
+
+        let ServerHandshake::NeedsInput(mut server) = server
+            .process(&mut server_input, &mut server_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+        let mut received = server
             .server_data_mut()
             .early_data()
-            .unwrap()
-            .take()
-            .unwrap();
-        assert_eq!(received, b"early hello world");
+            .expect("early data not accepted");
+        assert_eq!(received.take(), Some(b"early hello world".to_vec()));
+        assert_eq!(received.take(), None);
 
-        client_output.clear();
-        let ClientHandshake::Complete(split) = client
+        let ClientHandshake::Complete(client) = client
             .process(&mut SliceInput::new(&mut server_output), &mut client_output)
             .unwrap()
         else {
             panic!("unexpected state");
         };
-        server
-            .read_tls(&mut SliceInput::new(&mut client_output), &mut server_output)
-            .handle_all(&mut Vec::new())
-            .unwrap();
         assert!(
-            split
+            client
                 .side_outputs
                 .is_early_data_accepted()
+        );
+
+        server_input
+            .read(&mut client_output.as_slice())
+            .unwrap();
+        let ServerHandshake::Complete(mut server) = server
+            .process(&mut server_input, &mut server_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+        assert_eq!(
+            server
+                .side_outputs
+                .early_data()
+                .expect("early data not accepted")
+                .take(),
+            None
         );
     }
 }
