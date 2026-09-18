@@ -48,7 +48,7 @@ pub enum EchMode {
 }
 
 impl EchMode {
-    /// Returns true if the ECH mode will use a FIPS approved HPKE suite.
+    /// Returns the FIPS status of the HPKE suite that will be used.
     pub fn fips(&self) -> FipsStatus {
         match self {
             Self::Enable(ech_config) => ech_config.suite.fips(),

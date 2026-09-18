@@ -50,9 +50,9 @@ pub struct CipherSuiteCommon {
 }
 
 impl CipherSuiteCommon {
-    /// Return `true` if this is backed by a FIPS-approved implementation.
+    /// Return the FIPS validation status of this implementation.
     ///
-    /// This means all the constituent parts that do cryptography return `true` for `fips()`.
+    /// This is the combination of the constituent parts of the cipher suite.
     pub fn fips(&self) -> FipsStatus {
         self.hash_provider.fips()
     }

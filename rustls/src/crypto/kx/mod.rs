@@ -272,7 +272,7 @@ pub trait SupportedKxGroup: Send + Sync + Debug {
     /// you can create one locally, eg `NamedGroup(420)`.
     fn name(&self) -> NamedGroup;
 
-    /// Return `true` if this is backed by a FIPS-approved implementation.
+    /// Return the FIPS validation status of this implementation.
     fn fips(&self) -> FipsStatus {
         FipsStatus::Unvalidated
     }

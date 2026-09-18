@@ -24,7 +24,7 @@ You could, for example:
 
 ```rust,ignore
 # let client_config = unreachable!();
-assert!(client_config.fips());
+assert!(matches!(client_config.fips(), FipsStatus::Certified { .. }));
 ```
 
 But maybe your application has an error handling or health-check strategy better than panicking.
