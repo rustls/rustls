@@ -2159,9 +2159,10 @@ fn client_handshake_sends_early_data() {
         let mut early_data = client
             .early_data()
             .expect("early data not available");
+        assert_eq!(early_data.write(b"early ".into(), &mut client_output), 6);
         assert_eq!(
-            early_data.write(b"early hello world".into(), &mut client_output),
-            17
+            early_data.write(b"hello world".into(), &mut client_output),
+            11
         );
         assert_eq!(early_data.bytes_left(), 0xffff - 17);
 
@@ -2203,7 +2204,8 @@ fn client_handshake_sends_early_data() {
             .server_data_mut()
             .early_data()
             .expect("early data not accepted");
-        assert_eq!(received.take(), Some(b"early hello world".to_vec()));
+        assert_eq!(received.take(), Some(b"early ".to_vec()));
+        assert_eq!(received.take(), Some(b"hello world".to_vec()));
         assert_eq!(received.take(), None);
 
         let ClientHandshake::Complete(client) = client
