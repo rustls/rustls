@@ -1553,14 +1553,14 @@ pub enum ApiMisuse {
     /// Trying to resume a session with an unknown cipher suite.
     ResumingFromUnknownCipherSuite(CipherSuite),
 
-    /// The [`KeyingMaterialExporter`][] was already consumed.
+    /// The [`KeyingMaterialExporter`][] was already consumed or is not yet available.
     ///
-    /// Methods that obtain an exporter (eg, [`Connection::exporter()`][]) can only
+    /// Methods that obtain an exporter (eg, [`ConnectionOutputs::exporter()`][]) can only
     /// be used once.  This error is returned on subsequent calls.
     ///
     /// [`KeyingMaterialExporter`]: crate::KeyingMaterialExporter
-    /// [`Connection::exporter()`]: crate::Connection::exporter()
-    ExporterAlreadyUsed,
+    /// [`ConnectionOutputs::exporter()`]: crate::ConnectionOutputs::exporter()
+    ExporterNotAvailable,
 
     /// The `context` parameter to [`KeyingMaterialExporter::derive()`][] was too long.
     ///

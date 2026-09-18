@@ -244,18 +244,17 @@ fn exec(
 
         if opts.side == Side::Server
             && opts.enable_early_data
-            && let Some(ed) = &mut server(&mut sess).early_data()
+            && let Some(ed) = &mut server(&mut sess)
+                .server_data_mut()
+                .early_data()
         {
-            let mut data = Vec::new();
-            let data_len = ed
-                .read_to_end(&mut data)
-                .expect("cannot read early_data");
+            let mut data = ed.take().unwrap_or_default();
 
             for b in data.iter_mut() {
                 *b ^= 0xff;
             }
 
-            write_or_queue(&mut sess, &data[..data_len], &mut pending, &mut output)
+            write_or_queue(&mut sess, &data, &mut pending, &mut output)
                 .expect("cannot echo early_data in 1rtt data");
         }
 

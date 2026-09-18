@@ -13,7 +13,7 @@
 //! that is sensible outside of example code.
 
 use core::error::Error as StdError;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::net::TcpListener;
 use std::sync::Arc;
 use std::{env, io};
@@ -91,18 +91,15 @@ fn main() -> Result<(), Box<dyn StdError>> {
                 return Err(io::Error::new(io::ErrorKind::InvalidData, e).into());
             };
 
-            if let Some(mut early_data) = conn.early_data() {
+            if let Some(mut early_data) = conn.server_data_mut().early_data() {
                 if !did_early_data {
                     println!("Receiving early data from client");
                     did_early_data = true;
                 }
 
-                let bytes_read = early_data
-                    .read_to_end(&mut buf)
-                    .unwrap();
-
-                if bytes_read != 0 {
-                    println!("Early data from client: {buf:?}");
+                while let Some(item) = early_data.take() {
+                    println!("Early data from client: {item:?}");
+                    buf.extend(item);
                 }
             }
         }

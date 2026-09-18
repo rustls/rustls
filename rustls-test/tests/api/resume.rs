@@ -4,7 +4,6 @@
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 use std::fmt;
-use std::io::Read;
 use std::sync::Arc;
 
 use rustls::client::{Resumption, TicketRequest};
@@ -686,18 +685,17 @@ fn early_data_is_available_on_resumption() {
             .write(b"hello".into(), &mut client_output),
         5
     );
-    let client_early_exporter = client
-        .early_data()
-        .unwrap()
-        .exporter()
-        .unwrap();
     assert_eq!(
         client
             .early_data()
             .unwrap()
-            .exporter()
-            .err(),
-        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+            .write(b"world".into(), &mut client_output),
+        5
+    );
+    let client_early_exporter = client.early_exporter().unwrap();
+    assert_eq!(
+        client.early_exporter().err(),
+        Some(Error::ApiMisuse(ApiMisuse::ExporterNotAvailable)),
     );
     do_handshake(
         &mut client_input,
@@ -708,28 +706,34 @@ fn early_data_is_available_on_resumption() {
         &mut server,
     );
 
-    let mut received_early_data = [0u8; 5];
     assert_eq!(
         server
-            .early_data()
-            .expect("early_data didn't happen")
-            .read(&mut received_early_data)
-            .expect("early_data failed unexpectedly"),
-        5
-    );
-    assert_eq!(&received_early_data[..], b"hello");
-    let server_early_exporter = server
-        .early_data()
-        .unwrap()
-        .exporter()
-        .unwrap();
-    assert_eq!(
-        server
+            .server_data_mut()
             .early_data()
             .unwrap()
-            .exporter()
-            .err(),
-        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+            .take(),
+        Some(b"hello".to_vec())
+    );
+    assert_eq!(
+        server
+            .server_data_mut()
+            .early_data()
+            .unwrap()
+            .take(),
+        Some(b"world".to_vec())
+    );
+    assert_eq!(
+        server
+            .server_data_mut()
+            .early_data()
+            .unwrap()
+            .take(),
+        None
+    );
+    let server_early_exporter = server.early_exporter().unwrap();
+    assert_eq!(
+        server.early_exporter().err(),
+        Some(Error::ApiMisuse(ApiMisuse::ExporterNotAvailable)),
     );
 
     // check exporters agree
@@ -749,7 +753,12 @@ fn early_data_not_available_on_server_before_client_hello() {
         &provider::DEFAULT_PROVIDER,
     )))
     .unwrap();
-    assert!(server.early_data().is_none());
+    assert!(
+        server
+            .server_data_mut()
+            .early_data()
+            .is_none()
+    );
 }
 
 #[test]
@@ -800,16 +809,22 @@ fn early_data_is_limited_on_client() {
         &mut server,
     );
 
-    let mut received_early_data = [0u8; 1234];
     assert_eq!(
         server
+            .server_data_mut()
             .early_data()
-            .expect("early_data didn't happen")
-            .read(&mut received_early_data)
-            .expect("early_data failed unexpectedly"),
-        1234
+            .unwrap()
+            .take(),
+        Some(vec![0xaa; 1234])
     );
-    assert_eq!(&received_early_data[..], [0xaa; 1234]);
+    assert_eq!(
+        server
+            .server_data_mut()
+            .early_data()
+            .unwrap()
+            .take(),
+        None
+    );
 }
 
 fn early_data_configs_allowing_client_to_send_excess_data() -> (Arc<ClientConfig>, Arc<ServerConfig>)
@@ -912,16 +927,22 @@ fn server_detects_excess_streamed_early_data() {
         .handle_all(&mut Vec::new())
         .unwrap();
 
-    let mut received_early_data = [0u8; 1024];
     assert_eq!(
         server
+            .server_data_mut()
             .early_data()
-            .expect("early_data didn't happen")
-            .read(&mut received_early_data)
-            .expect("early_data failed unexpectedly"),
-        1024
+            .unwrap()
+            .take(),
+        Some(vec![0xaa; 1024])
     );
-    assert_eq!(&received_early_data[..], [0xaa; 1024]);
+    assert_eq!(
+        server
+            .server_data_mut()
+            .early_data()
+            .unwrap()
+            .take(),
+        None
+    );
 
     assert_eq!(
         client

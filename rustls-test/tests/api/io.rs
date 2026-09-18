@@ -2118,6 +2118,129 @@ fn client_handshake_receives_half_rtt_data() {
 }
 
 #[test]
+fn client_handshake_sends_early_data() {
+    for (client_config, server_config, _expect) in MultiTest::new(provider::DEFAULT_TLS13_PROVIDER)
+    {
+        let mut server_config = Arc::unwrap_or_clone(server_config);
+        server_config.max_early_data_size = 0xffff;
+        let server_config = Arc::new(server_config);
+        let mut client_config = Arc::unwrap_or_clone(client_config);
+        client_config.enable_early_data = true;
+        let client_config = Arc::new(client_config);
+
+        // warm up
+        let mut client_output = Vec::new();
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+        let mut server_output = Vec::new();
+        do_handshake(
+            &mut VecInput::default(),
+            &mut client_output,
+            &mut client,
+            &mut VecInput::default(),
+            &mut server_output,
+            &mut server,
+        );
+        client
+            .read_tls(&mut SliceInput::new(&mut server_output), &mut Vec::new())
+            .handle_all(&mut Vec::new())
+            .unwrap();
+
+        let mut client_output = Vec::new();
+        let mut client = client_config
+            .connect(server_name("localhost"))
+            .start_handshake(&mut client_output)
+            .unwrap();
+
+        client
+            .outputs_mut()
+            .early_exporter()
+            .expect("early exporter not available");
+        let mut early_data = client
+            .early_data()
+            .expect("early data not available");
+        assert_eq!(early_data.write(b"early ".into(), &mut client_output), 6);
+        assert_eq!(
+            early_data.write(b"hello world".into(), &mut client_output),
+            11
+        );
+        assert_eq!(early_data.bytes_left(), 0xffff - 17);
+
+        let mut server_input = VecInput::default();
+        server_input
+            .read(&mut client_output.as_slice())
+            .unwrap();
+        client_output.clear();
+
+        let mut server_output = Vec::new();
+        let ServerHandshake::Accepted(accepted) = ServerHandshake::start()
+            .process(&mut server_input, &mut server_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+        let ServerHandshake::NeedsInput(mut server) = accepted
+            .choose_config(server_config, &mut server_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+        assert_eq!(
+            server
+                .server_data_mut()
+                .early_data()
+                .expect("early data not accepted")
+                .take(),
+            None
+        );
+
+        let ServerHandshake::NeedsInput(mut server) = server
+            .process(&mut server_input, &mut server_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+        let mut received = server
+            .server_data_mut()
+            .early_data()
+            .expect("early data not accepted");
+        assert_eq!(received.take(), Some(b"early ".to_vec()));
+        assert_eq!(received.take(), Some(b"hello world".to_vec()));
+        assert_eq!(received.take(), None);
+
+        let ClientHandshake::Complete(client) = client
+            .process(&mut SliceInput::new(&mut server_output), &mut client_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+        assert!(
+            client
+                .side_outputs
+                .is_early_data_accepted()
+        );
+
+        server_input
+            .read(&mut client_output.as_slice())
+            .unwrap();
+        let ServerHandshake::Complete(mut server) = server
+            .process(&mut server_input, &mut server_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+        assert_eq!(
+            server
+                .side_outputs
+                .early_data()
+                .expect("early data not accepted")
+                .take(),
+            None
+        );
+    }
+}
+
+#[test]
 fn test_full_server_handshake() {
     for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
         println!("expect: {expect:?}");

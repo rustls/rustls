@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 use core::fmt;
-use core::ops::Deref;
+use core::ops::{Deref, DerefMut};
 
 use pki_types::{FipsStatus, ServerName};
 
@@ -11,8 +11,8 @@ use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event,
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    ClientNext, Connection, ConnectionCommon, Core, KeyingMaterialExporter, MessageHandler,
-    SideCommonOutput, SideData, Tcp, VerifyPeerIdentity,
+    ClientNext, Connection, ConnectionCommon, Core, MessageHandler, SideCommonOutput, SideData,
+    Tcp, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -61,7 +61,7 @@ impl ClientConnection {
         self.inner.split()
     }
 
-    /// Allows reading TLS1.3 0RTT/"early" data received from a client.
+    /// Allows writing TLS1.3 0RTT/"early" data.
     ///
     /// This returns None in many circumstances when the capability to
     /// send early data is not available, including but not limited to:
@@ -77,16 +77,10 @@ impl ClientConnection {
     ///
     /// The server can choose not to accept any sent early data --
     /// in this case the data is lost but the connection continues.  You
-    /// can tell this happened using `is_early_data_accepted`.
+    /// can tell this happened using [`ClientConnectionData::is_early_data_accepted()`].
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
         let ConnectionCommon { side, common, .. } = &mut self.inner;
-        let early_data = side.early_data.as_mut()?;
-        match early_data.state {
-            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted => {
-                Some(WriteEarlyData { early_data, common })
-            }
-            _ => None,
-        }
+        WriteEarlyData::new(&mut side.early_data, common)
     }
 
     /// Returns the number of TLS1.3 tickets that have been received.
@@ -122,10 +116,6 @@ impl Connection for ClientConnection {
         self.inner.read_tls(input, tls)
     }
 
-    fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.exporter()
-    }
-
     fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
         self.inner.dangerous_extract_secrets()
     }
@@ -152,6 +142,12 @@ impl Deref for ClientConnection {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl DerefMut for ClientConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
@@ -315,6 +311,31 @@ impl TryFrom<Core<ClientSide, Tcp>> for ClientHandshake {
     }
 }
 
+impl NeedsInput<ClientSide> {
+    /// Returns an object you can use to send TLS1.3 early data (a.k.a. "0-RTT data")
+    /// to the server.
+    ///
+    /// This returns None in many circumstances when the capability to
+    /// send early data is not available, including but not limited to:
+    ///
+    /// - The server hasn't been talked to previously.
+    /// - The server does not support resumption.
+    /// - The server does not support early data.
+    /// - The resumption data for the server has expired.
+    ///
+    /// The server specifies a maximum amount of early data.  You can
+    /// learn this limit through the returned object, and writes through
+    /// it will process only this many bytes.
+    ///
+    /// The server can choose not to accept any sent early data --
+    /// in this case the data is lost but the connection continues.  You
+    /// can tell this happened using [`ClientConnectionData::is_early_data_accepted()`].
+    pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
+        let ConnectionCommon { side, common, .. } = &mut self.0.inner;
+        WriteEarlyData::new(&mut side.early_data, common)
+    }
+}
+
 /// Allows writing of early data in resumed TLS 1.3 connections.
 ///
 /// "Early data" is also known as "0-RTT data".
@@ -326,6 +347,19 @@ pub struct WriteEarlyData<'a> {
 }
 
 impl<'a> WriteEarlyData<'a> {
+    fn new(early_data: &'a mut Option<EarlyData>, common: &'a mut CommonState) -> Option<Self> {
+        let Some(early_data) = early_data else {
+            return None;
+        };
+
+        match early_data.state {
+            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted => {
+                Some(WriteEarlyData { early_data, common })
+            }
+            _ => None,
+        }
+    }
+
     /// Encrypt early data as TLS records and encode them into `tls`.
     ///
     /// Yields the number of bytes of `plaintext` that were consumed.  This may be less than
@@ -352,29 +386,6 @@ impl<'a> WriteEarlyData<'a> {
     /// once this reaches zero.
     pub fn bytes_left(&self) -> usize {
         self.early_data.left
-    }
-
-    /// Returns the "early" exporter that can derive key material for use in early data
-    ///
-    /// See [RFC 5705][] for general details on what exporters are, and [RFC 9846 S7.5][] for
-    /// specific details on the "early" exporter.
-    ///
-    /// **Beware** that the early exporter requires care, as it is subject to the same
-    /// potential for replay as early data itself.  See [RFC 9846 appendix F.5.1][] for
-    /// more detail.
-    ///
-    /// This function can be called at most once per connection. This function will error:
-    /// if called more than once per connection.
-    ///
-    /// If you are looking for the normal exporter, this is available from
-    /// [`Connection::exporter()`].
-    ///
-    /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
-    /// [RFC 9846 S7.5]: https://datatracker.ietf.org/doc/html/rfc9846#section-7.5
-    /// [RFC 9846 appendix F.5.1]: https://datatracker.ietf.org/doc/html/rfc9846#appendix-F.5.1
-    /// [`Connection::exporter()`]: crate::conn::Connection::exporter()
-    pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.common.early_exporter()
     }
 }
 

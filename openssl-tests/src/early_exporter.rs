@@ -48,17 +48,18 @@ fn test_early_exporter() {
                 .handle_all(&mut Vec::new())
                 .unwrap();
 
-            let message = if let Some(mut early) = server.early_data() {
-                let secret = early
-                    .exporter()
+            let message = if let Some(mut early) = server.server_data_mut().early_data() {
+                let mut buf = b"early data: ".to_vec();
+                while let Some(chunk) = early.take() {
+                    buf.extend(chunk);
+                }
+                buf.push(b'\n');
+
+                let secret = server
+                    .early_exporter()
                     .unwrap()
                     .derive(b"label", Some(b"context"), [0u8; 64])
                     .unwrap();
-
-                let mut buf = b"early data: ".to_vec();
-                early.read_to_end(&mut buf).unwrap();
-                buf.push(b'\n');
-
                 buf.extend_from_slice(b"exported: ");
                 buf.extend_from_slice(format!("{:02x?}", secret).as_bytes());
                 buf.push(b'\n');
