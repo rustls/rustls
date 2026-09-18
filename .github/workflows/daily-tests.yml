@@ -114,7 +114,7 @@ jobs:
       - name: Check ech-client (defo.ie)
         run: >
           cargo run --locked -p rustls-examples --bin ech-client -- --host min-ng.test.defo.ie --path "echstat.php?format=json" public.test.defo.ie min-ng.test.defo.ie |
-            grep '"SSL_ECH_STATUS": "success"'
+            grep -i '"SSL_ECH_STATUS": "success"'
 
       - name: Check ech-client (tls-ech.dev)
         run: >
