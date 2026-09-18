@@ -934,7 +934,7 @@ pub trait Algorithm: Send + Sync {
     /// This controls the size of `AeadKey`s presented to `packet_key()` and `header_protection_key()`.
     fn aead_key_len(&self) -> usize;
 
-    /// Whether this algorithm is FIPS-approved.
+    /// The FIPS validation status of this algorithm.
     fn fips(&self) -> FipsStatus {
         FipsStatus::Unvalidated
     }

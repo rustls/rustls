@@ -26,8 +26,8 @@ struct KxGroup {
 
     /// Whether the algorithm is allowed by FIPS
     ///
-    /// `SupportedKxGroup::fips()` is true if and only if the algorithm is allowed,
-    /// _and_ the implementation is FIPS-validated.
+    /// `SupportedKxGroup::fips()` is FIPS-validated if and only if the algorithm
+    /// is allowed, _and_ the implementation is FIPS-validated.
     fips_allowed: bool,
 
     /// aws-lc-rs 1.9 and later accepts more formats of public keys than

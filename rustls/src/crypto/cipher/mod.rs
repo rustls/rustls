@@ -45,7 +45,7 @@ pub trait Tls13AeadAlgorithm: Send + Sync {
         iv: Iv,
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError>;
 
-    /// Return `true` if this is backed by a FIPS-approved implementation.
+    /// Return the FIPS validation status of this implementation.
     fn fips(&self) -> FipsStatus {
         FipsStatus::Unvalidated
     }

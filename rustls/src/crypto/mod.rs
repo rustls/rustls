@@ -138,7 +138,7 @@ pub use crate::suites::CipherSuiteCommon;
 /// Call [`CryptoProvider::fips()`] to determine the FIPS status of a given provider.
 ///
 /// You can verify the configuration at runtime by checking
-/// [`ServerConfig::fips()`]/[`ClientConfig::fips()`] return `true`.
+/// [`ServerConfig::fips()`]/[`ClientConfig::fips()`].
 #[expect(clippy::exhaustive_structs)]
 #[derive(Debug, Clone)]
 pub struct CryptoProvider {
