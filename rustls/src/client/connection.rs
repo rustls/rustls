@@ -402,7 +402,7 @@ impl ConnectionCommon<ClientSide> {
         common_state
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
-        let mut data = ClientConnectionData::default();
+        let mut data = ClientData::default();
 
         let mut output = SideCommonOutput {
             side: &mut data,
@@ -454,11 +454,11 @@ impl SideData for ClientSide {
 }
 
 impl crate::conn::private::Side for ClientSide {
-    type Data = ClientConnectionData;
+    type Data = ClientData;
     type State = ClientState;
 }
 
-impl SideOutput for ClientConnectionData {
+impl SideOutput for ClientData {
     fn emit(&mut self, ev: Event) {
         match ev {
             Event::EchStatus(ech) => self.ech_status = ech,
@@ -489,7 +489,7 @@ impl SideOutput for ClientConnectionData {
 }
 
 #[derive(Default)]
-pub(crate) struct ClientConnectionData {
+pub(crate) struct ClientData {
     early_data: Option<EarlyData>,
     ech_status: EchStatus,
 }
