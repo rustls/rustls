@@ -118,18 +118,6 @@ mod server_hello {
                 return Err(PeerMisbehaved::AttemptedDowngradeToTls12WhenTls13IsSupported.into());
             }
 
-            // If we didn't have an input session to resume, and we sent a session ID,
-            // that implies we sent a TLS 1.3 legacy_session_id for compatibility purposes.
-            // In this instance since we're now continuing a TLS 1.2 handshake the server
-            // should not have echoed it back: it's a randomly generated session ID it couldn't
-            // have known.
-            if st.input.resuming.is_none()
-                && !st.input.session_id.is_empty()
-                && st.input.session_id == server_hello.session_id
-            {
-                return Err(PeerMisbehaved::ServerEchoedCompatibilitySessionId.into());
-            }
-
             let ClientHelloInput {
                 config,
                 session_key,
@@ -143,6 +131,18 @@ mod server_hello {
                     ClientSessionValue::Tls12(inner) => Some(inner),
                     ClientSessionValue::Tls13(_) => None,
                 });
+
+            // If we didn't have a TLS 1.2 session to resume, and we sent a session ID,
+            // that implies we sent a TLS 1.3 legacy_session_id for compatibility purposes.
+            // In this instance since we're now continuing a TLS 1.2 handshake the server
+            // should not have echoed it back: it's a randomly generated session ID it couldn't
+            // have known.
+            if resuming_session.is_none()
+                && !st.input.session_id.is_empty()
+                && st.input.session_id == server_hello.session_id
+            {
+                return Err(PeerMisbehaved::ServerEchoedCompatibilitySessionId.into());
+            }
 
             // Doing EMS?
             let using_ems = server_hello
