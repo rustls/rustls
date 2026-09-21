@@ -109,11 +109,13 @@ impl ClientConnection {
 
 impl Connection for ClientConnection {
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.inner.quic_transport_parameters()
+        self.inner.quic.transport_parameters()
     }
 
     fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
-        self.inner.zero_rtt_keys()
+        self.inner
+            .quic
+            .zero_rtt_keys(&self.inner)
     }
 
     fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
@@ -254,11 +256,13 @@ impl ServerConnection {
 
 impl Connection for ServerConnection {
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.inner.quic_transport_parameters()
+        self.inner.quic.transport_parameters()
     }
 
     fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
-        self.inner.zero_rtt_keys()
+        self.inner
+            .quic
+            .zero_rtt_keys(&self.inner)
     }
 
     fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
@@ -381,12 +385,14 @@ impl NeedsInput {
     /// they cannot be fully trusted until then. Reliance on them should be minimized.
     /// Any tampering with the parameters will cause the handshake to fail.
     pub fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.inner.quic_transport_parameters()
+        self.inner.quic.transport_parameters()
     }
 
     /// Compute the keys for decrypting 0-RTT packets, if available.
     pub fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
-        self.inner.zero_rtt_keys()
+        self.inner
+            .quic
+            .zero_rtt_keys(&self.inner)
     }
 
     /// Retrieves the server name supplied by the client, if any.
@@ -626,35 +632,6 @@ impl<Side: SideData> QuicCommon<Side> {
         Self { common, quic }
     }
 
-    fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.quic
-            .params
-            .as_ref()
-            .map(|v| v.as_ref())
-    }
-
-    fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
-        let suite = self
-            .common
-            .common
-            .negotiated_cipher_suite()
-            .and_then(|suite| match suite {
-                SupportedCipherSuite::Tls13(suite) => Some(suite),
-                _ => None,
-            })?;
-
-        let suite = Suite {
-            inner: suite,
-            quic: suite.quic?,
-        };
-
-        Some(DirectionalKeys::new(
-            suite,
-            self.quic.early_secret.as_ref()?,
-            self.quic.version,
-        ))
-    }
-
     fn read_hs(
         &mut self,
         input: &mut dyn TlsInputBuffer,
@@ -741,6 +718,30 @@ impl Quic {
 
     pub(crate) fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
         mem::take(&mut self.events).into_iter()
+    }
+
+    fn zero_rtt_keys(&self, outputs: &ConnectionOutputs) -> Option<DirectionalKeys> {
+        let suite = outputs
+            .negotiated_cipher_suite()
+            .and_then(|suite| match suite {
+                SupportedCipherSuite::Tls13(suite) => Some(suite),
+                _ => None,
+            })?;
+
+        let suite = Suite {
+            inner: suite,
+            quic: suite.quic?,
+        };
+
+        Some(DirectionalKeys::new(
+            suite,
+            self.early_secret.as_ref()?,
+            self.version,
+        ))
+    }
+
+    fn transport_parameters(&self) -> Option<&[u8]> {
+        self.params.as_ref().map(|v| v.as_ref())
     }
 }
 
