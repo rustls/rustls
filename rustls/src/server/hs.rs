@@ -141,6 +141,18 @@ impl Tls12Extensions {
 
         // Renegotiation.
         // (We don't do reneg at all, but would support the secure version if we did.)
+        //
+        // RFC 5746 section 3.6: `renegotiated_connection` must be empty in an
+        // initial handshake.  A non-empty value means the client believes it is
+        // renegotiating an existing connection.
+        if hello
+            .renegotiation_info
+            .as_ref()
+            .is_some_and(|info| !info.is_empty())
+        {
+            return Err(PeerMisbehaved::NonEmptyRenegotiationInfo.into());
+        }
+
         if hello.renegotiation_info.is_some()
             || hello
                 .cipher_suites

@@ -118,6 +118,17 @@ mod server_hello {
                 return Err(PeerMisbehaved::AttemptedDowngradeToTls12WhenTls13IsSupported.into());
             }
 
+            // RFC 5746 section 3.4: `renegotiated_connection` must be empty in an
+            // initial handshake.  A non-empty value means the server believes it is
+            // renegotiating an existing connection.
+            if server_hello
+                .renegotiation_info
+                .as_ref()
+                .is_some_and(|info| !info.is_empty())
+            {
+                return Err(PeerMisbehaved::NonEmptyRenegotiationInfo.into());
+            }
+
             // If we didn't have an input session to resume, and we sent a session ID,
             // that implies we sent a TLS 1.3 legacy_session_id for compatibility purposes.
             // In this instance since we're now continuing a TLS 1.2 handshake the server
