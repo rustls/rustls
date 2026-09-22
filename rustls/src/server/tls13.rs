@@ -15,7 +15,7 @@ use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{Event, HandshakeFlightTls13, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
 use crate::conn::{
-    ConnectionRandoms, DataKind, Input, TrafficTemperCounters, VerifySidePeerIdentity,
+    ConnectionRandoms, DataKind, Input, State, TrafficTemperCounters, VerifySidePeerIdentity,
 };
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::NamedGroup;
@@ -46,37 +46,6 @@ use crate::verify::{
     ClientIdentity, FinishedMessageVerified, SignatureVerificationInput, VerifiedIdentity,
 };
 use crate::{ConnectionTrafficSecrets, compress};
-
-#[expect(private_interfaces)]
-pub(crate) enum Tls13State {
-    SkipRejectedEarlyData(Box<ExpectAndSkipRejectedEarlyData>),
-    CertificateOrCompressedCertificate(Box<ExpectCertificateOrCompressedCertificate>),
-    Certificate(Box<ExpectCertificate>),
-    CertificateVerify(Box<ExpectCertificateVerify>),
-    EarlyData(Box<ExpectEarlyData>),
-    Finished(Box<ExpectFinished>),
-    Traffic(Box<ExpectTraffic>),
-    QuicTraffic(Box<ExpectQuicTraffic>),
-}
-
-impl Tls13State {
-    pub(crate) fn handle<'m>(
-        self,
-        input: Input<'m>,
-        output: &mut dyn Output<'m>,
-    ) -> Result<ServerState, Error> {
-        match self {
-            Self::SkipRejectedEarlyData(e) => e.handle(input, output),
-            Self::CertificateOrCompressedCertificate(e) => e.handle(input, output),
-            Self::Certificate(e) => e.handle(input, output),
-            Self::CertificateVerify(e) => e.handle(input, output),
-            Self::EarlyData(e) => e.handle(input, output),
-            Self::Finished(e) => e.handle(input, output),
-            Self::Traffic(e) => e.handle(input, output),
-            Self::QuicTraffic(e) => e.handle(input, output),
-        }
-    }
-}
 
 mod client_hello {
     use super::*;
@@ -908,7 +877,7 @@ struct ExpectAndSkipRejectedEarlyData {
     next: Box<ExpectClientHello>,
 }
 
-impl ExpectAndSkipRejectedEarlyData {
+impl State<ServerSide> for ExpectAndSkipRejectedEarlyData {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
@@ -931,7 +900,7 @@ impl ExpectAndSkipRejectedEarlyData {
 
 impl From<Box<ExpectAndSkipRejectedEarlyData>> for ServerState {
     fn from(value: Box<ExpectAndSkipRejectedEarlyData>) -> Self {
-        Self::Tls13(Tls13State::SkipRejectedEarlyData(value))
+        Self::Tls13(value)
     }
 }
 
@@ -941,7 +910,7 @@ struct ExpectCertificateOrCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl ExpectCertificateOrCompressedCertificate {
+impl State<ServerSide> for ExpectCertificateOrCompressedCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -982,7 +951,7 @@ impl ExpectCertificateOrCompressedCertificate {
 
 impl From<Box<ExpectCertificateOrCompressedCertificate>> for ServerState {
     fn from(value: Box<ExpectCertificateOrCompressedCertificate>) -> Self {
-        Self::Tls13(Tls13State::CertificateOrCompressedCertificate(value))
+        Self::Tls13(value)
     }
 }
 
@@ -1104,7 +1073,7 @@ impl ExpectCertificate {
     }
 }
 
-impl ExpectCertificate {
+impl State<ServerSide> for ExpectCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -1116,7 +1085,7 @@ impl ExpectCertificate {
 
 impl From<Box<ExpectCertificate>> for ServerState {
     fn from(value: Box<ExpectCertificate>) -> Self {
-        Self::Tls13(Tls13State::Certificate(value))
+        Self::Tls13(value)
     }
 }
 
@@ -1168,7 +1137,7 @@ struct ExpectCertificateVerify {
     peer_identity: VerifiedIdentity<'static>,
 }
 
-impl ExpectCertificateVerify {
+impl State<ServerSide> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
@@ -1205,7 +1174,7 @@ impl ExpectCertificateVerify {
 
 impl From<Box<ExpectCertificateVerify>> for ServerState {
     fn from(value: Box<ExpectCertificateVerify>) -> Self {
-        Self::Tls13(Tls13State::CertificateVerify(value))
+        Self::Tls13(value)
     }
 }
 
@@ -1219,7 +1188,7 @@ struct ExpectEarlyData {
     remaining_length: usize,
 }
 
-impl ExpectEarlyData {
+impl State<ServerSide> for ExpectEarlyData {
     fn handle<'m>(
         mut self: Box<Self>,
         input: Input<'m>,
@@ -1266,7 +1235,7 @@ impl ExpectEarlyData {
 
 impl From<Box<ExpectEarlyData>> for ServerState {
     fn from(value: Box<ExpectEarlyData>) -> Self {
-        Self::Tls13(Tls13State::EarlyData(value))
+        Self::Tls13(value)
     }
 }
 
@@ -1471,7 +1440,7 @@ impl ExpectFinished {
     }
 }
 
-impl ExpectFinished {
+impl State<ServerSide> for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
@@ -1546,7 +1515,7 @@ impl ExpectFinished {
 
 impl From<Box<ExpectFinished>> for ServerState {
     fn from(value: Box<ExpectFinished>) -> Self {
-        Self::Tls13(Tls13State::Finished(value))
+        Self::Tls13(value)
     }
 }
 
@@ -1596,7 +1565,7 @@ impl ExpectTraffic {
     }
 }
 
-impl ExpectTraffic {
+impl State<ServerSide> for ExpectTraffic {
     fn handle<'m>(
         mut self: Box<Self>,
         input: Input<'m>,
@@ -1627,7 +1596,11 @@ impl ExpectTraffic {
         Ok(self.into())
     }
 
-    pub(super) fn into_external_state(
+    fn is_traffic(&self) -> bool {
+        true
+    }
+
+    fn into_external_state(
         self: Box<Self>,
         send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
@@ -1667,7 +1640,7 @@ impl KernelState for ExpectTraffic {
 
 impl From<Box<ExpectTraffic>> for ServerState {
     fn from(value: Box<ExpectTraffic>) -> Self {
-        Self::Tls13(Tls13State::Traffic(value))
+        Self::Tls13(value)
     }
 }
 
@@ -1675,14 +1648,18 @@ struct ExpectQuicTraffic {
     _fin_verified: FinishedMessageVerified,
 }
 
-impl ExpectQuicTraffic {
+impl State<ServerSide> for ExpectQuicTraffic {
     fn handle(
-        self,
+        self: Box<Self>,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         // reject all messages
         Err(inappropriate_message(&message.payload, &[]))
+    }
+
+    fn is_traffic(&self) -> bool {
+        true
     }
 }
 
@@ -1705,7 +1682,7 @@ impl KernelState for ExpectQuicTraffic {
 
 impl From<Box<ExpectQuicTraffic>> for ServerState {
     fn from(value: Box<ExpectQuicTraffic>) -> Self {
-        Self::Tls13(Tls13State::QuicTraffic(value))
+        Self::Tls13(value)
     }
 }
 
