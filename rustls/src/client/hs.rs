@@ -11,11 +11,11 @@ use super::config::{ClientSessionKey, Tls12Resumption};
 use super::ech::{EchMode, EchState, EchStatus};
 use super::{
     ClientHelloDetails, ClientSessionCommon, ClientSide, Retrieved, Tls12Session, Tls13Session,
-    tls12, tls13,
+    tls13,
 };
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{EarlyDataEvent, Event, Output, OutputEvent, Protocol};
-use crate::conn::{Input, StateMachine, VerifySidePeerIdentity};
+use crate::conn::{Input, State, StateMachine, VerifySidePeerIdentity};
 use crate::crypto::cipher::{EncodableVersion, Payload};
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
@@ -49,7 +49,7 @@ pub(crate) enum ClientState {
     /// Verifying the server's presented certificate chain.
     VerifyServerIdentity(Box<dyn VerifySidePeerIdentity<ClientSide>>),
 
-    Tls12(tls12::Tls12State),
+    Tls12(Box<dyn State<ClientSide>>),
     Tls13(tls13::Tls13State),
 }
 
@@ -81,16 +81,18 @@ impl StateMachine for ClientState {
     }
 
     fn is_traffic(&self) -> bool {
-        matches!(
-            self,
-            Self::Tls12(tls12::Tls12State::Traffic(..))
-                | Self::Tls13(tls13::Tls13State::Traffic(..) | tls13::Tls13State::QuicTraffic(..))
-        )
+        match self {
+            Self::Tls12(sm) => sm.is_traffic(),
+            Self::Tls13(tls13::Tls13State::Traffic(..) | tls13::Tls13State::QuicTraffic(..)) => {
+                true
+            }
+            _ => false,
+        }
     }
 
     fn handle_decrypt_error(&mut self) {
-        if let Self::Tls12(tls12::Tls12State::Finished(e)) = self {
-            e.handle_decrypt_error();
+        if let Self::Tls12(sm) = self {
+            sm.handle_decrypt_error();
         }
     }
 
@@ -99,7 +101,7 @@ impl StateMachine for ClientState {
         send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         match self {
-            Self::Tls12(tls12::Tls12State::Traffic(e)) => e.into_external_state(send_keys),
+            Self::Tls12(sm) => sm.into_external_state(send_keys),
             Self::Tls13(tls13::Tls13State::Traffic(e)) => e.into_external_state(send_keys),
             Self::Tls13(tls13::Tls13State::QuicTraffic(e)) => e.into_external_state(send_keys),
             _ => Err(Error::HandshakeNotComplete),

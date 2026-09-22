@@ -7,10 +7,10 @@ use core::fmt;
 use pki_types::DnsName;
 
 use super::config::{CipherSuiteSelector, VersionSuiteSelector};
-use super::{ClientHello, CommonServerSessionValue, ServerConfig, tls12, tls13};
+use super::{ClientHello, CommonServerSessionValue, ServerConfig, tls13};
 use crate::SupportedCipherSuite;
 use crate::common_state::{Event, Output, OutputEvent, Protocol};
-use crate::conn::{ConnectionRandoms, Input, VerifySidePeerIdentity};
+use crate::conn::{ConnectionRandoms, Input, State, VerifySidePeerIdentity};
 use crate::crypto::cipher::Payload;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
@@ -49,7 +49,7 @@ pub(crate) enum ServerState {
     /// Verifying the client's present certificate chain.
     VerifyClientIdentity(Box<dyn VerifySidePeerIdentity<ServerSide>>),
 
-    Tls12(tls12::Tls12State),
+    Tls12(Box<dyn State<ServerSide>>),
     Tls13(tls13::Tls13State),
 }
 
@@ -92,14 +92,20 @@ impl crate::conn::StateMachine for ServerState {
     }
 
     fn is_traffic(&self) -> bool {
-        matches!(
-            self,
-            Self::Tls12(tls12::Tls12State::Traffic(..))
-                | Self::Tls13(tls13::Tls13State::Traffic(..) | tls13::Tls13State::QuicTraffic(..))
-        )
+        match self {
+            Self::Tls12(sm) => sm.is_traffic(),
+            Self::Tls13(tls13::Tls13State::Traffic(..) | tls13::Tls13State::QuicTraffic(..)) => {
+                true
+            }
+            _ => false,
+        }
     }
 
-    fn handle_decrypt_error(&mut self) {}
+    fn handle_decrypt_error(&mut self) {
+        if let Self::Tls12(sm) = self {
+            sm.handle_decrypt_error();
+        }
+    }
 
     fn into_external_state(
         self,
@@ -107,7 +113,7 @@ impl crate::conn::StateMachine for ServerState {
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         match self {
             Self::Tls13(tls13::Tls13State::Traffic(e)) => e.into_external_state(send_keys),
-            Self::Tls12(tls12::Tls12State::Traffic(e)) => e.into_external_state(send_keys),
+            Self::Tls12(sm) => sm.into_external_state(send_keys),
             _ => Err(Error::HandshakeNotComplete),
         }
     }

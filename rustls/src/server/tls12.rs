@@ -14,7 +14,7 @@ use crate::ConnectionTrafficSecrets;
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
-use crate::conn::{ConnectionRandoms, DataKind, Input, VerifySidePeerIdentity};
+use crate::conn::{ConnectionRandoms, DataKind, Input, State, VerifySidePeerIdentity};
 use crate::crypto::cipher::{EncodableVersion, Payload, RecordDecrypter, RecordEncrypter};
 use crate::crypto::kx::{ActiveKeyExchange, SupportedKxGroup};
 use crate::crypto::{Identity, TicketProducer};
@@ -37,33 +37,6 @@ use crate::tracing::{debug, trace};
 use crate::verify::{
     ClientIdentity, FinishedMessageVerified, SignatureVerificationInput, VerifiedIdentity,
 };
-
-#[expect(private_interfaces)]
-pub(crate) enum Tls12State {
-    Certificate(Box<ExpectCertificate>),
-    ClientKx(Box<ExpectClientKx>),
-    CertificateVerify(Box<ExpectCertificateVerify>),
-    ChangeCipherSpec(Box<ExpectCcs>),
-    Finished(Box<ExpectFinished>),
-    Traffic(Box<ExpectTraffic>),
-}
-
-impl Tls12State {
-    pub(crate) fn handle<'m>(
-        self,
-        input: Input<'m>,
-        output: &mut dyn Output<'m>,
-    ) -> Result<ServerState, Error> {
-        match self {
-            Self::Certificate(e) => e.handle(input, output),
-            Self::ClientKx(e) => e.handle(input, output),
-            Self::CertificateVerify(e) => e.handle(input, output),
-            Self::ChangeCipherSpec(e) => e.handle(input, output),
-            Self::Finished(e) => e.handle(input, output),
-            Self::Traffic(e) => e.handle(input, output),
-        }
-    }
-}
 
 mod client_hello {
     use super::*;
@@ -531,7 +504,7 @@ struct ExpectCertificate {
     server_kx: GroupAndKeyExchange,
 }
 
-impl ExpectCertificate {
+impl State<ServerSide> for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
@@ -582,7 +555,7 @@ impl ExpectCertificate {
 
 impl From<Box<ExpectCertificate>> for ServerState {
     fn from(value: Box<ExpectCertificate>) -> Self {
-        Self::Tls12(Tls12State::Certificate(value))
+        Self::Tls12(value)
     }
 }
 
@@ -641,7 +614,7 @@ struct ExpectClientKx {
     peer_identity: Option<VerifiedIdentity<'static>>,
 }
 
-impl ExpectClientKx {
+impl State<ServerSide> for ExpectClientKx {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
@@ -698,7 +671,7 @@ impl ExpectClientKx {
 
 impl From<Box<ExpectClientKx>> for ServerState {
     fn from(value: Box<ExpectClientKx>) -> Self {
-        Self::Tls12(Tls12State::ClientKx(value))
+        Self::Tls12(value)
     }
 }
 
@@ -709,7 +682,7 @@ struct ExpectCertificateVerify {
     peer_identity: VerifiedIdentity<'static>,
 }
 
-impl ExpectCertificateVerify {
+impl State<ServerSide> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
@@ -754,7 +727,7 @@ impl ExpectCertificateVerify {
 
 impl From<Box<ExpectCertificateVerify>> for ServerState {
     fn from(value: Box<ExpectCertificateVerify>) -> Self {
-        Self::Tls12(Tls12State::CertificateVerify(value))
+        Self::Tls12(value)
     }
 }
 
@@ -766,7 +739,7 @@ struct ExpectCcs {
     resuming_decrypter: Option<Box<dyn RecordDecrypter>>,
 }
 
-impl ExpectCcs {
+impl State<ServerSide> for ExpectCcs {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -814,7 +787,7 @@ impl ExpectCcs {
 
 impl From<Box<ExpectCcs>> for ServerState {
     fn from(value: Box<ExpectCcs>) -> Self {
-        Self::Tls12(Tls12State::ChangeCipherSpec(value))
+        Self::Tls12(value)
     }
 }
 
@@ -983,7 +956,7 @@ pub(super) struct ExpectFinished {
     pending_encrypter: Option<Box<dyn RecordEncrypter>>,
 }
 
-impl ExpectFinished {
+impl State<ServerSide> for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
@@ -1097,7 +1070,7 @@ impl ExpectFinished {
 
 impl From<Box<ExpectFinished>> for ServerState {
     fn from(value: Box<ExpectFinished>) -> Self {
-        Self::Tls12(Tls12State::Finished(value))
+        Self::Tls12(value)
     }
 }
 
@@ -1121,7 +1094,7 @@ pub(super) struct ExpectTraffic {
 
 impl ExpectTraffic {}
 
-impl ExpectTraffic {
+impl State<ServerSide> for ExpectTraffic {
     fn handle<'m>(
         self: Box<Self>,
         Input { message, .. }: Input<'m>,
@@ -1141,7 +1114,11 @@ impl ExpectTraffic {
         Ok(self.into())
     }
 
-    pub(super) fn into_external_state(
+    fn is_traffic(&self) -> bool {
+        true
+    }
+
+    fn into_external_state(
         mut self: Box<Self>,
         _send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
@@ -1170,7 +1147,7 @@ impl KernelState for ExpectTraffic {
 
 impl From<Box<ExpectTraffic>> for ServerState {
     fn from(value: Box<ExpectTraffic>) -> Self {
-        Self::Tls12(Tls12State::Traffic(value))
+        Self::Tls12(value)
     }
 }
 
