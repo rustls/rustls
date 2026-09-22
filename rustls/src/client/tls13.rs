@@ -20,7 +20,7 @@ use crate::common_state::{
 };
 use crate::conn::kernel::KernelState;
 use crate::conn::{
-    ConnectionRandoms, DataKind, Input, TrafficTemperCounters, VerifySidePeerIdentity,
+    ConnectionRandoms, DataKind, Input, State, TrafficTemperCounters, VerifySidePeerIdentity,
 };
 use crate::crypto::cipher::{EncodableVersion, Payload};
 use crate::crypto::hash::Hash;
@@ -55,41 +55,6 @@ use crate::verify::{
     ServerIdentity, SignatureVerificationInput,
 };
 use crate::{ConnectionTrafficSecrets, KeyLog, compress, crypto, quic};
-
-#[expect(private_interfaces)]
-pub(crate) enum Tls13State {
-    EncryptedExtensions(Box<ExpectEncryptedExtensions>),
-    CertificateOrCompressedCertificateOrCertReq(
-        Box<ExpectCertificateOrCompressedCertificateOrCertReq>,
-    ),
-    CertificateOrCompressedCertificate(Box<ExpectCertificateOrCompressedCertificate>),
-    CertificateOrCertReq(Box<ExpectCertificateOrCertReq>),
-    Certificate(Box<ExpectCertificate>),
-    CertificateVerify(Box<ExpectCertificateVerify>),
-    Finished(Box<ExpectFinished>),
-    Traffic(Box<ExpectTraffic>),
-    QuicTraffic(Box<ExpectQuicTraffic>),
-}
-
-impl Tls13State {
-    pub(crate) fn handle<'m>(
-        self,
-        input: Input<'m>,
-        output: &mut dyn Output<'m>,
-    ) -> Result<ClientState, Error> {
-        match self {
-            Self::EncryptedExtensions(e) => e.handle(input, output),
-            Self::CertificateOrCompressedCertificateOrCertReq(e) => e.handle(input, output),
-            Self::CertificateOrCompressedCertificate(e) => e.handle(input, output),
-            Self::CertificateOrCertReq(e) => e.handle(input, output),
-            Self::Certificate(e) => e.handle(input, output),
-            Self::CertificateVerify(e) => e.handle(input, output),
-            Self::Finished(e) => e.handle(input, output),
-            Self::Traffic(e) => e.handle(input, output),
-            Self::QuicTraffic(e) => e.handle(input, output),
-        }
-    }
-}
 
 pub(crate) static TLS13_HANDLER: &dyn ClientHandler<Tls13CipherSuite> = &Handler;
 
@@ -520,7 +485,7 @@ struct ExpectEncryptedExtensions {
     in_early_traffic: bool,
 }
 
-impl ExpectEncryptedExtensions {
+impl State<ClientSide> for ExpectEncryptedExtensions {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
@@ -681,7 +646,7 @@ impl ExpectEncryptedExtensions {
 
 impl From<Box<ExpectEncryptedExtensions>> for ClientState {
     fn from(value: Box<ExpectEncryptedExtensions>) -> Self {
-        Self::Tls13(Tls13State::EncryptedExtensions(value))
+        Self::Tls13(value)
     }
 }
 
@@ -711,7 +676,7 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl ExpectCertificateOrCompressedCertificateOrCertReq {
+impl State<ClientSide> for ExpectCertificateOrCompressedCertificateOrCertReq {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -773,9 +738,7 @@ impl ExpectCertificateOrCompressedCertificateOrCertReq {
 
 impl From<Box<ExpectCertificateOrCompressedCertificateOrCertReq>> for ClientState {
     fn from(value: Box<ExpectCertificateOrCompressedCertificateOrCertReq>) -> Self {
-        Self::Tls13(Tls13State::CertificateOrCompressedCertificateOrCertReq(
-            value,
-        ))
+        Self::Tls13(value)
     }
 }
 
@@ -788,7 +751,7 @@ struct ExpectCertificateOrCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl ExpectCertificateOrCompressedCertificate {
+impl State<ClientSide> for ExpectCertificateOrCompressedCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -835,7 +798,7 @@ impl ExpectCertificateOrCompressedCertificate {
 
 impl From<Box<ExpectCertificateOrCompressedCertificate>> for ClientState {
     fn from(value: Box<ExpectCertificateOrCompressedCertificate>) -> Self {
-        Self::Tls13(Tls13State::CertificateOrCompressedCertificate(value))
+        Self::Tls13(value)
     }
 }
 
@@ -848,7 +811,7 @@ struct ExpectCertificateOrCertReq {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl ExpectCertificateOrCertReq {
+impl State<ClientSide> for ExpectCertificateOrCertReq {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -896,7 +859,7 @@ impl ExpectCertificateOrCertReq {
 
 impl From<Box<ExpectCertificateOrCertReq>> for ClientState {
     fn from(value: Box<ExpectCertificateOrCertReq>) -> Self {
-        Self::Tls13(Tls13State::CertificateOrCertReq(value))
+        Self::Tls13(value)
     }
 }
 
@@ -1106,7 +1069,7 @@ impl ExpectCertificate {
     }
 }
 
-impl ExpectCertificate {
+impl State<ClientSide> for ExpectCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -1118,7 +1081,7 @@ impl ExpectCertificate {
 
 impl From<Box<ExpectCertificate>> for ClientState {
     fn from(value: Box<ExpectCertificate>) -> Self {
-        Self::Tls13(Tls13State::Certificate(value))
+        Self::Tls13(value)
     }
 }
 
@@ -1133,7 +1096,7 @@ struct ExpectCertificateVerify {
     expected_certificate_type: CertificateType,
 }
 
-impl ExpectCertificateVerify {
+impl State<ClientSide> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
@@ -1176,7 +1139,7 @@ impl ExpectCertificateVerify {
 
 impl From<Box<ExpectCertificateVerify>> for ClientState {
     fn from(value: Box<ExpectCertificateVerify>) -> Self {
-        Self::Tls13(Tls13State::CertificateVerify(value))
+        Self::Tls13(value)
     }
 }
 
@@ -1344,7 +1307,7 @@ struct ExpectFinished {
     in_early_traffic: bool,
 }
 
-impl ExpectFinished {
+impl State<ClientSide> for ExpectFinished {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -1500,7 +1463,7 @@ impl ExpectFinished {
 
 impl From<Box<ExpectFinished>> for ClientState {
     fn from(value: Box<ExpectFinished>) -> Self {
-        Self::Tls13(Tls13State::Finished(value))
+        Self::Tls13(value)
     }
 }
 
@@ -1587,7 +1550,7 @@ impl ExpectTraffic {
     }
 }
 
-impl ExpectTraffic {
+impl State<ClientSide> for ExpectTraffic {
     fn handle<'m>(
         mut self: Box<Self>,
         input: Input<'m>,
@@ -1626,7 +1589,11 @@ impl ExpectTraffic {
         Ok(self.into())
     }
 
-    pub(super) fn into_external_state(
+    fn is_traffic(&self) -> bool {
+        true
+    }
+
+    fn into_external_state(
         self: Box<Self>,
         send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
@@ -1664,13 +1631,13 @@ impl KernelState for ExpectTraffic {
 
 impl From<Box<ExpectTraffic>> for ClientState {
     fn from(value: Box<ExpectTraffic>) -> Self {
-        Self::Tls13(Tls13State::Traffic(value))
+        Self::Tls13(value)
     }
 }
 
 pub(super) struct ExpectQuicTraffic(ExpectTraffic);
 
-impl ExpectQuicTraffic {
+impl State<ClientSide> for ExpectQuicTraffic {
     fn handle(
         self: Box<Self>,
         Input { message, .. }: Input<'_>,
@@ -1686,7 +1653,11 @@ impl ExpectQuicTraffic {
         Ok(self.into())
     }
 
-    pub(super) fn into_external_state(
+    fn is_traffic(&self) -> bool {
+        true
+    }
+
+    fn into_external_state(
         self: Box<Self>,
         send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
@@ -1722,7 +1693,7 @@ impl KernelState for ExpectQuicTraffic {
 
 impl From<Box<ExpectQuicTraffic>> for ClientState {
     fn from(value: Box<ExpectQuicTraffic>) -> Self {
-        Self::Tls13(Tls13State::QuicTraffic(value))
+        Self::Tls13(value)
     }
 }
 
