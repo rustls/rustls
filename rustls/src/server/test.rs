@@ -29,7 +29,8 @@ use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::{
     ClientExtensions, ClientHelloPayload, Codec, Compression, HEADER_SIZE, HandshakeMessagePayload,
     HandshakePayload, KeyShareEntry, Message, MessagePayload, PresharedKeyIdentity,
-    PresharedKeyOffer, PskKeyExchangeModes, Random, Reader, SessionId, SupportedProtocolVersions,
+    PresharedKeyOffer, PskKeyExchangeModes, Random, Reader, SessionId, SizedPayload,
+    SupportedProtocolVersions,
 };
 use crate::pki_types::pem::PemObject;
 use crate::pki_types::{CertificateDer, FipsStatus, PrivateKeyDer};
@@ -221,6 +222,36 @@ fn test_server_rejects_no_extended_main_secret_extension_when_require_ems_or_fip
     assert_eq!(
         process(&mut input, &mut conn).unwrap_err(),
         Error::PeerIncompatible(PeerIncompatible::ExtendedMainSecretExtensionRequired)
+    );
+}
+
+#[test]
+fn test_server_rejects_non_empty_renegotiation_info_in_initial_handshake() {
+    let provider = tls12_only(TEST_PROVIDER.clone());
+    let config = ServerConfig::builder(provider.into())
+        .with_no_client_auth()
+        .with_single_cert(server_identity(), server_key())
+        .unwrap();
+    let mut conn = ServerConnection::new(config.into()).unwrap();
+    let mut input = VecInput::default();
+
+    // a client behaving as if it were renegotiating an existing connection:
+    // `renegotiated_connection` carries its verify_data instead of being empty.
+    let mut ch = minimal_client_hello();
+    ch.extensions.renegotiation_info = Some(SizedPayload::from(vec![0x55; 12]));
+    let ch = Message {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
+            ch,
+        ))),
+    };
+    input
+        .read(&mut ch.into_wire_bytes().as_slice())
+        .unwrap();
+
+    assert_eq!(
+        process(&mut input, &mut conn).unwrap_err(),
+        Error::PeerMisbehaved(PeerMisbehaved::NonEmptyRenegotiationInfo)
     );
 }
 
