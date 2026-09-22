@@ -286,6 +286,30 @@ impl<Side: SideData> fmt::Debug for VerifyPeerIdentity<Side> {
     }
 }
 
+/// Dynamically-dispatched state machine, to maintain static unreachability of
+/// per-protocol-version code.
+pub(crate) trait State<Side: SideData>: Send + Sync {
+    /// Advance the state machine using `input` and emitting data to `output`.
+    fn handle<'m>(
+        self: Box<Self>,
+        input: Input<'m>,
+        output: &mut dyn Output<'m>,
+    ) -> Result<Side::State, Error>;
+
+    fn is_traffic(&self) -> bool {
+        false
+    }
+
+    fn handle_decrypt_error(&mut self) {}
+
+    fn into_external_state(
+        self: Box<Self>,
+        _send_keys: &Option<Box<KeyScheduleTrafficSend>>,
+    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
+        Err(Error::HandshakeNotComplete)
+    }
+}
+
 /// Trait to maintain static unreachablity of per-protocol-version code.
 pub(crate) trait VerifySidePeerIdentity<Side: SideData>: Send + Sync {
     fn presented_identity(&self) -> Result<Side::PeerIdentity<'_>, Error>;
