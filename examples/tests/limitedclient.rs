@@ -26,7 +26,6 @@ fn limited_no_aes_symbols() {
     );
 }
 
-#[ignore] // XXX: pending runtime binding of state machine states
 #[test]
 fn limited_no_tls12_symbols() {
     let expected = find_symbols_in_executable(tls12, env!("CARGO_BIN_EXE_simple-client"));
@@ -42,13 +41,12 @@ fn limited_no_tls12_symbols() {
 
 fn tls12(sym: &str) -> bool {
     sym.contains("rustls::client::tls12")
-        && !sym.contains("core::fmt::Debug")
         // Exclude some trivial `State` default method implementations that
-        // appear to sometimes get inlined even if no TLS 1.2 code is used.
-        && !sym.ends_with("::send_key_update_request")
-        && !sym.ends_with("::handle_decrypt_error")
-        && !sym.ends_with("::into_external_state")
-        && !sym.ends_with("::set_resumption_data")
+        // appear via inlining of default impls.
+        && !sym.contains("::is_traffic")
+        && !sym.contains("::handle_decrypt_error")
+        // Exclude tracing callsite objects
+        && !sym.contains("::__CALLSITE")
 }
 
 fn find_symbols_in_executable(f: impl Fn(&str) -> bool, exe: &str) -> Vec<String> {
