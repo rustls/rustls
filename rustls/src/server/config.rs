@@ -265,7 +265,7 @@ impl ServerConfig {
     ) -> ConfigBuilder<Self, WantsVerifier> {
         ConfigBuilder {
             state: WantsVerifier {
-                client_ech_mode: None,
+                client_ech_hpke_suites: Arc::default(),
             },
             provider,
             time_provider,
