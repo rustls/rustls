@@ -1029,15 +1029,9 @@ fn move_encrypted_extensions_into_server_hello(
         version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
         payload: Payload::Borrowed(remainder),
     };
-    let mut encrypted = vec![0u8; encrypter.encrypted_payload_len(remainder.payload.bytes().len())];
-    let encrypted = encrypter
-        .encrypt(remainder.borrow_outbound(), 0, &mut encrypted)
+    encrypter
+        .encrypt(remainder.borrow_outbound(), 0, &mut output)
         .unwrap();
-    output.extend(encoding::record_framing(
-        encrypted.typ,
-        ProtocolVersion::TLSv1_2,
-        encrypted.payload.to_vec(),
-    ));
     output
 }
 
