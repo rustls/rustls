@@ -45,7 +45,7 @@ use rustls::crypto::{
     CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom, SigningKey, TicketProducer,
     TicketerFactory,
 };
-use rustls::error::{ApiMisuse, Error, OtherError};
+use rustls::error::{Error, OtherError};
 #[cfg(feature = "std")]
 use rustls::ticketer::TicketRotator;
 use zeroize::Zeroizing;
@@ -256,21 +256,6 @@ mod ring_shim {
     }
 }
 
-/// The region of `out` that a `len`-byte sealed record payload will occupy.
-///
-/// If `out` is shorter than `len` bytes, this returns [`ApiMisuse::EncryptBufferTooSmall`].
-fn record_region(out: &mut [u8], len: usize) -> Result<&mut [u8], Error> {
-    let provided = out.len();
-    match out.get_mut(..len) {
-        Some(record) => Ok(record),
-        None => Err(ApiMisuse::EncryptBufferTooSmall {
-            required: len,
-            provided,
-        }
-        .into()),
-    }
-}
-
 /// Are we in FIPS mode?
 fn fips() -> FipsStatus {
     match aws_lc_rs::try_fips_mode().is_ok() {
@@ -284,8 +269,6 @@ fn fips() -> FipsStatus {
 fn unspecified_err(e: aws_lc_rs::error::Unspecified) -> Error {
     Error::Other(OtherError::new(e))
 }
-
-const MAX_FRAGMENT_LEN: usize = 16384;
 
 #[cfg(test)]
 mod tests {
