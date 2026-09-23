@@ -19,6 +19,15 @@ pub use messages::{
 mod record_layer;
 pub(crate) use record_layer::{Decrypted, DecryptionState, EncryptionState, PreEncryptAction};
 
+mod tls12;
+pub use tls12::{
+    GCM_EXPLICIT_NONCE_LEN, TLS12_AAD_SIZE, chacha20poly1305_decrypt_record,
+    chacha20poly1305_encrypt_record, chacha20poly1305_encrypted_payload_len, gcm_decrypt_record,
+    gcm_encrypt_record, gcm_encrypted_payload_len, gcm_iv,
+};
+mod tls13;
+pub use tls13::{TLS13_AAD_SIZE, decrypt_record, encrypt_record, encrypted_payload_len};
+
 /// Factory trait for building `RecordEncrypter` and `RecordDecrypter` for a TLS1.3 cipher suite.
 pub trait Tls13AeadAlgorithm: Send + Sync {
     /// Build a `RecordEncrypter` for the given key/iv.
@@ -323,6 +332,17 @@ impl AsRef<[u8]> for Nonce {
     }
 }
 
+impl From<[u8; NONCE_LEN]> for Nonce {
+    fn from(value: [u8; NONCE_LEN]) -> Self {
+        let mut buf = [0u8; Iv::MAX_LEN];
+        buf[..NONCE_LEN].copy_from_slice(&value);
+        Self {
+            buf,
+            len: NONCE_LEN,
+        }
+    }
+}
+
 /// Size of TLS nonces (incorrectly termed "IV" in standard) for all supported ciphersuites
 /// (AES-GCM, Chacha20Poly1305)
 pub const NONCE_LEN: usize = 12;
@@ -362,8 +382,6 @@ pub fn make_tls12_aad(
     put_u16(len as u16, &mut out[11..]);
     out
 }
-
-const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
 
 /// A key for an AEAD algorithm.
 ///
@@ -441,6 +459,21 @@ impl From<&[u8]> for Tag {
 impl AsRef<[u8]> for Tag {
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+/// The region of `out` that a `len`-byte sealed record payload will occupy.
+///
+/// If `out` is shorter than `len` bytes, this returns [`ApiMisuse::EncryptBufferTooSmall`].
+fn record_region(out: &mut [u8], len: usize) -> Result<&mut [u8], Error> {
+    let provided = out.len();
+    match out.get_mut(..len) {
+        Some(record) => Ok(record),
+        None => Err(ApiMisuse::EncryptBufferTooSmall {
+            required: len,
+            provided,
+        }
+        .into()),
     }
 }
 
