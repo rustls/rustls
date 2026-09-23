@@ -13,7 +13,7 @@ use crate::conn::{
     Accepted, ConnectionCommon, Core, KeyingMaterialExporter, MessageIter, MessageIterMode,
     ServerNext, SideData, Transport, VerifyPeerIdentity,
 };
-use crate::crypto::cipher::{AeadKey, Iv, Payload};
+use crate::crypto::cipher::{AeadKey, Iv, Payload, Tag};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{Message, MessagePayload, ServerExtensionsInput, TransportParameters};
@@ -754,26 +754,6 @@ impl DirectionalKeys {
             header: builder.header_protection_key(),
             packet: builder.packet_key(),
         }
-    }
-}
-
-/// All AEADs we support have 16-byte tags.
-const TAG_LEN: usize = 16;
-
-/// Authentication tag from an AEAD seal operation.
-pub struct Tag([u8; TAG_LEN]);
-
-impl From<&[u8]> for Tag {
-    fn from(value: &[u8]) -> Self {
-        let mut array = [0u8; TAG_LEN];
-        array.copy_from_slice(value);
-        Self(array)
-    }
-}
-
-impl AsRef<[u8]> for Tag {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
     }
 }
 

@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 
 use pki_types::FipsStatus;
 use ring::aead;
-use rustls::crypto::cipher::{AeadKey, Iv, Nonce};
+use rustls::crypto::cipher::{AeadKey, Iv, Nonce, Tag};
 use rustls::error::{ApiMisuse, Error};
 use rustls::quic;
 
@@ -130,7 +130,7 @@ impl quic::PacketKey for PacketKey {
         header: &[u8],
         payload: &mut [u8],
         path_id: Option<u32>,
-    ) -> Result<quic::Tag, Error> {
+    ) -> Result<Tag, Error> {
         let aad = aead::Aad::from(header);
         let nonce_value = Nonce::quic(path_id, &self.iv, packet_number);
         let nonce = aead::Nonce::assume_unique_for_key(nonce_value.to_array()?);
@@ -138,7 +138,7 @@ impl quic::PacketKey for PacketKey {
             .key
             .seal_in_place_separate_tag(nonce, aad, payload)
             .map_err(|_| Error::EncryptError)?;
-        Ok(quic::Tag::from(tag.as_ref()))
+        Ok(Tag::from(tag.as_ref()))
     }
 
     /// Decrypt a QUIC packet
