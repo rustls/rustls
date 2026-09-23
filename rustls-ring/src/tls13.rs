@@ -5,11 +5,11 @@ use ring::hkdf::{self, KeyType};
 use ring::{aead, hmac};
 use rustls::crypto::CipherSuite;
 use rustls::crypto::cipher::{
-    AeadKey, EncryptBuffer, InboundOpaque, Iv, Nonce, OutboundPlain, Record, RecordDecrypter,
-    RecordEncrypter, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, InboundOpaque, Iv, Nonce, OutboundPlain, Record, RecordDecrypter, RecordEncrypter,
+    Tls13AeadAlgorithm, UnsupportedOperationError, decrypt_record, encrypt_record,
+    encrypted_payload_len,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
-use rustls::enums::ContentType;
 use rustls::error::Error;
 use rustls::version::TLS13_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite, crypto};
@@ -215,59 +215,55 @@ impl RecordEncrypter for Tls13RecordEncrypter {
         out: &'a mut [u8],
     ) -> Result<Record<&'a [u8]>, Error> {
         let total_len = self.encrypted_payload_len(record.payload.len());
-        let mut payload = EncryptBuffer::new(out, total_len)?;
 
-        let typ = ContentType::ApplicationData;
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(typ, record.version.encode(), total_len));
-        payload.extend_from_chunks(&record.payload);
-        payload.extend_from_slice(&record.typ.to_array());
-
-        match self
-            .enc_key
-            .seal_in_place_separate_tag(nonce, aad, payload.as_mut())
-        {
-            Ok(tag) => payload.extend_from_slice(tag.as_ref()),
-            Err(_) => return Err(Error::EncryptError),
-        }
-
-        Ok(Record {
-            typ,
-            version: record.version,
-            payload: payload.into_written(),
-        })
+        encrypt_record(
+            |nonce, aad, payload| {
+                self.enc_key
+                    .seal_in_place_separate_tag(
+                        aead::Nonce::assume_unique_for_key(nonce.to_array()?),
+                        aead::Aad::from(aad),
+                        payload.as_mut(),
+                    )
+                    .map(|t| t.as_ref().into())
+                    .map_err(|_| Error::EncryptError)
+            },
+            None::<fn(Nonce, [u8; _], &[u8], &mut [u8], &[u8], &mut [u8]) -> Result<(), Error>>,
+            record,
+            seq,
+            &self.iv,
+            total_len,
+            out,
+        )
     }
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
-        payload_len + 1 + self.enc_key.algorithm().tag_len()
+        encrypted_payload_len(payload_len, self.enc_key.algorithm().tag_len())
     }
 }
 
 impl RecordDecrypter for Tls13RecordDecrypter {
     fn decrypt<'a>(
         &mut self,
-        mut record: Record<InboundOpaque<'a>>,
+        record: Record<InboundOpaque<'a>>,
         seq: u64,
     ) -> Result<Record<&'a [u8]>, Error> {
-        let payload = &mut record.payload;
-        if payload.len() < self.dec_key.algorithm().tag_len() {
-            return Err(Error::DecryptError);
-        }
-
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(
-            record.typ,
-            record.version.version(),
-            payload.len(),
-        ));
-        let plain_len = self
-            .dec_key
-            .open_in_place(nonce, aad, payload)
-            .map_err(|_| Error::DecryptError)?
-            .len();
-
-        payload.truncate(plain_len);
-        record.into_tls13_unpadded_record()
+        let tag_len = self.dec_key.algorithm().tag_len();
+        decrypt_record(
+            |nonce, aad, payload| {
+                self.dec_key
+                    .open_in_place(
+                        aead::Nonce::assume_unique_for_key(nonce.to_array()?),
+                        aead::Aad::from(aad),
+                        payload,
+                    )
+                    .map(|plaintext| plaintext.len())
+                    .map_err(|_| Error::DecryptError)
+            },
+            tag_len,
+            record,
+            seq,
+            &self.iv,
+        )
     }
 }
 
