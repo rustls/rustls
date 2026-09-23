@@ -13,7 +13,7 @@ use core::{fmt, mem};
 
 use super::{
     ConnectionCommon, MessageIter, MessageIterMode, NeedsInput, SideCommonOutput, SideData,
-    StateMachine, VerifySidePeerIdentity,
+    SideTransport, StateMachine, VerifySidePeerIdentity,
 };
 use crate::TlsInputBuffer;
 use crate::client::{ClientSide, ClientState};
@@ -74,6 +74,17 @@ impl<Side: SideData, T: Transport> Core<Side, T> {
 
         result?;
         Ok(Self { inner, transport })
+    }
+}
+
+impl<Side: SideTransport<Quic>> Core<Side, Quic> {
+    /// Append any pending events to `output`, then advance to the next handshake state.
+    pub(crate) fn into_handshake(
+        mut self,
+        output: &mut Vec<QuicEvent>,
+    ) -> Result<Side::Handshake, Error> {
+        output.extend(self.transport.events());
+        Side::handshake_from_core(self)
     }
 }
 
@@ -244,7 +255,7 @@ impl Accepted<Quic> {
 
         // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
         debug_assert!(tls.is_empty());
-        quic::ServerHandshake::from_core(core, output)
+        core.into_handshake(output)
     }
 }
 
@@ -295,7 +306,7 @@ impl<Side: SideData, T: Transport> VerifyPeerIdentity<Side, T> {
     }
 }
 
-impl<Side: SideData> VerifyPeerIdentity<Side, Tcp> {
+impl<Side: SideTransport<Tcp>> VerifyPeerIdentity<Side, Tcp> {
     /// Progress the handshake by calling the pre-configured certificate verification trait.
     pub fn with_config(self, tls: &mut Vec<u8>) -> Result<Side::Handshake, Error> {
         let result = self
@@ -316,13 +327,13 @@ impl<Side: SideData> VerifyPeerIdentity<Side, Tcp> {
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
         let core = self.partial_continue_with(verification_result, tls)?;
-        Side::tcp_handshake_from_core(core)
+        Side::handshake_from_core(core)
     }
 }
 
-impl<Side: SideData> VerifyPeerIdentity<Side, Quic> {
+impl<Side: SideTransport<Quic>> VerifyPeerIdentity<Side, Quic> {
     /// Progress the handshake by calling the pre-configured certificate verification trait.
-    pub fn with_config(self, output: &mut Vec<QuicEvent>) -> Result<Side::QuicHandshake, Error> {
+    pub fn with_config(self, output: &mut Vec<QuicEvent>) -> Result<Side::Handshake, Error> {
         let result = self
             .verify_identity
             .verify_with_config();
@@ -338,9 +349,9 @@ impl<Side: SideData> VerifyPeerIdentity<Side, Quic> {
         self,
         verification_result: Result<VerifiedIdentity<'static>, Error>,
         output: &mut Vec<QuicEvent>,
-    ) -> Result<Side::QuicHandshake, Error> {
+    ) -> Result<Side::Handshake, Error> {
         let core = self.partial_continue_with(verification_result, &mut Vec::new())?;
-        Side::quic_handshake_from_core(core, output)
+        core.into_handshake(output)
     }
 }
 

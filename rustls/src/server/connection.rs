@@ -11,14 +11,14 @@ use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
     Accepted, Connection, ConnectionCommon, Core, KeyingMaterialExporter, MessageHandler,
-    NeedsInput, ServerNext, SideData, Tcp, TlsInputBuffer, VerifyPeerIdentity,
+    NeedsInput, ServerNext, SideData, SideTransport, Tcp, TlsInputBuffer, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
 use crate::crypto::cipher::OutboundPlain;
 use crate::error::Error;
 use crate::msgs::ServerExtensionsInput;
-use crate::quic::{Quic, QuicEvent, ServerHandshake as QuicServerHandshake};
+use crate::quic::{Quic, ServerHandshake as QuicServerHandshake};
 use crate::server::hs::{ExpectClientHello, ReadClientHello, ServerState};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -288,22 +288,24 @@ impl TryFrom<Core<ServerSide, Tcp>> for ServerHandshake {
 pub struct ServerSide;
 
 impl SideData for ServerSide {
-    type Handshake = ServerHandshake;
-    type QuicHandshake = QuicServerHandshake;
-
     type PeerIdentity<'a> = ClientIdentity<'static, 'a>;
+}
+
+impl SideTransport<Tcp> for ServerSide {
+    type Handshake = ServerHandshake;
 
     #[expect(private_interfaces)]
-    fn tcp_handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error> {
+    fn handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error> {
         ServerHandshake::try_from(core)
     }
+}
+
+impl SideTransport<Quic> for ServerSide {
+    type Handshake = QuicServerHandshake;
 
     #[expect(private_interfaces)]
-    fn quic_handshake_from_core(
-        core: Core<Self, Quic>,
-        outputs: &mut Vec<QuicEvent>,
-    ) -> Result<Self::QuicHandshake, Error> {
-        QuicServerHandshake::from_core(core, outputs)
+    fn handshake_from_core(core: Core<Self, Quic>) -> Result<Self::Handshake, Error> {
+        QuicServerHandshake::from_core(core)
     }
 }
 

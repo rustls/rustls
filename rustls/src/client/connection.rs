@@ -12,7 +12,7 @@ use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
     ClientNext, Connection, ConnectionCommon, Core, KeyingMaterialExporter, MessageHandler,
-    SideCommonOutput, SideData, Tcp, VerifyPeerIdentity,
+    SideCommonOutput, SideData, SideTransport, Tcp, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -430,22 +430,15 @@ impl ConnectionCommon<ClientSide> {
 pub struct ClientSide;
 
 impl SideData for ClientSide {
-    type Handshake = ClientHandshake;
-    type QuicHandshake = ();
-
     type PeerIdentity<'a> = ServerIdentity<'static, 'a>;
+}
+
+impl SideTransport<Tcp> for ClientSide {
+    type Handshake = ClientHandshake;
 
     #[expect(private_interfaces)]
-    fn tcp_handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error> {
+    fn handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error> {
         ClientHandshake::try_from(core)
-    }
-
-    #[expect(private_interfaces)]
-    fn quic_handshake_from_core(
-        _core: Core<Self, Quic>,
-        _output: &mut Vec<quic::QuicEvent>,
-    ) -> Result<Self::QuicHandshake, Error> {
-        todo!("nyi")
     }
 }
 

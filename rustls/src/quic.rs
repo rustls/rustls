@@ -332,12 +332,7 @@ impl ServerHandshake {
         ))
     }
 
-    pub(crate) fn from_core(
-        mut core: Core<ServerSide, Quic>,
-        output: &mut Vec<QuicEvent>,
-    ) -> Result<Self, Error> {
-        output.extend(core.transport.events());
-
+    pub(crate) fn from_core(core: Core<ServerSide, Quic>) -> Result<Self, Error> {
         Ok(match ServerNext::try_from(core)? {
             ServerNext::NeedsInput(core) => Self::NeedsInput(NeedsInput(core)),
 
@@ -418,7 +413,9 @@ impl NeedsInput {
             .deframer
             .input_quic(input.slice_mut())?;
 
-        ServerHandshake::from_core(self.0.process(input, &mut Vec::new())?, output)
+        self.0
+            .process(input, &mut Vec::new())?
+            .into_handshake(output)
     }
 }
 

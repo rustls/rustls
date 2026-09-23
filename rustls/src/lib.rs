@@ -392,8 +392,9 @@ pub mod internal {
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
 pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind, Protocol};
 pub use crate::conn::{
-    Connection, IoState, KeyingMaterialExporter, MessageHandler, NeedsInput, SideData, SliceInput,
-    Tcp, TlsInputBuffer, Transport, VecInput, VerifyPeerIdentity, kernel,
+    Connection, IoState, KeyingMaterialExporter, MessageHandler, NeedsInput, SideData,
+    SideTransport, SliceInput, Tcp, TlsInputBuffer, Transport, VecInput, VerifyPeerIdentity,
+    kernel,
 };
 /// Types related to "split" mode.
 ///

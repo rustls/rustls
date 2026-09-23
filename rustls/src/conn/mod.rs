@@ -14,7 +14,7 @@ use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
 use crate::msgs::{Delocator, Message, Random, ServerExtensionsInput};
-use crate::quic::{Quic, QuicEvent, QuicOutput};
+use crate::quic::QuicOutput;
 use crate::server::{ChooseConfig, ServerConfig, ServerSide};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::sync::Arc;
@@ -150,7 +150,9 @@ impl<Side: SideData> NeedsInput<Side> {
     pub(crate) fn new(inner: ConnectionCommon<Side>) -> Self {
         Self(Core::new(inner, Tcp))
     }
+}
 
+impl<Side: SideTransport<Tcp>> NeedsInput<Side> {
     /// Progress the handshake by receiving further data.
     ///
     /// The data is obtained via `input`.  Any output produced is appended to `tls` and
@@ -168,7 +170,7 @@ impl<Side: SideData> NeedsInput<Side> {
         input: &mut dyn TlsInputBuffer,
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
-        Side::tcp_handshake_from_core(self.0.process(input, tls)?)
+        Side::handshake_from_core(self.0.process(input, tls)?)
     }
 }
 
@@ -678,24 +680,18 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
 /// Data specific to the peer's side (client or server).
 #[expect(private_bounds)]
 pub trait SideData: private::Side + Sized {
-    /// Type representing an in-progress TCP handshake.
-    type Handshake;
-    /// Type representing an in-progress QUIC handshake.
-    type QuicHandshake;
-
     /// Type representing the peer's identity.
     type PeerIdentity<'a>;
+}
+
+/// A side (client or server) that can perform a handshake over transport `T`.
+pub trait SideTransport<T: Transport>: SideData {
+    /// Type representing an in-progress handshake over transport `T`.
+    type Handshake;
 
     #[doc(hidden)]
     #[expect(private_interfaces)]
-    fn tcp_handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error>;
-
-    #[doc(hidden)]
-    #[expect(private_interfaces)]
-    fn quic_handshake_from_core(
-        core: Core<Self, Quic>,
-        output: &mut Vec<QuicEvent>,
-    ) -> Result<Self::QuicHandshake, Error>;
+    fn handshake_from_core(core: Core<Self, T>) -> Result<Self::Handshake, Error>;
 }
 
 pub(crate) mod private {
