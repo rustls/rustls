@@ -19,6 +19,15 @@ pub use messages::{
 mod record_layer;
 pub(crate) use record_layer::{Decrypted, DecryptionState, EncryptionState, PreEncryptAction};
 
+mod tls12;
+pub use tls12::{
+    GCM_EXPLICIT_NONCE_LEN, TLS12_AAD_SIZE, chacha20poly1305_decrypt_record,
+    chacha20poly1305_encrypt_record, chacha20poly1305_encrypted_payload_len, gcm_decrypt_record,
+    gcm_encrypt_record, gcm_encrypted_payload_len, gcm_iv,
+};
+mod tls13;
+pub use tls13::{TLS13_AAD_SIZE, decrypt_record, encrypt_record, encrypted_payload_len};
+
 /// Factory trait for building [`RecordEncrypter`] and [`RecordDecrypter`] for a TLS1.3 cipher suite.
 pub trait Tls13AeadAlgorithm: Send + Sync {
     /// Build a [`RecordEncrypter`] for the given key/iv.
@@ -188,6 +197,104 @@ pub trait RecordEncrypter: Send + Sync {
     fn encrypted_payload_len(&self, payload_len: usize) -> usize;
 }
 
+/// Context required for [`RecordEncrypter`]s to encrypt a TLS record.
+///
+/// `EncryptInput` values are passed into cryptography provider callbacks when record encryption
+/// functions [`gcm_encrypt_record`], [`chacha20poly1305_encrypt_record`] or [`encrypt_record`] are
+/// called.
+///
+/// This allows cryptography providers to take advantage of the layout of the plaintext if their
+/// AEAD implementation offers a fast path.
+pub struct EncryptInput<'a> {
+    /// The plaintext to be encrypted, which may be contiguous or fragmented.
+    plain: &'a OutboundPlain<'a>,
+    /// Extra plaintext to be encrypted along with `plain`.
+    ///
+    /// This is intended for the content type byte in TLS 1.3.
+    extra_plain: &'a [u8],
+    /// Buffer into which ciphertext will be written.
+    out: &'a mut [u8],
+}
+
+impl<'a> EncryptInput<'a> {
+    /// Prepare `plain` for encryption into `out`.
+    ///
+    /// `encrypted_len` is the length of an encrypted record in the TLS protocol version and AEAD in
+    /// use, including any extra plaintext, tags, or other data attached to ciphertext. `out` must
+    /// be at least `encrypted_len` bytes long, or this yields [`ApiMisuse::EncryptBufferTooSmall`].
+    /// Only that many bytes of `out` are written.
+    ///
+    /// Any extra plaintext to be appended to `plain` before encryption (e.g., the content type byte
+    /// in TLS 1.3) may be provided in `extra_plain`.
+    pub fn new(
+        encrypted_len: usize,
+        plain: &'a OutboundPlain<'a>,
+        extra_plain: &'a [u8],
+        out: &'a mut [u8],
+    ) -> Result<Self, Error> {
+        let provided = out.len();
+        let Some(out) = out.get_mut(..encrypted_len) else {
+            return Err(ApiMisuse::EncryptBufferTooSmall {
+                required: encrypted_len,
+                provided,
+            }
+            .into());
+        };
+
+        Ok(Self {
+            plain,
+            extra_plain,
+            out,
+        })
+    }
+
+    /// Lay out the output buffer for sealing contiguous plaintext out of place.
+    ///
+    /// Returns `None` if the plaintext is fragmented, in which case the implementation must fall
+    /// back to [`Self::collect()`].
+    ///
+    /// If this returns `Some(encrypt_into)`, then the caller is responsible for sealing
+    /// `encrypt_into.plain` into `encrypt_into.out`. The encryption of `extra_plain` and the AEAD
+    /// tag should be written into `encrypt_into.extra_ciphertext_and_tag`, in that order.
+    ///
+    /// This function guarantees that any mutable buffers returned have the correct size for the
+    /// content to be written.
+    pub fn contiguous(&mut self) -> Option<EncryptInto<'_>> {
+        let plain = self.plain.single_chunk()?;
+        let (out, extra_ciphertext_and_tag) = self.out.split_at_mut(plain.len());
+        Some(EncryptInto {
+            plain,
+            extra_plain: self.extra_plain,
+            out,
+            extra_ciphertext_and_tag,
+        })
+    }
+
+    /// Gather the plaintext into the output buffer for sealing in place.
+    ///
+    /// The caller is solely responsible for sealing the contents of the returned `EncryptBuffer`
+    /// in-place and returning the AEAD tag.
+    pub fn collect(&mut self) -> EncryptBuffer<'_> {
+        let mut buffer = EncryptBuffer::whole(self.out);
+        buffer.extend_from_chunks(self.plain);
+        buffer.extend_from_slice(self.extra_plain);
+        buffer
+    }
+}
+
+/// A structure representing the buffers for encrypting data into a cipher text and tag.
+#[non_exhaustive]
+pub struct EncryptInto<'a> {
+    /// Plaintext input to encrypt.
+    pub plain: &'a [u8],
+    /// Extra plaintext to encrypt.
+    pub extra_plain: &'a [u8],
+    /// Ciphertext output buffer.
+    pub out: &'a mut [u8],
+    /// Output buffer for extra ciphertext and authentication tag.
+    pub extra_ciphertext_and_tag: &'a mut [u8],
+}
+
 /// A write or read IV.
 #[derive(Default, Clone)]
 pub struct Iv {
@@ -323,6 +430,17 @@ impl AsRef<[u8]> for Nonce {
     }
 }
 
+impl From<[u8; NONCE_LEN]> for Nonce {
+    fn from(value: [u8; NONCE_LEN]) -> Self {
+        let mut buf = [0u8; Iv::MAX_LEN];
+        buf[..NONCE_LEN].copy_from_slice(&value);
+        Self {
+            buf,
+            len: NONCE_LEN,
+        }
+    }
+}
+
 /// Size of TLS nonces (incorrectly termed "IV" in standard) for all supported ciphersuites
 /// (AES-GCM, Chacha20Poly1305)
 pub const NONCE_LEN: usize = 12;
@@ -362,8 +480,6 @@ pub fn make_tls12_aad(
     put_u16(len as u16, &mut out[11..]);
     out
 }
-
-const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
 
 /// A key for an AEAD algorithm.
 ///
