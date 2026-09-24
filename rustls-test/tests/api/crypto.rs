@@ -6,7 +6,9 @@ use std::borrow::Cow;
 use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
-use rustls::crypto::cipher::{AeadKey, EncodableVersion, InboundOpaque, Iv, Payload, Record};
+use rustls::crypto::cipher::{
+    AeadKey, EncodableVersion, EncryptInput, InboundOpaque, Iv, Payload, Record,
+};
 use rustls::crypto::tls13::{HkdfExpander, OkmBlock, expand};
 use rustls::crypto::{Credentials, CryptoProvider};
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
@@ -1030,13 +1032,20 @@ fn move_encrypted_extensions_into_server_hello(
         payload: Payload::Borrowed(remainder),
     };
     let mut encrypted = vec![0u8; encrypter.encrypted_payload_len(remainder.payload.bytes().len())];
-    let encrypted = encrypter
-        .encrypt(remainder.borrow_outbound(), 0, &mut encrypted)
-        .unwrap();
+    let input = EncryptInput::new(
+        &*encrypter,
+        ProtocolVersion::TLSv1_3,
+        remainder.borrow_outbound(),
+        0,
+        &mut encrypted,
+    )
+    .unwrap();
+    let typ = input.record_type();
+    encrypter.encrypt(input).unwrap();
     output.extend(encoding::record_framing(
-        encrypted.typ,
+        typ,
         ProtocolVersion::TLSv1_2,
-        encrypted.payload.to_vec(),
+        encrypted,
     ));
     output
 }

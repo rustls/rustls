@@ -3,15 +3,17 @@ use alloc::vec::Vec;
 use core::cmp::min;
 
 use crate::crypto::cipher::{
-    InboundOpaque, OutboundPlain, Record, RecordDecrypter, RecordEncrypter, encode_record_header,
+    EncryptInput, InboundOpaque, OutboundPlain, Record, RecordDecrypter, RecordEncrypter,
+    encode_record_header,
 };
+use crate::enums::ProtocolVersion;
 use crate::error::Error;
 use crate::msgs::{HEADER_SIZE, HandshakeAlignedProof};
 use crate::tracing::trace;
 
 /// Record layer that tracks encryption keys.
 pub(crate) struct EncryptionState {
-    record_encrypter: Option<Box<dyn RecordEncrypter>>,
+    record_encrypter: Option<ActiveEncrypter>,
     write_seq_max: u64,
     write_seq: u64,
 }
@@ -44,11 +46,7 @@ impl EncryptionState {
         let start = output.len();
         output.resize(start + needed, 0);
         let written = self.encrypt_outgoing_into(plain, &mut output[start..]);
-        debug_assert_eq!(
-            written, needed,
-            "RecordEncrypter::encrypt() returned wrong length"
-        );
-        output.truncate(start + written);
+        debug_assert_eq!(written, needed);
     }
 
     /// Encrypt a TLS record directly into `out`, returning the encoded
@@ -66,33 +64,20 @@ impl EncryptionState {
         out: &mut [u8],
     ) -> usize {
         assert!(self.pre_encrypt_action(0) != Some(PreEncryptAction::Refuse));
-        let encrypter = self.record_encrypter.as_mut().unwrap();
+        let ActiveEncrypter { version, encrypter } = self.record_encrypter.as_mut().unwrap();
 
         let seq = self.write_seq;
         self.write_seq += 1;
 
-        #[cfg(debug_assertions)]
-        let (out_ptr, out_len) = (out.as_ptr(), out.len());
-        let encrypted = encrypter
-            .encrypt(plain, seq, &mut out[HEADER_SIZE..])
-            .unwrap();
+        let len = encrypter.encrypted_payload_len(plain.payload.len());
+        let wire_version = plain.version;
+        let (header, payload) = out.split_at_mut(HEADER_SIZE);
+        let input = EncryptInput::new(&**encrypter, *version, plain, seq, payload).unwrap();
+        let typ = input.record_type();
+        encrypter.encrypt(input).unwrap();
 
-        #[cfg(debug_assertions)]
-        {
-            // `RecordEncrypter::encrypt()` requires the returned payload to be
-            // the written prefix of the passed-in buffer. Try to catch misbehaving
-            // implementations in debug mode. In release builds a violation would corrupt
-            // the sent stream.
-            debug_assert_eq!(
-                encrypted.payload.as_ptr(),
-                out_ptr.wrapping_add(HEADER_SIZE)
-            );
-            debug_assert!(encrypted.payload.len() <= out_len - HEADER_SIZE);
-        }
-
-        let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
         debug_assert!(len <= usize::from(u16::MAX));
-        out[..HEADER_SIZE].copy_from_slice(&encode_record_header(typ, version, len as u16));
+        header.copy_from_slice(&encode_record_header(typ, wire_version, len as u16));
         HEADER_SIZE + len
     }
 
@@ -100,11 +85,12 @@ impl EncryptionState {
     /// record encryption.
     pub(crate) fn set_record_encrypter(
         &mut self,
-        cipher: Box<dyn RecordEncrypter>,
+        version: ProtocolVersion,
+        encrypter: Box<dyn RecordEncrypter>,
         max_records: u64,
     ) {
         *self = Self {
-            record_encrypter: Some(cipher),
+            record_encrypter: Some(ActiveEncrypter { version, encrypter }),
             write_seq_max: min(SEQ_SOFT_LIMIT, max_records),
             write_seq: 0,
         };
@@ -125,7 +111,11 @@ impl EncryptionState {
     pub(crate) fn encrypted_len(&self, payload_len: usize) -> usize {
         self.record_encrypter
             .as_ref()
-            .map(|enc| enc.encrypted_payload_len(payload_len))
+            .map(|active| {
+                active
+                    .encrypter
+                    .encrypted_payload_len(payload_len)
+            })
             .unwrap_or_default()
     }
 
@@ -141,6 +131,13 @@ impl EncryptionState {
     pub(crate) fn write_seq(&self) -> u64 {
         self.write_seq
     }
+}
+
+/// The encrypter for outgoing records, and the protocol version whose record
+/// protection it applies.
+struct ActiveEncrypter {
+    version: ProtocolVersion,
+    encrypter: Box<dyn RecordEncrypter>,
 }
 
 /// Record layer that tracks decryption keys.

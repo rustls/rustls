@@ -158,25 +158,10 @@ pub trait RecordDecrypter: Send + Sync {
 
 /// Objects with this trait can encrypt TLS records.
 pub trait RecordEncrypter: Send + Sync {
-    /// Encrypt the given TLS record into `out`, using the sequence number
-    /// `seq` which can be used to derive a unique [`Nonce`].
+    /// Apply record protection to the plaintext described by `input`.
     ///
-    /// The encrypted payload including all framing the ciphersuite requires, such
-    /// as any explicit nonce, padding and/or authentication tag, is written to the
-    /// front of `out`. `out` must be at least [`Self::encrypted_payload_len()`] bytes
-    /// long. See [`EncryptBuffer`] for a convenient wrapper.
-    ///
-    /// The return value describes the resulting record: its payload borrows the
-    /// written prefix of `out`, and its `typ` and `version` are what the record
-    /// header should carry on the wire. Encoding the record header is the caller's
-    /// responsibility and implementations of the `RecordEncrypter` trait must not
-    /// write it to `out` themselves.
-    fn encrypt<'a>(
-        &mut self,
-        record: Record<OutboundPlain<'_>>,
-        seq: u64,
-        out: &'a mut [u8],
-    ) -> Result<Record<&'a [u8]>, Error>;
+    /// The [`EncryptInput`] carries all the context required for encrypting the record payload.
+    fn encrypt<'a>(&mut self, input: EncryptInput<'a>) -> Result<(), Error>;
 
     /// Return the length of the ciphertext that results from encrypting plaintext of length `payload_len`.
     ///
@@ -186,6 +171,157 @@ pub trait RecordEncrypter: Send + Sync {
     /// payload to [`Self::encrypt()`] in chunks of length `F - A`.  Each `encrypt()`
     /// is then free to pad or otherwise transform the length at its option.
     fn encrypted_payload_len(&self, payload_len: usize) -> usize;
+}
+
+/// Context required for [`RecordEncrypter`]s to encrypt a TLS record.
+///
+/// Rather than prescribing one record layout, this offers what an implementation needs through
+/// methods, so that each implementation uses only those that match what its AEAD supports.
+pub struct EncryptInput<'a> {
+    version: ProtocolVersion,
+    record: Record<OutboundPlain<'a>>,
+    seq: u64,
+    out: &'a mut [u8],
+}
+
+impl<'a> EncryptInput<'a> {
+    /// Prepare `record` for encryption by `encrypter` into `out`, under `version`.
+    ///
+    /// `version` selects TLS1.2 or TLS1.3 record protection; any other version
+    /// yields [`ApiMisuse::UnsupportedProtocolVersion`]. `out` must be at least
+    /// [`RecordEncrypter::encrypted_payload_len()`] bytes long for the record's
+    /// payload, otherwise this yields [`ApiMisuse::EncryptBufferTooSmall`]. Only
+    /// that many bytes of `out` are written.
+    pub fn new(
+        encrypter: &dyn RecordEncrypter,
+        version: ProtocolVersion,
+        record: Record<OutboundPlain<'a>>,
+        seq: u64,
+        out: &'a mut [u8],
+    ) -> Result<Self, Error> {
+        if !matches!(version, ProtocolVersion::TLSv1_2 | ProtocolVersion::TLSv1_3) {
+            return Err(ApiMisuse::UnsupportedProtocolVersion(version).into());
+        }
+
+        let required = encrypter.encrypted_payload_len(record.payload.len());
+        let provided = out.len();
+        let Some(out) = out.get_mut(..required) else {
+            return Err(ApiMisuse::EncryptBufferTooSmall { required, provided }.into());
+        };
+
+        Ok(Self {
+            version,
+            record,
+            seq,
+            out,
+        })
+    }
+
+    /// The additional data to authenticate along with the payload.
+    pub fn aad(&self) -> Aad {
+        let version = self.record.version.encode();
+        match self.version {
+            ProtocolVersion::TLSv1_3 => Aad::Tls13(make_tls13_aad(
+                ContentType::ApplicationData,
+                version,
+                self.out.len(),
+            )),
+            _ => Aad::Tls12(make_tls12_aad(
+                self.seq,
+                self.record.typ,
+                version,
+                self.record.payload.len(),
+            )),
+        }
+    }
+
+    /// Lay out the output buffer for sealing contiguous plaintext out of place.
+    ///
+    /// Returns `None` if the plaintext is fragmented, in which case the implementation must fall
+    /// back to [`Self::collect()`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if the output buffer is too small for the explicit nonce and ciphertext.
+    pub fn contiguous(&mut self, nonce: &[u8]) -> Option<EncryptInto<'_>> {
+        let plain = self.record.payload.single_chunk()?;
+        let (nonce_out, sealed) = self.out.split_at_mut(nonce.len());
+        nonce_out.copy_from_slice(nonce);
+        let (out, tag) = sealed.split_at_mut(plain.len());
+        Some(EncryptInto {
+            typ: self.record.typ,
+            plain,
+            out,
+            tag,
+        })
+    }
+
+    /// Gather the plaintext into the output buffer for sealing in place.
+    ///
+    /// The caller is responsible for sealing the `payload` and appending the authentication tag.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the output buffer is too small for the explicit nonce and plaintext.
+    pub fn collect(&mut self, nonce: &[u8]) -> EncryptBuffer<'_> {
+        let mut buffer = EncryptBuffer::whole(self.out);
+        buffer.extend_from_slice(nonce);
+        buffer.extend_from_chunks(&self.record.payload);
+        if self.version == ProtocolVersion::TLSv1_3 {
+            buffer.extend_from_slice(&self.record.typ.to_array());
+        }
+        buffer
+    }
+
+    /// The content type that the record header carries on the wire.
+    pub fn record_type(&self) -> ContentType {
+        match self.version {
+            ProtocolVersion::TLSv1_3 => ContentType::ApplicationData,
+            _ => self.record.typ,
+        }
+    }
+
+    /// The nonce derived from the given IV and the input record's sequence number.
+    pub fn nonce(&self, iv: &Iv) -> Nonce {
+        Nonce::new(iv, self.seq)
+    }
+
+    /// The sequence number for the outgoing record.
+    #[doc(hidden)] // Only for test purposes
+    pub fn seq(&self) -> u64 {
+        self.seq
+    }
+}
+
+/// A structure representing the buffers for encrypting data into a cipher text and tag.
+#[non_exhaustive]
+pub struct EncryptInto<'a> {
+    /// Record type of the plaintext.
+    pub typ: ContentType,
+    /// Plaintext input to encrypt.
+    pub plain: &'a [u8],
+    /// Ciphertext output buffer.
+    pub out: &'a mut [u8],
+    /// Authentication tag output buffer.
+    pub tag: &'a mut [u8],
+}
+
+/// The additional data authenticated along with a record's payload.
+#[non_exhaustive]
+pub enum Aad {
+    /// The TLS1.2 encoding, see [`make_tls12_aad()`].
+    Tls12([u8; TLS12_AAD_SIZE]),
+    /// The TLS1.3 encoding, see [`make_tls13_aad()`].
+    Tls13([u8; TLS13_AAD_SIZE]),
+}
+
+impl AsRef<[u8]> for Aad {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Tls12(aad) => aad,
+            Self::Tls13(aad) => aad,
+        }
+    }
 }
 
 /// A write or read IV.
@@ -334,7 +470,11 @@ pub const NONCE_LEN: usize = 12;
 ///
 /// See RFC 9846 s5.2 for the `additional_data` definition.
 #[inline]
-pub fn make_tls13_aad(typ: ContentType, version: ProtocolVersion, payload_len: usize) -> [u8; 5] {
+pub fn make_tls13_aad(
+    typ: ContentType,
+    version: ProtocolVersion,
+    payload_len: usize,
+) -> [u8; TLS13_AAD_SIZE] {
     let version = version.to_array();
     [
         typ.into(),
@@ -363,6 +503,7 @@ pub fn make_tls12_aad(
     out
 }
 
+const TLS13_AAD_SIZE: usize = 1 + 2 + 2;
 const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
 
 /// A key for an AEAD algorithm.

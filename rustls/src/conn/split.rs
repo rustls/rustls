@@ -537,10 +537,15 @@ impl SendOutput for SendAdapter<'_> {
             .note_key_update_response();
     }
 
-    fn set_encrypter(&mut self, cipher: Box<dyn RecordEncrypter>, max_records: u64) {
+    fn set_encrypter(
+        &mut self,
+        version: ProtocolVersion,
+        cipher: Box<dyn RecordEncrypter>,
+        max_records: u64,
+    ) {
         self.as_locked(false)
             .send
-            .set_encrypter(cipher, max_records);
+            .set_encrypter(version, cipher, max_records);
     }
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>) {
@@ -584,9 +589,11 @@ mod tests {
         ));
         assert!(send_flag_for(|adapter| adapter.queue_requested_key_update()));
         assert!(!send_flag_for(|adapter| adapter.note_key_update_response()));
-        assert!(!send_flag_for(
-            |adapter| adapter.set_encrypter(Box::new(Tls13Cipher), 1234)
-        ));
+        assert!(!send_flag_for(|adapter| adapter.set_encrypter(
+            ProtocolVersion::TLSv1_3,
+            Box::new(Tls13Cipher),
+            1234
+        )));
         // update_key_schedule too hard
         assert!(send_flag_for(|adapter| adapter.send_alert(
             AlertLevel::Fatal,
@@ -604,7 +611,7 @@ mod tests {
     #[test]
     fn pending_send_data() {
         let mut send = SendPath::default();
-        send.set_encrypter(Box::new(Tls13Cipher), 1234);
+        send.set_encrypter(ProtocolVersion::TLSv1_3, Box::new(Tls13Cipher), 1234);
 
         let mut inner = SendInner {
             send,
@@ -634,7 +641,7 @@ mod tests {
 
     fn send_flag_for(f: impl FnOnce(&mut SendAdapter<'_>)) -> bool {
         let mut send = SendPath::default();
-        send.set_encrypter(Box::new(Tls13Cipher), 1234);
+        send.set_encrypter(ProtocolVersion::TLSv1_3, Box::new(Tls13Cipher), 1234);
 
         let send = Mutex::new(SendInner {
             send,
