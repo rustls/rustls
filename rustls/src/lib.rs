@@ -419,11 +419,11 @@ pub use crate::webpki::RootCertStore;
 
 /// Items for use in a client.
 pub mod client;
-pub use client::{ClientConfig, ClientConnection, ClientData};
+pub use client::{ClientConfig, ClientConnection, ClientSide};
 
 /// Items for use in a server.
 pub mod server;
-pub use server::{ServerConfig, ServerConnection, ServerData};
+pub use server::{ServerConfig, ServerConnection, ServerSide};
 
 /// All defined protocol versions appear in this module.
 ///

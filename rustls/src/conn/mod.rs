@@ -220,12 +220,12 @@ pub(crate) trait VerifySidePeerIdentity<Side: SideData>: Send + Sync {
 /// [`SideData`]. This is used to store side-specific data.
 pub(crate) struct ConnectionCommon<Side: SideData> {
     pub(crate) state: Result<Side::State, Error>,
-    pub(crate) side: Side::Data,
+    pub(crate) side: Side,
     pub(crate) common: CommonState,
 }
 
 impl<Side: SideData> ConnectionCommon<Side> {
-    pub(crate) fn new(state: Side::State, side: Side::Data, common: CommonState) -> Self {
+    pub(crate) fn new(state: Side::State, side: Side, common: CommonState) -> Self {
         Self {
             state: Ok(state),
             side,
@@ -692,11 +692,7 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
 
 /// Data specific to the peer's side (client or server).
 #[expect(private_bounds)]
-pub trait SideData: private::Side + Sized {
-    /// Type holding data learned during the connection, specific to this side.
-    #[expect(private_bounds)]
-    type Data: SideOutput + fmt::Debug;
-
+pub trait SideData: SideOutput + fmt::Debug + private::Side + Sized {
     /// Type representing an in-progress TCP handshake.
     type Handshake;
     /// Type representing an in-progress QUIC handshake.

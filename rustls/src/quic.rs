@@ -10,7 +10,7 @@ pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
 use crate::conn::{
     Accepted, ConnectionCommon, Core, KeyingMaterialExporter, MessageIter, MessageIterMode,
-    ServerNext, SideData, Transport, VerifyPeerIdentity,
+    ServerNext, SideData, TlsInputBuffer, Transport, VerifyPeerIdentity,
 };
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
@@ -23,7 +23,6 @@ use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
 };
-use crate::{ClientData, ServerData, TlsInputBuffer};
 
 /// A QUIC client or server connection.
 pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
@@ -82,7 +81,7 @@ impl ClientConnection {
     }
 
     /// Returns data learned during the connection, specific to being a client.
-    pub fn data(&self) -> &ClientData {
+    pub fn data(&self) -> &ClientSide {
         &self.inner.common.side
     }
 }
@@ -192,7 +191,7 @@ impl ServerConnection {
     }
 
     /// Returns data learned during the connection, specific to being a server.
-    pub fn data(&self) -> &ServerData {
+    pub fn data(&self) -> &ServerSide {
         &self.inner.common.side
     }
 }
@@ -363,7 +362,7 @@ impl NeedsInput {
     }
 
     /// Returns data learned during the connection, specific to being a server.
-    pub fn data(&self) -> &ServerData {
+    pub fn data(&self) -> &ServerSide {
         &self.0.inner.side
     }
 }
