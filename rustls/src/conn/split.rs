@@ -36,11 +36,10 @@ pub struct SplitConnection<Side: SideData> {
     pub outputs: ConnectionOutputs,
     /// Role-specific facts about the connection established during the handshake.
     ///
-    /// This is [`ClientData`] for clients and [`ServerData`] for servers.
+    /// This is [`ClientSide`] for clients and [`ServerSide`] for servers.
     ///
-    /// [`ClientData`]: crate::client::ClientData
-    /// [`ServerData`]: crate::server::ServerData
-    pub side_outputs: Side::Data,
+    /// [`ServerSide`]: crate::server::ServerSide
+    pub side_outputs: Side,
 }
 
 impl<Side: SideData> SplitConnection<Side> {

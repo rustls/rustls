@@ -77,7 +77,7 @@ impl ClientConnection {
     ///
     /// The server can choose not to accept any sent early data --
     /// in this case the data is lost but the connection continues.  You
-    /// can tell this happened using [`ClientData::is_early_data_accepted()`].
+    /// can tell this happened using [`ClientSide::is_early_data_accepted()`].
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
         let ConnectionCommon { side, common, .. } = &mut self.inner;
         WriteEarlyData::new(&mut side.early_data, common)
@@ -97,7 +97,7 @@ impl ClientConnection {
     }
 
     /// Returns data learned during the connection, specific to being a client.
-    pub fn data(&self) -> &ClientData {
+    pub fn data(&self) -> &ClientSide {
         &self.inner.side
     }
 }
@@ -326,7 +326,7 @@ impl NeedsInput<ClientSide> {
     ///
     /// The server can choose not to accept any sent early data --
     /// in this case the data is lost but the connection continues.  You
-    /// can tell this happened using [`ClientData::is_early_data_accepted()`].
+    /// can tell this happened using [`ClientSide::is_early_data_accepted()`].
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
         let ConnectionCommon { side, common, .. } = &mut self.0.inner;
         WriteEarlyData::new(&mut side.early_data, common)
@@ -401,7 +401,7 @@ impl ConnectionCommon<ClientSide> {
         common_state
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
-        let mut data = ClientData::default();
+        let mut data = ClientSide::default();
 
         let mut output = SideCommonOutput {
             side: &mut data,
@@ -417,13 +417,7 @@ impl ConnectionCommon<ClientSide> {
     }
 }
 
-/// State associated with a client connection.
-#[expect(clippy::exhaustive_structs)]
-#[derive(Debug)]
-pub struct ClientSide;
-
 impl SideData for ClientSide {
-    type Data = ClientData;
     type Handshake = ClientHandshake;
     type QuicHandshake = ();
 
@@ -447,7 +441,7 @@ impl crate::conn::private::Side for ClientSide {
     type State = ClientState;
 }
 
-impl SideOutput for ClientData {
+impl SideOutput for ClientSide {
     fn emit(&mut self, ev: Event) {
         match ev {
             Event::EchStatus(ech) => self.ech_status = ech,
@@ -479,12 +473,12 @@ impl SideOutput for ClientData {
 
 /// TLS client-specific information determined during a connection.
 #[derive(Debug, Default)]
-pub struct ClientData {
+pub struct ClientSide {
     early_data: Option<EarlyData>,
     ech_status: EchStatus,
 }
 
-impl ClientData {
+impl ClientSide {
     /// Returns True if the server signalled it will process early data.
     ///
     /// If you sent early data and this returns false at the end of the

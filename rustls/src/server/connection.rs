@@ -85,7 +85,7 @@ impl ServerConnection {
     }
 
     /// Returns data learned during the connection, specific to being a server.
-    pub fn data(&self) -> &ServerData {
+    pub fn data(&self) -> &ServerSide {
         &self.inner.side
     }
 }
@@ -163,7 +163,7 @@ impl ConnectionCommon<ServerSide> {
                 protocol,
             ))
             .into(),
-            ServerData::default(),
+            ServerSide::default(),
             common,
         ))
     }
@@ -171,7 +171,7 @@ impl ConnectionCommon<ServerSide> {
     pub(crate) fn for_acceptor(protocol: Protocol) -> Self {
         Self::new(
             ReadClientHello::new(protocol).into(),
-            ServerData::default(),
+            ServerSide::default(),
             CommonState::new(Side::Server, FipsStatus::Unvalidated),
         )
     }
@@ -232,13 +232,7 @@ impl TryFrom<Core<ServerSide, Tcp>> for ServerHandshake {
     }
 }
 
-/// State associated with a server connection.
-#[expect(clippy::exhaustive_structs)]
-#[derive(Debug)]
-pub struct ServerSide;
-
 impl SideData for ServerSide {
-    type Data = ServerData;
     type Handshake = ServerHandshake;
     type QuicHandshake = QuicServerHandshake;
 
@@ -264,12 +258,12 @@ impl crate::conn::private::Side for ServerSide {
 
 /// State associated with a server connection.
 #[derive(Default)]
-pub struct ServerData {
+pub struct ServerSide {
     sni: Option<DnsName<'static>>,
     received_resumption_data: Option<Vec<u8>>,
 }
 
-impl ServerData {
+impl ServerSide {
     /// Retrieves the resumption data supplied by the client, if any.
     ///
     /// Returns `Some` if and only if a valid resumption ticket has been received from the client.
@@ -296,7 +290,7 @@ impl ServerData {
     }
 }
 
-impl SideOutput for ServerData {
+impl SideOutput for ServerSide {
     fn emit(&mut self, ev: Event) {
         match ev {
             Event::ReceivedServerName(sni) => self.sni = sni,
@@ -306,9 +300,9 @@ impl SideOutput for ServerData {
     }
 }
 
-impl fmt::Debug for ServerData {
+impl fmt::Debug for ServerSide {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ServerData")
+        f.debug_struct("ServerSide")
             .field("sni", &self.sni)
             .finish_non_exhaustive()
     }
