@@ -11,8 +11,8 @@ use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event,
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    ClientNext, Connection, ConnectionCommon, Core, DataKind, KeyingMaterialExporter,
-    MessageHandler, SideCommonOutput, SideData, Tcp, VerifyPeerIdentity,
+    ClientNext, Connection, ConnectionCommon, DataKind, KeyingMaterialExporter, MessageHandler,
+    NeedsInput, SideCommonOutput, SideData, Tcp, TlsInputBuffer, Transport, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -20,19 +20,18 @@ use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::enums::ApplicationProtocol;
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{ClientExtensionsInput, TransportParameters};
-use crate::quic::{self, ClientConnection as QuicClientConnection, Quic, QuicCommon, QuicOutput};
+use crate::quic::{self, ClientConnection as QuicClientConnection, Quic};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::tracing::trace;
 use crate::verify::ServerIdentity;
-use crate::{NeedsInput, TlsInputBuffer};
 
 /// This represents a single TLS client connection.
 ///
 /// Encrypt data destined for the peer using [`Connection::write()`].
 /// Process received data from the peer using [`Connection::read_tls()`].
 pub struct ClientConnection {
-    inner: ConnectionCommon<ClientSide>,
+    inner: ConnectionCommon<ClientSide, Tcp>,
 }
 
 impl fmt::Debug for ClientConnection {
@@ -104,6 +103,7 @@ impl ClientConnection {
 
 impl Connection for ClientConnection {
     type Side = ClientSide;
+    type Transport = Tcp;
 
     fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error> {
         self.inner.write(plaintext, tls)
@@ -113,7 +113,7 @@ impl Connection for ClientConnection {
         &'a mut self,
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
-    ) -> MessageHandler<'a, 'm, ClientSide> {
+    ) -> MessageHandler<'a, 'm, Self::Side> {
         self.inner.read_tls(input, tls)
     }
 
@@ -180,7 +180,7 @@ impl ClientConnectionBuilder {
                 config,
                 name,
                 ClientExtensionsInput::from_alpn(alpn_protocols),
-                None,
+                Tcp,
                 Protocol::Tcp,
                 tls,
             )?,
@@ -225,7 +225,7 @@ impl ClientConnectionBuilder {
             )
         };
 
-        let mut quic = Quic {
+        let quic = Quic {
             version,
             ..Quic::default()
         };
@@ -235,14 +235,14 @@ impl ClientConnectionBuilder {
             self.config,
             self.name,
             exts,
-            Some(&mut quic),
+            quic,
             Protocol::Quic(version),
             &mut tls,
         )?;
 
         // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
         debug_assert!(tls.is_empty());
-        Ok(QuicClientConnection::from(QuicCommon::new(inner, quic)))
+        Ok(QuicClientConnection::from(inner))
     }
 
     /// Finalize the builder and create a [`ClientHandshake`].
@@ -267,7 +267,7 @@ impl ClientConnectionBuilder {
             config,
             name,
             ClientExtensionsInput::from_alpn(alpn_protocols),
-            None,
+            Tcp,
             Protocol::Tcp,
             tls,
         )?))
@@ -294,16 +294,16 @@ pub enum ClientHandshake {
     Complete(SplitConnection<ClientSide>),
 }
 
-impl TryFrom<Core<ClientSide, Tcp>> for ClientHandshake {
+impl TryFrom<ConnectionCommon<ClientSide, Tcp>> for ClientHandshake {
     type Error = Error;
 
-    fn try_from(core: Core<ClientSide, Tcp>) -> Result<Self, Error> {
-        Ok(match ClientNext::try_from(core)? {
-            ClientNext::NeedsInput(core) => Self::NeedsInput(NeedsInput(core)),
+    fn try_from(conn: ConnectionCommon<ClientSide, Tcp>) -> Result<Self, Error> {
+        Ok(match ClientNext::try_from(conn)? {
+            ClientNext::NeedsInput(conn) => Self::NeedsInput(NeedsInput(conn)),
 
             ClientNext::VerifyServerIdentity(verify) => Self::VerifyServerIdentity(verify),
 
-            ClientNext::Complete(core) => Self::Complete(SplitConnection::try_from(core.inner)?),
+            ClientNext::Complete(conn) => Self::Complete(SplitConnection::try_from(conn)?),
         })
     }
 }
@@ -328,7 +328,7 @@ impl NeedsInput<ClientSide> {
     /// in this case the data is lost but the connection continues.  You
     /// can tell this happened using [`ClientSide::is_early_data_accepted()`].
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
-        let ConnectionCommon { side, common, .. } = &mut self.0.inner;
+        let ConnectionCommon { side, common, .. } = &mut self.0;
         WriteEarlyData::new(&mut side.early_data, common)
     }
 }
@@ -388,12 +388,12 @@ impl<'a> WriteEarlyData<'a> {
     }
 }
 
-impl ConnectionCommon<ClientSide> {
+impl<T: Transport> ConnectionCommon<ClientSide, T> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
         extra_exts: ClientExtensionsInput,
-        quic: Option<&mut dyn QuicOutput>,
+        mut transport: T,
         protocol: Protocol,
         tls: &mut Vec<u8>,
     ) -> Result<Self, Error> {
@@ -405,7 +405,7 @@ impl ConnectionCommon<ClientSide> {
 
         let mut output = SideCommonOutput {
             side: &mut data,
-            quic,
+            quic: transport.quic(),
             common: &mut common_state,
             tls,
         };
@@ -413,7 +413,7 @@ impl ConnectionCommon<ClientSide> {
         let input = ClientHelloInput::new(name, &extra_exts, protocol, &mut output, config)?;
         let state = input.start_handshake(extra_exts, &mut output)?;
 
-        Ok(Self::new(state, data, common_state))
+        Ok(Self::new(state, data, transport, common_state))
     }
 }
 
@@ -453,13 +453,15 @@ impl SideData for ClientSide {
     type PeerIdentity<'a> = ServerIdentity<'static, 'a>;
 
     #[expect(private_interfaces)]
-    fn tcp_handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error> {
-        ClientHandshake::try_from(core)
+    fn tcp_handshake_from_conn(
+        conn: ConnectionCommon<Self, Tcp>,
+    ) -> Result<Self::Handshake, Error> {
+        ClientHandshake::try_from(conn)
     }
 
     #[expect(private_interfaces)]
-    fn quic_handshake_from_core(
-        _core: Core<Self, Quic>,
+    fn quic_handshake_from_conn(
+        _core: ConnectionCommon<Self, Quic>,
         _output: &mut Vec<quic::QuicEvent>,
     ) -> Result<Self::QuicHandshake, Error> {
         todo!("nyi")
