@@ -971,10 +971,22 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
 fn test_keys_match() {
     // Consistent: Both of these should have the same SPKI values
     Credentials::new(KeyType::Rsa2048.identity(), Box::new(SigningKeySomeSpki)).unwrap();
+    Credentials::new(
+        Arc::new(Identity::RawPublicKey(KeyType::Rsa2048.spki())),
+        Box::new(SigningKeySomeSpki),
+    )
+    .unwrap();
 
     // Inconsistent: These should not have the same SPKI values
     assert!(matches!(
         Credentials::new(KeyType::EcdsaP256.identity(), Box::new(SigningKeySomeSpki)),
+        Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch))
+    ));
+    assert!(matches!(
+        Credentials::new(
+            Arc::new(Identity::RawPublicKey(KeyType::EcdsaP256.spki())),
+            Box::new(SigningKeySomeSpki)
+        ),
         Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch))
     ));
 

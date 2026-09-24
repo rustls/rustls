@@ -128,24 +128,30 @@ impl Credentials {
 
     /// Make a new [`Credentials`], with the given identity and key.
     ///
-    /// Yields [`Error::InconsistentKeys`] if the `identity` is `X509` and the end-entity certificate's subject
-    /// public key info does not match that of the `key`'s public key, or if the `key` does not
-    /// have a public key.
+    /// Yields [`Error::InconsistentKeys`] if the public key asserted by `identity` does not match
+    /// that derived from `key`, or if the `key` cannot derive its public key.
+    ///
+    /// Use [`Self::new_unchecked()`] to avoid this consistency check.
     ///
     /// This constructor should be used with all [`SigningKey`] implementations
     /// that can provide a public key, including those provided by rustls itself.
     #[cfg(feature = "webpki")]
     pub fn new(identity: Arc<Identity<'static>>, key: Box<dyn SigningKey>) -> Result<Self, Error> {
-        if let Identity::X509(CertificateIdentity { end_entity, .. }) = &*identity {
-            let parsed = ParsedCertificate::try_from(end_entity)?;
-            match (key.public_key(), parsed.subject_public_key_info()) {
-                (None, _) => return Err(Error::InconsistentKeys(InconsistentKeys::Unknown)),
-                (Some(key_spki), cert_spki) if key_spki != cert_spki => {
-                    return Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch));
-                }
-                _ => {}
+        let id_spki = match &*identity {
+            Identity::X509(CertificateIdentity { end_entity, .. }) => {
+                let parsed = ParsedCertificate::try_from(end_entity)?;
+                &parsed.subject_public_key_info()
             }
+            Identity::RawPublicKey(spki) => spki,
         };
+
+        match (key.public_key(), id_spki) {
+            (None, _) => return Err(Error::InconsistentKeys(InconsistentKeys::Unknown)),
+            (Some(key_spki), id_spki) if key_spki != *id_spki => {
+                return Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch));
+            }
+            _ => {}
+        }
 
         Ok(Self {
             identity,
@@ -154,10 +160,10 @@ impl Credentials {
         })
     }
 
-    /// Make a new `Credentials` from a raw private key.
+    /// Make a new `Credentials` without a consistency check.
     ///
-    /// Unlike [`Credentials::new()`], this does not check that the end-entity certificate's
-    /// subject key matches `key`'s public key.
+    /// Unlike [`Credentials::new()`], this does not check if the public key asserted by `identity`
+    /// matches that derived from `key`.
     ///
     /// This avoids parsing the end-entity certificate, which is useful when using client
     /// certificates that are not fully standards compliant, but known to usable by the peer.
@@ -472,7 +478,7 @@ pub fn public_key_to_spki(
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InconsistentKeys {
-    /// The public key returned by the [`SigningKey`] does not match the public key information in the certificate.
+    /// The public key returned by the [`SigningKey`] does not match the public key asserted by the identity.
     ///
     /// [`SigningKey`]: crate::crypto::SigningKey
     KeyMismatch,
