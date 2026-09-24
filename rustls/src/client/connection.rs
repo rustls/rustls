@@ -34,13 +34,6 @@ pub struct ClientConnection {
     inner: ConnectionCommon<ClientSide, Tcp>,
 }
 
-impl fmt::Debug for ClientConnection {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ClientConnection")
-            .finish_non_exhaustive()
-    }
-}
-
 impl ClientConnection {
     /// Split a post-handshake connection into a [`SplitConnection`].
     ///
@@ -152,6 +145,13 @@ impl Deref for ClientConnection {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl fmt::Debug for ClientConnection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ClientConnection")
+            .finish_non_exhaustive()
     }
 }
 
