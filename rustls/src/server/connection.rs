@@ -6,7 +6,7 @@ use core::ops::Deref;
 use pki_types::{DnsName, FipsStatus};
 
 use super::config::ServerConfig;
-use crate::common_state::{CommonState, ConnectionOutputs, Event, Protocol, Side};
+use crate::common_state::{CommonState, ConnectionOutputs, Event, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
@@ -37,12 +37,7 @@ impl ServerConnection {
     /// we behave in the TLS protocol.
     pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
         Ok(Self {
-            inner: ConnectionCommon::for_server(
-                config,
-                ServerExtensionsInput::default(),
-                Tcp,
-                Protocol::Tcp,
-            )?,
+            inner: ConnectionCommon::for_server(config, ServerExtensionsInput::default(), Tcp)?,
         })
     }
 
@@ -152,12 +147,12 @@ impl<T: Transport> ConnectionCommon<ServerSide, T> {
         config: Arc<ServerConfig>,
         extra_exts: ServerExtensionsInput,
         transport: T,
-        protocol: Protocol,
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server, config.fips());
         common
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
+        let protocol = transport.protocol();
         Ok(Self::new(
             Box::new(ExpectClientHello::new(
                 config,
@@ -172,9 +167,9 @@ impl<T: Transport> ConnectionCommon<ServerSide, T> {
         ))
     }
 
-    pub(crate) fn for_acceptor(transport: T, protocol: Protocol) -> Self {
+    pub(crate) fn for_acceptor(transport: T) -> Self {
         Self::new(
-            ReadClientHello::new(protocol).into(),
+            ReadClientHello::new(transport.protocol()).into(),
             ServerSide::default(),
             transport,
             CommonState::new(Side::Server, FipsStatus::Unvalidated),
@@ -217,7 +212,7 @@ impl ServerHandshake {
     ///
     /// The returned object should be fed data from a single potential client.
     pub fn start() -> NeedsInput<ServerSide> {
-        NeedsInput::new(ConnectionCommon::for_acceptor(Tcp, Protocol::Tcp))
+        NeedsInput::new(ConnectionCommon::for_acceptor(Tcp))
     }
 }
 
