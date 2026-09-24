@@ -9,15 +9,15 @@ use crate::crypto::WebPkiSupportedAlgorithms;
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 use crate::verify::{HandshakeSignatureValid, SignatureVerificationInput, SignerPublicKey};
 
-/// Verify that the end-entity certificate `end_entity` is a valid server cert
-/// and chains to at least one of the trust anchors in the `roots` [RootCertStore].
+/// Verify that the end-entity certificate `cert` is a valid server cert
+/// and chains to at least one of the trust anchors in the `roots` [`RootCertStore`].
 ///
 /// This function is primarily useful when building a custom certificate verifier. It
 /// performs **no revocation checking**. Implementers must handle this themselves,
 /// along with checking that the server certificate is valid for the subject name
 /// being used (see [`verify_server_name`]).
 ///
-/// `intermediates` contains all certificates other than `end_entity` that
+/// `intermediates` contains all certificates other than `cert` that
 /// were sent as part of the server's `Certificate` message. It is in the
 /// same order that the server sent them and may be empty.
 pub fn verify_identity_signed_by_trust_anchor(
@@ -37,10 +37,10 @@ pub fn verify_identity_signed_by_trust_anchor(
     )
 }
 
-/// Verify that the `end_entity` has an alternative name matching the `server_name`.
+/// Verify that the `cert` has an alternative name matching the `server_name`.
 ///
 /// Note: this only verifies the name and should be used in conjunction with more verification
-/// like [verify_identity_signed_by_trust_anchor]
+/// like [`verify_identity_signed_by_trust_anchor()`]
 pub fn verify_server_name(
     cert: &ParsedCertificate<'_>,
     server_name: &ServerName<'_>,
@@ -71,14 +71,18 @@ impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {
     }
 }
 
-/// Verify a message signature using the `cert` public key and any supported scheme.
+/// Verify a message signature contained in `input` using any supported scheme.
 ///
-/// This function verifies the `dss` signature over `message` using the subject public key from
-/// `cert`. Since TLS 1.2 doesn't provide enough information to map the `dss.scheme` into a single
+/// `input` contains a message, purported signature as a [`DigitallySignedStruct`][], and
+/// subject public key.
+///
+/// Since TLS 1.2 doesn't provide enough information to map the `input.signature.scheme` into a single
 /// [`SignatureVerificationAlgorithm`], this function will map to several candidates and try each in
 /// succession until one succeeds or we exhaust all candidates.
 ///
 /// See [`WebPkiSupportedAlgorithms::mapping()`] for more information.
+///
+/// [`DigitallySignedStruct`]: crate::DigitallySignedStruct
 pub fn verify_tls12_signature(
     input: &SignatureVerificationInput<'_>,
     supported_schemes: &WebPkiSupportedAlgorithms,
@@ -120,12 +124,15 @@ pub fn verify_tls12_signature(
     })
 }
 
-/// Verify a message signature using the `cert` public key and the first TLS 1.3 compatible
-/// supported scheme.
+/// Verify a message signature contained in `input` using the first TLS1.3 supported scheme.
 ///
-/// This function verifies the `dss` signature over `message` using the subject public key from
-/// `cert`. Unlike [`verify_tls12_signature()`], this function only tries the first matching scheme. See
+/// `input` contains a message, purported signature as a [`DigitallySignedStruct`][], and
+/// subject public key.
+///
+/// Unlike [`verify_tls12_signature()`], this function only tries the first matching scheme. See
 /// [`WebPkiSupportedAlgorithms::mapping()`] for more information.
+///
+/// [`DigitallySignedStruct`]: crate::DigitallySignedStruct
 pub fn verify_tls13_signature(
     input: &SignatureVerificationInput<'_>,
     supported_schemes: &WebPkiSupportedAlgorithms,
@@ -158,18 +165,18 @@ pub fn verify_tls13_signature(
     .map(|_| HandshakeSignatureValid::assertion())
 }
 
-/// Verify that the end-entity certificate `end_entity` is a valid server cert
+/// Verify that the end-entity certificate `cert` is a valid server cert
 /// and chains to at least one of the trust anchors in the `roots` [RootCertStore].
 ///
-/// `intermediates` contains all certificates other than `end_entity` that
+/// `intermediates` contains all certificates other than `cert` that
 /// were sent as part of the server's `Certificate` message. It is in the
 /// same order that the server sent them and may be empty.
 ///
 /// `revocation` controls how revocation checking is performed, if at all.
 ///
-/// This function exists to be used by [`verify_identity_signed_by_trust_anchor`],
+/// This function exists to be used by [`verify_identity_signed_by_trust_anchor()`],
 /// and differs only in providing a `Option<webpki::RevocationOptions>` argument. We
-/// can't include this argument in `verify_identity_signed_by_trust_anchor` because
+/// can't include this argument in `verify_identity_signed_by_trust_anchor()` because
 /// it will leak the webpki types into Rustls' public API.
 pub(crate) fn verify_identity_signed_by_trust_anchor_impl(
     cert: &ParsedCertificate<'_>,

@@ -274,7 +274,7 @@ impl<'a> LengthPrefixedBuffer<'a> {
     /// Inserts a dummy length into `buf`, and remembers where it went.
     ///
     /// After this, the body of the length-delimited structure should be appended to `LengthPrefixedBuffer::buf`.
-    /// The length header is corrected in `LengthPrefixedBuffer::drop`.
+    /// The length header is corrected in [`LengthPrefixedBuffer::drop`].
     pub(crate) fn new(size_len: ListLength, buf: &'a mut Vec<u8>) -> Self {
         let len_offset = buf.len();
         buf.extend(match size_len {
@@ -434,7 +434,7 @@ pub(crate) trait Codec<'a>: Debug + Sized {
     /// a Reader for the slice of bytes provided
     ///
     /// Returns `Err(InvalidMessage::TrailingData(_))` if
-    /// `Self::read` does not read the entirety of `bytes`.
+    /// [`Self::read()`] does not read the entirety of `bytes`.
     fn read_bytes(bytes: &'a [u8]) -> Result<Self, InvalidMessage> {
         Reader::new(bytes).all("read_bytes", Self::read)
     }
@@ -452,7 +452,7 @@ pub(crate) struct Reader<'a> {
 }
 
 impl<'a> Reader<'a> {
-    /// Creates a new Reader of the provided `bytes` slice.
+    /// Creates a new Reader of the provided `buffer` slice.
     pub(crate) fn new(buffer: &'a [u8]) -> Self {
         Self { buffer }
     }

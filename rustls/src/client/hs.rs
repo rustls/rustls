@@ -973,14 +973,12 @@ impl GroupAndKeyShare {
     }
 }
 
-/// Prepares `exts` and `cx` with TLS 1.2 or TLS 1.3 session
-/// resumption.
+/// Prepares `exts` with TLS 1.2 or TLS 1.3 session resumption.
 ///
 /// - `suite` is `None` if this is the initial ClientHello, or
-///   `Some` if we're retrying in response to
-///   a HelloRetryRequest.
+///   `Some` if we're retrying in response to a HelloRetryRequest.
 ///
-/// This function will push onto `exts` to
+/// This function will alter `exts` to:
 ///
 /// (a) request a new ticket if we don't have one,
 /// (b) send our TLS 1.2 ticket after retrieving an 1.2 session,

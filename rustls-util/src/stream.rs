@@ -325,7 +325,7 @@ where
         &mut self.sock
     }
 
-    /// Extract the `conn` and `sock` parts from the `StreamOwned`
+    /// Destructure this object into its `conn` and `sock` parts
     pub fn into_parts(self) -> (C, T) {
         (self.conn, self.sock)
     }

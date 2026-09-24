@@ -75,7 +75,7 @@ pub struct ClientConfig {
     /// # Sharing `resumption` between `ClientConfig`s
     /// In a program using many `ClientConfig`s it may improve resumption rates
     /// (which has a significant impact on connection performance) if those
-    /// configs share a single `Resumption`.
+    /// configs share a single [`Resumption`].
     ///
     /// However, resumption is only allowed between two `ClientConfig`s if their
     /// `client_auth_cert_resolver` (ie, potential client authentication credentials)
@@ -390,15 +390,14 @@ impl ClientSessionKey<'_> {
 pub trait ClientCredentialResolver: fmt::Debug + Send + Sync {
     /// Resolve a client certificate chain/private key to use as the client's identity.
     ///
-    /// The `SelectedCredential` returned from this method contains an identity and a
+    /// The [`SelectedCredential`] returned from this method contains an identity and a
     /// one-time-use [`Signer`] wrapping the private key. This is usually obtained via a
     /// [`Credentials`], on which an implementation can call [`Credentials::signer()`].
     /// An implementation can either store long-lived [`Credentials`] values, or instantiate
     /// them as needed using one of its constructors.
     ///
-    /// Return `None` to continue the handshake without any client
-    /// authentication.  The server may reject the handshake later
-    /// if it requires authentication.
+    /// Return `None` to continue the handshake without any client authentication.  The server
+    /// may reject the handshake later if it requires authentication.
     ///
     /// [RFC 5280 A.1]: https://www.rfc-editor.org/rfc/rfc5280#appendix-A.1
     ///
@@ -448,7 +447,7 @@ impl CredentialRequest<'_> {
 
     /// The negotiated certificate type.
     ///
-    /// If the server does not support [RFC 7250], this will be `CertificateType::X509`.
+    /// If the server does not support [RFC 7250], this will be [`CertificateType::X509`].
     ///
     /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
     pub fn negotiated_type(&self) -> CertificateType {
@@ -716,15 +715,14 @@ pub struct WantsClientCert {
 }
 
 impl ConfigBuilder<ClientConfig, WantsClientCert> {
-    /// Sets a single certificate chain and matching private key for use
-    /// in client authentication.
+    /// Sets a single identity and matching private key for use in client authentication.
     ///
-    /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded private key as PKCS#1, PKCS#8, or SEC1. The
-    /// `aws-lc-rs` and `ring` [`CryptoProvider`]s support
-    /// all three encodings, but other `CryptoProviders` may not.
+    /// - `identity` is the [`Identity`], typically containing a certificate chain.
+    /// - `key_der` is a DER-encoded private key as PKCS#1, PKCS#8, or SEC1.  Supported key
+    ///   formats and types depends on the configured provider.
     ///
-    /// This function fails if `key_der` is invalid.
+    /// This function fails if `key_der` is invalid, or if the `SubjectPublicKeyInfo` from
+    /// the private key does not match the public key from the `identity`.
     #[cfg(feature = "webpki")]
     pub fn with_client_auth_cert(
         self,

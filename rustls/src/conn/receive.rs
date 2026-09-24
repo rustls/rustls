@@ -396,7 +396,7 @@ impl ReceivePath {
         }
     }
 
-    /// Take a TLS record and map it into an `Input`
+    /// Take a TLS record and map it into an [`Input`]
     ///
     /// `Input` is the input to our state machine.
     ///

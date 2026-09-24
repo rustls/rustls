@@ -61,8 +61,7 @@ pub struct Tls12CipherSuite {
     /// The precise scheme used is then chosen from this set by the selected authentication key.
     pub sign: &'static [SignatureScheme],
 
-    /// How to produce a [`RecordDecrypter`] or [`RecordEncrypter`]
-    /// from raw key material.
+    /// How to produce a [`RecordDecrypter`] or [`RecordEncrypter`] from raw key material.
     pub aead_alg: &'static dyn Tls12AeadAlgorithm,
 }
 
@@ -108,8 +107,7 @@ impl Suite for Tls12CipherSuite {
         self.kx == kxa
     }
 
-    /// Return true if this suite is usable for a key only offering `sig_alg`
-    /// signatures.
+    /// Return true if this suite is usable for a key only offering `scheme` signatures.
     fn usable_for_signature_scheme(&self, scheme: SignatureScheme) -> bool {
         let Some(alg) = scheme.algorithm() else {
             return false;

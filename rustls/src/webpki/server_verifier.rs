@@ -129,7 +129,7 @@ impl ServerVerifierBuilder {
     }
 }
 
-/// Default `ServerVerifier`, see the trait impl for more information.
+/// Default [`ServerVerifier`], see the trait impl for more information.
 #[derive(Debug, Hash)]
 pub struct WebPkiServerVerifier {
     roots: Arc<RootCertStore>,
@@ -201,7 +201,8 @@ impl WebPkiServerVerifier {
 
 impl ServerVerifier for WebPkiServerVerifier {
     /// Will verify the certificate is valid in the following ways:
-    /// - Signed by a trusted `RootCertStore` CA
+    ///
+    /// - Signed by a trusted [`RootCertStore`] CA
     /// - Not Expired
     /// - Valid for DNS entry
     /// - Valid revocation status (if applicable).

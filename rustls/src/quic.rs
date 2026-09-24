@@ -777,22 +777,22 @@ impl AsRef<[u8]> for Tag {
     }
 }
 
-/// How a `Tls13CipherSuite` generates `PacketKey`s and `HeaderProtectionKey`s.
+/// How a [`Tls13CipherSuite`] generates [`PacketKey`]s and [`HeaderProtectionKey`]s.
 pub trait Algorithm: Send + Sync {
-    /// Produce a `PacketKey` encrypter/decrypter for this suite.
+    /// Produce a [`PacketKey`] for this suite.
     ///
-    /// `suite` is the entire suite this `Algorithm` appeared in.
     /// `key` and `iv` is the key material to use.
     fn packet_key(&self, key: AeadKey, iv: Iv) -> Box<dyn PacketKey>;
 
-    /// Produce a `HeaderProtectionKey` encrypter/decrypter for this suite.
+    /// Produce a [`HeaderProtectionKey`] for this suite.
     ///
-    /// `key` is the key material, which is `aead_key_len()` bytes in length.
+    /// `key` is the key material, which is [`Self::aead_key_len()`] bytes in length.
     fn header_protection_key(&self, key: AeadKey) -> Box<dyn HeaderProtectionKey>;
 
     /// The length in bytes of keys for this Algorithm.
     ///
-    /// This controls the size of `AeadKey`s presented to `packet_key()` and `header_protection_key()`.
+    /// This controls the size of [`AeadKey`]s presented to [`Self::packet_key()`] and
+    /// [`Self::header_protection_key()`].
     fn aead_key_len(&self) -> usize;
 
     /// The FIPS validation status of this algorithm.

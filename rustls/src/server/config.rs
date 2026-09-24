@@ -652,23 +652,22 @@ pub struct WantsServerCert {
 }
 
 impl ConfigBuilder<ServerConfig, WantsServerCert> {
-    /// Sets a single certificate chain and matching private key.  This
-    /// certificate and key is used for all subsequent connections,
-    /// irrespective of things like SNI hostname.
+    /// Sets a single [`Identity`] and matching private key.
+    ///
+    /// This identity and key is used for all subsequent connections, irrespective of
+    /// things like SNI hostname.
     ///
     /// Note that the end-entity certificate must have the
     /// [Subject Alternative Name](https://tools.ietf.org/html/rfc6125#section-4.1)
     /// extension to describe, e.g., the valid DNS name. The `commonName` field is
     /// disregarded.
     ///
-    /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded private key as PKCS#1, PKCS#8, or SEC1. The
-    /// `aws-lc-rs` and `ring` [`CryptoProvider`]s support
-    /// all three encodings, but other `CryptoProvider`s may not.
+    /// - `identity` is the [`Identity`], typically containing a certificate chain.
+    /// - `key_der` is a DER-encoded private key as PKCS#1, PKCS#8, or SEC1.  Supported key
+    ///   formats and types depends on the configured provider.
     ///
-    /// This function fails if `key_der` is invalid, or if the
-    /// `SubjectPublicKeyInfo` from the private key does not match the public
-    /// key for the end-entity certificate from the `cert_chain`.
+    /// This function fails if `key_der` is invalid, or if the `SubjectPublicKeyInfo` from
+    /// the private key does not match the public key from the `identity`.
     #[cfg(feature = "webpki")]
     pub fn with_single_cert(
         self,
@@ -679,19 +678,24 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         self.with_server_credential_resolver(Arc::new(SingleCredential::from(credentials)))
     }
 
-    /// Sets a single certificate chain, matching private key and optional OCSP
-    /// response.  This certificate and key is used for all
-    /// subsequent connections, irrespective of things like SNI hostname.
+    /// Sets a single [`Identity`], matching private key, and stapled OCSP response.
     ///
-    /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded private key as PKCS#1, PKCS#8, or SEC1. The
-    /// `aws-lc-rs` and `ring` [`CryptoProvider`]s support
-    /// all three encodings, but other `CryptoProvider`s may not.
-    /// `ocsp` is a DER-encoded OCSP response.  Ignored if zero length.
+    /// This identity and key is used for all subsequent connections, irrespective of
+    /// things like SNI hostname.
     ///
-    /// This function fails if `key_der` is invalid, or if the
-    /// `SubjectPublicKeyInfo` from the private key does not match the public
-    /// key for the end-entity certificate from the `cert_chain`.
+    /// Note that the end-entity certificate must have the
+    /// [Subject Alternative Name](https://tools.ietf.org/html/rfc6125#section-4.1)
+    /// extension to describe, e.g., the valid DNS name. The `commonName` field is
+    /// disregarded.
+    ///
+    /// - `identity` is the [`Identity`], typically containing a certificate chain.
+    /// - `key_der` is a DER-encoded private key as PKCS#1, PKCS#8, or SEC1.  Supported key
+    ///   formats and types depends on the configured provider.
+    /// - `ocsp` is a DER-encoded OCSP response.  It is ignored if zero length but it is
+    ///   not validated otherwise.
+    ///
+    /// This function fails if `key_der` is invalid, or if the `SubjectPublicKeyInfo` from
+    /// the private key does not match the public key from the `identity`.
     #[cfg(feature = "webpki")]
     pub fn with_single_cert_with_ocsp(
         self,

@@ -70,8 +70,7 @@ impl SigningKey for RsaSigningKey {
 impl TryFrom<&PrivateKeyDer<'_>> for RsaSigningKey {
     type Error = Error;
 
-    /// Make a new `RsaSigningKey` from a DER encoding, in either
-    /// PKCS#1 or PKCS#8 format.
+    /// Make a new [`RsaSigningKey`] from a DER encoding, in either PKCS#1 or PKCS#8 format.
     fn try_from(der: &PrivateKeyDer<'_>) -> Result<Self, Self::Error> {
         let key_pair = match der {
             PrivateKeyDer::Pkcs1(pkcs1) => RsaKeyPair::from_der(pkcs1.secret_pkcs1_der()),

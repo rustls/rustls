@@ -26,7 +26,7 @@ struct KxGroup {
 
     /// Whether the algorithm is allowed by FIPS
     ///
-    /// `SupportedKxGroup::fips()` is FIPS-validated if and only if the algorithm
+    /// [`SupportedKxGroup::fips()`] is FIPS-validated if and only if the algorithm
     /// is allowed, _and_ the implementation is FIPS-validated.
     fips_allowed: bool,
 

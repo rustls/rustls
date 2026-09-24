@@ -46,7 +46,7 @@ pub trait ServerVerifier: Debug + Send + Sync {
     /// connection.
     ///
     /// This method is only called for TLS1.2 handshakes.  Note that, in TLS1.2,
-    /// SignatureSchemes such as `SignatureScheme::ECDSA_NISTP256_SHA256` are not
+    /// SignatureSchemes such as [`SignatureScheme::ECDSA_NISTP256_SHA256`] are not
     /// in fact bound to the specific curve implied in their name.
     fn verify_tls12_signature(
         &self,
@@ -277,8 +277,8 @@ pub enum SignerPublicKey<'a> {
 /// Turns off client authentication.
 ///
 /// In contrast to using
-/// `WebPkiClientVerifier::builder(roots).allow_unauthenticated().build()`, the `NoClientAuth`
-/// `ClientVerifier` will not offer client authentication at all, vs offering but not
+/// `WebPkiClientVerifier::builder(roots).allow_unauthenticated().build()`, the [`NoClientAuth`]
+/// [`ClientVerifier`] will not offer client authentication at all, versus offering but not
 /// requiring it.
 #[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
