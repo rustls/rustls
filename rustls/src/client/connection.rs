@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 use core::fmt;
-use core::ops::Deref;
+use core::ops::{Deref, DerefMut};
 
 use pki_types::{FipsStatus, ServerName};
 
@@ -146,6 +146,12 @@ impl Deref for ClientConnection {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl DerefMut for ClientConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 

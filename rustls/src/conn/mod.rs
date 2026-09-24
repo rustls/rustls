@@ -40,7 +40,7 @@ pub(crate) mod split;
 use split::SplitConnection;
 
 /// A trait generalizing over buffered client or server connections.
-pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
+pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> + DerefMut {
     /// The side (client or server) that this type implements.
     type Side: SideData;
 

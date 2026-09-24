@@ -26,7 +26,7 @@ use crate::tls13::key_schedule::{
 use crate::{ClientData, ServerData, TlsInputBuffer};
 
 /// A QUIC client or server connection.
-pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
+pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> + DerefMut {
     /// Return the TLS-encoded transport parameters for the session's peer.
     ///
     /// While the transport parameters are technically available prior to the
@@ -128,6 +128,12 @@ impl Deref for ClientConnection {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl DerefMut for ClientConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
@@ -250,6 +256,12 @@ impl Deref for ServerConnection {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl DerefMut for ServerConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
