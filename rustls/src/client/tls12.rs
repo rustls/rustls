@@ -9,7 +9,7 @@ use subtle::ConstantTimeEq;
 
 use super::config::{ClientConfig, ClientSessionKey};
 use super::hs::ClientState;
-use super::{ClientAuthDetails, ClientSide, ServerCertDetails, Tls12Session};
+use super::{ClientAuthDetails, ClientData, ServerCertDetails, Tls12Session};
 use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{HandshakeKind, Output, OutputEvent, Side};
@@ -244,7 +244,7 @@ struct ExpectCertificate {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State<ClientSide> for ExpectCertificate {
+impl State<ClientData> for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
@@ -296,7 +296,7 @@ struct ExpectCertificateStatusOrServerKx {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State<ClientSide> for ExpectCertificateStatusOrServerKx {
+impl State<ClientData> for ExpectCertificateStatusOrServerKx {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -434,7 +434,7 @@ impl ExpectServerKx {
     }
 }
 
-impl State<ClientSide> for ExpectServerKx {
+impl State<ClientData> for ExpectServerKx {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -577,7 +577,7 @@ struct ExpectServerDoneOrCertReq {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State<ClientSide> for ExpectServerDoneOrCertReq {
+impl State<ClientData> for ExpectServerDoneOrCertReq {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
@@ -737,7 +737,7 @@ impl ExpectServerDone {
     }
 }
 
-impl State<ClientSide> for ExpectServerDone {
+impl State<ClientData> for ExpectServerDone {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -766,7 +766,7 @@ struct AwaitServerIdentityVerification {
     proof: HandshakeAlignedProof,
 }
 
-impl VerifySidePeerIdentity<ClientSide> for AwaitServerIdentityVerification {
+impl VerifySidePeerIdentity<ClientData> for AwaitServerIdentityVerification {
     fn presented_identity(&self) -> Result<ServerIdentity<'static, '_>, Error> {
         Ok(ServerIdentity {
             identity: &self.peer_identity,
@@ -947,7 +947,7 @@ impl VerifySidePeerIdentity<ClientSide> for AwaitServerIdentityVerification {
 
 impl From<Box<AwaitServerIdentityVerification>> for ClientState {
     fn from(value: Box<AwaitServerIdentityVerification>) -> Self {
-        Self::VerifyServerIdentity(value as Box<dyn VerifySidePeerIdentity<ClientSide>>)
+        Self::VerifyServerIdentity(value as Box<dyn VerifySidePeerIdentity<ClientData>>)
     }
 }
 
@@ -960,7 +960,7 @@ struct ExpectNewTicket {
     sig_verified: HandshakeSignatureValid,
 }
 
-impl State<ClientSide> for ExpectNewTicket {
+impl State<ClientData> for ExpectNewTicket {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
@@ -1004,7 +1004,7 @@ struct ExpectCcs {
     sig_verified: HandshakeSignatureValid,
 }
 
-impl State<ClientSide> for ExpectCcs {
+impl State<ClientData> for ExpectCcs {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -1104,7 +1104,7 @@ impl ExpectFinished {
     }
 }
 
-impl State<ClientSide> for ExpectFinished {
+impl State<ClientData> for ExpectFinished {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -1212,7 +1212,7 @@ pub(super) struct ExpectTraffic {
     _fin_verified: FinishedMessageVerified,
 }
 
-impl State<ClientSide> for ExpectTraffic {
+impl State<ClientData> for ExpectTraffic {
     fn handle<'m>(
         self: Box<Self>,
         Input { message, .. }: Input<'m>,

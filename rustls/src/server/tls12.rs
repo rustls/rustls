@@ -28,7 +28,7 @@ use crate::msgs::{
     HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload, Message, MessagePayload,
     NewSessionTicketPayload, NewSessionTicketPayloadTls13, Reader, SessionId,
 };
-use crate::server::ServerSide;
+use crate::server::ServerData;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
@@ -504,7 +504,7 @@ struct ExpectCertificate {
     server_kx: GroupAndKeyExchange,
 }
 
-impl State<ServerSide> for ExpectCertificate {
+impl State<ServerData> for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
@@ -568,7 +568,7 @@ struct AwaitClientIdentityVerification {
     peer_identity: Identity<'static>,
 }
 
-impl VerifySidePeerIdentity<ServerSide> for AwaitClientIdentityVerification {
+impl VerifySidePeerIdentity<ServerData> for AwaitClientIdentityVerification {
     fn presented_identity(&self) -> Result<ClientIdentity<'static, '_>, Error> {
         Ok(ClientIdentity {
             identity: &self.peer_identity,
@@ -601,7 +601,7 @@ impl VerifySidePeerIdentity<ServerSide> for AwaitClientIdentityVerification {
 
 impl From<Box<AwaitClientIdentityVerification>> for ServerState {
     fn from(value: Box<AwaitClientIdentityVerification>) -> Self {
-        Self::VerifyClientIdentity(value as Box<dyn VerifySidePeerIdentity<ServerSide>>)
+        Self::VerifyClientIdentity(value as Box<dyn VerifySidePeerIdentity<ServerData>>)
     }
 }
 
@@ -614,7 +614,7 @@ struct ExpectClientKx {
     peer_identity: Option<VerifiedIdentity<'static>>,
 }
 
-impl State<ServerSide> for ExpectClientKx {
+impl State<ServerData> for ExpectClientKx {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
@@ -682,7 +682,7 @@ struct ExpectCertificateVerify {
     peer_identity: VerifiedIdentity<'static>,
 }
 
-impl State<ServerSide> for ExpectCertificateVerify {
+impl State<ServerData> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
@@ -739,7 +739,7 @@ struct ExpectCcs {
     resuming_decrypter: Option<Box<dyn RecordDecrypter>>,
 }
 
-impl State<ServerSide> for ExpectCcs {
+impl State<ServerData> for ExpectCcs {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -956,7 +956,7 @@ pub(super) struct ExpectFinished {
     pending_encrypter: Option<Box<dyn RecordEncrypter>>,
 }
 
-impl State<ServerSide> for ExpectFinished {
+impl State<ServerData> for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
@@ -1094,7 +1094,7 @@ pub(super) struct ExpectTraffic {
 
 impl ExpectTraffic {}
 
-impl State<ServerSide> for ExpectTraffic {
+impl State<ServerData> for ExpectTraffic {
     fn handle<'m>(
         self: Box<Self>,
         Input { message, .. }: Input<'m>,

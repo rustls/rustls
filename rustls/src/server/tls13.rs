@@ -30,7 +30,7 @@ use crate::msgs::{
     HandshakePayload, KeyUpdateRequest, Message, MessagePayload, NewSessionTicketPayloadTls13,
     PresharedKeyIdentity, Reader, ServerTicketRequestHint, SizedPayload,
 };
-use crate::server::ServerSide;
+use crate::server::ServerData;
 use crate::server::hs::ExpectClientHello;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
@@ -877,7 +877,7 @@ struct ExpectAndSkipRejectedEarlyData {
     next: Box<ExpectClientHello>,
 }
 
-impl State<ServerSide> for ExpectAndSkipRejectedEarlyData {
+impl State<ServerData> for ExpectAndSkipRejectedEarlyData {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
@@ -910,7 +910,7 @@ struct ExpectCertificateOrCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ServerSide> for ExpectCertificateOrCompressedCertificate {
+impl State<ServerData> for ExpectCertificateOrCompressedCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -1073,7 +1073,7 @@ impl ExpectCertificate {
     }
 }
 
-impl State<ServerSide> for ExpectCertificate {
+impl State<ServerData> for ExpectCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -1096,7 +1096,7 @@ struct AwaitClientIdentityVerification {
     peer_identity: Identity<'static>,
 }
 
-impl VerifySidePeerIdentity<ServerSide> for AwaitClientIdentityVerification {
+impl VerifySidePeerIdentity<ServerData> for AwaitClientIdentityVerification {
     fn presented_identity(&self) -> Result<ClientIdentity<'static, '_>, Error> {
         Ok(ClientIdentity {
             identity: &self.peer_identity,
@@ -1127,7 +1127,7 @@ impl VerifySidePeerIdentity<ServerSide> for AwaitClientIdentityVerification {
 
 impl From<Box<AwaitClientIdentityVerification>> for ServerState {
     fn from(value: Box<AwaitClientIdentityVerification>) -> Self {
-        Self::VerifyClientIdentity(value as Box<dyn VerifySidePeerIdentity<ServerSide>>)
+        Self::VerifyClientIdentity(value as Box<dyn VerifySidePeerIdentity<ServerData>>)
     }
 }
 
@@ -1137,7 +1137,7 @@ struct ExpectCertificateVerify {
     peer_identity: VerifiedIdentity<'static>,
 }
 
-impl State<ServerSide> for ExpectCertificateVerify {
+impl State<ServerData> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
@@ -1188,7 +1188,7 @@ struct ExpectEarlyData {
     remaining_length: usize,
 }
 
-impl State<ServerSide> for ExpectEarlyData {
+impl State<ServerData> for ExpectEarlyData {
     fn handle<'m>(
         mut self: Box<Self>,
         input: Input<'m>,
@@ -1440,7 +1440,7 @@ impl ExpectFinished {
     }
 }
 
-impl State<ServerSide> for ExpectFinished {
+impl State<ServerData> for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
@@ -1565,7 +1565,7 @@ impl ExpectTraffic {
     }
 }
 
-impl State<ServerSide> for ExpectTraffic {
+impl State<ServerData> for ExpectTraffic {
     fn handle<'m>(
         mut self: Box<Self>,
         input: Input<'m>,
@@ -1648,7 +1648,7 @@ struct ExpectQuicTraffic {
     _fin_verified: FinishedMessageVerified,
 }
 
-impl State<ServerSide> for ExpectQuicTraffic {
+impl State<ServerData> for ExpectQuicTraffic {
     fn handle(
         self: Box<Self>,
         Input { message, .. }: Input<'_>,

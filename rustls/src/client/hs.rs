@@ -10,7 +10,7 @@ use pki_types::ServerName;
 use super::config::{ClientSessionKey, Tls12Resumption};
 use super::ech::{EchMode, EchState, EchStatus};
 use super::{
-    ClientHelloDetails, ClientSessionCommon, ClientSide, Retrieved, Tls12Session, Tls13Session,
+    ClientData, ClientHelloDetails, ClientSessionCommon, Retrieved, Tls12Session, Tls13Session,
     tls13,
 };
 use crate::check::inappropriate_handshake_message;
@@ -47,10 +47,10 @@ pub(crate) enum ClientState {
     ServerHelloOrHelloRetryRequest(Box<ExpectServerHelloOrHelloRetryRequest>),
 
     /// Verifying the server's presented certificate chain.
-    VerifyServerIdentity(Box<dyn VerifySidePeerIdentity<ClientSide>>),
+    VerifyServerIdentity(Box<dyn VerifySidePeerIdentity<ClientData>>),
 
-    Tls12(Box<dyn State<ClientSide>>),
-    Tls13(Box<dyn State<ClientSide>>),
+    Tls12(Box<dyn State<ClientData>>),
+    Tls13(Box<dyn State<ClientData>>),
 }
 
 impl StateMachine for ClientState {

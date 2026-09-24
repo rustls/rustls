@@ -5,25 +5,24 @@ use core::{fmt, mem};
 
 use pki_types::FipsStatus;
 
-use crate::client::ClientSide;
+use crate::client::ClientData;
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
 use crate::conn::{
     Accepted, ConnectionCommon, Core, KeyingMaterialExporter, MessageIter, MessageIterMode,
-    ServerNext, SideData, Transport, VerifyPeerIdentity,
+    ServerNext, SideData, TlsInputBuffer, Transport, VerifyPeerIdentity,
 };
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{Message, MessagePayload, ServerExtensionsInput, TransportParameters};
-use crate::server::{ServerConfig, ServerSide};
+use crate::server::{ServerConfig, ServerData};
 use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
 };
-use crate::{ClientData, ServerData, TlsInputBuffer};
 
 /// A QUIC client or server connection.
 pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
@@ -58,7 +57,7 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
 
 /// A QUIC client connection.
 pub struct ClientConnection {
-    inner: QuicCommon<ClientSide>,
+    inner: QuicCommon<ClientData>,
 }
 
 impl ClientConnection {
@@ -138,15 +137,15 @@ impl fmt::Debug for ClientConnection {
     }
 }
 
-impl From<QuicCommon<ClientSide>> for ClientConnection {
-    fn from(inner: QuicCommon<ClientSide>) -> Self {
+impl From<QuicCommon<ClientData>> for ClientConnection {
+    fn from(inner: QuicCommon<ClientData>) -> Self {
         Self { inner }
     }
 }
 
 /// A QUIC server connection.
 pub struct ServerConnection {
-    inner: QuicCommon<ServerSide>,
+    inner: QuicCommon<ServerData>,
 }
 
 impl ServerConnection {
@@ -275,8 +274,8 @@ pub enum ServerHandshake {
 
     /// The client's presented identity must be verified.
     ///
-    /// See [`VerifyPeerIdentity<ServerSide, Quic>`] for how to proceed.
-    VerifyClientIdentity(VerifyPeerIdentity<ServerSide, Quic>),
+    /// See [`VerifyPeerIdentity<ServerData, Quic>`] for how to proceed.
+    VerifyClientIdentity(VerifyPeerIdentity<ServerData, Quic>),
 
     /// The handshake is complete.
     Complete(ServerConnection),
@@ -303,7 +302,7 @@ impl ServerHandshake {
     }
 
     pub(crate) fn from_core(
-        mut core: Core<ServerSide, Quic>,
+        mut core: Core<ServerData, Quic>,
         output: &mut Vec<QuicEvent>,
     ) -> Result<Self, Error> {
         output.extend(core.transport.events());
@@ -331,7 +330,7 @@ impl ServerHandshake {
 ///
 /// This type dereferences to [`ConnectionOutputs`]. Individual outputs are `None`
 /// until they are learned during the handshake.
-pub struct NeedsInput(Core<ServerSide, Quic>);
+pub struct NeedsInput(Core<ServerData, Quic>);
 
 impl NeedsInput {
     /// Return the TLS-encoded transport parameters received from the peer.

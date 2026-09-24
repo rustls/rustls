@@ -10,7 +10,7 @@ use pki_types::DnsName;
 use rustls::client::EchStatus;
 use rustls::crypto::cipher::OutboundPlain;
 use rustls::error::{AlertDescription, ApiMisuse, InvalidMessage};
-use rustls::server::ServerSide;
+use rustls::server::ServerData;
 use rustls::split::{ReceiveTraffic, ReceiveTrafficState, SplitConnection};
 use rustls::{Connection, Error, SideData, SliceInput, VecInput};
 use rustls_test::{
@@ -475,7 +475,7 @@ fn kernel_conversion_fails_with_pending_send_data() {
 ///
 /// This queues an encrypted response on the server's send half, awaiting the
 /// next send-side operation.
-fn split_server_with_queued_key_update() -> SplitConnection<ServerSide> {
+fn split_server_with_queued_key_update() -> SplitConnection<ServerData> {
     let mut client_output = Vec::new();
     let mut server_output = Vec::new();
     let mut server_config =

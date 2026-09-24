@@ -32,8 +32,7 @@ pub use config::{
 
 mod connection;
 pub use connection::{
-    ClientConnection, ClientConnectionBuilder, ClientData, ClientHandshake, ClientSide,
-    WriteEarlyData,
+    ClientConnection, ClientConnectionBuilder, ClientData, ClientHandshake, WriteEarlyData,
 };
 
 mod ech;

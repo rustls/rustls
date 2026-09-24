@@ -6,11 +6,11 @@
 
 use std::sync::Arc;
 
-use rustls::client::{ClientSide, Resumption};
+use rustls::client::{ClientData, Resumption};
 use rustls::enums::ProtocolVersion;
 use rustls::error::{ApiMisuse, InvalidMessage};
 use rustls::kernel::KernelConnection;
-use rustls::server::ServerSide;
+use rustls::server::ServerData;
 use rustls::{
     ClientConfig, ConnectionTrafficSecrets, Error, ExtractedSecrets, ServerConfig, VecInput,
 };
@@ -174,8 +174,8 @@ fn kernel_pair(
     client_config: Arc<ClientConfig>,
     server_config: Arc<ServerConfig>,
 ) -> (
-    (ExtractedSecrets, KernelConnection<ClientSide>),
-    (ExtractedSecrets, KernelConnection<ServerSide>),
+    (ExtractedSecrets, KernelConnection<ClientData>),
+    (ExtractedSecrets, KernelConnection<ServerData>),
 ) {
     // secret extraction must be opted into by both ends
     let mut client_config = Arc::unwrap_or_clone(client_config);

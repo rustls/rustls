@@ -29,7 +29,7 @@ use crate::verify::ClientIdentity;
 /// Encrypt data destined for the peer using [`Connection::write()`].
 /// Process received data from the peer using [`Connection::read_tls()`].
 pub struct ServerConnection {
-    pub(super) inner: ConnectionCommon<ServerSide>,
+    pub(super) inner: ConnectionCommon<ServerData>,
 }
 
 impl ServerConnection {
@@ -59,7 +59,7 @@ impl ServerConnection {
     ///
     /// - the handshake is not complete. Check with [`Connection::is_handshaking()`].
     /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write()`].
-    pub fn split(self) -> Result<SplitConnection<ServerSide>, Error> {
+    pub fn split(self) -> Result<SplitConnection<ServerData>, Error> {
         self.inner.split()
     }
 
@@ -112,7 +112,7 @@ impl ServerConnection {
 }
 
 impl Connection for ServerConnection {
-    type Side = ServerSide;
+    type Side = ServerData;
 
     fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error> {
         self.inner.write(plaintext, tls)
@@ -126,7 +126,7 @@ impl Connection for ServerConnection {
         &'a mut self,
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
-    ) -> MessageHandler<'a, 'm, ServerSide> {
+    ) -> MessageHandler<'a, 'm, ServerData> {
         self.inner.read_tls(input, tls)
     }
 
@@ -170,7 +170,7 @@ impl fmt::Debug for ServerConnection {
     }
 }
 
-impl ConnectionCommon<ServerSide> {
+impl ConnectionCommon<ServerData> {
     pub(crate) fn for_server(
         config: Arc<ServerConfig>,
         extra_exts: ServerExtensionsInput,
@@ -207,7 +207,7 @@ impl ConnectionCommon<ServerSide> {
 #[derive(Debug)]
 pub enum ServerHandshake {
     /// More data needs to be received to make progress.
-    NeedsInput(NeedsInput<ServerSide>),
+    NeedsInput(NeedsInput<ServerData>),
 
     /// A complete `ClientHello` has been received.
     ///
@@ -218,12 +218,12 @@ pub enum ServerHandshake {
     /// The client's presented identity must be verified.
     ///
     /// See [`VerifyPeerIdentity`] for how to proceed.
-    VerifyClientIdentity(VerifyPeerIdentity<ServerSide, Tcp>),
+    VerifyClientIdentity(VerifyPeerIdentity<ServerData, Tcp>),
 
     /// The handshake is complete.
     ///
     /// Now see [`SplitConnection`] to continue the connection.
-    Complete(SplitConnection<ServerSide>),
+    Complete(SplitConnection<ServerData>),
 }
 
 impl ServerHandshake {
@@ -236,15 +236,15 @@ impl ServerHandshake {
     /// [`ServerHandshake`].
     ///
     /// The returned object should be fed data from a single potential client.
-    pub fn start() -> NeedsInput<ServerSide> {
+    pub fn start() -> NeedsInput<ServerData> {
         NeedsInput::new(ConnectionCommon::for_acceptor(Protocol::Tcp))
     }
 }
 
-impl TryFrom<Core<ServerSide, Tcp>> for ServerHandshake {
+impl TryFrom<Core<ServerData, Tcp>> for ServerHandshake {
     type Error = Error;
 
-    fn try_from(core: Core<ServerSide, Tcp>) -> Result<Self, Error> {
+    fn try_from(core: Core<ServerData, Tcp>) -> Result<Self, Error> {
         Ok(match ServerNext::try_from(core)? {
             ServerNext::NeedsInput(core) => Self::NeedsInput(NeedsInput(core)),
 
@@ -257,13 +257,7 @@ impl TryFrom<Core<ServerSide, Tcp>> for ServerHandshake {
     }
 }
 
-/// State associated with a server connection.
-#[expect(clippy::exhaustive_structs)]
-#[derive(Debug)]
-pub struct ServerSide;
-
-impl SideData for ServerSide {
-    type Data = ServerData;
+impl SideData for ServerData {
     type Handshake = ServerHandshake;
     type QuicHandshake = QuicServerHandshake;
 
@@ -283,7 +277,7 @@ impl SideData for ServerSide {
     }
 }
 
-impl crate::conn::private::Side for ServerSide {
+impl crate::conn::private::Side for ServerData {
     type State = ServerState;
 }
 
@@ -349,11 +343,11 @@ impl fmt::Debug for ServerData {
 /// The early data itself is read via [`MessageHandler::next_early_data()`]; this
 /// type provides the matching "early" keying material exporter.
 pub struct ReadEarlyData<'a> {
-    common: &'a mut ConnectionCommon<ServerSide>,
+    common: &'a mut ConnectionCommon<ServerData>,
 }
 
 impl<'a> ReadEarlyData<'a> {
-    fn new(common: &'a mut ConnectionCommon<ServerSide>) -> Self {
+    fn new(common: &'a mut ConnectionCommon<ServerData>) -> Self {
         ReadEarlyData { common }
     }
 

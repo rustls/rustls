@@ -10,7 +10,7 @@ use rustls::client::danger::{
     HandshakeSignatureValid, ServerIdentity, ServerVerifier, SignatureVerificationInput,
 };
 use rustls::client::{
-    ClientHandshake, ClientSide, WebPkiServerVerifier, verify_identity_signed_by_trust_anchor,
+    ClientData, ClientHandshake, WebPkiServerVerifier, verify_identity_signed_by_trust_anchor,
 };
 use rustls::crypto::{
     Credentials, Identity, SelectedCredential, SignatureScheme, VerifiedIdentity,
@@ -298,7 +298,7 @@ fn client_external_verifier_test_setup(
     client_config: Arc<ClientConfig>,
     server_config: Arc<ServerConfig>,
 ) -> (
-    VerifyPeerIdentity<ClientSide, Tcp>,
+    VerifyPeerIdentity<ClientData, Tcp>,
     Vec<u8>,
     ServerConnection,
     Vec<u8>,

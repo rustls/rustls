@@ -32,7 +32,7 @@ use crate::{NeedsInput, TlsInputBuffer};
 /// Encrypt data destined for the peer using [`Connection::write()`].
 /// Process received data from the peer using [`Connection::read_tls()`].
 pub struct ClientConnection {
-    inner: ConnectionCommon<ClientSide>,
+    inner: ConnectionCommon<ClientData>,
 }
 
 impl fmt::Debug for ClientConnection {
@@ -57,7 +57,7 @@ impl ClientConnection {
     ///
     /// - the handshake is not complete. Check with [`Connection::is_handshaking()`].
     /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write()`].
-    pub fn split(self) -> Result<SplitConnection<ClientSide>, Error> {
+    pub fn split(self) -> Result<SplitConnection<ClientData>, Error> {
         self.inner.split()
     }
 
@@ -104,7 +104,7 @@ impl ClientConnection {
 }
 
 impl Connection for ClientConnection {
-    type Side = ClientSide;
+    type Side = ClientData;
 
     fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error> {
         self.inner.write(plaintext, tls)
@@ -118,7 +118,7 @@ impl Connection for ClientConnection {
         &'a mut self,
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
-    ) -> MessageHandler<'a, 'm, ClientSide> {
+    ) -> MessageHandler<'a, 'm, ClientData> {
         self.inner.read_tls(input, tls)
     }
 
@@ -260,7 +260,7 @@ impl ClientConnectionBuilder {
     /// [`ClientHandshake`].
     ///
     /// The returned object should be fed data from a single server.
-    pub fn start_handshake(self, tls: &mut Vec<u8>) -> Result<NeedsInput<ClientSide>, Error> {
+    pub fn start_handshake(self, tls: &mut Vec<u8>) -> Result<NeedsInput<ClientData>, Error> {
         let Self {
             config,
             name,
@@ -286,23 +286,23 @@ impl ClientConnectionBuilder {
 #[derive(Debug)]
 pub enum ClientHandshake {
     /// More data needs to be received to make progress.
-    NeedsInput(NeedsInput<ClientSide>),
+    NeedsInput(NeedsInput<ClientData>),
 
     /// The server's presented identity must be verified.
     ///
     /// See [`VerifyPeerIdentity`] for how to proceed.
-    VerifyServerIdentity(VerifyPeerIdentity<ClientSide, Tcp>),
+    VerifyServerIdentity(VerifyPeerIdentity<ClientData, Tcp>),
 
     /// The handshake is complete.
     ///
     /// Now see [`SplitConnection`] to continue the connection.
-    Complete(SplitConnection<ClientSide>),
+    Complete(SplitConnection<ClientData>),
 }
 
-impl TryFrom<Core<ClientSide, Tcp>> for ClientHandshake {
+impl TryFrom<Core<ClientData, Tcp>> for ClientHandshake {
     type Error = Error;
 
-    fn try_from(core: Core<ClientSide, Tcp>) -> Result<Self, Error> {
+    fn try_from(core: Core<ClientData, Tcp>) -> Result<Self, Error> {
         Ok(match ClientNext::try_from(core)? {
             ClientNext::NeedsInput(core) => Self::NeedsInput(NeedsInput(core)),
 
@@ -380,7 +380,7 @@ impl<'a> WriteEarlyData<'a> {
     }
 }
 
-impl ConnectionCommon<ClientSide> {
+impl ConnectionCommon<ClientData> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
@@ -409,13 +409,7 @@ impl ConnectionCommon<ClientSide> {
     }
 }
 
-/// State associated with a client connection.
-#[expect(clippy::exhaustive_structs)]
-#[derive(Debug)]
-pub struct ClientSide;
-
-impl SideData for ClientSide {
-    type Data = ClientData;
+impl SideData for ClientData {
     type Handshake = ClientHandshake;
     type QuicHandshake = ();
 
@@ -435,7 +429,7 @@ impl SideData for ClientSide {
     }
 }
 
-impl crate::conn::private::Side for ClientSide {
+impl crate::conn::private::Side for ClientData {
     type State = ClientState;
 }
 
