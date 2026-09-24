@@ -48,7 +48,7 @@ impl CommonState {
     ///
     /// This informs the peer that the connection is being closed. Does nothing if any
     /// `close_notify` or fatal alert was already sent.
-    pub fn send_close_notify(&mut self, tls: &mut Vec<u8>) {
+    pub fn send_close_notify(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
         self.send.send_close_notify(tls)
     }
 
@@ -235,11 +235,15 @@ impl fmt::Debug for ConnectionOutputs {
 }
 
 /// Send an alert via `output` if `error` specifies one.
-pub(crate) fn maybe_send_fatal_alert(send: &mut dyn SendOutput, error: &Error, tls: &mut Vec<u8>) {
+pub(crate) fn maybe_send_fatal_alert(
+    send: &mut dyn SendOutput,
+    error: &Error,
+    tls: &mut Vec<u8>,
+) -> Result<(), Error> {
     let Ok(alert) = AlertDescription::try_from(error) else {
-        return;
+        return Ok(());
     };
-    send.send_alert(AlertLevel::Fatal, alert, tls);
+    send.send_alert(AlertLevel::Fatal, alert, tls)
 }
 
 /// Describes which sort of handshake happened.
@@ -280,7 +284,7 @@ pub(crate) trait Output<'m> {
 
     fn output(&mut self, ev: OutputEvent<'_>);
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool);
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) -> Result<(), Error>;
 
     fn quic(&mut self) -> Option<&mut dyn QuicOutput> {
         None
@@ -424,7 +428,7 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
             .add(&self.body[start_len..]);
     }
 
-    pub(crate) fn finish(self, output: &mut dyn Output<'_>) {
+    pub(crate) fn finish(self, output: &mut dyn Output<'_>) -> Result<(), Error> {
         let m = Message {
             version: EncodableVersion::Legacy(match TLS13 {
                 true => ProtocolVersion::TLSv1_3,
@@ -433,7 +437,7 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
             payload: MessagePayload::HandshakeFlight(Payload::new(self.body)),
         };
 
-        output.send_msg(m, TLS13);
+        output.send_msg(m, TLS13)
     }
 }
 

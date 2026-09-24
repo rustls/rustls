@@ -167,8 +167,8 @@ impl Connection for ServerConnection {
         self.inner.refresh_traffic_keys(tls)
     }
 
-    fn send_close_notify(&mut self, tls: &mut Vec<u8>) {
-        self.inner.send_close_notify(tls);
+    fn send_close_notify(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
+        self.inner.send_close_notify(tls)
     }
 
     fn is_handshaking(&self) -> bool {

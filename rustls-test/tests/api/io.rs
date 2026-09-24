@@ -2466,7 +2466,9 @@ fn server_close_notify() {
         client
             .write(b"from-client!".into(), &mut client_output)
             .unwrap();
-        server.send_close_notify(&mut server_output);
+        server
+            .send_close_notify(&mut server_output)
+            .unwrap();
 
         transfer(&mut server_output, &mut client_input);
         let iter = client.read_tls(&mut client_input, &mut client_output);
@@ -2506,7 +2508,9 @@ fn client_close_notify() {
         client
             .write(b"from-client!".into(), &mut client_output)
             .unwrap();
-        client.send_close_notify(&mut client_output);
+        client
+            .send_close_notify(&mut client_output)
+            .unwrap();
 
         transfer(&mut client_output, &mut server_input);
         let iter = server.read_tls(&mut server_input, &mut server_output);
@@ -2668,7 +2672,9 @@ fn test_complete_io_with_no_io_needed() {
     client
         .write(b"hello".into(), &mut client_output)
         .unwrap();
-    client.send_close_notify(&mut client_output);
+    client
+        .send_close_notify(&mut client_output)
+        .unwrap();
     transfer(&mut client_output, &mut server_input);
     server
         .read_tls(&mut server_input, &mut server_output)
@@ -2677,7 +2683,9 @@ fn test_complete_io_with_no_io_needed() {
     server
         .write(b"hello".into(), &mut server_output)
         .unwrap();
-    server.send_close_notify(&mut server_output);
+    server
+        .send_close_notify(&mut server_output)
+        .unwrap();
     transfer(&mut server_output, &mut client_input);
     client
         .read_tls(&mut client_input, &mut client_output)
@@ -2737,7 +2745,9 @@ fn test_junk_after_close_notify_received() {
     client
         .write(b"hello".into(), &mut client_output)
         .unwrap();
-    client.send_close_notify(&mut client_output);
+    client
+        .send_close_notify(&mut client_output)
+        .unwrap();
 
     let mut client_buffer = mem::take(&mut client_output);
 
@@ -2782,7 +2792,9 @@ fn test_data_after_close_notify_is_ignored() {
     client
         .write(b"before".into(), &mut client_output)
         .unwrap();
-    client.send_close_notify(&mut client_output);
+    client
+        .send_close_notify(&mut client_output)
+        .unwrap();
     assert_eq!(
         client
             .write(b"after".into(), &mut client_output)
@@ -2842,11 +2854,15 @@ fn test_subsequent_close_notify_ignored() {
     );
     client_output.clear();
     let mut server_input = VecInput::default();
-    client.send_close_notify(&mut client_output);
+    client
+        .send_close_notify(&mut client_output)
+        .unwrap();
     assert!(transfer(&mut client_output, &mut server_input) > 0);
 
     // does nothing
-    client.send_close_notify(&mut client_output);
+    client
+        .send_close_notify(&mut client_output)
+        .unwrap();
     assert_eq!(transfer(&mut client_output, &mut server_input), 0);
 }
 
@@ -2869,7 +2885,9 @@ fn test_second_close_notify_after_handshake() {
         &mut server_output,
         &mut server,
     );
-    client.send_close_notify(&mut client_output);
+    client
+        .send_close_notify(&mut client_output)
+        .unwrap();
     assert!(transfer(&mut client_output, &mut server_input) > 0);
     server
         .read_tls(&mut server_input, &mut server_output)
@@ -2877,7 +2895,9 @@ fn test_second_close_notify_after_handshake() {
         .unwrap();
 
     // does nothing
-    client.send_close_notify(&mut client_output);
+    client
+        .send_close_notify(&mut client_output)
+        .unwrap();
     assert_eq!(transfer(&mut client_output, &mut server_input), 0);
 }
 
@@ -2900,7 +2920,9 @@ fn test_read_tls_artificial_eof_after_close_notify() {
         &mut server_output,
         &mut server,
     );
-    client.send_close_notify(&mut client_output);
+    client
+        .send_close_notify(&mut client_output)
+        .unwrap();
     assert!(transfer(&mut client_output, &mut server_input) > 0);
     server
         .read_tls(&mut server_input, &mut server_output)

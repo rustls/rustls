@@ -174,7 +174,7 @@ mod client_hello {
             let doing_client_auth = emit_certificate_req(&mut flight, &st.config)?;
             emit_server_hello_done(&mut flight);
 
-            flight.finish(output);
+            flight.finish(output)?;
             let hs = HandshakeState {
                 config: st.config,
                 transcript,
@@ -308,7 +308,7 @@ mod client_hello {
             &randoms,
             extra_exts,
         )?;
-        flight.finish(output);
+        flight.finish(output)?;
 
         let mut hs = HandshakeState {
             config,
@@ -356,7 +356,7 @@ mod client_hello {
                 )?;
             }
         }
-        emit_ccs(output);
+        emit_ccs(output)?;
 
         let (dec, encrypter) = secrets.make_cipher_pair(Side::Server);
         output.send().set_encrypter(
@@ -366,7 +366,7 @@ mod client_hello {
                 .common
                 .confidentiality_limit,
         );
-        emit_finished(&secrets, &mut hs.transcript, output, &proof);
+        emit_finished(&secrets, &mut hs.transcript, output, &proof)?;
 
         Ok(Box::new(ExpectCcs {
             hs,
@@ -913,18 +913,18 @@ fn emit_ticket(
     };
 
     transcript.add_message(&m);
-    output.send_msg(m, false);
+    output.send_msg(m, false)?;
     Ok(())
 }
 
-fn emit_ccs(output: &mut dyn Output<'_>) {
+fn emit_ccs(output: &mut dyn Output<'_>) -> Result<(), Error> {
     output.send_msg(
         Message {
             version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         },
         false,
-    );
+    )
 }
 
 fn emit_finished(
@@ -932,7 +932,7 @@ fn emit_finished(
     transcript: &mut HandshakeHash,
     output: &mut dyn Output<'_>,
     proof: &HandshakeAlignedProof,
-) {
+) -> Result<(), Error> {
     let vh = transcript.current_hash();
     let verify_data = secrets.server_verify_data(&vh, proof);
     let verify_data_payload = Payload::Borrowed(&verify_data);
@@ -945,7 +945,7 @@ fn emit_finished(
     };
 
     transcript.add_message(&f);
-    output.send_msg(f, true);
+    output.send_msg(f, true)
 }
 
 pub(super) struct ExpectFinished {
@@ -1032,7 +1032,7 @@ impl State<ServerSide> for ExpectFinished {
                     )?;
                 }
             }
-            emit_ccs(output);
+            emit_ccs(output)?;
             output.send().set_encrypter(
                 encrypter,
                 self.secrets
@@ -1040,7 +1040,7 @@ impl State<ServerSide> for ExpectFinished {
                     .common
                     .confidentiality_limit,
             );
-            emit_finished(&self.secrets, &mut self.hs.transcript, output, &proof);
+            emit_finished(&self.secrets, &mut self.hs.transcript, output, &proof)?;
         }
 
         if let Some(identity) = self.peer_identity {

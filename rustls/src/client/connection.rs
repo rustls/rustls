@@ -143,8 +143,8 @@ impl Connection for ClientConnection {
         self.inner.refresh_traffic_keys(tls)
     }
 
-    fn send_close_notify(&mut self, tls: &mut Vec<u8>) {
-        self.inner.send_close_notify(tls);
+    fn send_close_notify(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
+        self.inner.send_close_notify(tls)
     }
 
     fn is_handshaking(&self) -> bool {
@@ -339,7 +339,11 @@ impl<'a> WriteEarlyData<'a> {
     /// the length of `plaintext` if the server has limited the amount of early data that
     /// may be sent.
     #[must_use]
-    pub fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> usize {
+    pub fn write(
+        &mut self,
+        plaintext: OutboundPlain<'_>,
+        tls: &mut Vec<u8>,
+    ) -> Result<usize, Error> {
         let state = &mut self.early_data;
         let plaintext = match state.state {
             EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted => {
@@ -347,7 +351,7 @@ impl<'a> WriteEarlyData<'a> {
                 state.left -= take;
                 plaintext.split_at(take).0
             }
-            EarlyDataState::AcceptedFinished => return 0,
+            EarlyDataState::AcceptedFinished => return Ok(0),
         };
 
         self.common

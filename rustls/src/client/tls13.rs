@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::mem;
 
 use subtle::ConstantTimeEq;
 
@@ -233,7 +234,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             &proof,
         );
 
-        emit_fake_ccs(&mut sent_tls13_fake_ccs, output);
+        emit_fake_ccs(&mut sent_tls13_fake_ccs, output)?;
 
         output.output(OutputEvent::HandshakeKind(
             match (&resuming_session, st.done_retry) {
@@ -422,9 +423,9 @@ pub(super) fn derive_early_traffic_secret(
     sent_tls13_fake_ccs: &mut bool,
     transcript_buffer: &HandshakeHashBuffer,
     client_random: &[u8; 32],
-) {
+) -> Result<(), Error> {
     // For middlebox compatibility
-    emit_fake_ccs(sent_tls13_fake_ccs, output);
+    emit_fake_ccs(sent_tls13_fake_ccs, output)?;
 
     let client_hello_hash = transcript_buffer.hash_given(hash_alg, &[]);
     early_key_schedule.client_early_traffic_secret(
@@ -441,17 +442,21 @@ pub(super) fn derive_early_traffic_secret(
     // Now the client can send encrypted early data
     output.emit(Event::EarlyData(EarlyDataEvent::Start));
     trace!("Starting early data traffic");
+    Ok(())
 }
 
-pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, output: &mut dyn Output<'_>) {
+pub(super) fn emit_fake_ccs(
+    sent_tls13_fake_ccs: &mut bool,
+    output: &mut dyn Output<'_>,
+) -> Result<(), Error> {
     // RFC 9001 §8.4 prohibits TLS middlebox compatibility mode in QUIC:
     // <https://www.rfc-editor.org/rfc/rfc9001.html#section-8.4>
     if output.quic().is_some() {
-        return;
+        return Ok(());
     }
 
-    if core::mem::replace(sent_tls13_fake_ccs, true) {
-        return;
+    if mem::replace(sent_tls13_fake_ccs, true) {
+        return Ok(());
     }
 
     output.send_msg(
@@ -460,7 +465,7 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, output: &mut dyn Out
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         },
         false,
-    );
+    )
 }
 
 fn validate_encrypted_extensions(
@@ -1282,9 +1287,12 @@ fn emit_finished_tls13(
     )));
 }
 
-fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn Output<'_>) {
+fn emit_end_of_early_data_tls13(
+    transcript: &mut HandshakeHash,
+    output: &mut dyn Output<'_>,
+) -> Result<(), Error> {
     if output.quic().is_some() {
-        return;
+        return Ok(());
     }
 
     let m = Message {
@@ -1295,7 +1303,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn
     };
 
     transcript.add_message(&m);
-    output.send_msg(m, true);
+    output.send_msg(m, true)
 }
 
 struct ExpectFinished {
@@ -1343,7 +1351,7 @@ impl State<ClientSide> for ExpectFinished {
         /* The EndOfEarlyData message to server is still encrypted with early data keys,
          * but appears in the transcript after the server Finished. */
         if st.in_early_traffic {
-            emit_end_of_early_data_tls13(&mut st.hs.transcript, output);
+            emit_end_of_early_data_tls13(&mut st.hs.transcript, output)?;
             output.emit(Event::EarlyData(EarlyDataEvent::Finished));
             st.hs
                 .key_schedule
@@ -1401,7 +1409,7 @@ impl State<ClientSide> for ExpectFinished {
             );
 
         emit_finished_tls13(&mut flight, &verify_data);
-        flight.finish(output);
+        flight.finish(output)?;
 
         /* We're now sure this server supports TLS1.3.  But if we run out of TLS1.3 tickets
          * when connecting to it again, we definitely don't want to attempt a TLS1.2 resumption. */
@@ -1539,7 +1547,7 @@ impl ExpectTraffic {
             KeyUpdateRequest::UpdateNotRequested => output.send().note_key_update_response(),
             KeyUpdateRequest::UpdateRequested => output
                 .send()
-                .queue_requested_key_update(),
+                .queue_requested_key_update()?,
             _ => return Err(InvalidMessage::InvalidKeyUpdate.into()),
         }
 

@@ -331,7 +331,8 @@ impl OpenConnection {
             .unwrap();
         if self.sent_http_response {
             self.tls_conn
-                .send_close_notify(&mut self.output);
+                .send_close_notify(&mut self.output)
+                .unwrap();
         }
     }
 
@@ -362,7 +363,8 @@ impl OpenConnection {
             // flush_pending() sends the close_notify instead.
             if !self.tls_conn.is_handshaking() {
                 self.tls_conn
-                    .send_close_notify(&mut self.output);
+                    .send_close_notify(&mut self.output)
+                    .unwrap();
             }
         }
     }

@@ -124,7 +124,7 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
     /// This informs the peer that the connection is being closed.
     ///
     /// Does nothing if any `close_notify` or fatal alert was already sent.
-    fn send_close_notify(&mut self, tls: &mut Vec<u8>);
+    fn send_close_notify(&mut self, tls: &mut Vec<u8>) -> Result<(), Error>;
 
     /// Returns true if the connection is currently performing the TLS handshake.
     ///
@@ -266,7 +266,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
 
         self.common
             .send
-            .send_appdata_encrypt(plaintext, tls);
+            .send_appdata_encrypt(plaintext, tls)?;
 
         Ok(())
     }
@@ -664,9 +664,12 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
         self.common.outputs.handle(ev);
     }
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) -> Result<(), Error> {
         match self.quic() {
-            Some(quic) => quic.send_msg(m, must_encrypt),
+            Some(quic) => {
+                quic.send_msg(m, must_encrypt);
+                Ok(())
+            }
             None => self
                 .common
                 .send

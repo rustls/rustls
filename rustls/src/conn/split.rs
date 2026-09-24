@@ -126,12 +126,17 @@ impl SendTraffic {
     ///
     /// When you need to handle a [`ReceiveTrafficState::FlushSender`] state, you can call this
     /// method with [`OutboundPlain::new_empty()`] to flush any pending TLS data to the peer.
-    pub fn write(&mut self, application_data: OutboundPlain<'_>, tls: &mut Vec<u8>) {
+    pub fn write(
+        &mut self,
+        application_data: OutboundPlain<'_>,
+        tls: &mut Vec<u8>,
+    ) -> Result<(), Error> {
         let mut inner = self.0.lock().unwrap();
         inner.pump(tls);
         inner
             .send
-            .send_appdata_encrypt(application_data, tls);
+            .send_appdata_encrypt(application_data, tls)
+            .map(|_| ())
     }
 
     /// Conclude sending traffic by sending a `close_notify` alert.
@@ -140,11 +145,10 @@ impl SendTraffic {
     /// This data should then be communicated to the peer.
     ///
     /// This is the final possible operation with a [`SendTraffic`].
-    pub fn close(self, tls: &mut Vec<u8>) {
+    pub fn close(self, tls: &mut Vec<u8>) -> Result<(), Error> {
         let mut inner = self.0.lock().unwrap();
         inner.pump(tls);
-        inner.send.send_close_notify(tls);
-        drop(inner);
+        inner.send.send_close_notify(tls)
     }
 
     /// Writes a TLS 1.3 `key_update` message into `tls` to refresh a connection's keys.
@@ -200,14 +204,14 @@ impl SendInner {
         !self.aside_buffer.is_empty() || self.send.has_queued_key_update()
     }
 
-    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
+    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) -> Result<(), Error> {
         self.send
-            .send_alert(level, desc, &mut self.aside_buffer);
+            .send_alert(level, desc, &mut self.aside_buffer)
     }
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) -> Result<(), Error> {
         self.send
-            .send_msg(m, must_encrypt, &mut self.aside_buffer);
+            .send_msg(m, must_encrypt, &mut self.aside_buffer)
     }
 }
 
@@ -523,12 +527,12 @@ impl SendOutput for SendAdapter<'_> {
             .negotiated_version(version);
     }
 
-    fn queue_requested_key_update(&mut self) {
+    fn queue_requested_key_update(&mut self) -> Result<(), Error> {
         // waking the sender here is a policy decision to encourage timely execution of
         // the write-side key update, it is not strictly required at a protocol level.
         self.as_locked(true)
             .send
-            .queue_requested_key_update();
+            .queue_requested_key_update()
     }
 
     fn note_key_update_response(&mut self) {
@@ -554,9 +558,9 @@ impl SendOutput for SendAdapter<'_> {
         level: AlertLevel,
         desc: AlertDescription,
         _wrong_thread_tls: &mut Vec<u8>,
-    ) {
+    ) -> Result<(), Error> {
         self.as_locked(true)
-            .send_alert(level, desc);
+            .send_alert(level, desc)
     }
 
     fn start_traffic(&mut self) {
@@ -565,7 +569,12 @@ impl SendOutput for SendAdapter<'_> {
             .start_traffic();
     }
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, _wrong_thread_tls: &mut Vec<u8>) {
+    fn send_msg(
+        &mut self,
+        m: Message<'_>,
+        must_encrypt: bool,
+        _wrong_thread_tls: &mut Vec<u8>,
+    ) -> Result<(), Error> {
         self.as_locked(true)
             .send_msg(m, must_encrypt)
     }
@@ -582,23 +591,25 @@ mod tests {
         assert!(!send_flag_for(
             |adapter| adapter.negotiated_version(ProtocolVersion::TLSv1_3)
         ));
-        assert!(send_flag_for(|adapter| adapter.queue_requested_key_update()));
+        assert!(send_flag_for(|adapter| adapter
+            .queue_requested_key_update()
+            .unwrap()));
         assert!(!send_flag_for(|adapter| adapter.note_key_update_response()));
         assert!(!send_flag_for(
             |adapter| adapter.set_encrypter(Box::new(Tls13Cipher), 1234)
         ));
         // update_key_schedule too hard
-        assert!(send_flag_for(|adapter| adapter.send_alert(
-            AlertLevel::Fatal,
-            AlertDescription::CertificateUnknown,
-            &mut tls,
-        )));
+        assert!(send_flag_for(|adapter| adapter
+            .send_alert(
+                AlertLevel::Fatal,
+                AlertDescription::CertificateUnknown,
+                &mut tls,
+            )
+            .unwrap()));
         assert!(!send_flag_for(|adapter| adapter.start_traffic()));
-        assert!(send_flag_for(|adapter| adapter.send_msg(
-            Message::build_key_update_notify(),
-            false,
-            &mut tls,
-        )));
+        assert!(send_flag_for(|adapter| adapter
+            .send_msg(Message::build_key_update_notify(), false, &mut tls,)
+            .unwrap()));
     }
 
     #[test]
@@ -613,7 +624,9 @@ mod tests {
         assert!(!inner.pending_send_data());
 
         // an aside alert is pending until pumped
-        inner.send_alert(AlertLevel::Fatal, AlertDescription::DecodeError);
+        inner
+            .send_alert(AlertLevel::Fatal, AlertDescription::DecodeError)
+            .unwrap();
         assert!(inner.pending_send_data());
 
         let mut tls = Vec::new();
@@ -622,13 +635,17 @@ mod tests {
         assert!(!inner.pending_send_data());
 
         // a queued key-update response is pending until the next send
-        inner.send.queue_requested_key_update();
+        inner
+            .send
+            .queue_requested_key_update()
+            .unwrap();
         assert!(inner.pending_send_data());
 
         tls.clear();
         inner
             .send
-            .send_appdata_encrypt(b"x".as_slice().into(), &mut tls);
+            .send_appdata_encrypt(b"x".as_slice().into(), &mut tls)
+            .unwrap();
         assert!(!inner.pending_send_data());
     }
 

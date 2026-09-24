@@ -724,14 +724,16 @@ fn early_data_is_available_on_resumption() {
         client
             .early_data()
             .unwrap()
-            .write(b"".into(), &mut client_output),
+            .write(b"".into(), &mut client_output)
+            .unwrap(),
         0
     );
     assert_eq!(
         client
             .early_data()
             .unwrap()
-            .write(b"hello".into(), &mut client_output),
+            .write(b"hello".into(), &mut client_output)
+            .unwrap(),
         5
     );
     let client_early_exporter = client
@@ -829,7 +831,8 @@ fn early_data_is_limited_on_client() {
         client
             .early_data()
             .unwrap()
-            .write((&[0xaa; 1234 + 1]).into(), &mut client_output),
+            .write((&[0xaa; 1234 + 1]).into(), &mut client_output)
+            .unwrap(),
         1234
     );
     let mut received_early_data = Vec::new();
@@ -897,7 +900,8 @@ fn server_detects_excess_early_data() {
         client
             .early_data()
             .unwrap()
-            .write((&[0xaa; 2024]).into(), &mut client_output),
+            .write((&[0xaa; 2024]).into(), &mut client_output)
+            .unwrap(),
         2024
     );
     assert_eq!(
@@ -937,7 +941,8 @@ fn server_detects_excess_streamed_early_data() {
         client
             .early_data()
             .unwrap()
-            .write((&[0xaa; 1024]).into(), &mut client_output),
+            .write((&[0xaa; 1024]).into(), &mut client_output)
+            .unwrap(),
         1024
     );
     transfer(&mut client_output, &mut server_input);
@@ -956,7 +961,8 @@ fn server_detects_excess_streamed_early_data() {
         client
             .early_data()
             .unwrap()
-            .write((&[0xbb; 1000]).into(), &mut client_output),
+            .write((&[0xbb; 1000]).into(), &mut client_output)
+            .unwrap(),
         1000
     );
     transfer(&mut client_output, &mut server_input);
@@ -981,8 +987,18 @@ fn early_data_and_traffic_are_kept_separate() {
 
     // Two writes produce two early data records.
     let mut early = client.early_data().unwrap();
-    assert_eq!(early.write(b"hello ".into(), &mut client_output), 6);
-    assert_eq!(early.write(b"early".into(), &mut client_output), 5);
+    assert_eq!(
+        early
+            .write(b"hello ".into(), &mut client_output)
+            .unwrap(),
+        6
+    );
+    assert_eq!(
+        early
+            .write(b"early".into(), &mut client_output)
+            .unwrap(),
+        5
+    );
 
     // Deliver only the ClientHello for now, holding the early data records back.
     let mut held_back = client_output.split_off(first_record_len(&client_output));
@@ -1065,8 +1081,18 @@ fn unread_early_data_is_dropped() {
     let mut server_output = Vec::new();
 
     let mut early = client.early_data().unwrap();
-    assert_eq!(early.write(b"hello ".into(), &mut client_output), 6);
-    assert_eq!(early.write(b"early".into(), &mut client_output), 5);
+    assert_eq!(
+        early
+            .write(b"hello ".into(), &mut client_output)
+            .unwrap(),
+        6
+    );
+    assert_eq!(
+        early
+            .write(b"early".into(), &mut client_output)
+            .unwrap(),
+        5
+    );
 
     // Skipping `next_early_data()` drops the early data without error.
     transfer(&mut client_output, &mut server_input);
@@ -1117,8 +1143,18 @@ fn early_data_is_dropped_by_next_payload() {
     let mut server_output = Vec::new();
 
     let mut early = client.early_data().unwrap();
-    assert_eq!(early.write(b"hello ".into(), &mut client_output), 6);
-    assert_eq!(early.write(b"early".into(), &mut client_output), 5);
+    assert_eq!(
+        early
+            .write(b"hello ".into(), &mut client_output)
+            .unwrap(),
+        6
+    );
+    assert_eq!(
+        early
+            .write(b"early".into(), &mut client_output)
+            .unwrap(),
+        5
+    );
 
     // Deliver only the ClientHello, then complete the client's side of the handshake.
     let mut held_back = client_output.split_off(first_record_len(&client_output));
@@ -1213,7 +1249,8 @@ fn rejected_early_data_is_skipped() {
         client
             .early_data()
             .unwrap()
-            .write(b"early".into(), &mut client_output),
+            .write(b"early".into(), &mut client_output)
+            .unwrap(),
         5
     );
     transfer(&mut client_output, &mut server_input);
@@ -1259,7 +1296,8 @@ fn next_early_data_reports_excess_early_data() {
         client
             .early_data()
             .unwrap()
-            .write((&[0xaa; 1024]).into(), &mut client_output),
+            .write((&[0xaa; 1024]).into(), &mut client_output)
+            .unwrap(),
         1024
     );
     transfer(&mut client_output, &mut server_input);
@@ -1272,7 +1310,8 @@ fn next_early_data_reports_excess_early_data() {
         client
             .early_data()
             .unwrap()
-            .write((&[0xbb; 1000]).into(), &mut client_output),
+            .write((&[0xbb; 1000]).into(), &mut client_output)
+            .unwrap(),
         1000
     );
     transfer(&mut client_output, &mut server_input);

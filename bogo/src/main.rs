@@ -198,7 +198,8 @@ fn exec(
                     let len = client(&mut sess)
                         .early_data()
                         .expect("0rtt not available")
-                        .write(message.into(), &mut output);
+                        .write(message.into(), &mut output)
+                        .unwrap();
                     write_or_queue(&mut sess, &message[len..], &mut pending, &mut output).unwrap();
                 }
                 sent_message = true;
@@ -389,7 +390,8 @@ fn exec(
         }
 
         if opts.shut_down_after_handshake && !sent_shutdown && !sess.is_handshaking() {
-            sess.send_close_notify(&mut output);
+            sess.send_close_notify(&mut output)
+                .unwrap();
             sent_shutdown = true;
         }
 

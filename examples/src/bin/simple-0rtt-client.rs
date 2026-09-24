@@ -48,7 +48,9 @@ fn start_connection(config: &Arc<ClientConfig>, domain_name: &str, port: u16) {
     // will yield Some(WriteEarlyData).  Use this to encrypt the
     // request into TLS records right after the ClientHello.
     if let Some(mut early_data) = conn.early_data() {
-        let len = early_data.write(request.as_bytes().into(), &mut output);
+        let len = early_data
+            .write(request.as_bytes().into(), &mut output)
+            .unwrap();
         assert_eq!(len, request.len(), "request exceeds early data limit");
         println!("  * 0-RTT request sent");
     }

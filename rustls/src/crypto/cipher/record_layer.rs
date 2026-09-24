@@ -36,19 +36,20 @@ impl EncryptionState {
         &mut self,
         plain: Record<OutboundPlain<'_>>,
         output: &mut Vec<u8>,
-    ) {
+    ) -> Result<(), Error> {
         // Contents are fully overwritten below, so zeroing is pure cost.
         // A fresh buffer gets pre-zeroed memory straight from the allocator
         // while a reused one zeroes only what `resize` grows.
         let needed = HEADER_SIZE + self.encrypted_len(plain.payload.len());
         let start = output.len();
         output.resize(start + needed, 0);
-        let written = self.encrypt_outgoing_into(plain, &mut output[start..]);
+        let written = self.encrypt_outgoing_into(plain, &mut output[start..])?;
         debug_assert_eq!(
             written, needed,
             "RecordEncrypter::encrypt() returned wrong length"
         );
         output.truncate(start + written);
+        Ok(())
     }
 
     /// Encrypt a TLS record directly into `out`, returning the encoded
@@ -64,7 +65,7 @@ impl EncryptionState {
         &mut self,
         plain: Record<OutboundPlain<'_>>,
         out: &mut [u8],
-    ) -> usize {
+    ) -> Result<usize, Error> {
         assert!(self.pre_encrypt_action(0) != Some(PreEncryptAction::Refuse));
         let encrypter = self.record_encrypter.as_mut().unwrap();
 
@@ -73,9 +74,7 @@ impl EncryptionState {
 
         #[cfg(debug_assertions)]
         let (out_ptr, out_len) = (out.as_ptr(), out.len());
-        let encrypted = encrypter
-            .encrypt(plain, seq, &mut out[HEADER_SIZE..])
-            .unwrap();
+        let encrypted = encrypter.encrypt(plain, seq, &mut out[HEADER_SIZE..])?;
 
         #[cfg(debug_assertions)]
         {
@@ -93,7 +92,7 @@ impl EncryptionState {
         let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
         debug_assert!(len <= usize::from(u16::MAX));
         out[..HEADER_SIZE].copy_from_slice(&encode_record_header(typ, version, len as u16));
-        HEADER_SIZE + len
+        Ok(HEADER_SIZE + len)
     }
 
     /// Set and start using the given `RecordEncrypter` for future outgoing

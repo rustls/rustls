@@ -239,7 +239,8 @@ mod server {
 
         loop {
             if !received_plaintext.is_empty() {
-                conn.send_close_notify(&mut output);
+                conn.send_close_notify(&mut output)
+                    .unwrap();
                 complete_io(
                     &mut stream,
                     &mut input,

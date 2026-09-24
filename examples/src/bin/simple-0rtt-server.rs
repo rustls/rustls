@@ -114,7 +114,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
         println!("Handshake complete\n");
 
         conn.write(b"Hello from the server".into(), &mut output)?;
-        conn.send_close_notify(&mut output);
+        conn.send_close_notify(&mut output)?;
         complete_io(&mut stream, &mut input, &mut buf, &mut output, &mut conn)?;
     }
 }

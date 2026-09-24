@@ -896,21 +896,21 @@ fn emit_client_hello_for_retry(
     if retryreq.is_some() {
         // send dummy CCS to fool middleboxes prior
         // to second client hello
-        tls13::emit_fake_ccs(&mut input.sent_tls13_fake_ccs, output);
+        tls13::emit_fake_ccs(&mut input.sent_tls13_fake_ccs, output)?;
     }
 
     trace!("Sending ClientHello {ch:#?}");
 
     transcript_buffer.add_message(&ch);
-    output.send_msg(ch, false);
+    output.send_msg(ch, false)?;
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
-    let early_data_key_schedule =
-        tls13_early_data_key_schedule.map(|(resuming_suite, schedule)| {
+    let early_data_key_schedule = tls13_early_data_key_schedule
+        .map(|(resuming_suite, schedule)| {
             if !early_data_enabled {
                 // No early data if a HelloRetryRequest happens
                 output.emit(Event::EarlyData(EarlyDataEvent::Rejected));
-                return (schedule, false);
+                return Ok((schedule, false));
             }
 
             let (transcript_buffer, random) = match &ech_state {
@@ -934,9 +934,10 @@ fn emit_client_hello_for_retry(
                 &mut input.sent_tls13_fake_ccs,
                 transcript_buffer,
                 random,
-            );
-            (schedule, true)
-        });
+            )
+            .map(|()| (schedule, true))
+        })
+        .transpose()?;
 
     let mut next = Box::new(ExpectServerHello {
         input,
