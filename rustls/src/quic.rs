@@ -1,16 +1,16 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::ops::{Deref, DerefMut};
+use core::ops::Deref;
 use core::{fmt, mem};
 
 use pki_types::FipsStatus;
 
 use crate::client::ClientSide;
 pub use crate::common_state::Side;
-use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
+use crate::common_state::{ConnectionOutputs, Protocol};
 use crate::conn::{
-    Accepted, ConnectionCommon, Core, KeyingMaterialExporter, MessageIter, MessageIterMode,
-    ServerNext, SideData, Transport, VerifyPeerIdentity,
+    Accepted, ConnectionCommon, KeyingMaterialExporter, MessageIter, MessageIterMode, ServerNext,
+    SideData, Transport, VerifyPeerIdentity,
 };
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
@@ -58,7 +58,7 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
 
 /// A QUIC client connection.
 pub struct ClientConnection {
-    inner: QuicCommon<ClientSide>,
+    inner: ConnectionCommon<ClientSide, Quic>,
 }
 
 impl ClientConnection {
@@ -70,7 +70,6 @@ impl ClientConnection {
     /// Returns the number of TLS1.3 tickets that have been received.
     pub fn tls13_tickets_received(&self) -> u32 {
         self.inner
-            .common
             .common
             .recv
             .tls13_tickets_received
@@ -85,28 +84,30 @@ impl ClientConnection {
     /// This function will error:
     ///
     /// - if called prior to the handshake completing; (check with
-    ///   [`CommonState::is_handshaking`] first).
+    ///   [`Connection::is_handshaking`] first).
     /// - if called more than once per connection.
     ///
     /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.common.exporter()
+        self.inner.exporter()
     }
 
     /// Returns data learned during the connection, specific to being a client.
     pub fn data(&self) -> &ClientData {
-        &self.inner.common.side
+        &self.inner.side
     }
 }
 
 impl Connection for ClientConnection {
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.inner.quic.transport_parameters()
+        self.inner
+            .transport
+            .transport_parameters()
     }
 
     fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
         self.inner
-            .quic
+            .transport
             .zero_rtt_keys(&self.inner)
     }
 
@@ -138,15 +139,15 @@ impl fmt::Debug for ClientConnection {
     }
 }
 
-impl From<QuicCommon<ClientSide>> for ClientConnection {
-    fn from(inner: QuicCommon<ClientSide>) -> Self {
+impl From<ConnectionCommon<ClientSide, Quic>> for ClientConnection {
+    fn from(inner: ConnectionCommon<ClientSide, Quic>) -> Self {
         Self { inner }
     }
 }
 
 /// A QUIC server connection.
 pub struct ServerConnection {
-    inner: QuicCommon<ServerSide>,
+    inner: ConnectionCommon<ServerSide, Quic>,
 }
 
 impl ServerConnection {
@@ -166,15 +167,17 @@ impl ServerConnection {
             }),
         };
 
-        let core = ConnectionCommon::for_server(config, exts, Protocol::Quic(version))?;
-        let inner = QuicCommon::new(
-            core,
-            Quic {
-                version,
-                ..Quic::default()
-            },
-        );
-        Ok(Self { inner })
+        Ok(Self {
+            inner: ConnectionCommon::for_server(
+                config,
+                exts,
+                Quic {
+                    version,
+                    ..Quic::default()
+                },
+                Protocol::Quic(version),
+            )?,
+        })
     }
 
     /// Return the FIPS validation status of the connection.
@@ -192,7 +195,7 @@ impl ServerConnection {
     /// from the client is desired, encrypt the data separately.
     pub fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
         assert!(resumption_data.len() < 2usize.pow(15));
-        match &mut self.inner.common.state {
+        match &mut self.inner.state {
             Ok(st) => st.set_resumption_data(resumption_data),
             Err(e) => Err(e.clone()),
         }
@@ -207,28 +210,30 @@ impl ServerConnection {
     /// This function will error:
     ///
     /// - if called prior to the handshake completing; (check with
-    ///   [`CommonState::is_handshaking`] first).
+    ///   [`Connection::is_handshaking()`] first).
     /// - if called more than once per connection.
     ///
     /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.common.exporter()
+        self.inner.exporter()
     }
 
     /// Returns data learned during the connection, specific to being a server.
     pub fn data(&self) -> &ServerData {
-        &self.inner.common.side
+        &self.inner.side
     }
 }
 
 impl Connection for ServerConnection {
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.inner.quic.transport_parameters()
+        self.inner
+            .transport
+            .transport_parameters()
     }
 
     fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
         self.inner
-            .quic
+            .transport
             .zero_rtt_keys(&self.inner)
     }
 
@@ -293,34 +298,29 @@ impl ServerHandshake {
     ///
     /// The returned object should be fed data from a single potential client.
     pub fn start(version: Version) -> NeedsInput {
-        NeedsInput(Core::new(
-            ConnectionCommon::for_acceptor(Protocol::Quic(version)),
+        NeedsInput(ConnectionCommon::for_acceptor(
             Quic {
                 version,
                 ..Quic::default()
             },
+            Protocol::Quic(version),
         ))
     }
 
     pub(crate) fn from_core(
-        mut core: Core<ServerSide, Quic>,
+        mut conn: ConnectionCommon<ServerSide, Quic>,
         output: &mut Vec<QuicEvent>,
     ) -> Result<Self, Error> {
-        output.extend(core.transport.events());
+        output.extend(conn.transport.events());
 
-        Ok(match ServerNext::try_from(core)? {
+        Ok(match ServerNext::try_from(conn)? {
             ServerNext::NeedsInput(core) => Self::NeedsInput(NeedsInput(core)),
 
             ServerNext::ChooseConfig(accepted) => Self::Accepted(accepted),
 
             ServerNext::VerifyClientIdentity(verify) => Self::VerifyClientIdentity(verify),
 
-            ServerNext::Complete(core) => {
-                let Core { inner, transport } = core;
-                Self::Complete(ServerConnection {
-                    inner: QuicCommon::new(inner, transport),
-                })
-            }
+            ServerNext::Complete(inner) => Self::Complete(ServerConnection { inner }),
         })
     }
 }
@@ -331,7 +331,7 @@ impl ServerHandshake {
 ///
 /// This type dereferences to [`ConnectionOutputs`]. Individual outputs are `None`
 /// until they are learned during the handshake.
-pub struct NeedsInput(Core<ServerSide, Quic>);
+pub struct NeedsInput(ConnectionCommon<ServerSide, Quic>);
 
 impl NeedsInput {
     /// Return the TLS-encoded transport parameters received from the peer.
@@ -345,9 +345,7 @@ impl NeedsInput {
 
     /// Compute the keys for decrypting 0-RTT packets, if available.
     pub fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
-        self.0
-            .transport
-            .zero_rtt_keys(&self.0.inner)
+        self.0.transport.zero_rtt_keys(&self.0)
     }
 
     /// Progress the handshake by receiving further unencrypted TLS handshake data.
@@ -378,17 +376,17 @@ impl NeedsInput {
         output: &mut Vec<QuicEvent>,
     ) -> Result<ServerHandshake, Error> {
         self.0
-            .inner
             .recv
             .deframer
             .input_quic(input.slice_mut())?;
 
-        ServerHandshake::from_core(self.0.process(input, &mut Vec::new())?, output)
+        self.0.process(input, &mut Vec::new())?;
+        ServerHandshake::from_core(self.0, output)
     }
 
     /// Returns data learned during the connection, specific to being a server.
     pub fn data(&self) -> &ServerData {
-        &self.0.inner.side
+        &self.0.side
     }
 }
 
@@ -396,7 +394,7 @@ impl Deref for NeedsInput {
     type Target = ConnectionOutputs;
 
     fn deref(&self) -> &Self::Target {
-        self.0.inner.deref()
+        self.0.deref()
     }
 }
 
@@ -439,65 +437,27 @@ pub enum QuicEvent {
     KeyChange(KeyChange),
 }
 
-/// A shared interface for QUIC connections.
-pub(crate) struct QuicCommon<Side: SideData> {
-    common: ConnectionCommon<Side>,
-    quic: Quic,
-}
-
-impl<Side: SideData> QuicCommon<Side> {
-    pub(crate) fn new(common: ConnectionCommon<Side>, quic: Quic) -> Self {
-        Self { common, quic }
-    }
-
+impl<Side: SideData> ConnectionCommon<Side, Quic> {
     fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
         self.common
-            .common
             .recv
             .deframer
             .input_quic(input.slice_mut())?;
 
         let mut tls = Vec::new();
-        let mut iter = MessageIter::new(
-            input,
-            &mut tls,
-            Some(&mut self.quic),
-            &mut self.common,
-            MessageIterMode::All,
-        );
+        let mut iter = MessageIter::new(input, &mut tls, self, MessageIterMode::All);
 
         let result = match iter.next(false) {
             Some(Ok(_)) | None => Ok(()),
             Some(Err(e)) => Err(e),
         };
 
-        input.discard(
-            self.common
-                .common
-                .recv
-                .deframer
-                .take_discard(),
-        );
-
+        input.discard(self.common.recv.deframer.take_discard());
         result
     }
 
     fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
-        self.quic.events()
-    }
-}
-
-impl<Side: SideData> Deref for QuicCommon<Side> {
-    type Target = CommonState;
-
-    fn deref(&self) -> &Self::Target {
-        &self.common.common
-    }
-}
-
-impl<Side: SideData> DerefMut for QuicCommon<Side> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.common.common
+        self.transport.events()
     }
 }
 

@@ -25,7 +25,7 @@ pub mod kernel;
 
 mod handshake;
 pub use handshake::{Accepted, Tcp, Transport, VerifyPeerIdentity};
-pub(crate) use handshake::{ClientNext, Core, ServerNext, sealed};
+pub(crate) use handshake::{ClientNext, ServerNext, sealed};
 
 mod receive;
 pub(crate) use receive::{
@@ -43,6 +43,8 @@ use split::SplitConnection;
 pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
     /// The side (client or server) that this type implements.
     type Side: SideData;
+    /// The transport protocol that this type uses.
+    type Transport: Transport;
 
     /// Writes the application data from `plaintext` into TLS records and appends them to `tls`.
     ///
@@ -63,7 +65,7 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
         &'a mut self,
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
-    ) -> MessageHandler<'a, 'm, Self::Side>;
+    ) -> MessageHandler<'a, 'm, Self::Side, Self::Transport>;
 
     /// Returns an object that can derive key material from the agreed connection secrets.
     ///
@@ -144,11 +146,11 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
 /// More data needs to be supplied to make progress.
 ///
 /// Provide the data to [`Self::process()`].
-pub struct NeedsInput<Side: SideData>(pub(crate) Core<Side, Tcp>);
+pub struct NeedsInput<Side: SideData>(pub(crate) ConnectionCommon<Side, Tcp>);
 
 impl<Side: SideData> NeedsInput<Side> {
-    pub(crate) fn new(inner: ConnectionCommon<Side>) -> Self {
-        Self(Core::new(inner, Tcp))
+    pub(crate) fn new(inner: ConnectionCommon<Side, Tcp>) -> Self {
+        Self(inner)
     }
 
     /// Progress the handshake by receiving further data.
@@ -164,11 +166,12 @@ impl<Side: SideData> NeedsInput<Side> {
     /// the connection.  If this contains another [`NeedsInput`] object then obtaining more
     /// input (eg, from a socket or other source) is certainly necessary.
     pub fn process(
-        self,
+        mut self,
         input: &mut dyn TlsInputBuffer,
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
-        Side::tcp_handshake_from_core(self.0.process(input, tls)?)
+        self.0.process(input, tls)?;
+        Side::tcp_handshake_from_core(self.0)
     }
 }
 
@@ -224,26 +227,53 @@ pub(crate) trait VerifySidePeerIdentity<Side: SideData>: Send + Sync {
 ///
 /// This object is generic over the `Side` type parameter, which must implement the marker trait
 /// [`SideData`]. This is used to store side-specific data.
-pub(crate) struct ConnectionCommon<Side: SideData> {
+pub(crate) struct ConnectionCommon<Side: SideData, T: Transport> {
     pub(crate) state: Result<Side::State, Error>,
     pub(crate) side: Side::Data,
     pub(crate) common: CommonState,
+    pub(crate) transport: T,
 }
 
-impl<Side: SideData> ConnectionCommon<Side> {
-    pub(crate) fn new(state: Side::State, side: Side::Data, common: CommonState) -> Self {
+impl<Side: SideData, T: Transport> ConnectionCommon<Side, T> {
+    pub(crate) fn new(
+        state: Side::State,
+        side: Side::Data,
+        transport: T,
+        common: CommonState,
+    ) -> Self {
         Self {
             state: Ok(state),
             side,
             common,
+            transport,
         }
+    }
+
+    pub(crate) fn process(
+        &mut self,
+        input: &mut dyn TlsInputBuffer,
+        tls: &mut Vec<u8>,
+    ) -> Result<(), Error> {
+        let mut iter = MessageIter::new(input, tls, self, MessageIterMode::Handshake);
+        let result = loop {
+            match iter.next(false) {
+                Some(Ok(_)) => {}
+                Some(Err(e)) => break Err(e),
+                None => break Ok(()),
+            };
+        };
+
+        input.discard(self.common.recv.deframer.take_discard());
+
+        result?;
+        Ok(())
     }
 
     pub(crate) fn read_tls<'a, 'm>(
         &'a mut self,
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
-    ) -> MessageHandler<'a, 'm, Side> {
+    ) -> MessageHandler<'a, 'm, Side, T> {
         MessageHandler::new(input, tls, self)
     }
 
@@ -354,12 +384,11 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 }
 
-impl ConnectionCommon<ServerSide> {
+impl<T: Transport> ConnectionCommon<ServerSide, T> {
     pub(crate) fn accepted(
         &mut self,
         choose: Box<ChooseConfig>,
         exts: ServerExtensionsInput,
-        quic: Option<&mut dyn QuicOutput>,
         config: Arc<ServerConfig>,
         tls: &mut Vec<u8>,
     ) -> Result<(), Error> {
@@ -370,7 +399,7 @@ impl ConnectionCommon<ServerSide> {
 
         let mut output = SideCommonOutput {
             side: &mut self.side,
-            quic,
+            quic: self.transport.quic(),
             common: &mut self.common,
             tls,
         };
@@ -380,7 +409,7 @@ impl ConnectionCommon<ServerSide> {
     }
 }
 
-impl<Side: SideData> Deref for ConnectionCommon<Side> {
+impl<Side: SideData, T: Transport> Deref for ConnectionCommon<Side, T> {
     type Target = CommonState;
 
     fn deref(&self) -> &Self::Target {
@@ -388,7 +417,7 @@ impl<Side: SideData> Deref for ConnectionCommon<Side> {
     }
 }
 
-impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
+impl<Side: SideData, T: Transport> DerefMut for ConnectionCommon<Side, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.common
     }
@@ -402,25 +431,25 @@ impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
 /// Backpressure is provided by the [`TlsInputBuffer`] implementation. When using a [`VecInput`]
 /// buffer, [`VecInput::read()`] will not ingest more data once the internal buffer is full.
 #[must_use]
-pub struct MessageHandler<'a, 'm, Side: SideData> {
-    iter: MessageIter<'a, 'm, Side, SendPath>,
+pub struct MessageHandler<'a, 'm, Side: SideData, T: Transport> {
+    iter: MessageIter<'a, 'm, Side, T, SendPath>,
     done: bool,
 }
 
-impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
+impl<'a, 'm, Side: SideData, T: Transport> MessageHandler<'a, 'm, Side, T> {
     pub(crate) fn new(
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
-        core: &'a mut ConnectionCommon<Side>,
+        conn: &'a mut ConnectionCommon<Side, T>,
     ) -> Self {
         Self {
-            iter: MessageIter::new(input, tls, None, core, MessageIterMode::All),
+            iter: MessageIter::new(input, tls, conn, MessageIterMode::All),
             done: false,
         }
     }
 }
 
-impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
+impl<'a, 'm, Side: SideData, T: Transport> MessageHandler<'a, 'm, Side, T> {
     /// Handles all complete messages from the input buffer.
     ///
     /// Writes any plaintext application data from the input into `buf`, and returns the I/O
@@ -478,7 +507,7 @@ impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
     }
 }
 
-impl<'a, 'm> MessageHandler<'a, 'm, ServerSide> {
+impl<'a, 'm, T: Transport> MessageHandler<'a, 'm, ServerSide, T> {
     /// Yields the next payload application data received from the client.
     ///
     /// Early data is only received during the handshake, from clients resuming an earlier
@@ -525,14 +554,16 @@ impl<'a, 'm> MessageHandler<'a, 'm, ServerSide> {
     }
 }
 
-impl<'a, 'm, Side: SideData + private::Side> Drop for MessageHandler<'a, 'm, Side> {
+impl<'a, 'm, Side: SideData + private::Side, T: Transport> Drop
+    for MessageHandler<'a, 'm, Side, T>
+{
     fn drop(&mut self) {
         let MessageIter { input, recv, .. } = &mut self.iter;
         input.discard(recv.deframer.take_discard());
     }
 }
 
-impl<S: SideData> fmt::Debug for MessageHandler<'_, '_, S> {
+impl<S: SideData, T: Transport> fmt::Debug for MessageHandler<'_, '_, S, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MessageHandler")
             .field("done", &self.done)
@@ -719,12 +750,13 @@ pub trait SideData: private::Side + Sized {
 
     #[doc(hidden)]
     #[expect(private_interfaces)]
-    fn tcp_handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error>;
+    fn tcp_handshake_from_core(conn: ConnectionCommon<Self, Tcp>)
+    -> Result<Self::Handshake, Error>;
 
     #[doc(hidden)]
     #[expect(private_interfaces)]
     fn quic_handshake_from_core(
-        core: Core<Self, Quic>,
+        core: ConnectionCommon<Self, Quic>,
         output: &mut Vec<QuicEvent>,
     ) -> Result<Self::QuicHandshake, Error>;
 }

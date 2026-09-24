@@ -4,14 +4,13 @@ use core::mem;
 use core::ops::Range;
 use std::io::{self, Read};
 
+use super::private::SideOutput;
 use super::send::{SendOutput, SendPath};
 use super::split::SendAdapter;
-use crate::SideData;
+use super::{ConnectionCommon, SideData, StateMachine, Transport};
 use crate::common_state::{
     ConnectionOutput, Event, Output, OutputEvent, Side, UnborrowedPayload, maybe_send_fatal_alert,
 };
-use crate::conn::private::SideOutput;
-use crate::conn::{ConnectionCommon, StateMachine};
 use crate::crypto::cipher::{Decrypted, DecryptionState, EncodableVersion, Payload, Record};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
@@ -22,21 +21,21 @@ use crate::msgs::{
 use crate::quic::QuicOutput;
 use crate::tracing::{trace, warn};
 
-pub(crate) struct MessageIter<'a, 'm, Side: SideData, Send: SendOutput + 'a> {
+pub(crate) struct MessageIter<'a, 'm, Side: SideData, T: Transport, Send: SendOutput + 'a> {
     pub(super) input: &'m mut dyn TlsInputBuffer,
     pub(super) tls: &'a mut Vec<u8>,
     pub(super) recv: &'a mut ReceivePath,
     pub(super) state: &'a mut Result<Side::State, Error>,
     pub(super) output: JoinOutput<'a, Send>,
     pub(super) mode: MessageIterMode,
+    pub(super) transport: PhantomData<T>,
 }
 
-impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
+impl<'a, 'm, Side: SideData, T: Transport> MessageIter<'a, 'm, Side, T, SendPath> {
     pub(crate) fn new(
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
-        quic: Option<&'a mut dyn QuicOutput>,
-        conn: &'a mut ConnectionCommon<Side>,
+        conn: &'a mut ConnectionCommon<Side, T>,
         mode: MessageIterMode,
     ) -> Self {
         Self {
@@ -46,16 +45,17 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
             state: &mut conn.state,
             output: JoinOutput {
                 outputs: &mut conn.common.outputs,
-                quic,
+                quic: conn.transport.quic(),
                 send: &mut conn.common.send,
                 side: &mut conn.side,
             },
             mode,
+            transport: PhantomData,
         }
     }
 }
 
-impl<'a, 'm, 's, Side: SideData> MessageIter<'a, 'm, Side, SendAdapter<'s>> {
+impl<'a, 'm, 's, Side: SideData, T: Transport> MessageIter<'a, 'm, Side, T, SendAdapter<'s>> {
     pub(super) fn receive(
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
@@ -71,11 +71,14 @@ impl<'a, 'm, 's, Side: SideData> MessageIter<'a, 'm, Side, SendAdapter<'s>> {
             state,
             output,
             mode,
+            transport: PhantomData,
         }
     }
 }
 
-impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Send> {
+impl<'a, 'm, Side: SideData, T: Transport, Send: SendOutput + 'a>
+    MessageIter<'a, 'm, Side, T, Send>
+{
     pub(crate) fn next(&mut self, early_only: bool) -> Option<Result<UnborrowedPayload, Error>> {
         let mut st = match mem::replace(self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,

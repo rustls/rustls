@@ -31,7 +31,7 @@ use rustls::server::{
 use rustls::{
     ClientConfig, ClientConnection, ConfigBuilder, Connection, ConnectionTrafficSecrets,
     DistinguishedName, MessageHandler, RootCertStore, ServerConfig, ServerConnection, SideData,
-    SupportedCipherSuite, VecInput, WantsVerifier,
+    SupportedCipherSuite, Transport, VecInput, WantsVerifier,
 };
 use tracing::{Event, Level, Metadata, field, span, subscriber};
 
@@ -1947,7 +1947,7 @@ impl<C: Connection> io::Write for OtherSession<'_, C> {
 
 /// Check `iter` yields exactly `expected`
 #[track_caller]
-pub fn check_iter(iter: MessageHandler<'_, '_, impl SideData>, expected: &[u8]) {
+pub fn check_iter(iter: MessageHandler<'_, '_, impl SideData, impl Transport>, expected: &[u8]) {
     let mut read = Vec::with_capacity(expected.len());
     iter.handle_all(&mut read).unwrap();
     assert_eq!(expected, &read);

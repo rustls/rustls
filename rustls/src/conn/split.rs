@@ -5,6 +5,7 @@ use core::ops::Range;
 use std::sync::MutexGuard;
 
 use super::receive::{Discard, JoinOutput};
+use super::{ConnectionOutputs, Error, ExtractedSecrets, SideData, Tcp, Transport};
 use crate::client::ClientSide;
 use crate::common_state::UnborrowedPayload;
 use crate::conn::kernel::KernelConnection;
@@ -19,7 +20,6 @@ use crate::lock::Mutex;
 use crate::msgs::{AlertLevel, Delocator, Message};
 use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
-use crate::{ConnectionOutputs, Error, ExtractedSecrets, SideData};
 
 /// A post-handshake connection which has been split by direction.
 ///
@@ -89,7 +89,7 @@ impl<Side: SideData> SplitConnection<Side> {
             return Err(ApiMisuse::KernelConnectionWithPendingSendData.into());
         }
 
-        ConnectionCommon::<Side>::from_parts_into_kernel_connection(
+        ConnectionCommon::<Side, Tcp>::from_parts_into_kernel_connection(
             &mut send.send,
             recv,
             outputs,
@@ -98,10 +98,10 @@ impl<Side: SideData> SplitConnection<Side> {
     }
 }
 
-impl<Side: SideData> TryFrom<ConnectionCommon<Side>> for SplitConnection<Side> {
+impl<Side: SideData, T: Transport> TryFrom<ConnectionCommon<Side, T>> for SplitConnection<Side> {
     type Error = Error;
 
-    fn try_from(conn: ConnectionCommon<Side>) -> Result<Self, Error> {
+    fn try_from(conn: ConnectionCommon<Side, T>) -> Result<Self, Error> {
         let send = Arc::new(Mutex::new(SendInner {
             send: conn.common.send,
             aside_buffer: Vec::new(),
@@ -268,7 +268,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             side: &mut Discard,
         };
 
-        let mut iter = MessageIter::<Side, _>::receive(
+        let mut iter = MessageIter::<Side, Tcp, _>::receive(
             input,
             &mut tls_unused,
             &mut state,
