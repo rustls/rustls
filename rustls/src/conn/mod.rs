@@ -25,7 +25,7 @@ pub mod kernel;
 
 mod handshake;
 pub use handshake::{Accepted, Tcp, Transport, VerifyPeerIdentity};
-pub(crate) use handshake::{ClientNext, Core, ServerNext, sealed};
+pub(crate) use handshake::{ClientNext, ServerNext, sealed};
 
 mod receive;
 pub(crate) use receive::{
@@ -43,6 +43,8 @@ use split::SplitConnection;
 pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
     /// The side (client or server) that this type implements.
     type Side: SideData;
+    /// The transport protocol that this type uses.
+    type Transport: Transport;
 
     /// Writes the application data from `plaintext` into TLS records and appends them to `tls`.
     ///
@@ -138,11 +140,11 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
 /// More data needs to be supplied to make progress.
 ///
 /// Provide the data to [`Self::process()`].
-pub struct NeedsInput<Side: SideData>(pub(crate) Core<Side, Tcp>);
+pub struct NeedsInput<Side: SideData>(pub(crate) ConnectionCommon<Side, Tcp>);
 
 impl<Side: SideData> NeedsInput<Side> {
-    pub(crate) fn new(inner: ConnectionCommon<Side>) -> Self {
-        Self(Core::new(inner, Tcp))
+    pub(crate) fn new(inner: ConnectionCommon<Side, Tcp>) -> Self {
+        Self(inner)
     }
 
     /// Progress the handshake by receiving further data.
@@ -158,16 +160,17 @@ impl<Side: SideData> NeedsInput<Side> {
     /// the connection.  If this contains another [`NeedsInput`] object then obtaining more
     /// input (eg, from a socket or other source) is certainly necessary.
     pub fn process(
-        self,
+        mut self,
         input: &mut dyn TlsInputBuffer,
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
-        Side::tcp_handshake_from_core(self.0.process(input, tls)?)
+        self.0.process(input, tls)?;
+        Side::tcp_handshake_from_conn(self.0)
     }
 
     #[doc = include_str!("../doc/early_exporter.md")]
     pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.0.inner.early_exporter()
+        self.0.early_exporter()
     }
 }
 
@@ -223,19 +226,41 @@ pub(crate) trait VerifySidePeerIdentity<Side: SideData>: Send + Sync {
 ///
 /// This object is generic over the `Side` type parameter, which must implement the marker trait
 /// [`SideData`]. This is used to store side-specific data.
-pub(crate) struct ConnectionCommon<Side: SideData> {
+pub(crate) struct ConnectionCommon<Side: SideData, T: Transport> {
     pub(crate) state: Result<Side::State, Error>,
     pub(crate) side: Side,
     pub(crate) common: CommonState,
+    pub(crate) transport: T,
 }
 
-impl<Side: SideData> ConnectionCommon<Side> {
-    pub(crate) fn new(state: Side::State, side: Side, common: CommonState) -> Self {
+impl<Side: SideData, T: Transport> ConnectionCommon<Side, T> {
+    pub(crate) fn new(state: Side::State, side: Side, transport: T, common: CommonState) -> Self {
         Self {
             state: Ok(state),
             side,
             common,
+            transport,
         }
+    }
+
+    pub(crate) fn process(
+        &mut self,
+        input: &mut dyn TlsInputBuffer,
+        tls: &mut Vec<u8>,
+    ) -> Result<(), Error> {
+        let mut iter = MessageIter::new(input, tls, self, MessageIterMode::Handshake);
+        let result = loop {
+            match iter.next(false) {
+                Some(Ok(_)) => {}
+                Some(Err(e)) => break Err(e),
+                None => break Ok(()),
+            };
+        };
+
+        input.discard(self.common.recv.deframer.take_discard());
+
+        result?;
+        Ok(())
     }
 
     pub(crate) fn read_tls<'a, 'm>(
@@ -335,12 +360,11 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 }
 
-impl ConnectionCommon<ServerSide> {
+impl<T: Transport> ConnectionCommon<ServerSide, T> {
     pub(crate) fn accepted(
         &mut self,
         choose: Box<ChooseConfig>,
         exts: ServerExtensionsInput,
-        quic: Option<&mut dyn QuicOutput>,
         config: Arc<ServerConfig>,
         tls: &mut Vec<u8>,
     ) -> Result<(), Error> {
@@ -351,7 +375,7 @@ impl ConnectionCommon<ServerSide> {
 
         let mut output = SideCommonOutput {
             side: &mut self.side,
-            quic,
+            quic: self.transport.quic(),
             common: &mut self.common,
             tls,
         };
@@ -361,7 +385,7 @@ impl ConnectionCommon<ServerSide> {
     }
 }
 
-impl<Side: SideData> Deref for ConnectionCommon<Side> {
+impl<Side: SideData, T: Transport> Deref for ConnectionCommon<Side, T> {
     type Target = CommonState;
 
     fn deref(&self) -> &Self::Target {
@@ -369,7 +393,7 @@ impl<Side: SideData> Deref for ConnectionCommon<Side> {
     }
 }
 
-impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
+impl<Side: SideData, T: Transport> DerefMut for ConnectionCommon<Side, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.common
     }
@@ -392,10 +416,10 @@ impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
     pub(crate) fn new(
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
-        core: &'a mut ConnectionCommon<Side>,
+        conn: &'a mut ConnectionCommon<Side, impl Transport>,
     ) -> Self {
         Self {
-            iter: MessageIter::new(input, tls, None, core, MessageIterMode::All),
+            iter: MessageIter::new(input, tls, conn, MessageIterMode::All),
             done: false,
         }
     }
@@ -696,12 +720,13 @@ pub trait SideData: SideOutput + fmt::Debug + private::Side + Sized {
 
     #[doc(hidden)]
     #[expect(private_interfaces)]
-    fn tcp_handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error>;
+    fn tcp_handshake_from_conn(conn: ConnectionCommon<Self, Tcp>)
+    -> Result<Self::Handshake, Error>;
 
     #[doc(hidden)]
     #[expect(private_interfaces)]
-    fn quic_handshake_from_core(
-        core: Core<Self, Quic>,
+    fn quic_handshake_from_conn(
+        core: ConnectionCommon<Self, Quic>,
         output: &mut Vec<QuicEvent>,
     ) -> Result<Self::QuicHandshake, Error>;
 }

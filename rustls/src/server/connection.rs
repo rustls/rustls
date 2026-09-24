@@ -10,8 +10,8 @@ use crate::common_state::{CommonState, ConnectionOutputs, Event, Protocol, Side}
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Accepted, Connection, ConnectionCommon, Core, KeyingMaterialExporter, MessageHandler,
-    NeedsInput, ServerNext, SideData, Tcp, TlsInputBuffer, VerifyPeerIdentity,
+    Accepted, Connection, ConnectionCommon, KeyingMaterialExporter, MessageHandler, NeedsInput,
+    ServerNext, SideData, Tcp, TlsInputBuffer, Transport, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -29,7 +29,7 @@ use crate::verify::ClientIdentity;
 /// Encrypt data destined for the peer using [`Connection::write()`].
 /// Process received data from the peer using [`Connection::read_tls()`].
 pub struct ServerConnection {
-    pub(super) inner: ConnectionCommon<ServerSide>,
+    pub(super) inner: ConnectionCommon<ServerSide, Tcp>,
 }
 
 impl ServerConnection {
@@ -40,6 +40,7 @@ impl ServerConnection {
             inner: ConnectionCommon::for_server(
                 config,
                 ServerExtensionsInput::default(),
+                Tcp,
                 Protocol::Tcp,
             )?,
         })
@@ -92,6 +93,7 @@ impl ServerConnection {
 
 impl Connection for ServerConnection {
     type Side = ServerSide;
+    type Transport = Tcp;
 
     fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error> {
         self.inner.write(plaintext, tls)
@@ -101,7 +103,7 @@ impl Connection for ServerConnection {
         &'a mut self,
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
-    ) -> MessageHandler<'a, 'm, ServerSide> {
+    ) -> MessageHandler<'a, 'm, Self::Side> {
         self.inner.read_tls(input, tls)
     }
 
@@ -145,10 +147,11 @@ impl fmt::Debug for ServerConnection {
     }
 }
 
-impl ConnectionCommon<ServerSide> {
+impl<T: Transport> ConnectionCommon<ServerSide, T> {
     pub(crate) fn for_server(
         config: Arc<ServerConfig>,
         extra_exts: ServerExtensionsInput,
+        transport: T,
         protocol: Protocol,
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server, config.fips());
@@ -164,14 +167,16 @@ impl ConnectionCommon<ServerSide> {
             ))
             .into(),
             ServerSide::default(),
+            transport,
             common,
         ))
     }
 
-    pub(crate) fn for_acceptor(protocol: Protocol) -> Self {
+    pub(crate) fn for_acceptor(transport: T, protocol: Protocol) -> Self {
         Self::new(
             ReadClientHello::new(protocol).into(),
             ServerSide::default(),
+            transport,
             CommonState::new(Side::Server, FipsStatus::Unvalidated),
         )
     }
@@ -212,22 +217,22 @@ impl ServerHandshake {
     ///
     /// The returned object should be fed data from a single potential client.
     pub fn start() -> NeedsInput<ServerSide> {
-        NeedsInput::new(ConnectionCommon::for_acceptor(Protocol::Tcp))
+        NeedsInput::new(ConnectionCommon::for_acceptor(Tcp, Protocol::Tcp))
     }
 }
 
-impl TryFrom<Core<ServerSide, Tcp>> for ServerHandshake {
+impl TryFrom<ConnectionCommon<ServerSide, Tcp>> for ServerHandshake {
     type Error = Error;
 
-    fn try_from(core: Core<ServerSide, Tcp>) -> Result<Self, Error> {
-        Ok(match ServerNext::try_from(core)? {
-            ServerNext::NeedsInput(core) => Self::NeedsInput(NeedsInput(core)),
+    fn try_from(conn: ConnectionCommon<ServerSide, Tcp>) -> Result<Self, Error> {
+        Ok(match ServerNext::try_from(conn)? {
+            ServerNext::NeedsInput(conn) => Self::NeedsInput(NeedsInput(conn)),
 
             ServerNext::ChooseConfig(accepted) => Self::Accepted(accepted),
 
             ServerNext::VerifyClientIdentity(verify) => Self::VerifyClientIdentity(verify),
 
-            ServerNext::Complete(core) => Self::Complete(SplitConnection::try_from(core.inner)?),
+            ServerNext::Complete(conn) => Self::Complete(SplitConnection::try_from(conn)?),
         })
     }
 }
@@ -273,16 +278,18 @@ impl SideData for ServerSide {
     type PeerIdentity<'a> = ClientIdentity<'static, 'a>;
 
     #[expect(private_interfaces)]
-    fn tcp_handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error> {
-        ServerHandshake::try_from(core)
+    fn tcp_handshake_from_conn(
+        conn: ConnectionCommon<Self, Tcp>,
+    ) -> Result<Self::Handshake, Error> {
+        ServerHandshake::try_from(conn)
     }
 
     #[expect(private_interfaces)]
-    fn quic_handshake_from_core(
-        core: Core<Self, Quic>,
+    fn quic_handshake_from_conn(
+        conn: ConnectionCommon<Self, Quic>,
         outputs: &mut Vec<QuicEvent>,
     ) -> Result<Self::QuicHandshake, Error> {
-        QuicServerHandshake::from_core(core, outputs)
+        QuicServerHandshake::from_conn(conn, outputs)
     }
 }
 
