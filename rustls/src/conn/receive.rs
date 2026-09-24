@@ -103,7 +103,7 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
             let opt_record = match res {
                 Ok(opt_record) => opt_record,
                 Err(e) => {
-                    maybe_send_fatal_alert(output.other.send, &e, output.tls);
+                    let _ = maybe_send_fatal_alert(output.other.send, &e, output.tls);
                     if let Error::DecryptError = e {
                         st.handle_decrypt_error();
                     }
@@ -122,7 +122,7 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
             } = record;
 
             if want_close_before_decrypt {
-                output.other.send.send_alert(
+                let _ = output.other.send.send_alert(
                     AlertLevel::Warning,
                     AlertDescription::CloseNotify,
                     output.tls,
@@ -131,11 +131,12 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
                 && matches!(record.typ, ContentType::Handshake | ContentType::Alert)
             {
                 // <https://datatracker.ietf.org/doc/html/rfc9846#section-5.4>
-                output.other.send.send_alert(
+                let _ = output.other.send.send_alert(
                     AlertLevel::Fatal,
                     AlertDescription::UnexpectedMessage,
                     output.tls,
                 );
+
                 let error = Error::from(PeerMisbehaved::EmptyFragment);
                 *self.state = Err(error.clone());
                 return Some(Err(error));
@@ -155,7 +156,7 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
             match result {
                 Ok(new) => st = new,
                 Err(e) => {
-                    maybe_send_fatal_alert(output.other.send, &e, output.tls);
+                    let _ = maybe_send_fatal_alert(output.other.send, &e, output.tls);
                     *self.state = Err(e.clone());
                     return Some(Err(e));
                 }
@@ -165,7 +166,7 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
                 st = match st.handle_without_input(&mut output) {
                     Ok(st) => st,
                     Err(err) => {
-                        maybe_send_fatal_alert(output.other.send, &err, output.tls);
+                        let _ = maybe_send_fatal_alert(output.other.send, &err, output.tls);
                         *self.state = Err(err.clone());
                         return Some(Err(err));
                     }
@@ -482,7 +483,7 @@ impl ReceivePath {
             .received_renegotiation_request()?;
         let desc = AlertDescription::NoRenegotiation;
         warn!("sending warning alert {desc:?}");
-        send.send_alert(AlertLevel::Warning, desc, tls);
+        send.send_alert(AlertLevel::Warning, desc, tls)?;
         Ok(true)
     }
 
@@ -562,9 +563,12 @@ impl<'a, 'm, Send: SendOutput + 'a> Output<'m> for CaptureAppData<'a, '_, 'm, Se
         self.other.outputs.handle(ev);
     }
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) -> Result<(), Error> {
         match self.other.quic.as_deref_mut() {
-            Some(quic) => quic.send_msg(m, must_encrypt),
+            Some(quic) => {
+                quic.send_msg(m, must_encrypt);
+                Ok(())
+            }
             None => self
                 .other
                 .send

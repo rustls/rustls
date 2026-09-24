@@ -454,7 +454,7 @@ fn emit_certificate(
     transcript: &mut HandshakeHash,
     cert_chain: CertificateChain<'_>,
     output: &mut dyn Output<'_>,
-) {
+) -> Result<(), Error> {
     let cert = Message {
         version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Certificate(
@@ -463,7 +463,7 @@ fn emit_certificate(
     };
 
     transcript.add_message(&cert);
-    output.send_msg(cert, false);
+    output.send_msg(cert, false)
 }
 
 fn emit_client_kx(
@@ -471,7 +471,7 @@ fn emit_client_kx(
     kxa: KeyExchangeAlgorithm,
     output: &mut dyn Output<'_>,
     pub_key: &[u8],
-) {
+) -> Result<(), Error> {
     let mut buf = Vec::new();
     match kxa {
         KeyExchangeAlgorithm::ECDHE => ClientKeyExchangeParams::Ecdh(ClientEcdhParams {
@@ -492,7 +492,7 @@ fn emit_client_kx(
     };
 
     transcript.add_message(&ckx);
-    output.send_msg(ckx, false);
+    output.send_msg(ckx, false)
 }
 
 fn emit_certverify(
@@ -516,18 +516,17 @@ fn emit_certverify(
     };
 
     transcript.add_message(&m);
-    output.send_msg(m, false);
-    Ok(())
+    output.send_msg(m, false)
 }
 
-fn emit_ccs(output: &mut dyn Output<'_>) {
+fn emit_ccs(output: &mut dyn Output<'_>) -> Result<(), Error> {
     output.send_msg(
         Message {
             version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         },
         false,
-    );
+    )
 }
 
 fn emit_finished(
@@ -535,7 +534,7 @@ fn emit_finished(
     transcript: &mut HandshakeHash,
     output: &mut dyn Output<'_>,
     proof: &HandshakeAlignedProof,
-) {
+) -> Result<(), Error> {
     let vh = transcript.current_hash();
     let verify_data = secrets.client_verify_data(&vh, proof);
     let verify_data_payload = Payload::Borrowed(&verify_data);
@@ -548,7 +547,7 @@ fn emit_finished(
     };
 
     transcript.add_message(&f);
-    output.send_msg(f, true);
+    output.send_msg(f, true)
 }
 
 struct ServerKxDetails {
@@ -843,7 +842,7 @@ impl VerifySidePeerIdentity<ClientSide> for AwaitServerIdentityVerification {
                     CertificateChain::from_signer(credentials)
                 }
             };
-            emit_certificate(&mut self.hs.transcript, certs, output);
+            emit_certificate(&mut self.hs.transcript, certs, output)?;
         }
 
         // 4a.
@@ -875,7 +874,7 @@ impl VerifySidePeerIdentity<ClientSide> for AwaitServerIdentityVerification {
         let kx = skxg.start()?.into_single();
 
         // 4b.
-        emit_client_kx(&mut self.hs.transcript, self.suite.kx, output, kx.pub_key());
+        emit_client_kx(&mut self.hs.transcript, self.suite.kx, output, kx.pub_key())?;
         // Note: EMS handshake hash only runs up to ClientKeyExchange.
         let ems_seed = self
             .hs
@@ -900,7 +899,7 @@ impl VerifySidePeerIdentity<ClientSide> for AwaitServerIdentityVerification {
         output.output(OutputEvent::KeyExchangeGroup(skxg));
 
         // 4e. CCS. We are definitely going to switch on encryption.
-        emit_ccs(output);
+        emit_ccs(output)?;
 
         // 4f. Now commit secrets.
         self.hs.config.key_log.log(
@@ -919,7 +918,7 @@ impl VerifySidePeerIdentity<ClientSide> for AwaitServerIdentityVerification {
         );
 
         // 5.
-        emit_finished(&secrets, &mut self.hs.transcript, output, &self.proof);
+        emit_finished(&secrets, &mut self.hs.transcript, output, &self.proof)?;
 
         if self.must_issue_new_ticket {
             Ok(Box::new(ExpectNewTicket {
@@ -1144,7 +1143,7 @@ impl State<ClientSide> for ExpectFinished {
         st.save_session();
 
         if let Some((_, encrypter)) = st.resuming.take() {
-            emit_ccs(output);
+            emit_ccs(output)?;
             output.send().set_encrypter(
                 encrypter,
                 st.secrets
@@ -1152,7 +1151,7 @@ impl State<ClientSide> for ExpectFinished {
                     .common
                     .confidentiality_limit,
             );
-            emit_finished(&st.secrets, &mut st.hs.transcript, output, &proof);
+            emit_finished(&st.secrets, &mut st.hs.transcript, output, &proof)?;
         }
 
         let extracted_secrets = st

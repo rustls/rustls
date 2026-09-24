@@ -188,7 +188,7 @@ impl<T: Transport> Accepted<T> {
         let send_path = &mut inner.common.send;
 
         if let Err(err) = &result {
-            maybe_send_fatal_alert(send_path, err, tls);
+            maybe_send_fatal_alert(send_path, err, tls)?;
         }
 
         result?;
@@ -371,7 +371,7 @@ impl<Side: SideData, T: Transport> VerifyPeerIdentity<Side, T> {
         });
 
         if let Err(err) = &result {
-            maybe_send_fatal_alert(&mut inner.common.send, err, tls);
+            maybe_send_fatal_alert(&mut inner.common.send, err, tls)?;
         }
 
         inner.state = result;

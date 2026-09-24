@@ -27,13 +27,13 @@ pub(crate) struct SendPath {
 }
 
 impl SendPath {
-    pub(crate) fn send_close_notify(&mut self, tls: &mut Vec<u8>) {
+    pub(crate) fn send_close_notify(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
         if self.has_sent_close_notify {
-            return;
+            return Ok(());
         }
         debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
         self.has_sent_close_notify = true;
-        self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify, tls);
+        self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify, tls)
     }
 
     fn preflight_encrypt(&mut self, n: usize, tls: &mut Vec<u8>) -> Result<(), Error> {
@@ -55,7 +55,7 @@ impl SendPath {
                         error!(
                             "traffic keys exhausted, closing connection to prevent security failure"
                         );
-                        self.send_close_notify(tls);
+                        self.send_close_notify(tls)?;
                         Err(Error::EncryptError)
                     }
                 }
@@ -71,7 +71,7 @@ impl SendPath {
         &mut self,
         payload: OutboundPlain<'_>,
         tls: &mut Vec<u8>,
-    ) -> usize {
+    ) -> Result<usize, Error> {
         let len = payload.len();
         self.send_records::<true>(
             self.fragmenter.fragment(
@@ -82,9 +82,9 @@ impl SendPath {
                     .encrypted_record_overhead(),
             ),
             tls,
-        );
+        )?;
         self.maybe_refresh_traffic_keys(tls);
-        len
+        Ok(len)
     }
 
     /// Encrypt and queue each fragment in `iter`.
@@ -92,7 +92,7 @@ impl SendPath {
         &mut self,
         iter: impl ExactSizeIterator<Item = Record<OutboundPlain<'a>>>,
         tls: &mut Vec<u8>,
-    ) {
+    ) -> Result<(), Error> {
         self.perhaps_write_key_update(tls);
         let count = iter.len();
         let mut iter = iter.peekable();
@@ -113,16 +113,18 @@ impl SendPath {
                 && record.typ != ContentType::Alert
                 && self.preflight_encrypt(0, tls).is_err()
             {
-                return;
+                return Ok(());
             }
 
             match MUST_ENCRYPT {
                 true => self
                     .encrypt_state
-                    .encrypt_outgoing(record, tls),
+                    .encrypt_outgoing(record, tls)?,
                 false => record.encode_unencrypted(tls),
             }
         }
+
+        Ok(())
     }
 
     pub(crate) fn start_outgoing_traffic(&mut self) {
@@ -168,7 +170,7 @@ impl SendPath {
             return Err(Error::HandshakeNotComplete);
         };
 
-        self.send_msg(Message::build_key_update_request(), true, tls);
+        self.send_msg(Message::build_key_update_request(), true, tls)?;
         ks.update_encrypter(self);
         self.key_update_local = KeyUpdateLocal::Outstanding;
         self.tls13_key_schedule = Some(ks);
@@ -181,21 +183,23 @@ impl SendOutput for SendPath {
         self.negotiated_version = Some(version);
     }
 
-    fn queue_requested_key_update(&mut self) {
+    fn queue_requested_key_update(&mut self) -> Result<(), Error> {
         if let KeyUpdateRemote::Queued(_) = &self.key_update_remote {
-            return;
+            return Ok(());
         }
 
         let record = Record::<Payload<'static>>::from(Message::build_key_update_notify());
         let mut queued = Vec::new();
         self.encrypt_state
-            .encrypt_outgoing(record.borrow_outbound(), &mut queued);
+            .encrypt_outgoing(record.borrow_outbound(), &mut queued)?;
         self.key_update_remote = KeyUpdateRemote::Queued(queued);
 
         if let Some(mut ks) = self.tls13_key_schedule.take() {
             ks.update_encrypter_for_key_update(self);
             self.tls13_key_schedule = Some(ks);
         }
+
+        Ok(())
     }
 
     fn note_key_update_response(&mut self) {
@@ -213,9 +217,14 @@ impl SendOutput for SendPath {
         self.tls13_key_schedule = Some(schedule);
     }
 
-    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription, tls: &mut Vec<u8>) {
+    fn send_alert(
+        &mut self,
+        level: AlertLevel,
+        desc: AlertDescription,
+        tls: &mut Vec<u8>,
+    ) -> Result<(), Error> {
         match level {
-            AlertLevel::Fatal if self.has_sent_fatal_alert => return,
+            AlertLevel::Fatal if self.has_sent_fatal_alert => return Ok(()),
             AlertLevel::Fatal => self.has_sent_fatal_alert = true,
             _ => {}
         };
@@ -224,7 +233,7 @@ impl SendOutput for SendPath {
             Message::build_alert(level, desc),
             self.encrypt_state.is_encrypting(),
             tls,
-        );
+        )
     }
 
     fn start_traffic(&mut self) {
@@ -233,7 +242,12 @@ impl SendOutput for SendPath {
     }
 
     /// Send a raw TLS message, fragmenting it if needed.
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, tls: &mut Vec<u8>) {
+    fn send_msg(
+        &mut self,
+        m: Message<'_>,
+        must_encrypt: bool,
+        tls: &mut Vec<u8>,
+    ) -> Result<(), Error> {
         let record = Record::from(m);
         let fragments = self.fragmenter.fragment(
             record.typ,
@@ -295,7 +309,7 @@ enum KeyUpdateRemote {
 pub(crate) trait SendOutput {
     fn negotiated_version(&mut self, version: ProtocolVersion);
 
-    fn queue_requested_key_update(&mut self);
+    fn queue_requested_key_update(&mut self) -> Result<(), Error>;
 
     fn note_key_update_response(&mut self);
 
@@ -303,9 +317,19 @@ pub(crate) trait SendOutput {
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>);
 
-    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription, tls: &mut Vec<u8>);
+    fn send_alert(
+        &mut self,
+        level: AlertLevel,
+        desc: AlertDescription,
+        tls: &mut Vec<u8>,
+    ) -> Result<(), Error>;
 
     fn start_traffic(&mut self);
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, tls: &mut Vec<u8>);
+    fn send_msg(
+        &mut self,
+        m: Message<'_>,
+        must_encrypt: bool,
+        tls: &mut Vec<u8>,
+    ) -> Result<(), Error>;
 }

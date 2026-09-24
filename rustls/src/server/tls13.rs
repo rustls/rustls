@@ -178,9 +178,9 @@ mod client_hello {
                     input.client_hello.session_id,
                     output,
                     kx_group.name(),
-                );
+                )?;
                 if !st.protocol.is_quic() {
-                    emit_fake_ccs(output);
+                    emit_fake_ccs(output)?;
                 }
 
                 let skip_early_data = max_early_data_size(st.config.max_early_data_size);
@@ -266,7 +266,7 @@ mod client_hello {
                 &st.config,
             )?;
             if !st.previous_hello.is_some() && !st.protocol.is_quic() {
-                emit_fake_ccs(output);
+                emit_fake_ccs(output)?;
             }
 
             output.output(OutputEvent::HandshakeKind(
@@ -354,7 +354,7 @@ mod client_hello {
                 key_schedule,
                 &st.config,
                 &input.proof,
-            );
+            )?;
 
             if !doing_client_auth && st.config.send_half_rtt_data {
                 // Application data can be sent immediately after Finished, in one
@@ -564,7 +564,7 @@ mod client_hello {
 
         trace!("sending server hello {sh:?}");
         transcript.add_message(&sh);
-        output.send_msg(sh, false);
+        output.send_msg(sh, false)?;
 
         // Start key schedule
         let key_schedule_pre_handshake = if let Some((_, psk)) = resuming {
@@ -606,12 +606,12 @@ mod client_hello {
         Ok(key_schedule)
     }
 
-    fn emit_fake_ccs(output: &mut dyn Output<'_>) {
+    fn emit_fake_ccs(output: &mut dyn Output<'_>) -> Result<(), Error> {
         let m = Message {
             version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         };
-        output.send_msg(m, false);
+        output.send_msg(m, false)
     }
 
     fn emit_hello_retry_request(
@@ -620,7 +620,7 @@ mod client_hello {
         session_id: SessionId,
         output: &mut dyn Output<'_>,
         group: NamedGroup,
-    ) {
+    ) -> Result<(), Error> {
         let req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
             session_id,
@@ -642,7 +642,7 @@ mod client_hello {
         trace!("Requesting retry {m:?}");
         transcript.rollup_for_hrr();
         transcript.add_message(&m);
-        output.send_msg(m, false);
+        output.send_msg(m, false)
     }
 
     fn decide_if_early_data_allowed(
@@ -849,7 +849,7 @@ mod client_hello {
         key_schedule: KeyScheduleHandshake,
         config: &ServerConfig,
         proof: &HandshakeAlignedProof,
-    ) -> KeyScheduleTrafficWithClientFinishedPending {
+    ) -> Result<KeyScheduleTrafficWithClientFinishedPending, Error> {
         let handshake_hash = flight.transcript.current_hash();
         let verify_data = key_schedule.sign_server_finish(&handshake_hash, proof);
         let verify_data_payload = Payload::new(verify_data.as_ref());
@@ -859,16 +859,16 @@ mod client_hello {
         trace!("sending finished {fin:?}");
         flight.add(fin);
         let hash_at_server_fin = flight.transcript.current_hash();
-        flight.finish(output);
+        flight.finish(output)?;
 
         // Now move to application data keys.  Read key change is deferred until
         // the Finish message is received & validated.
-        key_schedule.into_traffic_with_client_finished_pending(
+        Ok(key_schedule.into_traffic_with_client_finished_pending(
             hash_at_server_fin,
             &*config.key_log,
             &randoms.client,
             output,
-        )
+        ))
     }
 }
 
@@ -1486,7 +1486,7 @@ impl State<ServerSide> for ExpectFinished {
                 &self.hs.config,
             )?;
         }
-        flight.finish(output);
+        flight.finish(output)?;
 
         let (key_schedule_send, key_schedule_recv) = key_schedule_traffic.split();
 
@@ -1554,7 +1554,7 @@ impl ExpectTraffic {
             KeyUpdateRequest::UpdateNotRequested => output.send().note_key_update_response(),
             KeyUpdateRequest::UpdateRequested => output
                 .send()
-                .queue_requested_key_update(),
+                .queue_requested_key_update()?,
             _ => return Err(InvalidMessage::InvalidKeyUpdate.into()),
         }
 

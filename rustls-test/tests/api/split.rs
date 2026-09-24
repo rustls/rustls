@@ -74,7 +74,9 @@ fn split_pairwise() {
     );
 
     let mut flight = Vec::new();
-    client_send.write(b"client to server".as_slice().into(), &mut flight);
+    client_send
+        .write(b"client to server".as_slice().into(), &mut flight)
+        .unwrap();
     server_recv = check_receive_all(
         server_recv,
         flight,
@@ -86,7 +88,9 @@ fn split_pairwise() {
     .unwrap();
 
     let mut flight = Vec::new();
-    server_send.write(b"server to client".as_slice().into(), &mut flight);
+    server_send
+        .write(b"server to client".as_slice().into(), &mut flight)
+        .unwrap();
     client_recv = check_receive_all(
         client_recv,
         flight,
@@ -98,10 +102,10 @@ fn split_pairwise() {
     .unwrap();
 
     let mut flight = Vec::new();
-    client_send.close(&mut flight);
+    client_send.close(&mut flight).unwrap();
     check_receive_all(server_recv, flight, ExpectCloseNotify);
     let mut flight = Vec::new();
-    server_send.close(&mut flight);
+    server_send.close(&mut flight).unwrap();
     check_receive_all(client_recv, flight, ExpectCloseNotify);
 }
 
@@ -136,7 +140,9 @@ fn split_incremental() {
     } = server.split().unwrap();
 
     let mut flight = Vec::new();
-    client_send.write(b"client to server".as_slice().into(), &mut flight);
+    client_send
+        .write(b"client to server".as_slice().into(), &mut flight)
+        .unwrap();
 
     // messages are not consumed until they are fully provided.
     for ll in 1..flight.len() - 1 {
@@ -245,7 +251,9 @@ fn key_update() {
     .unwrap();
 
     let mut flight = Vec::new();
-    server_send.write(b"server to client".as_slice().into(), &mut flight);
+    server_send
+        .write(b"server to client".as_slice().into(), &mut flight)
+        .unwrap();
     check_receive_all(
         client_recv,
         flight,
@@ -256,7 +264,9 @@ fn key_update() {
     );
 
     let mut flight = Vec::new();
-    client_send.write(b"client to server".as_slice().into(), &mut flight);
+    client_send
+        .write(b"client to server".as_slice().into(), &mut flight)
+        .unwrap();
     check_receive_all(
         server_recv,
         flight,
@@ -301,7 +311,9 @@ fn key_update_alongside_data() {
     client_send
         .refresh_traffic_keys(&mut flight)
         .unwrap();
-    client_send.write(b"client to server".as_slice().into(), &mut flight);
+    client_send
+        .write(b"client to server".as_slice().into(), &mut flight)
+        .unwrap();
     check_receive_all(
         server_recv,
         flight,
@@ -343,8 +355,10 @@ fn close_alongside_data() {
     } = server.split().unwrap();
 
     let mut flight = Vec::new();
-    client_send.write(b"client to server".as_slice().into(), &mut flight);
-    client_send.close(&mut flight);
+    client_send
+        .write(b"client to server".as_slice().into(), &mut flight)
+        .unwrap();
+    client_send.close(&mut flight).unwrap();
     flight.extend(b"rubbish");
 
     // receive of appdata does not consume subsequent data
@@ -391,7 +405,7 @@ fn read_invalid_data_and_send_alert() {
     );
 
     client_output.clear();
-    send.close(&mut client_output);
+    send.close(&mut client_output).unwrap();
 
     server_input
         .read(&mut Cursor::new(&mut client_output))
@@ -423,7 +437,9 @@ fn kernel_conversion_fails_with_pending_send_data() {
         outputs: server_outputs,
     } = split_server_with_queued_key_update();
     let mut flight = Vec::new();
-    server_send.write(OutboundPlain::new_empty(), &mut flight);
+    server_send
+        .write(OutboundPlain::new_empty(), &mut flight)
+        .unwrap();
     assert!(!flight.is_empty());
     SplitConnection {
         send: server_send,

@@ -171,7 +171,9 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
         client
             .write(message.as_bytes().into(), &mut output)
             .unwrap();
-        client.send_close_notify(&mut output);
+        client
+            .send_close_notify(&mut output)
+            .unwrap();
         tcp_stream.write_all(&output).unwrap();
         tcp_stream.flush().unwrap();
     }
