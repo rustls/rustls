@@ -413,6 +413,11 @@ impl<'a> EncryptBuffer<'a> {
         }
     }
 
+    /// Wrap all of `out`, none of which has been written yet.
+    pub(super) fn whole(buf: &'a mut [u8]) -> Self {
+        Self { buf, used: 0 }
+    }
+
     /// Append bytes from an `OutboundPlain`'s chunks.
     ///
     /// Panics if the write would extend beyond the `len` given to [`Self::new()`],

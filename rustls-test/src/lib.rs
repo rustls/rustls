@@ -9,7 +9,8 @@ use rustls::client::{
     ClientSessionKey, ServerVerifierBuilder, Tls13Session, WantsClientCert, WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{
-    EncodableVersion, InboundOpaque, Payload, Record, RecordDecrypter, RecordEncrypter,
+    EncodableVersion, EncryptInput, InboundOpaque, Payload, Record, RecordDecrypter,
+    RecordEncrypter,
 };
 use rustls::crypto::kx::{NamedGroup, SupportedKxGroup};
 use rustls::crypto::{
@@ -1478,6 +1479,7 @@ impl ClientVerifier for MockClientVerifier {
 /// It consumes one of the peers, extracts its secrets, and then reconstitutes the
 /// message encrypter/decrypter.  It does not do fragmentation/joining.
 pub struct RawTls {
+    version: ProtocolVersion,
     encrypter: Box<dyn RecordEncrypter>,
     enc_seq: u64,
     decrypter: Box<dyn RecordDecrypter>,
@@ -1510,6 +1512,12 @@ impl RawTls {
             tx: (tx_seq, tx_keys),
             rx: (rx_seq, rx_keys),
         } = secrets;
+
+        let version = match suite {
+            SupportedCipherSuite::Tls12(_) => ProtocolVersion::TLSv1_2,
+            SupportedCipherSuite::Tls13(_) => ProtocolVersion::TLSv1_3,
+            _ => unreachable!("only TLS1.2 and TLS1.3 cipher suites exist"),
+        };
 
         let encrypter = match (tx_keys, suite) {
             (
@@ -1552,6 +1560,7 @@ impl RawTls {
         };
 
         Self {
+            version,
             encrypter,
             enc_seq: tx_seq,
             decrypter,
@@ -1571,21 +1580,17 @@ impl RawTls {
                     .encrypter
                     .encrypted_payload_len(msg.payload.len())
         ];
-        let encrypted = self
-            .encrypter
-            .encrypt(msg, self.enc_seq, &mut record[HEADER_SIZE..])
-            .unwrap();
+        let (header, payload) = record.split_at_mut(HEADER_SIZE);
+        let (version, len) = (msg.version.encode(), payload.len());
+        let input =
+            EncryptInput::new(&*self.encrypter, self.version, msg, self.enc_seq, payload).unwrap();
+        let typ = input.record_type();
+        self.encrypter.encrypt(input).unwrap();
 
         // Encode the TLS record header: 1 byte type, 2 bytes version, 2 bytes length
-        let (typ, version, len) = (
-            encrypted.typ,
-            encrypted.version.encode(),
-            encrypted.payload.len(),
-        );
-        record.truncate(HEADER_SIZE + len);
-        record[0] = typ.into();
-        record[1..3].copy_from_slice(&version.to_array());
-        record[3..5].copy_from_slice(&(len as u16).to_be_bytes());
+        header[0] = typ.into();
+        header[1..3].copy_from_slice(&version.to_array());
+        header[3..5].copy_from_slice(&(len as u16).to_be_bytes());
 
         self.enc_seq += 1;
         peer_input
@@ -2004,7 +2009,7 @@ pub fn certificate_error_expecting_name(expected: &str) -> CertificateError {
 mod plaintext {
     use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
-        AeadKey, EncryptBuffer, InboundOpaque, Iv, OutboundPlain, RecordDecrypter, RecordEncrypter,
+        AeadKey, EncryptInput, InboundOpaque, Iv, RecordDecrypter, RecordEncrypter,
         Tls13AeadAlgorithm, UnsupportedOperationError,
     };
 
@@ -2037,24 +2042,15 @@ mod plaintext {
     struct Encrypter;
 
     impl RecordEncrypter for Encrypter {
-        fn encrypt<'a>(
-            &mut self,
-            record: Record<OutboundPlain<'_>>,
-            _seq: u64,
-            out: &'a mut [u8],
-        ) -> Result<Record<&'a [u8]>, Error> {
-            let mut payload = EncryptBuffer::new(out, record.payload.len())?;
-            payload.extend_from_chunks(&record.payload);
-
-            Ok(Record {
-                typ: ContentType::ApplicationData,
-                version: record.version,
-                payload: payload.into_written(),
-            })
+        fn encrypt<'a>(&mut self, mut input: EncryptInput<'a>) -> Result<(), Error> {
+            // Gathering the plaintext (and the inner content type) into the output is all
+            // the "encryption" this does.
+            input.collect(&[]);
+            Ok(())
         }
 
         fn encrypted_payload_len(&self, payload_len: usize) -> usize {
-            payload_len
+            payload_len + 1
         }
     }
 

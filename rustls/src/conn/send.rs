@@ -204,9 +204,14 @@ impl SendOutput for SendPath {
         }
     }
 
-    fn set_encrypter(&mut self, encrypter: Box<dyn RecordEncrypter>, max_records: u64) {
+    fn set_encrypter(
+        &mut self,
+        version: ProtocolVersion,
+        encrypter: Box<dyn RecordEncrypter>,
+        max_records: u64,
+    ) {
         self.encrypt_state
-            .set_record_encrypter(encrypter, max_records);
+            .set_record_encrypter(version, encrypter, max_records);
     }
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>) {
@@ -299,7 +304,12 @@ pub(crate) trait SendOutput {
 
     fn note_key_update_response(&mut self);
 
-    fn set_encrypter(&mut self, cipher: Box<dyn RecordEncrypter>, max_records: u64);
+    fn set_encrypter(
+        &mut self,
+        version: ProtocolVersion,
+        cipher: Box<dyn RecordEncrypter>,
+        max_records: u64,
+    );
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>);
 
