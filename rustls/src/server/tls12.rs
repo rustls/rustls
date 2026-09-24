@@ -360,6 +360,7 @@ mod client_hello {
 
         let (dec, encrypter) = secrets.make_cipher_pair(Side::Server);
         output.send().set_encrypter(Encrypter {
+            version: ProtocolVersion::TLSv1_2,
             encrypter,
             limit: secrets
                 .suite()
@@ -1032,6 +1033,7 @@ impl State<ServerSide> for ExpectFinished {
             }
             emit_ccs(output)?;
             output.send().set_encrypter(Encrypter {
+                version: ProtocolVersion::TLSv1_2,
                 encrypter,
                 limit: self
                     .secrets

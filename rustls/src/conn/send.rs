@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 
 use super::{DataKind, SEQ_HARD_LIMIT, SEQ_SOFT_LIMIT};
 use crate::crypto::cipher::{
-    EncodableVersion, OutboundPlain, Record, RecordEncrypter, encode_record_header,
+    EncodableVersion, EncryptInput, OutboundPlain, Record, RecordEncrypter, encode_record_header,
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, ApiMisuse, Error};
@@ -290,6 +290,7 @@ enum EncryptionState {
 impl EncryptionState {
     fn set_encrypter(&mut self, encrypter: Encrypter) {
         let Encrypter {
+            version,
             encrypter,
             limit: max_records,
         } = encrypter;
@@ -297,6 +298,7 @@ impl EncryptionState {
         match self {
             Self::Handshake => {
                 *self = Self::Encrypting(Encrypting {
+                    version,
                     encrypter,
                     write_seq_max: Ord::min(SEQ_SOFT_LIMIT, max_records),
                     write_seq: 0,
@@ -317,6 +319,7 @@ impl EncryptionState {
 }
 
 struct Encrypting {
+    version: ProtocolVersion,
     encrypter: Box<dyn RecordEncrypter>,
     write_seq_max: u64,
     write_seq: u64,
@@ -406,28 +409,17 @@ impl Encrypting {
         let seq = self.write_seq;
         self.write_seq += 1;
 
-        #[cfg(debug_assertions)]
-        let (out_ptr, out_len) = (out.as_ptr(), out.len());
-        let encrypted = self
+        let len = self
             .encrypter
-            .encrypt(plain, seq, &mut out[HEADER_SIZE..])?;
+            .encrypted_payload_len(plain.payload.len());
+        let wire_version = plain.version;
+        let (header, payload) = out.split_at_mut(HEADER_SIZE);
+        let input = EncryptInput::new(&*self.encrypter, plain, seq, payload, self.version).unwrap();
+        let typ = input.record_type();
+        self.encrypter.encrypt(input)?;
 
-        #[cfg(debug_assertions)]
-        {
-            // `RecordEncrypter::encrypt()` requires the returned payload to be
-            // the written prefix of the passed-in buffer. Try to catch misbehaving
-            // implementations in debug mode. In release builds a violation would corrupt
-            // the sent stream.
-            debug_assert_eq!(
-                encrypted.payload.as_ptr(),
-                out_ptr.wrapping_add(HEADER_SIZE)
-            );
-            debug_assert!(encrypted.payload.len() <= out_len - HEADER_SIZE);
-        }
-
-        let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
         debug_assert!(len <= usize::from(u16::MAX));
-        out[..HEADER_SIZE].copy_from_slice(&encode_record_header(typ, version, len as u16));
+        header.copy_from_slice(&encode_record_header(typ, wire_version, len as u16));
         Ok(HEADER_SIZE + len)
     }
 
@@ -442,7 +434,9 @@ impl Encrypting {
             return Err(Error::HandshakeNotComplete);
         };
 
-        let Encrypter { encrypter, limit } = ks.update_encrypter();
+        let Encrypter {
+            encrypter, limit, ..
+        } = ks.update_encrypter();
         self.key_update_local = KeyUpdateLocal::Outstanding;
         self.encrypter = encrypter;
         self.write_seq_max = Ord::min(SEQ_SOFT_LIMIT, limit);
@@ -537,6 +531,7 @@ pub(crate) trait SendOutput {
 }
 
 pub(crate) struct Encrypter {
+    pub(crate) version: ProtocolVersion,
     pub(crate) encrypter: Box<dyn RecordEncrypter>,
     pub(crate) limit: u64,
 }
@@ -552,6 +547,7 @@ mod tests {
     fn encrypt_records_checks_limits_for_all_records() {
         let encrypt = |write_seq_max, write_seq, records| {
             let mut encrypting = Encrypting {
+                version: ProtocolVersion::TLSv1_3,
                 encrypter: Box::new(Tls13Cipher),
                 write_seq_max,
                 write_seq,

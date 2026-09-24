@@ -5,9 +5,8 @@ use std::sync::Arc;
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::ServerVerifier;
 use rustls::crypto::cipher::{
-    AeadKey, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape, OutboundPlain, Record,
-    RecordDecrypter, RecordEncrypter, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
-    UnsupportedOperationError,
+    AeadKey, EncryptInput, InboundOpaque, Iv, KeyBlockShape, Record, RecordDecrypter,
+    RecordEncrypter, Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError,
 };
 use rustls::crypto::kx::{
     KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup,
@@ -17,7 +16,6 @@ use rustls::crypto::{
     SelectedCredential, SignatureScheme, TicketProducer, WebPkiSupportedAlgorithms, hash, tls12,
     tls13,
 };
-use rustls::enums::ContentType;
 use rustls::error::{PeerIncompatible, PeerMisbehaved};
 use rustls::pki_types::{
     AlgorithmIdentifier, CertificateDer, FipsStatus, InvalidSignature, PrivateKeyDer,
@@ -318,18 +316,9 @@ impl Tls12AeadAlgorithm for Aead {
 struct Tls13Cipher;
 
 impl RecordEncrypter for Tls13Cipher {
-    fn encrypt<'a>(
-        &mut self,
-        record: Record<OutboundPlain<'_>>,
-        seq: u64,
-        out: &'a mut [u8],
-    ) -> Result<Record<&'a [u8]>, Error> {
-        let total_len = self.encrypted_payload_len(record.payload.len());
-        let mut payload = EncryptBuffer::new(out, total_len)?;
-
-        payload.extend_from_chunks(&record.payload);
-        payload.extend_from_slice(&record.typ.to_array());
-
+    fn encrypt<'a>(&mut self, mut input: EncryptInput<'a>) -> Result<(), Error> {
+        let seq = input.seq();
+        let mut payload = input.collect(&[]);
         for (p, mask) in payload
             .as_mut()
             .iter_mut()
@@ -340,12 +329,7 @@ impl RecordEncrypter for Tls13Cipher {
 
         payload.extend_from_slice(&seq.to_be_bytes());
         payload.extend_from_slice(AEAD_TAG);
-
-        Ok(Record {
-            typ: ContentType::ApplicationData,
-            version: record.version,
-            payload: payload.into_written(),
-        })
+        Ok(())
     }
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
@@ -388,16 +372,9 @@ impl RecordDecrypter for Tls13Cipher {
 struct Tls12Cipher;
 
 impl RecordEncrypter for Tls12Cipher {
-    fn encrypt<'a>(
-        &mut self,
-        record: Record<OutboundPlain<'_>>,
-        seq: u64,
-        out: &'a mut [u8],
-    ) -> Result<Record<&'a [u8]>, Error> {
-        let total_len = self.encrypted_payload_len(record.payload.len());
-        let mut payload = EncryptBuffer::new(out, total_len)?;
-        payload.extend_from_chunks(&record.payload);
-
+    fn encrypt<'a>(&mut self, mut input: EncryptInput<'a>) -> Result<(), Error> {
+        let seq = input.seq();
+        let mut payload = input.collect(&[]);
         for (p, mask) in payload
             .as_mut()
             .iter_mut()
@@ -408,12 +385,7 @@ impl RecordEncrypter for Tls12Cipher {
 
         payload.extend_from_slice(&seq.to_be_bytes());
         payload.extend_from_slice(AEAD_TAG);
-
-        Ok(Record {
-            typ: record.typ,
-            version: record.version,
-            payload: payload.into_written(),
-        })
+        Ok(())
     }
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {

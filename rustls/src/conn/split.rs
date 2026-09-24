@@ -610,6 +610,7 @@ mod tests {
             .unwrap()));
         assert!(!send_flag_for(|adapter| adapter.note_key_update_response()));
         assert!(!send_flag_for(|adapter| adapter.set_encrypter(Encrypter {
+            version: ProtocolVersion::TLSv1_3,
             encrypter: Box::new(Tls13Cipher),
             limit: 1234,
         })));
@@ -631,6 +632,7 @@ mod tests {
     fn pending_send_data() {
         let mut send = SendPath::default();
         send.set_encrypter(Encrypter {
+            version: ProtocolVersion::TLSv1_3,
             encrypter: Box::new(Tls13Cipher),
             limit: 1234,
         });
@@ -678,6 +680,7 @@ mod tests {
     fn send_flag_for(f: impl FnOnce(&mut SendAdapter<'_>)) -> bool {
         let mut send = SendPath::default();
         send.set_encrypter(Encrypter {
+            version: ProtocolVersion::TLSv1_3,
             encrypter: Box::new(Tls13Cipher),
             limit: 1234,
         });

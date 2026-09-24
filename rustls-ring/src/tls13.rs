@@ -5,11 +5,10 @@ use ring::hkdf::{self, KeyType};
 use ring::{aead, hmac};
 use rustls::crypto::CipherSuite;
 use rustls::crypto::cipher::{
-    AeadKey, EncryptBuffer, InboundOpaque, Iv, Nonce, OutboundPlain, Record, RecordDecrypter,
-    RecordEncrypter, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, EncryptInput, InboundOpaque, Iv, Nonce, Record, RecordDecrypter, RecordEncrypter,
+    Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
-use rustls::enums::ContentType;
 use rustls::error::Error;
 use rustls::version::TLS13_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite, crypto};
@@ -208,21 +207,13 @@ struct Tls13RecordDecrypter {
 }
 
 impl RecordEncrypter for Tls13RecordEncrypter {
-    fn encrypt<'a>(
-        &mut self,
-        record: Record<OutboundPlain<'_>>,
-        seq: u64,
-        out: &'a mut [u8],
-    ) -> Result<Record<&'a [u8]>, Error> {
-        let total_len = self.encrypted_payload_len(record.payload.len());
-        let mut payload = EncryptBuffer::new(out, total_len)?;
+    fn encrypt<'a>(&mut self, mut input: EncryptInput<'a>) -> Result<(), Error> {
+        let nonce = aead::Nonce::assume_unique_for_key(input.nonce(&self.iv).to_array()?);
+        let aad = aead::Aad::from(input.aad());
 
-        let typ = ContentType::ApplicationData;
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(typ, record.version.encode(), total_len));
-        payload.extend_from_chunks(&record.payload);
-        payload.extend_from_slice(&record.typ.to_array());
-
+        // The plaintext is gathered into the output and then sealed in place: `ring`
+        // has no out-of-place seal.
+        let mut payload = input.collect(&[]);
         match self
             .enc_key
             .seal_in_place_separate_tag(nonce, aad, payload.as_mut())
@@ -231,11 +222,7 @@ impl RecordEncrypter for Tls13RecordEncrypter {
             Err(_) => return Err(Error::EncryptError),
         }
 
-        Ok(Record {
-            typ,
-            version: record.version,
-            payload: payload.into_written(),
-        })
+        Ok(())
     }
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {

@@ -9,6 +9,7 @@ use crate::crypto::cipher::{AeadKey, Iv, RecordDecrypter, Tls13AeadAlgorithm};
 use crate::crypto::kx::SharedSecret;
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expand};
 use crate::crypto::{hash, hmac};
+use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error};
 use crate::key_log::KeyLog;
 use crate::msgs::HandshakeAlignedProof;
@@ -940,6 +941,7 @@ impl KeyScheduleSuite {
         let iv = derive_traffic_iv(expander.as_ref(), suite.aead_alg.iv_len());
 
         Encrypter {
+            version: ProtocolVersion::TLSv1_3,
             encrypter: suite.aead_alg.encrypter(key, iv),
             limit: suite.common.confidentiality_limit,
         }

@@ -910,6 +910,7 @@ impl VerifySidePeerIdentity<ClientSide> for AwaitServerIdentityVerification {
 
         let (dec, encrypter) = secrets.make_cipher_pair(Side::Client);
         output.send().set_encrypter(Encrypter {
+            version: ProtocolVersion::TLSv1_2,
             encrypter,
             limit: secrets
                 .suite()
@@ -1145,6 +1146,7 @@ impl State<ClientSide> for ExpectFinished {
         if let Some((_, encrypter)) = st.resuming.take() {
             emit_ccs(output)?;
             output.send().set_encrypter(Encrypter {
+                version: ProtocolVersion::TLSv1_2,
                 encrypter,
                 limit: st
                     .secrets
