@@ -15,7 +15,7 @@ use super::{
     ConnectionCommon, NeedsInput, SideCommonOutput, SideData, StateMachine, VerifySidePeerIdentity,
 };
 use crate::client::{ClientSide, ClientState};
-use crate::common_state::maybe_send_fatal_alert;
+use crate::common_state::{Protocol, maybe_send_fatal_alert};
 use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::Payload;
 use crate::error::Error;
@@ -335,9 +335,14 @@ impl<Side: SideData, T: Transport> fmt::Debug for VerifyPeerIdentity<Side, T> {
 pub trait Transport: Sized + sealed::Transport {}
 
 pub(crate) mod sealed {
+    use super::QuicOutput;
+    use crate::Protocol;
+
     pub(crate) trait Transport {
+        fn protocol(&self) -> Protocol;
+
         /// The sink for QUIC-specific events.
-        fn quic(&mut self) -> Option<&mut dyn super::QuicOutput>;
+        fn quic(&mut self) -> Option<&mut dyn QuicOutput>;
     }
 }
 
@@ -348,6 +353,10 @@ pub struct Tcp;
 impl Transport for Tcp {}
 
 impl sealed::Transport for Tcp {
+    fn protocol(&self) -> Protocol {
+        Protocol::Tcp
+    }
+
     fn quic(&mut self) -> Option<&mut dyn QuicOutput> {
         None
     }

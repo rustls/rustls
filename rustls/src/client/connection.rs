@@ -7,7 +7,7 @@ use pki_types::{FipsStatus, ServerName};
 use super::config::ClientConfig;
 use super::hs::{ClientHelloInput, ClientState};
 use crate::client::EchStatus;
-use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
+use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
@@ -186,7 +186,6 @@ impl ClientConnectionBuilder {
                 name,
                 ClientExtensionsInput::from_alpn(alpn_protocols),
                 Tcp,
-                Protocol::Tcp,
                 tls,
             )?,
         })
@@ -236,14 +235,7 @@ impl ClientConnectionBuilder {
         };
 
         let mut tls = Vec::new();
-        let inner = ConnectionCommon::for_client(
-            self.config,
-            self.name,
-            exts,
-            quic,
-            Protocol::Quic(version),
-            &mut tls,
-        )?;
+        let inner = ConnectionCommon::for_client(self.config, self.name, exts, quic, &mut tls)?;
 
         // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
         debug_assert!(tls.is_empty());
@@ -273,7 +265,6 @@ impl ClientConnectionBuilder {
             name,
             ClientExtensionsInput::from_alpn(alpn_protocols),
             Tcp,
-            Protocol::Tcp,
             tls,
         )?))
     }
@@ -386,7 +377,6 @@ impl<T: Transport> ConnectionCommon<ClientSide, T> {
         name: ServerName<'static>,
         extra_exts: ClientExtensionsInput,
         mut transport: T,
-        protocol: Protocol,
         tls: &mut Vec<u8>,
     ) -> Result<Self, Error> {
         let mut common_state = CommonState::new(Side::Client, config.fips());
@@ -395,6 +385,7 @@ impl<T: Transport> ConnectionCommon<ClientSide, T> {
             .set_max_fragment_size(config.max_fragment_size)?;
         let mut data = ClientData::default();
 
+        let protocol = transport.protocol();
         let mut output = SideCommonOutput {
             side: &mut data,
             quic: transport.quic(),

@@ -10,7 +10,7 @@ pub use crate::common_state::Side;
 use crate::common_state::{ConnectionOutputs, Protocol};
 use crate::conn::{
     Accepted, ConnectionCommon, KeyingMaterialExporter, MessageIter, MessageIterMode, ServerNext,
-    SideData, Transport, VerifyPeerIdentity,
+    SideData, Transport, VerifyPeerIdentity, sealed,
 };
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
@@ -175,7 +175,6 @@ impl ServerConnection {
                     version,
                     ..Quic::default()
                 },
-                Protocol::Quic(version),
             )?,
         })
     }
@@ -298,13 +297,10 @@ impl ServerHandshake {
     ///
     /// The returned object should be fed data from a single potential client.
     pub fn start(version: Version) -> NeedsInput {
-        NeedsInput(ConnectionCommon::for_acceptor(
-            Quic {
-                version,
-                ..Quic::default()
-            },
-            Protocol::Quic(version),
-        ))
+        NeedsInput(ConnectionCommon::for_acceptor(Quic {
+            version,
+            ..Quic::default()
+        }))
     }
 
     pub(crate) fn from_core(
@@ -522,7 +518,11 @@ impl Quic {
 
 impl Transport for Quic {}
 
-impl crate::conn::sealed::Transport for Quic {
+impl sealed::Transport for Quic {
+    fn protocol(&self) -> Protocol {
+        Protocol::Quic(self.version)
+    }
+
     fn quic(&mut self) -> Option<&mut dyn QuicOutput> {
         Some(self)
     }
