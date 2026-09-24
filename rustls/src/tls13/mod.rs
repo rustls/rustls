@@ -50,18 +50,18 @@ pub struct Tls13CipherSuite {
 
     /// How to complete HKDF with the suite's hash function.
     ///
-    /// If you have a HKDF implementation, you should directly implement the `crypto::tls13::Hkdf`
+    /// If you have a HKDF implementation, you should directly implement the [`crypto::tls13::Hkdf`]
     /// trait (and associated).
     ///
     /// If not, you can implement the [`crypto::hmac::Hmac`] trait (and associated), and then use
     /// [`crypto::tls13::HkdfUsingHmac`].
     pub hkdf_provider: &'static dyn crypto::tls13::Hkdf,
 
-    /// How to produce a [RecordDecrypter] or [RecordEncrypter]
+    /// How to produce a [`RecordDecrypter`] or [`RecordEncrypter`]
     /// from raw key material.
     ///
-    /// [RecordDecrypter]: crate::crypto::cipher::RecordDecrypter
-    /// [RecordEncrypter]: crate::crypto::cipher::RecordEncrypter
+    /// [`RecordDecrypter`]: crate::crypto::cipher::RecordDecrypter
+    /// [`RecordEncrypter`]: crate::crypto::cipher::RecordEncrypter
     pub aead_alg: &'static dyn crypto::cipher::Tls13AeadAlgorithm,
 
     /// How to create QUIC header and record protection algorithms

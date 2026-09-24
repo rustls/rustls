@@ -189,7 +189,7 @@ impl Tls13Session {
         self.quic_params.encode(buf);
     }
 
-    /// Test only: replace `max_early_data_size` with `new`
+    /// Test only: CAS `max_early_data_size` from `expected` to `desired`
     #[doc(hidden)]
     pub fn _reset_max_early_data_size(&mut self, expected: u32, desired: u32) {
         assert_eq!(

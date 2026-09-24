@@ -19,26 +19,26 @@ pub use messages::{
 mod record_layer;
 pub(crate) use record_layer::{Decrypted, DecryptionState, EncryptionState, PreEncryptAction};
 
-/// Factory trait for building `RecordEncrypter` and `RecordDecrypter` for a TLS1.3 cipher suite.
+/// Factory trait for building [`RecordEncrypter`] and [`RecordDecrypter`] for a TLS1.3 cipher suite.
 pub trait Tls13AeadAlgorithm: Send + Sync {
-    /// Build a `RecordEncrypter` for the given key/iv.
+    /// Build a [`RecordEncrypter`] for the given key/iv.
     fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordEncrypter>;
 
-    /// Build a `RecordDecrypter` for the given key/iv.
+    /// Build a [`RecordDecrypter`] for the given key/iv.
     fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn RecordDecrypter>;
 
-    /// The length of key in bytes required by `encrypter()` and `decrypter()`.
+    /// The length of key in bytes required by [`Self::encrypter()`] and [`Self::decrypter()`].
     fn key_len(&self) -> usize;
 
-    /// The length of IV in bytes required by `encrypter()` and `decrypter()`.
+    /// The length of IV in bytes required by [`Self::encrypter()`] and [`Self::decrypter()`].
     fn iv_len(&self) -> usize {
         NONCE_LEN
     }
 
-    /// Convert the key material from `key`/`iv`, into a `ConnectionTrafficSecrets` item.
+    /// Convert the key material from `key`/`iv`, into a [`ConnectionTrafficSecrets`] item.
     ///
     /// May return [`UnsupportedOperationError`] if the AEAD algorithm is not a supported
-    /// variant of `ConnectionTrafficSecrets`.
+    /// variant of [`ConnectionTrafficSecrets`].
     fn extract_keys(
         &self,
         key: AeadKey,
@@ -51,7 +51,7 @@ pub trait Tls13AeadAlgorithm: Send + Sync {
     }
 }
 
-/// Factory trait for building `RecordEncrypter` and `RecordDecrypter` for a TLS1.2 cipher suite.
+/// Factory trait for building [`RecordEncrypter`] and [`RecordDecrypter`] for a TLS1.2 cipher suite.
 pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
     /// Build a `RecordEncrypter` for the given key/iv and extra key block (which can be used for
     /// improving explicit nonce size security, if needed).
@@ -80,7 +80,7 @@ pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
     ///
     /// The length of `iv` is set by [`KeyBlockShape::fixed_iv_len`].
     ///
-    /// The length of `extra` is set by [`KeyBlockShape::explicit_nonce_len`].
+    /// The length of `explicit` is set by [`KeyBlockShape::explicit_nonce_len`].
     ///
     /// May return [`UnsupportedOperationError`] if the AEAD algorithm is not a supported
     /// variant of `ConnectionTrafficSecrets`.
@@ -291,7 +291,7 @@ impl Nonce {
     /// Returns an error if the nonce length is not `N`.
     ///
     /// For standard nonces, use `nonce.to_array::<NONCE_LEN>()?` or just `nonce.to_array()?`
-    /// which defaults to `NONCE_LEN`.
+    /// which defaults to [`NONCE_LEN`].
     pub fn to_array<const N: usize>(&self) -> Result<[u8; N], Error> {
         if self.len != N {
             return Err(ApiMisuse::NonceArraySizeMismatch {

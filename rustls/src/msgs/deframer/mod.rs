@@ -104,14 +104,13 @@ impl Deframer {
 
     /// Accepts a message into the deframer.
     ///
-    /// `containing_buffer` allows mapping the message payload to its position
-    /// in the input buffer, and thereby avoid retaining a borrow on the input
-    /// buffer.
+    /// `bounds` allows mapping the message payload to its position in the input buffer,
+    /// and thereby avoid retaining a borrow on the input buffer.
     ///
     /// That is required because our processing of handshake messages requires
     /// them to be contiguous (and avoiding that would mean supporting gather-based
     /// parsing in a large number of places, including `core`, `webpki`, and the
-    /// `CryptoProvider` interface).  `coalesce()` arranges for that to happen, but
+    /// `CryptoProvider` interface).  [`Self::coalesce()`] arranges for that to happen, but
     /// to do so it needs to move the fragments together in the original buffer.
     /// This would not be possible if the messages were borrowing from that buffer.
     pub(crate) fn input_message(

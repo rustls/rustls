@@ -224,7 +224,7 @@ pub struct ReceiveTraffic<Side: SideData> {
 impl<Side: SideData> ReceiveTraffic<Side> {
     /// Receive application data from the peer.
     ///
-    /// `received_tls` is an instance of the receive buffer abstraction containing
+    /// `input` is an instance of the receive buffer abstraction containing
     /// TLS-protected data received from the peer.
     ///
     /// A [`ReceiveTrafficState`] is returned on success.

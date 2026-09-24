@@ -107,8 +107,9 @@ impl Debug for KeyLogFileInner {
 pub struct KeyLogFile(Mutex<KeyLogFileInner>);
 
 impl KeyLogFile {
-    /// Makes a new `KeyLogFile`.  The environment variable is
-    /// inspected and the named file is opened during this call.
+    /// Makes a new [`KeyLogFile`].
+    ///
+    /// The environment variable is inspected and the named file is opened during this call.
     pub fn new() -> Self {
         let var = var_os("SSLKEYLOGFILE");
         Self(Mutex::new(KeyLogFileInner::new(var)))

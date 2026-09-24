@@ -177,7 +177,7 @@ impl Credentials {
 
     /// Attempt to produce a `SelectedCredential` using one of the given signature schemes.
     ///
-    /// Calls [`SigningKey::choose_scheme()`] and propagates `cert_chain` and `ocsp`.
+    /// Calls [`SigningKey::choose_scheme()`] and propagates `identity` and `ocsp`.
     pub fn signer(&self, sig_schemes: &[SignatureScheme]) -> Option<SelectedCredential> {
         Some(SelectedCredential {
             identity: self.identity.clone(),

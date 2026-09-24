@@ -110,7 +110,7 @@ impl EchConfig {
 
     /// Build an EchConfig for retrying ECH using a retry config from a server's previous rejection
     ///
-    /// Returns an error if the server provided no retry configurations in `RejectedEch`, or if
+    /// Returns an error if the server provided no retry configurations in [`RejectedEch`], or if
     /// none of the retry configurations are compatible with the supported `hpke_suites`.
     pub fn for_retry(
         rejection: RejectedEch,

@@ -6,7 +6,7 @@ use crate::crypto::SelectedCredential;
 use crate::crypto::kx::NamedGroup;
 use crate::enums::CertificateType;
 
-/// An implementer of `ClientSessionStore` which does nothing.
+/// An implementer of [`ClientSessionStore`] which does nothing.
 #[derive(Debug)]
 pub(super) struct NoClientSessionStorage;
 

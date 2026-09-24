@@ -25,7 +25,7 @@ use crate::{ClientConfig, ServerConfig};
 /// This can be selected by passing in `rustls_aws_lc_rs::DEFAULT_PROVIDER`,
 /// which includes safe defaults for cipher suites and protocol versions.
 ///
-/// After choosing the `CryptoProvider`, you must choose (a) how to verify certificates and (b) what certificates
+/// After choosing the [`CryptoProvider`], you must choose (a) how to verify certificates and (b) what certificates
 /// (if any) to send to the peer. The methods to do this are specific to whether you're building a ClientConfig
 /// or a ServerConfig, as tracked by the [`ConfigSide`] type parameter on the various impls of ConfigBuilder.
 ///

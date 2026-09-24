@@ -413,7 +413,7 @@ impl<'a> EncryptBuffer<'a> {
         }
     }
 
-    /// Append bytes from an `OutboundPlain`'s chunks.
+    /// Append bytes from an [`OutboundPlain`]'s chunks.
     ///
     /// Panics if the write would extend beyond the `len` given to [`Self::new()`],
     /// which indicates a bug in the calling `RecordEncrypter` implementation (see

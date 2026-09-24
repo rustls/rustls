@@ -75,7 +75,7 @@ pub static TLS13_VERSION: &Tls13Version = &Tls13Version {
 
 /// Internal data for handling the TLS1.2 protocol.
 ///
-/// There is one value of this type.  It is `TLS12_VERSION`.
+/// There is one value of this type: [`TLS12_VERSION`].
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct Tls12Version {
@@ -85,7 +85,7 @@ pub struct Tls12Version {
 
 /// Internal data for handling the TLS1.3 protocol.
 ///
-/// There is one value of this type.  It is `TLS13_VERSION`.
+/// There is one value of this type: [`TLS13_VERSION`].
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct Tls13Version {

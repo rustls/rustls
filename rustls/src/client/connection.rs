@@ -77,7 +77,7 @@ impl ClientConnection {
     ///
     /// The server can choose not to accept any sent early data --
     /// in this case the data is lost but the connection continues.  You
-    /// can tell this happened using `is_early_data_accepted`.
+    /// can tell this happened using [`Self::is_early_data_accepted()`].
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
         let ConnectionCommon { side, common, .. } = &mut self.inner;
         let early_data = side.early_data.as_mut()?;

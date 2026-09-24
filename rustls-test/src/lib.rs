@@ -1945,7 +1945,7 @@ impl<C: Connection> io::Write for OtherSession<'_, C> {
     }
 }
 
-/// Check `reader` has available exactly `bytes`
+/// Check `iter` yields exactly `expected`
 #[track_caller]
 pub fn check_iter(iter: MessageHandler<'_, '_, impl SideData>, expected: &[u8]) {
     let mut read = Vec::with_capacity(expected.len());
