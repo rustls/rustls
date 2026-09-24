@@ -16,7 +16,7 @@ use super::{
     StateMachine, VerifySidePeerIdentity,
 };
 use crate::TlsInputBuffer;
-use crate::client::{ClientSide, ClientState};
+use crate::client::{ClientData, ClientState};
 use crate::common_state::maybe_send_fatal_alert;
 use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::Payload;
@@ -24,7 +24,7 @@ use crate::error::Error;
 use crate::msgs::{ServerExtensionsInput, TransportParameters};
 use crate::quic::{self, Quic, QuicEvent, QuicOutput};
 use crate::server::{
-    ChooseConfig, ClientHello, ServerConfig, ServerHandshake, ServerSide, ServerState,
+    ChooseConfig, ClientHello, ServerConfig, ServerData, ServerHandshake, ServerState,
 };
 use crate::sync::Arc;
 use crate::tracing::trace;
@@ -79,16 +79,16 @@ impl<Side: SideData, T: Transport> Core<Side, T> {
 
 /// The states a server handshake can be in, for any transport.
 pub(crate) enum ServerNext<T: Transport> {
-    NeedsInput(Core<ServerSide, T>),
+    NeedsInput(Core<ServerData, T>),
     ChooseConfig(Accepted<T>),
-    VerifyClientIdentity(VerifyPeerIdentity<ServerSide, T>),
-    Complete(Core<ServerSide, T>),
+    VerifyClientIdentity(VerifyPeerIdentity<ServerData, T>),
+    Complete(Core<ServerData, T>),
 }
 
-impl<T: Transport> TryFrom<Core<ServerSide, T>> for ServerNext<T> {
+impl<T: Transport> TryFrom<Core<ServerData, T>> for ServerNext<T> {
     type Error = Error;
 
-    fn try_from(mut core: Core<ServerSide, T>) -> Result<Self, Error> {
+    fn try_from(mut core: Core<ServerData, T>) -> Result<Self, Error> {
         const MISUSED: Error = Error::Unreachable("forgot to restore state");
 
         Ok(match mem::replace(&mut core.inner.state, Err(MISUSED))? {
@@ -119,15 +119,15 @@ impl<T: Transport> TryFrom<Core<ServerSide, T>> for ServerNext<T> {
 
 /// The states a client handshake can be in, for any transport.
 pub(crate) enum ClientNext<T: Transport> {
-    NeedsInput(Core<ClientSide, T>),
-    VerifyServerIdentity(VerifyPeerIdentity<ClientSide, T>),
-    Complete(Core<ClientSide, T>),
+    NeedsInput(Core<ClientData, T>),
+    VerifyServerIdentity(VerifyPeerIdentity<ClientData, T>),
+    Complete(Core<ClientData, T>),
 }
 
-impl<T: Transport> TryFrom<Core<ClientSide, T>> for ClientNext<T> {
+impl<T: Transport> TryFrom<Core<ClientData, T>> for ClientNext<T> {
     type Error = Error;
 
-    fn try_from(mut core: Core<ClientSide, T>) -> Result<Self, Error> {
+    fn try_from(mut core: Core<ClientData, T>) -> Result<Self, Error> {
         const MISUSED: Error = Error::Unreachable("forgot to restore state");
 
         Ok(match mem::replace(&mut core.inner.state, Err(MISUSED))? {
@@ -157,7 +157,7 @@ impl<T: Transport> TryFrom<Core<ClientSide, T>> for ClientNext<T> {
 /// [`Self::client_hello()`] and providing it to [`Self::choose_config()`].
 pub struct Accepted<T: Transport> {
     // invariant: `core.inner.state` is `Err(_)` and requires restoring
-    core: Core<ServerSide, T>,
+    core: Core<ServerData, T>,
     choose_config: Box<ChooseConfig>,
 }
 
@@ -174,7 +174,7 @@ impl<T: Transport> Accepted<T> {
         config: Arc<ServerConfig>,
         exts: ServerExtensionsInput,
         tls: &mut Vec<u8>,
-    ) -> Result<Core<ServerSide, T>, Error> {
+    ) -> Result<Core<ServerData, T>, Error> {
         let Self {
             core: Core {
                 mut inner,

@@ -5,7 +5,7 @@ use core::ops::Range;
 use std::sync::MutexGuard;
 
 use super::receive::{Discard, JoinOutput};
-use crate::client::ClientSide;
+use crate::client::ClientData;
 use crate::common_state::UnborrowedPayload;
 use crate::conn::kernel::KernelConnection;
 use crate::conn::{
@@ -40,7 +40,7 @@ pub struct SplitConnection<Side: SideData> {
     ///
     /// [`ClientData`]: crate::client::ClientData
     /// [`ServerData`]: crate::server::ServerData
-    pub side_outputs: Side::Data,
+    pub side_outputs: Side,
 }
 
 impl<Side: SideData> SplitConnection<Side> {
@@ -338,7 +338,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
     }
 }
 
-impl ReceiveTraffic<ClientSide> {
+impl ReceiveTraffic<ClientData> {
     /// Returns the number of TLS1.3 tickets that have been received.
     pub fn tls13_tickets_received(&self) -> u32 {
         self.recv.tls13_tickets_received

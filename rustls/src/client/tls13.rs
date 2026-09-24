@@ -12,7 +12,7 @@ use super::hs::{
     GroupAndKeyShare, process_alpn_protocol,
 };
 use super::{
-    ClientAuthDetails, ClientHelloDetails, ClientSide, Retrieved, ServerCertDetails,
+    ClientAuthDetails, ClientData, ClientHelloDetails, Retrieved, ServerCertDetails,
     Tls13ClientSessionInput, Tls13Session,
 };
 use crate::check::inappropriate_handshake_message;
@@ -498,7 +498,7 @@ struct ExpectEncryptedExtensions {
     in_early_traffic: bool,
 }
 
-impl State<ClientSide> for ExpectEncryptedExtensions {
+impl State<ClientData> for ExpectEncryptedExtensions {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
@@ -689,7 +689,7 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State<ClientSide> for ExpectCertificateOrCompressedCertificateOrCertReq {
+impl State<ClientData> for ExpectCertificateOrCompressedCertificateOrCertReq {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -764,7 +764,7 @@ struct ExpectCertificateOrCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ClientSide> for ExpectCertificateOrCompressedCertificate {
+impl State<ClientData> for ExpectCertificateOrCompressedCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -824,7 +824,7 @@ struct ExpectCertificateOrCertReq {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State<ClientSide> for ExpectCertificateOrCertReq {
+impl State<ClientData> for ExpectCertificateOrCertReq {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -1082,7 +1082,7 @@ impl ExpectCertificate {
     }
 }
 
-impl State<ClientSide> for ExpectCertificate {
+impl State<ClientData> for ExpectCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -1109,7 +1109,7 @@ struct ExpectCertificateVerify {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ClientSide> for ExpectCertificateVerify {
+impl State<ClientData> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
@@ -1169,7 +1169,7 @@ struct AwaitServerIdentityVerification {
     handshake_hash: crypto::hash::Output,
 }
 
-impl VerifySidePeerIdentity<ClientSide> for AwaitServerIdentityVerification {
+impl VerifySidePeerIdentity<ClientData> for AwaitServerIdentityVerification {
     fn presented_identity(&self) -> Result<ServerIdentity<'static, '_>, Error> {
         Ok(ServerIdentity {
             identity: &self.peer_identity,
@@ -1220,7 +1220,7 @@ impl VerifySidePeerIdentity<ClientSide> for AwaitServerIdentityVerification {
 
 impl From<Box<AwaitServerIdentityVerification>> for ClientState {
     fn from(value: Box<AwaitServerIdentityVerification>) -> Self {
-        Self::VerifyServerIdentity(value as Box<dyn VerifySidePeerIdentity<ClientSide>>)
+        Self::VerifyServerIdentity(value as Box<dyn VerifySidePeerIdentity<ClientData>>)
     }
 }
 
@@ -1323,7 +1323,7 @@ struct ExpectFinished {
     in_early_traffic: bool,
 }
 
-impl State<ClientSide> for ExpectFinished {
+impl State<ClientData> for ExpectFinished {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
@@ -1566,7 +1566,7 @@ impl ExpectTraffic {
     }
 }
 
-impl State<ClientSide> for ExpectTraffic {
+impl State<ClientData> for ExpectTraffic {
     fn handle<'m>(
         mut self: Box<Self>,
         input: Input<'m>,
@@ -1653,7 +1653,7 @@ impl From<Box<ExpectTraffic>> for ClientState {
 
 pub(super) struct ExpectQuicTraffic(ExpectTraffic);
 
-impl State<ClientSide> for ExpectQuicTraffic {
+impl State<ClientData> for ExpectQuicTraffic {
     fn handle(
         self: Box<Self>,
         Input { message, .. }: Input<'_>,

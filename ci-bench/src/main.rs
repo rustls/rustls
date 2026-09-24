@@ -240,9 +240,9 @@ fn main() -> anyhow::Result<()> {
                 match side {
                     Side::Server => {
                         run_bench(
-                            ServerSideStepper {
+                            ServerDataStepper {
                                 io,
-                                config: ServerSideStepper::make_config(
+                                config: ServerDataStepper::make_config(
                                     &bench.params,
                                     resumption_kind,
                                 ),
@@ -256,10 +256,10 @@ fn main() -> anyhow::Result<()> {
                     }
                     Side::Client => {
                         run_bench(
-                            ClientSideStepper {
+                            ClientDataStepper {
                                 io,
                                 resumption_kind,
-                                config: ClientSideStepper::make_config(
+                                config: ClientDataStepper::make_config(
                                     &bench.params,
                                     resumption_kind,
                                 ),
@@ -302,13 +302,13 @@ fn main() -> anyhow::Result<()> {
                     let server_side = async move {
                         let handshake_buf = &mut [0u8; DEFAULT_BUFFER_SIZE];
                         run_bench(
-                            ServerSideStepper {
+                            ServerDataStepper {
                                 io: StepperIo {
                                     reader: &mut server_reader,
                                     writer: &mut server_writer,
                                     handshake_buf,
                                 },
-                                config: ServerSideStepper::make_config(params, resumption_kind),
+                                config: ServerDataStepper::make_config(params, resumption_kind),
                                 input: VecInput::default(),
                                 output: Vec::new(),
                             },
@@ -321,14 +321,14 @@ fn main() -> anyhow::Result<()> {
                     let client_side = async move {
                         let handshake_buf = &mut [0u8; DEFAULT_BUFFER_SIZE];
                         run_bench(
-                            ClientSideStepper {
+                            ClientDataStepper {
                                 io: StepperIo {
                                     reader: &mut client_reader,
                                     writer: &mut client_writer,
                                     handshake_buf,
                                 },
                                 resumption_kind,
-                                config: ClientSideStepper::make_config(params, resumption_kind),
+                                config: ClientDataStepper::make_config(params, resumption_kind),
                                 input: VecInput::default(),
                                 output: Vec::new(),
                             },
@@ -699,7 +699,7 @@ struct StepperIo<'a> {
 }
 
 /// A benchmark stepper for the client-side of the connection
-struct ClientSideStepper<'a> {
+struct ClientDataStepper<'a> {
     io: StepperIo<'a>,
     resumption_kind: ResumptionKind,
     config: Arc<ClientConfig>,
@@ -707,7 +707,7 @@ struct ClientSideStepper<'a> {
     output: Vec<u8>,
 }
 
-impl ClientSideStepper<'_> {
+impl ClientDataStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ClientConfig> {
         let cfg = ClientConfig::builder(params.provider.clone());
 
@@ -741,7 +741,7 @@ impl ClientSideStepper<'_> {
 }
 
 #[async_trait(?Send)]
-impl BenchStepper for ClientSideStepper<'_> {
+impl BenchStepper for ClientDataStepper<'_> {
     type Endpoint = ClientConnection;
 
     async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
@@ -812,14 +812,14 @@ impl BenchStepper for ClientSideStepper<'_> {
 }
 
 /// A benchmark stepper for the server-side of the connection
-struct ServerSideStepper<'a> {
+struct ServerDataStepper<'a> {
     io: StepperIo<'a>,
     config: Arc<ServerConfig>,
     input: VecInput,
     output: Vec<u8>,
 }
 
-impl ServerSideStepper<'_> {
+impl ServerDataStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ServerConfig> {
         let cfg = ServerConfig::builder(params.provider.clone());
 
@@ -848,7 +848,7 @@ impl ServerSideStepper<'_> {
 }
 
 #[async_trait(?Send)]
-impl BenchStepper for ServerSideStepper<'_> {
+impl BenchStepper for ServerDataStepper<'_> {
     type Endpoint = ServerConnection;
 
     async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {

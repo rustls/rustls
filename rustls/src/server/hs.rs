@@ -25,7 +25,7 @@ use crate::msgs::{
     ServerExtensionsInput, ServerNamePayload, SessionId, SingleProtocolName, TransportParameters,
 };
 use crate::sealed::Sealed;
-use crate::server::ServerSide;
+use crate::server::ServerData;
 use crate::suites::{PartiallyExtractedSecrets, Suite};
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
@@ -47,10 +47,10 @@ pub(crate) enum ServerState {
     ClientHello(Box<ExpectClientHello>),
 
     /// Verifying the client's present certificate chain.
-    VerifyClientIdentity(Box<dyn VerifySidePeerIdentity<ServerSide>>),
+    VerifyClientIdentity(Box<dyn VerifySidePeerIdentity<ServerData>>),
 
-    Tls12(Box<dyn State<ServerSide>>),
-    Tls13(Box<dyn State<ServerSide>>),
+    Tls12(Box<dyn State<ServerData>>),
+    Tls13(Box<dyn State<ServerData>>),
 }
 
 impl ServerState {

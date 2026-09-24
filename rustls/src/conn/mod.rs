@@ -15,7 +15,7 @@ use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
 use crate::msgs::{Delocator, Message, Random, ServerExtensionsInput};
 use crate::quic::{Quic, QuicEvent, QuicOutput};
-use crate::server::{ChooseConfig, ServerConfig, ServerSide};
+use crate::server::{ChooseConfig, ServerConfig, ServerData};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
@@ -226,12 +226,12 @@ pub(crate) trait VerifySidePeerIdentity<Side: SideData>: Send + Sync {
 /// [`SideData`]. This is used to store side-specific data.
 pub(crate) struct ConnectionCommon<Side: SideData> {
     pub(crate) state: Result<Side::State, Error>,
-    pub(crate) side: Side::Data,
+    pub(crate) side: Side,
     pub(crate) common: CommonState,
 }
 
 impl<Side: SideData> ConnectionCommon<Side> {
-    pub(crate) fn new(state: Side::State, side: Side::Data, common: CommonState) -> Self {
+    pub(crate) fn new(state: Side::State, side: Side, common: CommonState) -> Self {
         Self {
             state: Ok(state),
             side,
@@ -354,7 +354,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 }
 
-impl ConnectionCommon<ServerSide> {
+impl ConnectionCommon<ServerData> {
     pub(crate) fn accepted(
         &mut self,
         choose: Box<ChooseConfig>,
@@ -478,7 +478,7 @@ impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
     }
 }
 
-impl<'a, 'm> MessageHandler<'a, 'm, ServerSide> {
+impl<'a, 'm> MessageHandler<'a, 'm, ServerData> {
     /// Yields the next payload application data received from the client.
     ///
     /// Early data is only received during the handshake, from clients resuming an earlier
@@ -704,11 +704,7 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
 
 /// Data specific to the peer's side (client or server).
 #[expect(private_bounds)]
-pub trait SideData: private::Side + Sized {
-    /// Type holding data learned during the connection, specific to this side.
-    #[expect(private_bounds)]
-    type Data: SideOutput + fmt::Debug;
-
+pub trait SideData: SideOutput + fmt::Debug + private::Side + Sized {
     /// Type representing an in-progress TCP handshake.
     type Handshake;
     /// Type representing an in-progress QUIC handshake.
