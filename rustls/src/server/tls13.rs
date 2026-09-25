@@ -51,6 +51,7 @@ mod client_hello {
     use super::*;
     use crate::common_state::Protocol;
     use crate::compress::CertCompressor;
+    use crate::conn::Exporter;
     use crate::crypto::cipher::{EncodableVersion, Payload};
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
@@ -242,7 +243,7 @@ mod client_hello {
                 );
             }
 
-            if let Some((_, session)) = &resuming {
+            if let Some(PskAcceptance { session, .. }) = &resuming {
                 output.emit(Event::ResumptionData(
                     session
                         .common
@@ -254,14 +255,14 @@ mod client_hello {
 
             let full_handshake = resuming.is_none();
             transcript.add_message(input.message);
-            let key_schedule = emit_server_hello(
+            let (key_schedule, resuming) = emit_server_hello(
                 &mut transcript,
                 &randoms,
                 suite,
                 output,
                 &input.client_hello.session_id,
                 chosen_share_and_kxg,
-                resuming.as_ref(),
+                resuming,
                 &input.proof,
                 &st.config,
             )?;
@@ -286,13 +287,14 @@ mod client_hello {
                     alpn_protocol,
                 },
                 doing_early_data,
+                resuming,
             ) = emit_encrypted_extensions(
                 &mut flight,
                 suite.suite(),
                 output,
                 &mut ocsp_response,
                 input.client_hello,
-                resuming.as_ref(),
+                resuming,
                 st.extra_exts,
                 &st.config,
                 st.send_tickets,
@@ -388,16 +390,23 @@ mod client_hello {
             } else if matches!(doing_early_data, EarlyDataDecision::Accepted { .. })
                 && !st.protocol.is_quic()
             {
-                let EarlyDataDecision::Accepted { max_length } = doing_early_data else {
+                let EarlyDataDecision::Accepted {
+                    max_length,
+                    early_exporter,
+                } = doing_early_data
+                else {
                     unreachable!();
                 };
+
+                output.output(OutputEvent::EarlyExporter(early_exporter));
+
                 // Not used for QUIC: RFC 9001 §8.3: Clients MUST NOT send the EndOfEarlyData
                 // message. A server MUST treat receipt of a CRYPTO frame in a 0-RTT packet as a
                 // connection error of type PROTOCOL_VIOLATION.
                 Ok(Box::new(ExpectEarlyData {
                     hs,
                     key_schedule: key_schedule_traffic,
-                    peer_identity: resuming.and_then(|(_, session)| session.common.peer_identity),
+                    peer_identity: resuming.and_then(|acc| acc.session.common.peer_identity),
                     remaining_length: max_length as usize,
                 })
                 .into())
@@ -405,7 +414,7 @@ mod client_hello {
                 Ok(Box::new(ExpectFinished {
                     hs,
                     key_schedule: key_schedule_traffic,
-                    peer_identity: resuming.and_then(|(_, session)| session.common.peer_identity),
+                    peer_identity: resuming.and_then(|acc| acc.session.common.peer_identity),
                 })
                 .into())
             }
@@ -414,11 +423,13 @@ mod client_hello {
 
     impl Sealed for Handler {}
 
-    #[derive(PartialEq)]
     pub(super) enum EarlyDataDecision {
         Disabled,
         RequestedButRejected,
-        Accepted { max_length: u32 },
+        Accepted {
+            max_length: u32,
+            early_exporter: Box<dyn Exporter>,
+        },
     }
 
     fn max_early_data_size(configured: u32) -> usize {
@@ -436,13 +447,23 @@ mod client_hello {
         }
     }
 
+    pub(super) struct PskAcceptance {
+        index: usize,
+        session: Tls13ServerSessionValue<'static>,
+    }
+
+    pub(super) struct PskAcceptanceWithExporter {
+        accept: PskAcceptance,
+        early_exporter: Box<dyn Exporter>,
+    }
+
     fn handle_psk_offer(
         input: &ClientHelloInput<'_>,
         transcript: &HandshakeHash,
         sni: Option<&DnsName<'_>>,
         suite: Tls13ProtocolSuite,
         config: &ServerConfig,
-    ) -> Result<Option<(usize, Tls13ServerSessionValue<'static>)>, Error> {
+    ) -> Result<Option<PskAcceptance>, Error> {
         let Some(psk_offer) = &input.client_hello.preshared_key_offer else {
             return Ok(None);
         };
@@ -468,7 +489,7 @@ mod client_hello {
         }
 
         let now = config.current_time()?;
-        for (i, psk_id) in psk_offer.identities.iter().enumerate() {
+        for (index, psk_id) in psk_offer.identities.iter().enumerate() {
             let Some(mut session) = Tls13ServerSessionValue::from_ticket(psk_id, config) else {
                 continue;
             };
@@ -485,12 +506,15 @@ mod client_hello {
                 transcript,
                 &KeyScheduleEarlyServer::new(suite, session.secret.bytes())?,
                 input.message,
-                psk_offer.binders[i].as_ref(),
+                psk_offer.binders[index].as_ref(),
             ) {
                 return Err(PeerMisbehaved::IncorrectBinder.into());
             }
 
-            return Ok(Some((i, session.into_owned())));
+            return Ok(Some(PskAcceptance {
+                index,
+                session: session.into_owned(),
+            }));
         }
 
         Ok(None)
@@ -525,19 +549,23 @@ mod client_hello {
         output: &mut dyn Output<'_>,
         session_id: &SessionId,
         share_and_kxgroup: (&KeyShareEntry, &'static dyn SupportedKxGroup),
-        resuming: Option<&(usize, Tls13ServerSessionValue<'_>)>,
+        resuming: Option<PskAcceptance>,
         proof: &HandshakeAlignedProof,
         config: &ServerConfig,
-    ) -> Result<KeyScheduleHandshake, Error> {
+    ) -> Result<(KeyScheduleHandshake, Option<PskAcceptanceWithExporter>), Error> {
         // Prepare key exchange; the caller already found the matching SupportedKxGroup
         let (share, kxgroup) = share_and_kxgroup;
         debug_assert_eq!(kxgroup.name(), share.group);
         let ckx = kxgroup.start_and_complete(share.payload.bytes())?;
         output.output(OutputEvent::KeyExchangeGroup(kxgroup));
 
+        let preshared_key = resuming
+            .as_ref()
+            .map(|r| r.index as u16);
+
         let extensions = Box::new(ServerExtensions {
             key_share: Some(KeyShareEntry::new(ckx.group, ckx.pub_key)),
-            preshared_key: resuming.map(|&(idx, _)| idx as u16),
+            preshared_key,
             selected_version: Some(ProtocolVersion::TLSv1_3),
             ..Default::default()
         });
@@ -563,8 +591,9 @@ mod client_hello {
         output.send_msg(sh, false)?;
 
         // Start key schedule
-        let key_schedule_pre_handshake = if let Some((_, psk)) = resuming {
-            let early_key_schedule = KeyScheduleEarlyServer::new(suite, psk.secret.bytes())?;
+        let mut early_exporter = None;
+        let key_schedule_pre_handshake = if let Some(PskAcceptance { session, .. }) = &resuming {
+            let early_key_schedule = KeyScheduleEarlyServer::new(suite, session.secret.bytes())?;
             early_key_schedule.client_early_traffic_secret(
                 &client_hello_hash,
                 &*config.key_log,
@@ -574,12 +603,10 @@ mod client_hello {
             );
 
             if config.max_early_data_size > 0 {
-                output.output(OutputEvent::EarlyExporter(
-                    early_key_schedule.early_exporter(
-                        &client_hello_hash,
-                        &*config.key_log,
-                        &randoms.client,
-                    ),
+                early_exporter = Some(early_key_schedule.early_exporter(
+                    &client_hello_hash,
+                    &*config.key_log,
+                    &randoms.client,
                 ));
             }
 
@@ -599,7 +626,15 @@ mod client_hello {
             output,
         );
 
-        Ok(key_schedule)
+        let psk_acceptance = match (resuming, early_exporter) {
+            (Some(accept), Some(early_exporter)) => Some(PskAcceptanceWithExporter {
+                accept,
+                early_exporter,
+            }),
+            _ => None,
+        };
+
+        Ok((key_schedule, psk_acceptance))
     }
 
     fn emit_fake_ccs(output: &mut dyn Output<'_>) -> Result<(), Error> {
@@ -644,20 +679,27 @@ mod client_hello {
     fn decide_if_early_data_allowed(
         output: &mut dyn Output<'_>,
         client_hello: &ClientHelloPayload,
-        resuming: Option<&(usize, Tls13ServerSessionValue<'_>)>,
+        resuming: Option<PskAcceptanceWithExporter>,
         chosen_alpn_protocol: Option<&ApplicationProtocol<'_>>,
         suite: &'static Tls13CipherSuite,
         config: &ServerConfig,
-    ) -> EarlyDataDecision {
+    ) -> (EarlyDataDecision, Option<PskAcceptance>) {
         let early_data_requested = client_hello
             .early_data_request
             .is_some();
-        let rejected_or_disabled = match early_data_requested {
-            true => EarlyDataDecision::RequestedButRejected,
-            false => EarlyDataDecision::Disabled,
-        };
+        let rejected_or_disabled = (
+            match early_data_requested {
+                true => EarlyDataDecision::RequestedButRejected,
+                false => EarlyDataDecision::Disabled,
+            },
+            None,
+        );
 
-        let Some((psk_index, resume)) = resuming else {
+        let Some(PskAcceptanceWithExporter {
+            accept,
+            early_exporter,
+        }) = resuming
+        else {
             // never any early data if not resuming.
             return rejected_or_disabled;
         };
@@ -687,15 +729,19 @@ mod client_hello {
          *
          * (RFC 9846, section 4.3.10) */
         let early_data_possible = early_data_requested
-            && *psk_index == 0
-            && resume.is_fresh()
-            && resume.common.cipher_suite == suite.common.suite
-            && resume.common.alpn.as_ref() == chosen_alpn_protocol;
+            && accept.index == 0
+            && accept.session.is_fresh()
+            && accept.session.common.cipher_suite == suite.common.suite
+            && accept.session.common.alpn.as_ref() == chosen_alpn_protocol;
 
         if early_data_configured && early_data_possible {
-            EarlyDataDecision::Accepted {
-                max_length: config.max_early_data_size,
-            }
+            (
+                EarlyDataDecision::Accepted {
+                    max_length: config.max_early_data_size,
+                    early_exporter,
+                },
+                Some(accept),
+            )
         } else {
             if let Some(quic) = output.quic() {
                 quic.early_secret(None);
@@ -711,15 +757,17 @@ mod client_hello {
         output: &mut dyn Output<'_>,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
-        resuming: Option<&(usize, Tls13ServerSessionValue<'_>)>,
+        resuming: Option<PskAcceptanceWithExporter>,
         extra_exts: ServerExtensionsInput,
         config: &ServerConfig,
         send_tickets: usize,
-    ) -> Result<(Tls13Extensions, EarlyDataDecision), Error> {
+    ) -> Result<(Tls13Extensions, EarlyDataDecision, Option<PskAcceptance>), Error> {
         let (out, mut extensions) = Tls13Extensions::new(
             extra_exts,
             ocsp_response,
-            resuming.map(|(_, session)| &session.common),
+            resuming
+                .as_ref()
+                .map(|r| &r.accept.session.common),
             hello,
             output,
             config,
@@ -731,7 +779,7 @@ mod client_hello {
             });
         }
 
-        let early_data = decide_if_early_data_allowed(
+        let (early_data, resuming) = decide_if_early_data_allowed(
             output,
             hello,
             resuming,
@@ -747,7 +795,7 @@ mod client_hello {
 
         trace!("sending encrypted extensions {ee:?}");
         flight.add(ee);
-        Ok((out, early_data))
+        Ok((out, early_data, resuming))
     }
 
     fn emit_certificate_req_tls13(
