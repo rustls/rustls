@@ -237,7 +237,8 @@ pub mod cipher_suite {
 /// [`DEFAULT_KX_GROUPS`] is provided as an array of this provider's defaults.
 pub mod kx_group {
     pub use super::kx::{
-        MLKEM768, MLKEM1024, SECP256R1, SECP256R1MLKEM768, SECP384R1, X25519, X25519MLKEM768,
+        MLKEM768, MLKEM1024, SECP256R1, SECP256R1MLKEM768, SECP384R1, SECP384R1MLKEM1024, X25519,
+        X25519MLKEM768,
     };
 }
 

@@ -28,6 +28,7 @@ pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
 pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
     X25519MLKEM768,
     SECP256R1MLKEM768,
+    SECP384R1MLKEM1024,
     X25519,
     SECP256R1,
     SECP384R1,
@@ -61,6 +62,21 @@ pub static SECP256R1MLKEM768: &dyn SupportedKxGroup = &Hybrid {
         classical_share_len: SECP256R1_LEN,
         post_quantum_client_share_len: MLKEM768_ENCAP_LEN,
         post_quantum_server_share_len: MLKEM768_CIPHERTEXT_LEN,
+        post_quantum_first: false,
+    },
+};
+
+/// This is the [SECP384R1MLKEM1024] key exchange.
+///
+/// [SECP384R1MLKEM1024]: <https://www.rfc-editor.org/rfc/rfc10024#section-4>
+pub static SECP384R1MLKEM1024: &dyn SupportedKxGroup = &Hybrid {
+    classical: SECP384R1,
+    post_quantum: MLKEM1024,
+    name: NamedGroup::secp384r1MLKEM1024,
+    layout: HybridLayout {
+        classical_share_len: SECP384R1_LEN,
+        post_quantum_client_share_len: MLKEM1024_ENCAP_LEN,
+        post_quantum_server_share_len: MLKEM1024_CIPHERTEXT_LEN,
         post_quantum_first: false,
     },
 };
@@ -170,8 +186,11 @@ impl ActiveKeyExchange for Active {
 
 const X25519_LEN: usize = 32;
 const SECP256R1_LEN: usize = 65;
+const SECP384R1_LEN: usize = 97;
 const MLKEM768_CIPHERTEXT_LEN: usize = 1088;
 const MLKEM768_ENCAP_LEN: usize = 1184;
+const MLKEM1024_CIPHERTEXT_LEN: usize = 1568;
+const MLKEM1024_ENCAP_LEN: usize = 1568;
 
 /// A key-exchange group supported by *ring*.
 struct KxGroup {
@@ -313,9 +332,49 @@ impl ActiveKeyExchange for KeyExchange {
 mod tests {
     use std::format;
 
+    use aws_lc_rs::kem;
+
     #[test]
     fn kxgroup_fmt_yields_name() {
         assert_eq!("X25519", format!("{:?}", super::X25519));
+    }
+
+    /// Confirm an exchange completes against a peer that lays out its shares and
+    /// secret as [RFC 10024 section 4] describes.
+    ///
+    /// The offsets and the secret order are spelled out here rather than read from
+    /// `SECP384R1MLKEM1024`, so that transposing the two elements there is caught.
+    ///
+    /// [RFC 10024 section 4]: https://www.rfc-editor.org/rfc/rfc10024#section-4
+    #[test]
+    fn secp384r1mlkem1024_matches_rfc_layout() {
+        let client = super::SECP384R1MLKEM1024
+            .start()
+            .unwrap()
+            .into_single();
+        assert_eq!(client.pub_key().len(), 1665);
+        let (client_ecdh_share, encaps_key) = client.pub_key().split_at(97);
+
+        let server_ecdh = super::SECP384R1
+            .start()
+            .unwrap()
+            .into_single();
+        let mut server_share = server_ecdh.pub_key().to_vec();
+        let ecdh_secret = server_ecdh
+            .complete(client_ecdh_share)
+            .unwrap();
+
+        let (ciphertext, mlkem_secret) = kem::EncapsulationKey::new(&kem::ML_KEM_1024, encaps_key)
+            .unwrap()
+            .encapsulate()
+            .unwrap();
+        server_share.extend_from_slice(ciphertext.as_ref());
+
+        let secret = client.complete(&server_share).unwrap();
+        assert_eq!(
+            secret.secret_bytes(),
+            [ecdh_secret.secret_bytes(), mlkem_secret.as_ref()].concat()
+        );
     }
 }
 
