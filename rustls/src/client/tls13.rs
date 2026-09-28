@@ -1426,15 +1426,18 @@ impl State<ClientConnectionData> for ExpectFinished {
         cx.common.check_aligned_handshake()?;
         let (key_schedule, resumption) =
             key_schedule_pre_finished.into_traffic(cx.common, st.transcript.current_hash());
-        cx.common
-            .start_traffic(&mut cx.sendable_plaintext);
 
         // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by
         // sending an alert and returning an error (potentially with retry configs) if the server
-        // did not accept our ECH offer.
+        // did not accept our ECH offer. This must happen before the connection is made available
+        // for application data, since the server has only been authenticated for the ECH config's
+        // `public_name`.
         if cx.data.ech_status == EchStatus::Rejected {
             return Err(ech::fatal_alert_required(st.ech_retry_configs, cx.common));
         }
+
+        cx.common
+            .start_traffic(&mut cx.sendable_plaintext);
 
         let st = ExpectTraffic {
             config: st.config.clone(),
