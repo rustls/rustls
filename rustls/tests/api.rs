@@ -7679,6 +7679,7 @@ fn test_client_sends_no_application_data_after_ech_rejection() {
     // The connection is only authenticated for the `public_name`, so it must not become
     // usable for application data intended for the inner server name.
     assert!(client.is_handshaking());
+    assert!(client.refresh_traffic_keys().is_err());
 
     transfer(&mut client, &mut server);
     assert_eq!(
