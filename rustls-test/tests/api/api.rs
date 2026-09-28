@@ -1893,6 +1893,12 @@ fn test_client_sends_no_application_data_after_ech_rejection() {
             .unwrap_err(),
         ApiMisuse::WriteTlsBeforeHandshakeComplete.into()
     );
+    assert_eq!(
+        client
+            .refresh_traffic_keys(&mut client_output)
+            .unwrap_err(),
+        Error::HandshakeNotComplete
+    );
     assert_eq!(client_output.len(), queued);
 
     let mut server_received = Vec::new();
