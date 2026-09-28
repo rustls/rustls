@@ -1432,6 +1432,18 @@ impl State<ClientSide> for ExpectFinished {
             key_schedule_pre_finished.into_traffic(output, st.hs.transcript.current_hash(), &proof);
         let (key_schedule_send, key_schedule_recv) = key_schedule.split();
 
+        // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by
+        // sending an alert and returning an error (potentially with retry configs) if the server
+        // did not accept our ECH offer. This must happen before the connection is made available
+        // for application data, since the server has only been authenticated for the ECH config's
+        // `public_name`.
+        if st.ech.status == EchStatus::Rejected {
+            return Err(RejectedEch {
+                retry_configs: st.ech.retry_configs,
+            }
+            .into());
+        }
+
         let _cert_verified = st
             .session_input
             .peer_identity
@@ -1444,16 +1456,6 @@ impl State<ClientSide> for ExpectFinished {
             .send()
             .update_key_schedule(Box::new(key_schedule_send));
         output.start_traffic();
-
-        // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by
-        // sending an alert and returning an error (potentially with retry configs) if the server
-        // did not accept our ECH offer.
-        if st.ech.status == EchStatus::Rejected {
-            return Err(RejectedEch {
-                retry_configs: st.ech.retry_configs,
-            }
-            .into());
-        }
 
         let is_quic = key_schedule_recv.is_quic();
 
