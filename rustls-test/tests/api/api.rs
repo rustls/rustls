@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use pki_types::{DnsName, FipsStatus, SubjectPublicKeyInfoDer};
 use provider::cipher_suite;
-use rustls::client::{EchConfig, EchGreaseConfig, EchMode, Resumption};
+use rustls::client::{EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption};
 use rustls::crypto::cipher::{EncodableVersion, Payload, Record};
 use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{
@@ -1838,6 +1838,74 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
             .unwrap();
         assert_eq!(conn.fips(), suite.fips());
     }
+}
+
+#[test]
+fn test_client_sends_no_application_data_after_ech_rejection() {
+    // The server has no ECH keys, so it rejects ECH and completes the outer handshake
+    // with a certificate that is valid for the ECH config's `public_name` only.
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let (public_key, _) = suite.generate_key_pair().unwrap();
+    let ech_config = EchConfig::new(
+        encoding::ech_config_list(suite.suite(), &public_key.0, "testserver.com"),
+        &[suite],
+    )
+    .unwrap();
+
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let client_config = ClientConfig::builder(provider.clone().into())
+        .with_ech(EchMode::Enable(ech_config))
+        .finish(KeyType::default());
+    let server_config = make_server_config(KeyType::default(), &provider);
+
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let mut client = Arc::new(client_config)
+        .connect(server_name("private.example"))
+        .build(&mut client_output)
+        .unwrap();
+    let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+
+    let err = do_handshake_until_error(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ErrorFromPeer::Client(Error::RejectedEch(_))));
+    assert_eq!(client.data().ech_status(), EchStatus::Rejected);
+
+    // The connection is only authenticated for the `public_name`, so it must not become
+    // usable for application data intended for the inner server name.
+    assert!(client.is_handshaking());
+    assert!(client.peer_identity().is_none());
+    assert_eq!(client.exporter().unwrap_err(), Error::HandshakeNotComplete);
+
+    let queued = client_output.len();
+    assert_eq!(
+        client
+            .write(b"ech-inner-secret".into(), &mut client_output)
+            .unwrap_err(),
+        ApiMisuse::WriteTlsBeforeHandshakeComplete.into()
+    );
+    assert_eq!(client_output.len(), queued);
+
+    let mut server_received = Vec::new();
+    transfer(&mut client_output, &mut server_input);
+    let err = server
+        .read_tls(&mut server_input, &mut server_output)
+        .handle_all(&mut server_received)
+        .unwrap_err();
+    assert_eq!(
+        err,
+        Error::AlertReceived(AlertDescription::EncryptedClientHelloRequired)
+    );
+    assert!(server_received.is_empty());
 }
 
 #[test]

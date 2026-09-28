@@ -2273,10 +2273,12 @@ pub mod macros {
 
 /// Deeply inefficient, test-only TLS encoding helpers
 pub mod encoding {
+    use rustls::crypto::hpke::HpkeSuite;
     use rustls::crypto::kx::NamedGroup;
     use rustls::crypto::{CipherSuite, SignatureScheme};
     use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
     use rustls::error::AlertDescription;
+    use rustls::pki_types::EchConfigListBytes;
 
     /// Return a client hello with mandatory extensions added to `extensions`
     ///
@@ -2523,6 +2525,32 @@ pub mod encoding {
         )
     }
 
+    /// Return an `ECHConfigList` containing a single `ECHConfig` for `public_name`
+    ///
+    /// See <https://www.rfc-editor.org/rfc/rfc9849#section-4>.
+    pub fn ech_config_list(
+        suite: HpkeSuite,
+        public_key: &[u8],
+        public_name: &str,
+    ) -> EchConfigListBytes<'static> {
+        let mut contents = vec![0]; // config_id
+        contents.extend_from_slice(&suite.kem.to_array());
+        contents.extend(len_u16(public_key.to_vec()));
+        contents.extend(len_u16(vector_of([
+            suite.sym.kdf_id.to_array(),
+            suite.sym.aead_id.to_array(),
+        ])));
+        contents.push(0); // maximum_name_length
+        contents.extend(len_u8(public_name.as_bytes().to_vec()));
+        contents.extend(len_u16(vec![])); // extensions
+
+        let mut config = ECH_CONFIG_VERSION
+            .to_be_bytes()
+            .to_vec();
+        config.extend(len_u16(contents));
+        EchConfigListBytes::from(len_u16(config))
+    }
+
     /// Prefix with u8 length
     pub fn len_u8(mut body: Vec<u8>) -> Vec<u8> {
         body.splice(0..0, [body.len() as u8]);
@@ -2551,6 +2579,7 @@ pub mod encoding {
 
     const ALERT_LEVEL_WARNING: u8 = 1;
     const ALERT_LEVEL_FATAL: u8 = 2;
+    const ECH_CONFIG_VERSION: u16 = 0xfe0d;
 }
 
 /// A tracing subscriber that collects everything which was logged.
