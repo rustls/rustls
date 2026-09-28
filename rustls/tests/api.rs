@@ -38,7 +38,7 @@ use rustls::{
 };
 #[cfg(feature = "aws_lc_rs")]
 use rustls::{
-    client::{EchConfig, EchGreaseConfig, EchMode},
+    client::{EchConfig, EchGreaseConfig, EchMode, EchStatus},
     crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES,
     internal::msgs::base::PayloadU16,
     internal::msgs::handshake::{
@@ -7622,6 +7622,76 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
         .unwrap();
         assert_eq!(conn.fips(), suite.fips());
     }
+}
+
+#[cfg(feature = "aws_lc_rs")]
+#[test]
+fn test_client_sends_no_application_data_after_ech_rejection() {
+    // The server has no ECH keys, so it rejects ECH and completes the outer handshake
+    // with a certificate that is valid for the ECH config's `public_name` only.
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let (public_key, _) = suite.generate_key_pair().unwrap();
+    let suite_id = suite.suite();
+    let config = EchConfigPayload::V18(EchConfigContents {
+        key_config: HpkeKeyConfig {
+            config_id: 0,
+            kem_id: suite_id.kem,
+            public_key: PayloadU16::new(public_key.0.clone()),
+            symmetric_cipher_suites: vec![HpkeSymmetricCipherSuite {
+                kdf_id: suite_id.sym.kdf_id,
+                aead_id: suite_id.sym.aead_id,
+            }],
+        },
+        maximum_name_length: 0,
+        public_name: DnsName::try_from("testserver.com").unwrap(),
+        extensions: vec![],
+    });
+    let mut config_bytes = Vec::new();
+    vec![config].encode(&mut config_bytes);
+    let ech_config = EchConfig::new(EchConfigListBytes::from(config_bytes), &[suite]).unwrap();
+
+    let provider = provider::default_provider();
+    let client_config = ClientConfig::builder_with_provider(provider.clone().into())
+        .with_ech(EchMode::Enable(ech_config))
+        .unwrap();
+    let client_config = finish_client_config(KeyType::Rsa2048, client_config);
+    let server_config = make_server_config(KeyType::Rsa2048, &provider);
+
+    let mut client =
+        ClientConnection::new(Arc::new(client_config), server_name("private.example")).unwrap();
+    let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+
+    // Application data written before the handshake completes is buffered until then.
+    client
+        .writer()
+        .write_all(b"ech-inner-secret")
+        .unwrap();
+
+    let err = do_handshake_until_error(&mut client, &mut server).unwrap_err();
+    assert!(matches!(
+        err,
+        ErrorFromPeer::Client(Error::PeerIncompatible(
+            PeerIncompatible::ServerRejectedEncryptedClientHello(_)
+        ))
+    ));
+    assert_eq!(client.ech_status(), EchStatus::Rejected);
+
+    // The connection is only authenticated for the `public_name`, so it must not become
+    // usable for application data intended for the inner server name.
+    assert!(client.is_handshaking());
+
+    transfer(&mut client, &mut server);
+    assert_eq!(
+        server
+            .process_new_packets()
+            .unwrap_err(),
+        Error::AlertReceived(AlertDescription::EncryptedClientHelloRequired)
+    );
+    let mut server_received = Vec::new();
+    let _ = server
+        .reader()
+        .read_to_end(&mut server_received);
+    assert!(server_received.is_empty());
 }
 
 #[test]
