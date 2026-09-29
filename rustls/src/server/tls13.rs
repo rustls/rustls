@@ -1029,6 +1029,14 @@ impl ExpectCertificate {
         mut self,
         certp: CertificatePayloadTls13<'_>,
     ) -> Result<ServerState, Error> {
+        // RFC 8446: the certificate_request_context in the client's Certificate
+        // must match the one in our CertificateRequest, which we always send
+        // empty.  The client applies the mirror-image check to the server's
+        // Certificate.
+        if !certp.context.is_empty() {
+            return Err(InvalidMessage::InvalidCertRequest.into());
+        }
+
         // We don't send any CertificateRequest extensions, so any extensions
         // here are illegal.
         if certp
