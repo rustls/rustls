@@ -1087,6 +1087,17 @@ impl State<ServerConnectionData> for ExpectCertificate {
             HandshakePayload::CertificateTls13
         )?;
 
+        // RFC 8446: the certificate_request_context in the client's Certificate
+        // must match the one in our CertificateRequest, which we always send
+        // empty.  The client applies the mirror-image check to the server's
+        // Certificate.
+        if !certp.context.0.is_empty() {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::DecodeError,
+                InvalidMessage::InvalidCertRequest,
+            ));
+        }
+
         // We don't send any CertificateRequest extensions, so any extensions
         // here are illegal.
         if certp

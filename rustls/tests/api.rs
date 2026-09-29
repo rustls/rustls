@@ -8039,6 +8039,29 @@ fn test_cert_decompression_by_server_produces_invalid_cert_payload() {
 }
 
 #[test]
+fn test_cert_decompression_by_server_rejects_nonempty_context() {
+    let provider = provider::default_provider();
+    let mut server_config =
+        make_server_config_with_mandatory_client_auth(KeyType::Rsa2048, &provider);
+    server_config.cert_decompressors = vec![&NonEmptyContextDecompressor];
+    let mut client_config = make_client_config_with_auth(KeyType::Rsa2048, &provider);
+    client_config.cert_compressors = vec![&IdentityCompressor];
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    assert_eq!(
+        do_handshake_until_error(&mut client, &mut server),
+        Err(ErrorFromPeer::Server(Error::InvalidMessage(
+            InvalidMessage::InvalidCertRequest
+        )))
+    );
+    transfer(&mut server, &mut client);
+    assert_eq!(
+        client.process_new_packets(),
+        Err(Error::AlertReceived(AlertDescription::DecodeError))
+    );
+}
+
+#[test]
 fn test_cert_decompression_by_server_fails() {
     let provider = provider::default_provider();
     let mut server_config =
@@ -8101,6 +8124,37 @@ impl rustls::compress::CertDecompressor for GarbageDecompressor {
         output: &mut [u8],
     ) -> Result<(), rustls::compress::DecompressionFailed> {
         output.fill(0xff);
+        Ok(())
+    }
+
+    fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
+        rustls::CertificateCompressionAlgorithm::Zlib
+    }
+}
+
+#[derive(Debug)]
+struct NonEmptyContextDecompressor;
+
+impl rustls::compress::CertDecompressor for NonEmptyContextDecompressor {
+    fn decompress(
+        &self,
+        _input: &[u8],
+        output: &mut [u8],
+    ) -> Result<(), rustls::compress::DecompressionFailed> {
+        // Emit a syntactically valid `CertificatePayloadTls13` whose
+        // certificate_request_context is one byte long instead of empty,
+        // followed by a single certificate entry sized to fill `output`.  A
+        // server following RFC 8446 must reject the non-empty context.
+        let Some(cert_len) = output.len().checked_sub(10) else {
+            return Err(rustls::compress::DecompressionFailed);
+        };
+        let mut buf = Vec::with_capacity(output.len());
+        buf.extend_from_slice(&[1, 0]); // certificate_request_context: length 1 (non-empty)
+        buf.extend_from_slice(&((cert_len + 5) as u32).to_be_bytes()[1..]); // certificate_list length (u24)
+        buf.extend_from_slice(&(cert_len as u32).to_be_bytes()[1..]); // cert_data length (u24)
+        buf.resize(buf.len() + cert_len, 0); // cert_data
+        buf.extend_from_slice(&[0, 0]); // per-entry extensions length
+        output.copy_from_slice(&buf);
         Ok(())
     }
 
