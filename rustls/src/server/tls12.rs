@@ -791,7 +791,6 @@ impl From<Box<ExpectCcs>> for ServerState {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct Tls12ServerSessionValue<'a> {
     common: CommonServerSessionValue<'a>,
     master_secret: ZeroizingCow<'a, 48>,
@@ -845,7 +844,6 @@ impl<'a> From<Tls12ServerSessionValue<'a>> for ServerSessionValue<'a> {
     }
 }
 
-#[derive(Debug)]
 enum ZeroizingCow<'a, const N: usize> {
     Borrowed(&'a [u8; N]),
     Owned([u8; N]),

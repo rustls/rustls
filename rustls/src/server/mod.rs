@@ -49,7 +49,6 @@ pub mod danger {
 #[cfg(test)]
 mod test;
 
-#[derive(Debug)]
 pub(crate) enum ServerSessionValue<'a> {
     Tls12(Tls12ServerSessionValue<'a>),
     Tls13(Tls13ServerSessionValue<'a>),
@@ -78,7 +77,6 @@ impl<'a> Codec<'a> for ServerSessionValue<'a> {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct CommonServerSessionValue<'a> {
     pub(crate) creation_time_sec: u64,
     pub(crate) sni: Option<DnsName<'a>>,

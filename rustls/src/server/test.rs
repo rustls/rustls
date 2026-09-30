@@ -43,25 +43,6 @@ use crate::verify::VerifiedIdentity;
 use crate::version::TLS12_VERSION;
 
 #[test]
-fn serversessionvalue_is_debug() {
-    use std::{println, vec};
-    let ssv = ServerSessionValue::Tls13(Tls13ServerSessionValue::new(
-        CommonServerSessionValue::new(
-            None,
-            CipherSuite::TLS13_AES_128_GCM_SHA256,
-            None,
-            None,
-            vec![4, 5, 6],
-            UnixTime::now(),
-        ),
-        &[1, 2, 3],
-        0x12345678,
-    ));
-    println!("{ssv:?}");
-    println!("{:#04x?}", ssv.get_encoding());
-}
-
-#[test]
 fn serversessionvalue_no_sni() {
     let bytes = [
         0x03, 0x04, 0x00, 0x00, 0x00, 0x00, 0x69, 0x7a, 0x4a, 0xdf, 0x00, 0x13, 0x01, 0x00, 0x00,

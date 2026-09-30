@@ -168,13 +168,11 @@ impl core::fmt::Debug for TicketRotator {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct TicketRotatorState {
     current: Option<Generation>,
     previous: Option<Generation>,
 }
 
-#[derive(Debug)]
 struct Generation {
     producer: Box<dyn TicketProducer>,
     expires_at: Instant,

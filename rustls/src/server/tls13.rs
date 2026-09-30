@@ -1250,7 +1250,6 @@ impl From<Box<ExpectEarlyData>> for ServerState {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct Tls13ServerSessionValue<'a> {
     common: CommonServerSessionValue<'a>,
     secret: ZeroizingCow<'a>,
@@ -1344,7 +1343,6 @@ impl<'a> From<Tls13ServerSessionValue<'a>> for ServerSessionValue<'a> {
     }
 }
 
-#[derive(Debug)]
 enum ZeroizingCow<'a> {
     Borrowed(SizedPayload<'a, u8>),
     Owned(Zeroizing<SizedPayload<'static, u8>>),

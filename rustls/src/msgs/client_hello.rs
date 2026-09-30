@@ -629,7 +629,7 @@ fn trim_hostname_trailing_dot_for_sni(dns_name: &DnsName<'_>) -> DnsName<'static
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) enum HostNamePayload {
     HostName(DnsName<'static>),
     IpAddress(SizedPayload<'static, u16, NonEmpty>),
