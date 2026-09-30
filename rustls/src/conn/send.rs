@@ -66,7 +66,10 @@ impl SendPath {
         }
     }
 
-    /// Like send_msg_encrypt, but operate on an appdata directly.
+    /// Encrypt application data from `payload` into TLS records, appended to `tls`.
+    ///
+    /// Unlike handshake messages, application data comes from the caller, may be arbitrarily
+    /// large, and is always encrypted.
     pub(crate) fn send_appdata_encrypt(
         &mut self,
         payload: OutboundPlain<'_>,
