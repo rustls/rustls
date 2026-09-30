@@ -1135,6 +1135,9 @@ impl<Data> ConnectionCore<Data> {
                 self.common_state
                     .send_fatal_alert(AlertDescription::BadRecordMac, error)
             }
+            Error::PeerMisbehaved(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec) => self
+                .common_state
+                .send_fatal_alert(AlertDescription::UnexpectedMessage, error),
 
             error => error,
         }

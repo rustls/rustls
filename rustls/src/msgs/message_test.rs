@@ -6,8 +6,9 @@ use std::{format, fs, println, vec};
 use super::base::Payload;
 use super::codec::Reader;
 use super::enums::AlertLevel;
-use super::message::{Message, OutboundOpaqueMessage, PlainMessage};
-use crate::enums::{AlertDescription, HandshakeType};
+use super::message::{InboundOpaqueMessage, Message, OutboundOpaqueMessage, PlainMessage};
+use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
+use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::base::{MaybeEmpty, NonEmpty, PayloadU8, PayloadU16, PayloadU24};
 
 #[test]
@@ -123,5 +124,20 @@ fn into_wire_format() {
     assert_eq!(
         Message::build_key_update_request().into_wire_bytes(),
         &[0x16, 0x3, 0x4, 0x0, 0x5, 0x18, 0x0, 0x0, 0x1, 0x1]
+    );
+}
+
+#[test]
+fn tls13_unpadded_message_rejects_protected_change_cipher_spec() {
+    let mut payload = [0x01u8, ContentType::ChangeCipherSpec.into(), 0x00];
+    let msg = InboundOpaqueMessage::new(
+        ContentType::ApplicationData,
+        ProtocolVersion::TLSv1_2,
+        &mut payload,
+    );
+    assert_eq!(
+        msg.into_tls13_unpadded_message()
+            .unwrap_err(),
+        Error::PeerMisbehaved(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec)
     );
 }
