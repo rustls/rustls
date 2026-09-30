@@ -192,6 +192,8 @@ pub use feat_zlib_rs::{ZLIB_COMPRESSOR, ZLIB_DECOMPRESSOR};
 mod feat_brotli {
     use std::io::{Cursor, Write};
 
+    use brotli_decompressor::{BrotliDecompressStream, BrotliResult, BrotliState, StandardAlloc};
+
     use super::*;
 
     /// A certificate decompressor for the brotli algorithm using the `brotli` crate.
@@ -202,17 +204,27 @@ mod feat_brotli {
 
     impl CertDecompressor for BrotliDecompressor {
         fn decompress(&self, input: &[u8], output: &mut [u8]) -> Result<(), DecompressionFailed> {
-            let mut in_cursor = Cursor::new(input);
-            let mut out_cursor = Cursor::new(output);
+            let mut state = BrotliState::new_strict(
+                StandardAlloc::default(),
+                StandardAlloc::default(),
+                StandardAlloc::default(),
+            );
+            let (mut available_in, mut input_offset) = (input.len(), 0);
+            let (mut available_out, mut output_offset, mut total_out) = (output.len(), 0, 0);
 
-            brotli::BrotliDecompress(&mut in_cursor, &mut out_cursor)
-                .map_err(|_| DecompressionFailed)?;
-
-            if out_cursor.position() as usize != out_cursor.into_inner().len() {
-                return Err(DecompressionFailed);
+            match BrotliDecompressStream(
+                &mut available_in,
+                &mut input_offset,
+                input,
+                &mut available_out,
+                &mut output_offset,
+                output,
+                &mut total_out,
+                &mut state,
+            ) {
+                BrotliResult::ResultSuccess if available_out == 0 => Ok(()),
+                _ => Err(DecompressionFailed),
             }
-
-            Ok(())
         }
 
         fn algorithm(&self) -> CertificateCompressionAlgorithm {
@@ -448,6 +460,16 @@ mod tests {
     #[cfg(feature = "brotli")]
     fn test_brotli() {
         test_compressor(BROTLI_COMPRESSOR, BROTLI_DECOMPRESSOR);
+    }
+
+    #[test]
+    #[cfg(feature = "brotli")]
+    fn test_brotli_rejects_large_window() {
+        let large_window_empty = [0x11, 0xd0];
+        brotli::BrotliDecompress(&mut &large_window_empty[..], &mut Vec::new()).unwrap();
+        BROTLI_DECOMPRESSOR
+            .decompress(&large_window_empty, &mut [])
+            .unwrap_err();
     }
 
     fn test_compressor(comp: &dyn CertCompressor, decomp: &dyn CertDecompressor) {
