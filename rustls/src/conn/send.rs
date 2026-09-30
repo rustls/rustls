@@ -73,7 +73,7 @@ impl SendPath {
         tls: &mut Vec<u8>,
     ) -> Result<usize, Error> {
         let len = payload.len();
-        self.send_records::<true>(
+        self.encrypt_records(
             self.fragmenter.fragment(
                 ContentType::ApplicationData,
                 EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
@@ -87,8 +87,8 @@ impl SendPath {
         Ok(len)
     }
 
-    /// Encrypt and queue each fragment in `iter`.
-    fn send_records<'a, const MUST_ENCRYPT: bool>(
+    /// Encrypt each fragment in `iter`, appending the resulting records to `tls`.
+    fn encrypt_records<'a>(
         &mut self,
         iter: impl ExactSizeIterator<Item = Record<OutboundPlain<'a>>>,
         tls: &mut Vec<u8>,
@@ -98,26 +98,19 @@ impl SendPath {
         let mut iter = iter.peekable();
         if let Some(first) = iter.peek() {
             let record_len = HEADER_SIZE
-                + match MUST_ENCRYPT {
-                    true => self
-                        .encrypt_state
-                        .encrypted_len(first.payload.len()),
-                    false => first.payload.len(),
-                };
+                + self
+                    .encrypt_state
+                    .encrypted_len(first.payload.len());
             tls.reserve(count * record_len);
         }
 
         for record in iter {
-            if MUST_ENCRYPT && self.preflight_encrypt(0, tls).is_err() {
+            if self.preflight_encrypt(0, tls).is_err() {
                 return Ok(());
             }
 
-            match MUST_ENCRYPT {
-                true => self
-                    .encrypt_state
-                    .encrypt_outgoing(record, tls)?,
-                false => record.encode_unencrypted(tls),
-            }
+            self.encrypt_state
+                .encrypt_outgoing(record, tls)?;
         }
 
         Ok(())
@@ -265,10 +258,21 @@ impl SendOutput for SendPath {
                 .encrypted_record_overhead(),
         );
 
-        match must_encrypt {
-            true => self.send_records::<true>(fragments, tls),
-            false => self.send_records::<false>(fragments, tls),
+        if must_encrypt {
+            return self.encrypt_records(fragments, tls);
         }
+
+        let count = fragments.len();
+        let mut iter = fragments.peekable();
+        if let Some(first) = iter.peek() {
+            tls.reserve(count * (HEADER_SIZE + first.payload.len()));
+        }
+
+        for record in iter {
+            record.encode_unencrypted(tls);
+        }
+
+        Ok(())
     }
 }
 
