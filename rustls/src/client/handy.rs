@@ -265,7 +265,9 @@ impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
 #[cfg(test)]
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
+    use core::time::Duration;
     use std::prelude::v1::*;
+    use std::{format, vec};
 
     use pki_types::{ServerName, UnixTime};
 
@@ -345,6 +347,60 @@ mod tests {
             ),
         );
         assert!(c.take_tls13_ticket(&name).is_none());
+    }
+
+    #[test]
+    fn debug_of_session_types() {
+        let server_cert_verifier: Arc<dyn ServerCertVerifier> = Arc::new(DummyServerCertVerifier);
+        let resolves_client_cert: Arc<dyn ResolvesClientCert> = Arc::new(DummyResolvesClientCert);
+
+        #[cfg(feature = "tls12")]
+        {
+            use crate::msgs::persist::Tls12ClientSessionValue;
+            let SupportedCipherSuite::Tls12(tls12_suite) =
+                cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+            else {
+                unreachable!()
+            };
+
+            let tls12 = Tls12ClientSessionValue::new(
+                tls12_suite,
+                SessionId::empty(),
+                Arc::new(PayloadU16::new(vec![5])),
+                &[0xa5; 48],
+                CertificateChain::default(),
+                &server_cert_verifier,
+                &resolves_client_cert,
+                UnixTime::since_unix_epoch(Duration::from_secs(1)),
+                2,
+                true,
+            );
+            let debug = format!("{tls12:?}");
+            assert!(
+                debug.contains("ClientSessionCommon { ticket: 05, epoch: 1, lifetime_secs: 2,")
+            );
+            assert!(!debug.contains("a5a5"), "{debug}");
+        }
+
+        let SupportedCipherSuite::Tls13(tls13_suite) = cipher_suite::TLS13_AES_256_GCM_SHA384
+        else {
+            unreachable!();
+        };
+        let tls13 = Tls13ClientSessionValue::new(
+            tls13_suite,
+            Arc::new(PayloadU16::new(vec![5])),
+            &[0xa5; 32],
+            CertificateChain::default(),
+            &server_cert_verifier,
+            &resolves_client_cert,
+            UnixTime::since_unix_epoch(Duration::from_secs(1)),
+            2,
+            3,
+            0,
+        );
+        let debug = format!("{tls13:?}");
+        assert!(debug.contains("ClientSessionCommon { ticket: 05, epoch: 1, lifetime_secs: 2,"));
+        assert!(!debug.contains("a5a5"), "{debug}");
     }
 
     /// For each `size` from 1 to 8, the cache keeps one server's key
