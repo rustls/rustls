@@ -7,7 +7,7 @@ use crate::crypto::cipher::{
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
-use crate::msgs::{AlertLevel, Fragmenter, HEADER_SIZE, Message};
+use crate::msgs::{AlertLevel, Fragmenter, HEADER_SIZE, Message, MessagePayload};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::tracing::{debug, error};
 
@@ -108,11 +108,7 @@ impl SendPath {
         }
 
         for record in iter {
-            // Alerts are always sendable -- never quashed by a PreEncryptAction.
-            if MUST_ENCRYPT
-                && record.typ != ContentType::Alert
-                && self.preflight_encrypt(0, tls).is_err()
-            {
+            if MUST_ENCRYPT && self.preflight_encrypt(0, tls).is_err() {
                 return Ok(());
             }
 
@@ -229,11 +225,20 @@ impl SendOutput for SendPath {
             _ => {}
         };
 
-        self.send_msg(
-            Message::build_alert(level, desc),
-            self.encrypt_state.is_encrypting(),
-            tls,
-        )
+        // Alerts always fit in a single record, and are never quashed by a `PreEncryptAction`.
+        let record = Record::from(Message::build_alert(level, desc));
+        let record = record.borrow_outbound();
+        match self.encrypt_state.is_encrypting() {
+            true => {
+                self.perhaps_write_key_update(tls);
+                self.encrypt_state
+                    .encrypt_outgoing(record, tls)
+            }
+            false => {
+                record.encode_unencrypted(tls);
+                Ok(())
+            }
+        }
     }
 
     fn start_traffic(&mut self) {
@@ -242,12 +247,15 @@ impl SendOutput for SendPath {
     }
 
     /// Send a raw TLS message, fragmenting it if needed.
+    ///
+    /// Alerts must be sent with [`Self::send_alert()`] instead.
     fn send_msg(
         &mut self,
         m: Message<'_>,
         must_encrypt: bool,
         tls: &mut Vec<u8>,
     ) -> Result<(), Error> {
+        debug_assert!(!matches!(m.payload, MessagePayload::Alert(_)));
         let record = Record::from(m);
         let fragments = self.fragmenter.fragment(
             record.typ,
