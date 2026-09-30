@@ -811,9 +811,7 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
 
     for i in 0..CONFIDENTIALITY_LIMIT {
         let message = format!("{i:08}");
-        client
-            .write(message.as_bytes().into(), &mut client_output)
-            .unwrap();
+        let result = client.write(message.as_bytes().into(), &mut client_output);
         let transferred = transfer(&mut client_output, &mut server_input);
 
         let mut buf = Vec::new();
@@ -824,8 +822,16 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
         println!("{}: {} -> {:?}", i, transferred, state);
 
         match i {
-            1023 => assert_eq!(buf.len(), 0),
-            _ => assert_eq!(&buf, message.as_bytes()),
+            1023 => {
+                assert_eq!(result, Err(Error::EncryptError));
+                assert!(state.peer_has_closed());
+                assert_eq!(buf.len(), 0);
+            }
+            _ => {
+                result.unwrap();
+                assert!(!state.peer_has_closed());
+                assert_eq!(&buf, message.as_bytes());
+            }
         }
     }
 }
