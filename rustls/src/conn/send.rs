@@ -36,36 +36,6 @@ impl SendPath {
         self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify, tls)
     }
 
-    fn preflight_encrypt(&mut self, n: usize, tls: &mut Vec<u8>) -> Result<(), Error> {
-        match self
-            .encrypt_state
-            .pre_encrypt_action(n as u64)
-        {
-            None => Ok(()),
-
-            // Close connection once we start to run out of sequence space.
-            Some(PreEncryptAction::RefreshOrClose) => {
-                match self.negotiated_version {
-                    // driven by caller, as we don't have the `State` here
-                    Some(ProtocolVersion::TLSv1_3) => {
-                        self.key_update_local = KeyUpdateLocal::Requested;
-                        Ok(())
-                    }
-                    _ => {
-                        error!(
-                            "traffic keys exhausted, closing connection to prevent security failure"
-                        );
-                        self.send_close_notify(tls)?;
-                        Err(Error::EncryptError)
-                    }
-                }
-            }
-
-            // Refuse to wrap counter at all costs. This is basically untestable unfortunately.
-            Some(PreEncryptAction::Refuse) => Err(Error::EncryptError),
-        }
-    }
-
     /// Encrypt application data from `payload` into TLS records, appended to `tls`.
     ///
     /// Unlike handshake messages, application data comes from the caller, may be arbitrarily
@@ -117,6 +87,36 @@ impl SendPath {
         }
 
         Ok(())
+    }
+
+    fn preflight_encrypt(&mut self, n: usize, tls: &mut Vec<u8>) -> Result<(), Error> {
+        match self
+            .encrypt_state
+            .pre_encrypt_action(n as u64)
+        {
+            None => Ok(()),
+
+            // Close connection once we start to run out of sequence space.
+            Some(PreEncryptAction::RefreshOrClose) => {
+                match self.negotiated_version {
+                    // driven by caller, as we don't have the `State` here
+                    Some(ProtocolVersion::TLSv1_3) => {
+                        self.key_update_local = KeyUpdateLocal::Requested;
+                        Ok(())
+                    }
+                    _ => {
+                        error!(
+                            "traffic keys exhausted, closing connection to prevent security failure"
+                        );
+                        self.send_close_notify(tls)?;
+                        Err(Error::EncryptError)
+                    }
+                }
+            }
+
+            // Refuse to wrap counter at all costs. This is basically untestable unfortunately.
+            Some(PreEncryptAction::Refuse) => Err(Error::EncryptError),
+        }
     }
 
     pub(crate) fn start_outgoing_traffic(&mut self) {
