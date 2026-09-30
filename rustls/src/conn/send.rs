@@ -81,7 +81,7 @@ impl SendPath {
             if let Some(action) = self.encrypt_state.pre_encrypt_action(0) {
                 match action {
                     // Refuse to wrap counter at all costs. This is basically untestable unfortunately.
-                    PreEncryptAction::Refuse => return Ok(()),
+                    PreEncryptAction::Refuse => return Err(Error::EncryptError),
                     // Close connection once we start to run out of sequence space.
                     PreEncryptAction::RefreshOrClose => {}
                 }
@@ -96,7 +96,7 @@ impl SendPath {
                             "traffic keys exhausted, closing connection to prevent security failure"
                         );
                         self.send_close_notify(tls)?;
-                        return Ok(());
+                        return Err(Error::EncryptError);
                     }
                 }
             }
