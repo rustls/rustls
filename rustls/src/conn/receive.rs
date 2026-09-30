@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::marker::PhantomData;
-use core::mem;
 use core::ops::Range;
+use core::{fmt, mem};
 use std::io::{self, Read};
 
 use super::send::{SendOutput, SendPath};
@@ -774,7 +774,7 @@ impl InboundUnborrowedRecord {
 }
 
 /// A buffer of TLS bytes read from a socket, stored in a `Vec<u8>`.
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct VecInput {
     /// Buffer of data read from the socket, in the process of being parsed into messages.
     ///
@@ -898,8 +898,24 @@ impl TlsInputBuffer for VecInput {
     }
 }
 
+impl fmt::Debug for VecInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            buf,
+            used,
+            has_seen_eof,
+            received_close_notify,
+        } = self;
+        f.debug_struct("VecInput")
+            .field("buf_len", &buf.len())
+            .field("used", used)
+            .field("has_seen_eof", has_seen_eof)
+            .field("received_close_notify", received_close_notify)
+            .finish_non_exhaustive()
+    }
+}
+
 /// A borrowed version of [`VecInput`] that tracks discard operations
-#[derive(Debug)]
 pub struct SliceInput<'a> {
     // a fully initialized buffer that will be deframed
     buf: &'a mut [u8],
@@ -946,6 +962,23 @@ impl TlsInputBuffer for SliceInput<'_> {
     }
 }
 
+impl fmt::Debug for SliceInput<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            buf,
+            discard,
+            has_seen_eof,
+            received_close_notify,
+        } = self;
+        f.debug_struct("SliceInput")
+            .field("buf_len", &buf.len())
+            .field("discard", discard)
+            .field("has_seen_eof", has_seen_eof)
+            .field("received_close_notify", received_close_notify)
+            .finish_non_exhaustive()
+    }
+}
+
 /// An abstraction over received data buffers (either owned or borrowed)
 pub trait TlsInputBuffer {
     /// Return the buffer which contains the received data.
@@ -987,3 +1020,28 @@ pub trait TlsInputBuffer {
 /// cf. BoringSSL's `kMaxEmptyRecords`
 /// <https://github.com/google/boringssl/blob/dec5989b793c56ad4dd32173bd2d8595ca78b398/ssl/tls_record.cc#L124-L128>
 const ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX: u8 = 32;
+
+#[cfg(test)]
+mod tests {
+    use alloc::format;
+
+    use super::*;
+
+    #[test]
+    fn debug_of_input_types() {
+        let mut buffer = [b'a'; 32];
+        let mut slice = SliceInput::new(&mut buffer);
+        slice.discard(2);
+        assert_eq!(
+            format!("{slice:?}"),
+            "SliceInput { buf_len: 32, discard: 2, has_seen_eof: false, received_close_notify: false, .. }"
+        );
+
+        let mut vec = VecInput::default();
+        vec.prepare_read().unwrap();
+        assert_eq!(
+            format!("{vec:?}"),
+            "VecInput { buf_len: 4096, used: 0, has_seen_eof: false, received_close_notify: false, .. }"
+        );
+    }
+}
