@@ -84,7 +84,8 @@ impl<'a> Record<InboundOpaque<'a>> {
     /// For TLS1.3 (only), checks the length record.payload is valid and removes the padding.
     ///
     /// Returns an error if the record payload (pre-unpadding) is too long, or the padding is invalid,
-    /// or the record payload (post-unpadding) is too long.
+    /// or the inner content type is `change_cipher_spec`, or the record payload (post-unpadding)
+    /// is too long.
     pub fn into_tls13_unpadded_record(mut self) -> Result<Record<&'a [u8]>, Error> {
         let payload = &mut self.payload;
 
@@ -99,6 +100,14 @@ impl<'a> Record<InboundOpaque<'a>> {
         self.typ = unpad_tls13_payload(payload);
         if self.typ == ContentType(0) {
             return Err(PeerMisbehaved::IllegalTlsInnerPlaintext.into());
+        }
+
+        // > An implementation which receives any other change_cipher_spec value or
+        // > which receives a protected change_cipher_spec record MUST abort the
+        // > handshake with an "unexpected_message" alert.
+        // <https://www.rfc-editor.org/rfc/rfc9846#section-5>
+        if self.typ == ContentType::ChangeCipherSpec {
+            return Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into());
         }
 
         if payload.len() > MAX_FRAGMENT_LEN.get() {
@@ -793,6 +802,22 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn tls13_unpadded_record_rejects_protected_change_cipher_spec() {
+        let mut payload = [0x01u8, ContentType::ChangeCipherSpec.into(), 0x00];
+        let record = Record {
+            typ: ContentType::ApplicationData,
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+            payload: InboundOpaque(&mut payload),
+        };
+        assert_eq!(
+            record
+                .into_tls13_unpadded_record()
+                .unwrap_err(),
+            Error::PeerMisbehaved(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec)
+        );
     }
 
     #[test]
