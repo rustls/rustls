@@ -268,6 +268,7 @@
     "SecondServerHelloWrongVersion-TLS13": ":INCOMPATIBLE:",
     "SendBogusAlertType": ":BAD_ALERT:",
     "SendInvalidRecordType": ":GARBAGE:",
+    "SendPostHandshakeChangeCipherSpec-TLS13": ":ILLEGAL_MIDDLEBOX_CHANGE_CIPHER_SPEC:",
     "Server-NonEmptyEndOfEarlyData-TLS13": ":BAD_HANDSHAKE_MSG:",
     "Server-Sign-ML-DSA-44-TLS12": ":INCOMPATIBLE:",
     "Server-Sign-ML-DSA-65-TLS12": ":INCOMPATIBLE:",

@@ -27,13 +27,13 @@ use crate::crypto::{
 use crate::enums::{CertificateType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::{
-    CertificateChain, ClientHelloPayload, Codec, Compression, ECCurveType, EcParameters,
-    EncryptedExtensions, ExtensionType, HEADER_SIZE, HandshakeMessagePayload, HandshakePayload,
-    HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, LengthPrefixedBuffer,
-    ListLength, MaybeEmpty, Message, MessagePayload, NewSessionTicketExtensions,
-    NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams, ServerExtensions,
-    ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
-    SessionId, SizedPayload,
+    CertificateChain, ChangeCipherSpecPayload, ClientHelloPayload, Codec, Compression, ECCurveType,
+    EcParameters, EncryptedExtensions, ExtensionType, HEADER_SIZE, HandshakeMessagePayload,
+    HandshakePayload, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry,
+    LengthPrefixedBuffer, ListLength, MaybeEmpty, Message, MessagePayload,
+    NewSessionTicketExtensions, NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams,
+    ServerExtensions, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams,
+    ServerKeyExchangePayload, SessionId, SizedPayload,
 };
 use crate::pki_types::PrivateKeyDer;
 use crate::pki_types::pem::PemObject;
@@ -817,6 +817,84 @@ fn client_receives_tls13_server_hello_with_raw_extension(
     conn.read_tls(&mut input, &mut tls)
         .handle_all(&mut Vec::new())
         .map(|_| ())
+}
+
+#[test]
+fn test_client_rejects_protected_change_cipher_spec() {
+    let provider = Arc::new(tls13_only(TEST_PROVIDER.clone()));
+    let fake_server_crypto = Arc::new(FakeServerCrypto::new(provider.clone()));
+    let mut config = ClientConfig::builder(provider)
+        .with_root_certificates(roots())
+        .with_no_client_auth()
+        .unwrap();
+    config.key_log = fake_server_crypto.clone();
+
+    let mut tls = Vec::new();
+    let mut conn = Arc::new(config)
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build(&mut tls)
+        .unwrap();
+
+    let sh = Message {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
+            ServerHelloPayload {
+                random: Random([0; 32]),
+                compression_method: Compression::Null,
+                cipher_suite: TLS13_TEST_SUITE.suite(),
+                legacy_version: ProtocolVersion::TLSv1_3,
+                session_id: client_hello_in(&tls).session_id,
+                extensions: Box::new(ServerExtensions {
+                    key_share: Some(KeyShareEntry {
+                        group: KEY_EXCHANGE_GROUP.name(),
+                        payload: KEY_EXCHANGE_GROUP
+                            .start()
+                            .unwrap()
+                            .pub_key()
+                            .to_vec()
+                            .into(),
+                    }),
+                    ..ServerExtensions::default()
+                }),
+            },
+        ))),
+    };
+    let mut input = VecInput::default();
+    input
+        .read(&mut sh.into_wire_bytes().as_slice())
+        .unwrap();
+    process(&mut input, &mut conn).unwrap();
+
+    // A change_cipher_spec protected under the handshake keys is not a
+    // compatibility-mode CCS, and must not be dropped like one.
+    let ccs = Message {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload),
+    };
+
+    let mut encrypter = fake_server_crypto.server_handshake_encrypter();
+    let ccs = Record::<Payload<'_>>::from(ccs);
+    let ccs = ccs.borrow_outbound();
+    let mut enc_ccs = vec![0u8; HEADER_SIZE + encrypter.encrypted_payload_len(ccs.payload.len())];
+    let encrypted = encrypter
+        .encrypt(ccs, 0, &mut enc_ccs[HEADER_SIZE..])
+        .unwrap();
+
+    let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
+    enc_ccs.truncate(HEADER_SIZE + len);
+    enc_ccs[..HEADER_SIZE].copy_from_slice(&encode_record_header(
+        typ,
+        version,
+        u16::try_from(len).unwrap(),
+    ));
+
+    input
+        .read(&mut enc_ccs.as_slice())
+        .unwrap();
+    assert_eq!(
+        process(&mut input, &mut conn).unwrap_err(),
+        PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into()
+    );
 }
 
 fn client_credentials(provider: &CryptoProvider) -> Credentials {
