@@ -72,12 +72,18 @@ mod tests {
         ActiveKeyExchange, CryptoProvider, KeyExchangeAlgorithm, SupportedKxGroup,
     };
     use crate::enums::CertificateType;
-    use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer, PskKeyExchangeModes};
+    use crate::msgs::codec::{Codec, Reader};
+    use crate::msgs::handshake::{
+        PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, PskKeyExchangeModes,
+    };
+    use crate::msgs::message::HEADER_SIZE;
+    use crate::msgs::persist;
     use crate::pki_types::pem::PemObject;
     use crate::pki_types::{CertificateDer, PrivateKeyDer};
     use crate::server::{AlwaysResolvesServerRawPublicKeys, ServerConfig, ServerConnection};
     use crate::sign::CertifiedKey;
     use crate::sync::Arc;
+    use crate::tls13::key_schedule::KeyScheduleEarly;
     use crate::{
         CipherSuiteCommon, SupportedCipherSuite, Tls12CipherSuite, Tls13CipherSuite, version,
     };
@@ -347,6 +353,122 @@ mod tests {
             conn.process_new_packets().unwrap_err(),
             PeerMisbehaved::CipherSuiteDifferedOnRetry.into(),
         );
+    }
+
+    #[test]
+    fn early_data_accepted_for_first_psk_identity() {
+        let (selected, early_data_accepted) = resume_with_early_data(0);
+        assert_eq!(selected, Some(0));
+        assert!(early_data_accepted);
+    }
+
+    #[test]
+    fn early_data_rejected_for_later_psk_identity() {
+        // RFC 9846 section 4.3.10: "In order to accept early data, the server MUST have
+        // accepted a PSK cipher suite and selected the first key offered in the client's
+        // "pre_shared_key" extension." The server may still resume with a later PSK.
+        let (selected, early_data_accepted) = resume_with_early_data(1);
+        assert_eq!(selected, Some(1));
+        assert!(!early_data_accepted);
+    }
+
+    /// Offer a resumable PSK at `index` (preceded by unknown identities) along with an
+    /// early data request, returning the selected PSK index and whether early data was accepted.
+    fn resume_with_early_data(index: usize) -> (Option<u16>, bool) {
+        // ensures X25519 is offered irrespective of cfg(feature = "fips"), to match
+        // `minimal_client_hello()`
+        let provider = CryptoProvider {
+            kx_groups: vec![super::provider::kx_group::X25519],
+            ..super::provider::default_provider()
+        };
+        let mut config = ServerConfig::builder_with_provider(provider.into())
+            .with_protocol_versions(&[&version::TLS13])
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(server_cert(), server_key())
+            .unwrap();
+        config.max_early_data_size = 1024;
+
+        let SupportedCipherSuite::Tls13(suite) =
+            super::provider::cipher_suite::TLS13_AES_128_GCM_SHA256
+        else {
+            unreachable!();
+        };
+
+        let secret = [0x42u8; 32];
+        let ticket = b"resumable ticket";
+        let session = persist::ServerSessionValue::new(
+            None,
+            ProtocolVersion::TLSv1_3,
+            suite.common.suite,
+            &secret,
+            None,
+            None,
+            vec![],
+            config.current_time().unwrap(),
+            0,
+        );
+        assert!(
+            config
+                .session_storage
+                .put(ticket.to_vec(), session.get_encoding())
+        );
+
+        let binder_len = suite.common.hash_provider.output_len();
+        let mut identities = vec![PresharedKeyIdentity::new(b"unknown ticket".to_vec(), 0); index];
+        identities.push(PresharedKeyIdentity::new(ticket.to_vec(), 0));
+        let binders = vec![PresharedKeyBinder::from(vec![0u8; binder_len]); identities.len()];
+
+        let mut ch = minimal_client_hello();
+        ch.cipher_suites = vec![suite.common.suite];
+        ch.extensions.preshared_key_modes = Some(PskKeyExchangeModes {
+            psk_dhe: true,
+            psk: false,
+        });
+        ch.extensions.early_data_request = Some(());
+        ch.extensions.preshared_key_offer = Some(PresharedKeyOffer {
+            identities,
+            binders,
+        });
+        let mut hmp = HandshakeMessagePayload(HandshakePayload::ClientHello(ch));
+
+        // compute a genuine binder for the resumable PSK over the final ClientHello
+        let key_schedule = KeyScheduleEarly::new(suite, &secret);
+        let handshake_hash = suite
+            .common
+            .hash_provider
+            .hash(&hmp.encoding_for_binder_signing());
+        let binder = key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
+        let HandshakePayload::ClientHello(ch) = &mut hmp.0 else {
+            unreachable!();
+        };
+        ch.preshared_key_offer
+            .as_mut()
+            .unwrap()
+            .binders[index] = PresharedKeyBinder::from(binder.as_ref().to_vec());
+
+        let ch = Message {
+            version: ProtocolVersion::TLSv1_3,
+            payload: MessagePayload::handshake(hmp),
+        };
+        let mut conn = ServerConnection::new(config.into()).unwrap();
+        conn.read_tls(&mut ch.into_wire_bytes().as_slice())
+            .unwrap();
+        conn.process_new_packets().unwrap();
+
+        let mut flight = vec![];
+        conn.write_tls(&mut flight).unwrap();
+        let mut r = Reader::init(&flight[HEADER_SIZE..]);
+        let HandshakeMessagePayload(HandshakePayload::ServerHello(server_hello)) =
+            HandshakeMessagePayload::read(&mut r).unwrap()
+        else {
+            panic!("expected ServerHello");
+        };
+
+        (
+            server_hello.extensions.preshared_key,
+            conn.early_data().is_some(),
+        )
     }
 
     static TLS13_AES_128_GCM_SHA256_ALT: SupportedCipherSuite =
