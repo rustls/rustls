@@ -292,9 +292,7 @@ mod client_hello {
                 output,
                 &mut ocsp_response,
                 input.client_hello,
-                resuming
-                    .as_ref()
-                    .map(|(_, session)| session),
+                resuming.as_ref(),
                 st.extra_exts,
                 &st.config,
                 st.send_tickets,
@@ -648,7 +646,7 @@ mod client_hello {
     fn decide_if_early_data_allowed(
         output: &mut dyn Output<'_>,
         client_hello: &ClientHelloPayload,
-        resumedata: Option<&Tls13ServerSessionValue<'_>>,
+        resuming: Option<&(usize, Tls13ServerSessionValue<'_>)>,
         chosen_alpn_protocol: Option<&ApplicationProtocol<'_>>,
         suite: &'static Tls13CipherSuite,
         config: &ServerConfig,
@@ -661,7 +659,7 @@ mod client_hello {
             false => EarlyDataDecision::Disabled,
         };
 
-        let Some(resume) = resumedata else {
+        let Some((psk_index, resume)) = resuming else {
             // never any early data if not resuming.
             return rejected_or_disabled;
         };
@@ -685,8 +683,13 @@ mod client_hello {
          *  - The selected cipher suite
          *  - The selected ALPN [RFC 7301] protocol, if any"
          *
+         * "In order to accept early data, the server MUST have accepted a PSK
+         *  cipher suite and selected the first key offered in the client's
+         *  "pre_shared_key" extension."
+         *
          * (RFC 9846, section 4.3.10) */
         let early_data_possible = early_data_requested
+            && *psk_index == 0
             && resume.is_fresh()
             && resume.common.cipher_suite == suite.common.suite
             && resume.common.alpn.as_ref() == chosen_alpn_protocol;
@@ -710,7 +713,7 @@ mod client_hello {
         output: &mut dyn Output<'_>,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
-        resumedata: Option<&Tls13ServerSessionValue<'_>>,
+        resuming: Option<&(usize, Tls13ServerSessionValue<'_>)>,
         extra_exts: ServerExtensionsInput,
         config: &ServerConfig,
         send_tickets: usize,
@@ -718,7 +721,7 @@ mod client_hello {
         let (out, mut extensions) = Tls13Extensions::new(
             extra_exts,
             ocsp_response,
-            resumedata.map(|r| &r.common),
+            resuming.map(|(_, session)| &session.common),
             hello,
             output,
             config,
@@ -733,7 +736,7 @@ mod client_hello {
         let early_data = decide_if_early_data_allowed(
             output,
             hello,
-            resumedata,
+            resuming,
             out.alpn_protocol.as_ref(),
             suite,
             config,
