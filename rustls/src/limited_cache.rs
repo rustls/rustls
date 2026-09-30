@@ -1,6 +1,5 @@
 use alloc::collections::VecDeque;
 use core::borrow::Borrow;
-use core::fmt::Debug;
 use core::hash::Hash;
 
 use crate::hash_map::{Entry, HashMap};
@@ -20,7 +19,7 @@ pub(crate) struct LimitedCache<K, V> {
     oldest: VecDeque<K>,
 }
 
-impl<K: Eq + Hash + Clone + Debug, V> LimitedCache<K, V> {
+impl<K: Eq + Hash + Clone, V> LimitedCache<K, V> {
     /// Create a new LimitedCache with the given rough capacity.
     pub(crate) fn new(capacity_order_of_magnitude: usize) -> Self {
         Self {
@@ -86,7 +85,7 @@ impl<K: Eq + Hash + Clone + Debug, V> LimitedCache<K, V> {
     }
 }
 
-impl<K: Eq + Hash + Clone + Debug, V: Default> LimitedCache<K, V> {
+impl<K: Eq + Hash + Clone, V: Default> LimitedCache<K, V> {
     pub(crate) fn get_or_insert_default_and_edit(&mut self, k: K, edit: impl FnOnce(&mut V)) {
         let inserted_new_item = match self.map.entry(k) {
             Entry::Occupied(value) => {

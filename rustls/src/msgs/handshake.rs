@@ -809,12 +809,11 @@ impl Codec<'_> for EcParameters {
     }
 }
 
-pub(crate) trait KxDecode<'a>: fmt::Debug + Sized {
+pub(crate) trait KxDecode<'a>: Sized {
     /// Decode a key exchange message given the key_exchange `algo`
     fn decode(r: &mut Reader<'a>, algo: KeyExchangeAlgorithm) -> Result<Self, InvalidMessage>;
 }
 
-#[derive(Debug)]
 pub(crate) enum ClientKeyExchangeParams {
     Ecdh(ClientEcdhParams),
     Dh(ClientDhParams),
@@ -846,7 +845,6 @@ impl KxDecode<'_> for ClientKeyExchangeParams {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct ClientEcdhParams {
     /// RFC 4492: `opaque point <1..2^8-1>;`
     pub(crate) public: SizedPayload<'static, u8, NonEmpty>,

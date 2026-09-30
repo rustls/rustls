@@ -266,7 +266,6 @@ impl DecryptionState {
 }
 
 /// Result of decryption.
-#[derive(Debug)]
 pub(crate) struct Decrypted<'a> {
     /// Whether the peer appears to be getting close to encrypting too many records with this key.
     pub(crate) want_close_before_decrypt: bool,

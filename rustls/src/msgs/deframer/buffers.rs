@@ -46,7 +46,6 @@ impl<'b> Delocator<'b> {
 
 /// Conversion from a slice within a larger buffer into
 /// a `Range` offset within.
-#[derive(Debug)]
 pub(crate) struct Locator {
     bounds: Range<*const u8>,
 }

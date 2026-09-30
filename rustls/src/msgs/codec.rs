@@ -214,12 +214,12 @@ impl TlsListElement for SubjectPublicKeyInfoDer<'_> {
 ///
 /// All uses _MUST_ exhaust the iterator, as errors may be delayed
 /// until the last element.
-pub(crate) struct TlsListIter<'a, T: Codec<'a> + TlsListElement + Debug> {
+pub(crate) struct TlsListIter<'a, T: Codec<'a> + TlsListElement> {
     sub: Reader<'a>,
     _t: PhantomData<T>,
 }
 
-impl<'a, T: Codec<'a> + TlsListElement + Debug> TlsListIter<'a, T> {
+impl<'a, T: Codec<'a> + TlsListElement> TlsListIter<'a, T> {
     pub(crate) fn new(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         let len = T::SIZE_LEN.read(r)?;
         let sub = r.sub(len)?;
@@ -230,7 +230,7 @@ impl<'a, T: Codec<'a> + TlsListElement + Debug> TlsListIter<'a, T> {
     }
 }
 
-impl<'a, T: Codec<'a> + TlsListElement + Debug> Iterator for TlsListIter<'a, T> {
+impl<'a, T: Codec<'a> + TlsListElement> Iterator for TlsListIter<'a, T> {
     type Item = Result<T, InvalidMessage>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -412,7 +412,7 @@ impl Codec<'_> for () {
 
 /// Trait for implementing encoding and decoding functionality
 /// on something.
-pub(crate) trait Codec<'a>: Debug + Sized {
+pub(crate) trait Codec<'a>: Sized {
     /// Function for encoding itself by appending itself to
     /// the provided vec of bytes.
     fn encode(&self, bytes: &mut Vec<u8>);
