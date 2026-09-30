@@ -206,6 +206,7 @@
     "ExtensionTrailingData-StatusRequest-Client-TLS-TLS12": ":BAD_HANDSHAKE_MSG:",
     "ExtensionTrailingData-StatusRequest-Client-TLS-TLS13": ":BAD_HANDSHAKE_MSG:",
     "SendInvalidRecordType": ":GARBAGE:",
+    "SendPostHandshakeChangeCipherSpec-TLS13": ":PEER_MISBEHAVIOUR:",
     "NoSharedCipher": ":HANDSHAKE_FAILURE:",
     "NoSharedCipher-TLS13": ":HANDSHAKE_FAILURE:",
     "InvalidECDHPoint-Client": ":PEER_MISBEHAVIOUR:",

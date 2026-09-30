@@ -56,7 +56,8 @@ impl<'a> InboundOpaqueMessage<'a> {
     /// For TLS1.3 (only), checks the length msg.payload is valid and removes the padding.
     ///
     /// Returns an error if the message (pre-unpadding) is too long, or the padding is invalid,
-    /// or the message (post-unpadding) is too long.
+    /// or the inner content type is `change_cipher_spec`, or the message (post-unpadding) is
+    /// too long.
     pub fn into_tls13_unpadded_message(mut self) -> Result<InboundPlainMessage<'a>, Error> {
         let payload = &mut self.payload;
 
@@ -67,6 +68,14 @@ impl<'a> InboundOpaqueMessage<'a> {
         self.typ = unpad_tls13_payload(payload);
         if self.typ == ContentType::Unknown(0) {
             return Err(PeerMisbehaved::IllegalTlsInnerPlaintext.into());
+        }
+
+        // > An implementation which receives any other change_cipher_spec value or
+        // > which receives a protected change_cipher_spec record MUST abort the
+        // > handshake with an "unexpected_message" alert.
+        // <https://www.rfc-editor.org/rfc/rfc9846#section-5>
+        if self.typ == ContentType::ChangeCipherSpec {
+            return Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into());
         }
 
         if payload.len() > MAX_FRAGMENT_LEN {
