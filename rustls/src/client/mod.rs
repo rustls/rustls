@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::fmt;
 use core::ops::Deref;
 use core::time::Duration;
 
@@ -117,7 +118,6 @@ impl<T> Deref for Retrieved<T> {
 }
 
 /// A stored TLS 1.3 client session value.
-#[derive(Debug)]
 pub struct Tls13Session {
     suite: Tls13ProtocolSuite,
     secret: Zeroizing<SizedPayload<'static, u8>>,
@@ -215,6 +215,26 @@ impl Deref for Tls13Session {
     }
 }
 
+impl fmt::Debug for Tls13Session {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            suite,
+            secret: _,
+            age_add,
+            max_early_data_size,
+            common,
+            quic_params,
+        } = self;
+        f.debug_struct("Tls13Session")
+            .field("suite", suite)
+            .field("age_add", age_add)
+            .field("max_early_data_size", max_early_data_size)
+            .field("common", common)
+            .field("quic_params", quic_params)
+            .finish_non_exhaustive()
+    }
+}
+
 /// A "template" for future TLS1.3 client session values.
 #[derive(Clone)]
 pub(crate) struct Tls13ClientSessionInput {
@@ -224,7 +244,7 @@ pub(crate) struct Tls13ClientSessionInput {
 }
 
 /// A stored TLS 1.2 client session value.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Tls12Session {
     suite: &'static Tls12CipherSuite,
     pub(crate) session_id: SessionId,
@@ -299,6 +319,24 @@ impl Deref for Tls12Session {
 
     fn deref(&self) -> &Self::Target {
         &self.common
+    }
+}
+
+impl fmt::Debug for Tls12Session {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            suite,
+            session_id,
+            master_secret: _,
+            extended_ms,
+            common,
+        } = self;
+        f.debug_struct("Tls12Session")
+            .field("suite", suite)
+            .field("session_id", session_id)
+            .field("extended_ms", extended_ms)
+            .field("common", common)
+            .finish_non_exhaustive()
     }
 }
 
@@ -445,3 +483,55 @@ impl ClientAuthDetails {
 }
 
 static MAX_TICKET_LIFETIME: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
+#[cfg(test)]
+mod tests {
+    use alloc::format;
+
+    use pki_types::SubjectPublicKeyInfoDer;
+
+    use super::*;
+    use crate::crypto::{TEST_PROVIDER, tls12_suite};
+
+    #[test]
+    fn debug_of_session_types() {
+        let tls12 = Tls12Session::new(
+            tls12_suite(CipherSuite(0xff12), &TEST_PROVIDER),
+            SessionId::empty(),
+            Arc::new(SizedPayload::empty()),
+            &[0xa5; 48],
+            VerifiedIdentity::assertion(Identity::RawPublicKey(SubjectPublicKeyInfoDer::from(
+                &b"spki"[..],
+            ))),
+            UnixTime::since_unix_epoch(Duration::from_secs(1)),
+            Duration::from_secs(2),
+            true,
+        );
+        assert_eq!(
+            format!("{tls12:?}"),
+            "Tls12Session { suite: Tls12CipherSuite { suite: 0xff12, .. }, session_id: , extended_ms: true, common: ClientSessionCommon { ticket: , epoch: 1, lifetime: 2s, peer_identity: VerifiedIdentity(RawPublicKey(SubjectPublicKeyInfoDer(0x73706b69))) }, .. }"
+        );
+
+        let tls13 = Tls13Session::new(
+            &NewSessionTicketPayloadTls13::new(
+                Duration::from_secs(2),
+                3,
+                [4u8; 32],
+                Vec::from([5]),
+            ),
+            Tls13ClientSessionInput {
+                suite: Tls13ProtocolSuite::Tcp(TEST_PROVIDER.tls13_cipher_suites[0]),
+                peer_identity: VerifiedIdentity::assertion(Identity::RawPublicKey(
+                    SubjectPublicKeyInfoDer::from(&b"spki"[..]),
+                )),
+                quic_params: None,
+            },
+            &[0xa5; 32],
+            UnixTime::since_unix_epoch(Duration::from_secs(1)),
+        );
+        assert_eq!(
+            format!("{tls13:?}"),
+            "Tls13Session { suite: Tcp(Tls13CipherSuite { suite: 0xff13, .. }), age_add: 3, max_early_data_size: 0, common: ClientSessionCommon { ticket: 05, epoch: 1, lifetime: 2s, peer_identity: VerifiedIdentity(RawPublicKey(SubjectPublicKeyInfoDer(0x73706b69))) }, quic_params: , .. }"
+        );
+    }
+}
