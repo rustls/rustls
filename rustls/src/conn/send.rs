@@ -16,7 +16,6 @@ pub(crate) struct SendPath {
     pub(crate) encrypt_state: EncryptionState,
     pub(crate) may_send_application_data: bool,
     pub(crate) may_send_half_rtt_data: bool,
-    has_sent_fatal_alert: bool,
     /// If we signaled end of stream.
     pub(crate) has_sent_close_notify: bool,
     fragmenter: Fragmenter,
@@ -204,16 +203,14 @@ impl SendOutput for SendPath {
         desc: AlertDescription,
         tls: &mut Vec<u8>,
     ) -> Result<(), Error> {
-        match level {
-            AlertLevel::Fatal if self.has_sent_fatal_alert => return Ok(()),
-            AlertLevel::Fatal => self.has_sent_fatal_alert = true,
-            _ => {}
-        };
+        if matches!(self.encrypt_state, EncryptionState::Retired) {
+            return Ok(());
+        }
 
         // Alerts always fit in a single record, and are never quashed by a `PreEncryptAction`.
         let record = Record::from(Message::build_alert(level, desc));
         let record = record.borrow_outbound();
-        match self.encrypt_state.is_encrypting() {
+        let result = match self.encrypt_state.is_encrypting() {
             true => {
                 self.perhaps_write_key_update(tls);
                 self.encrypt_state
@@ -223,7 +220,12 @@ impl SendOutput for SendPath {
                 record.encode_unencrypted(tls);
                 Ok(())
             }
+        };
+
+        if level == AlertLevel::Fatal {
+            self.encrypt_state.retire();
         }
+        result
     }
 
     fn start_traffic(&mut self) {
@@ -240,6 +242,10 @@ impl SendOutput for SendPath {
         must_encrypt: bool,
         tls: &mut Vec<u8>,
     ) -> Result<(), Error> {
+        if matches!(self.encrypt_state, EncryptionState::Retired) {
+            return Err(Error::EncryptError);
+        }
+
         debug_assert!(!matches!(m.payload, MessagePayload::Alert(_)));
         let record = Record::from(m);
         let fragments = self.fragmenter.fragment(
@@ -274,7 +280,6 @@ impl Default for SendPath {
             encrypt_state: EncryptionState::default(),
             may_send_application_data: false,
             may_send_half_rtt_data: false,
-            has_sent_fatal_alert: false,
             has_sent_close_notify: false,
             fragmenter: Fragmenter::default(),
             key_update_local: KeyUpdateLocal::Idle,

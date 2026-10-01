@@ -19,13 +19,13 @@ pub(crate) enum EncryptionState {
         write_seq_max: u64,
         write_seq: u64,
     },
+    Retired,
 }
 
 impl EncryptionState {
     /// Encrypt a TLS record, returning the fully-encoded record.
     ///
-    /// `plain` is a TLS record we'd like to send.  This function
-    /// panics if the requisite keying material hasn't been established yet.
+    /// `plain` is a TLS record we'd like to send.
     ///
     /// The result including framing is appended to `output`.
     pub(crate) fn encrypt_outgoing(
@@ -33,6 +33,10 @@ impl EncryptionState {
         plain: Record<OutboundPlain<'_>>,
         output: &mut Vec<u8>,
     ) -> Result<(), Error> {
+        if !self.is_encrypting() {
+            return Err(Error::EncryptError);
+        }
+
         // Contents are fully overwritten below, so zeroing is pure cost.
         // A fresh buffer gets pre-zeroed memory straight from the allocator
         // while a reused one zeroes only what `resize` grows.
@@ -54,9 +58,6 @@ impl EncryptionState {
     /// The record, header included, is written to the front of `out`,
     /// which must be at least `HEADER_SIZE` plus
     /// [`Self::encrypted_len()`](Self::encrypted_len) bytes long.
-    ///
-    /// This function panics if the requisite keying material hasn't been
-    /// established yet.
     pub(crate) fn encrypt_outgoing_into(
         &mut self,
         plain: Record<OutboundPlain<'_>>,
@@ -105,11 +106,24 @@ impl EncryptionState {
         record_encrypter: Box<dyn RecordEncrypter>,
         max_records: u64,
     ) {
+        if matches!(self, Self::Retired) {
+            // Retirement is permanent.
+            return;
+        }
+
         *self = Self::Encrypting {
             record_encrypter,
             write_seq_max: min(SEQ_SOFT_LIMIT, max_records),
             write_seq: 0,
         };
+    }
+
+    /// Stops any further encryptions from working.
+    ///
+    /// Depending on the precise prior implementation of `record_encrypter`,
+    /// this has the opportunity to zeroise the key material needed for sending.
+    pub(crate) fn retire(&mut self) {
+        *self = Self::Retired;
     }
 
     /// Return a remedial action when we are near to encrypting too many records.
@@ -138,7 +152,7 @@ impl EncryptionState {
             Self::Encrypting {
                 record_encrypter, ..
             } => record_encrypter.encrypted_payload_len(payload_len),
-            Self::Handshake => 0,
+            Self::Handshake | Self::Retired => 0,
         }
     }
 

@@ -643,18 +643,25 @@ mod tests {
         assert!(!tls.is_empty());
         assert!(!inner.pending_send_data());
 
-        // a queued key-update response is pending until the next send
-        inner
-            .send
-            .queue_requested_key_update()
-            .unwrap();
-        assert!(inner.pending_send_data());
+        // subsequent attempts no longer work
+        assert_eq!(
+            inner
+                .send
+                .queue_requested_key_update()
+                .unwrap_err(),
+            Error::EncryptError
+        );
+        assert!(!inner.pending_send_data());
 
         tls.clear();
-        inner
-            .send
-            .send_appdata_encrypt(b"x".as_slice().into(), &mut tls)
-            .unwrap();
+        assert_eq!(
+            inner
+                .send
+                .send_appdata_encrypt(b"x".as_slice().into(), &mut tls)
+                .unwrap_err(),
+            Error::EncryptError
+        );
+        assert!(tls.is_empty());
         assert!(!inner.pending_send_data());
     }
 
