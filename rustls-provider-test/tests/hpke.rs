@@ -1,5 +1,3 @@
-use std::fs::File;
-
 use rustls::crypto::hpke::{
     Hpke, HpkeAead, HpkeKdf, HpkeKem, HpkePrivateKey, HpkePublicKey, HpkeSuite,
     HpkeSymmetricCipherSuite,
@@ -97,8 +95,8 @@ impl TestVector {
 }
 
 fn test_vectors() -> Vec<TestVector> {
-    serde_json::from_reader(
-        &mut File::open("tests/rfc-9180-test-vectors.json")
+    serde_json::from_slice(
+        &std::fs::read("tests/rfc-9180-test-vectors.json")
             .expect("failed to open test vectors data file"),
     )
     .expect("failed to deserialize test vectors")
