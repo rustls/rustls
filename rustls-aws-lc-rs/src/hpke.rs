@@ -1051,7 +1051,6 @@ mod tests {
 #[cfg(test)]
 mod rfc_tests {
     use alloc::string::String;
-    use std::fs::File;
     use std::println;
 
     use serde::Deserialize;
@@ -1197,8 +1196,8 @@ mod rfc_tests {
     }
 
     fn test_vectors() -> Vec<TestVector> {
-        serde_json::from_reader(
-            &mut File::open("../rustls-provider-test/tests/rfc-9180-test-vectors.json")
+        serde_json::from_slice(
+            &std::fs::read("../rustls-provider-test/tests/rfc-9180-test-vectors.json")
                 .expect("failed to open test vectors data file"),
         )
         .expect("failed to deserialize test vectors")
