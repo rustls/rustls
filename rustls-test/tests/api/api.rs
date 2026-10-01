@@ -45,80 +45,109 @@ fn alpn_test_error(
     client_protos: Vec<ApplicationProtocol<'static>>,
     agreed: Option<ApplicationProtocol<'static>>,
     expected_error: Option<ErrorFromPeer>,
+    server_config: &Arc<ServerConfig>,
+    client_config: &Arc<ClientConfig>,
 ) {
-    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
-        let mut server_config = Arc::unwrap_or_clone(server_config);
-        server_config.alpn_protocols = server_protos.clone();
+    let mut server_config = Arc::unwrap_or_clone(server_config.clone());
+    server_config.alpn_protocols = server_protos.clone();
 
-        let mut client_config = Arc::unwrap_or_clone(client_config);
-        client_config
-            .alpn_protocols
-            .clone_from(&client_protos);
+    let mut client_config = Arc::unwrap_or_clone(client_config.clone());
+    client_config
+        .alpn_protocols
+        .clone_from(&client_protos);
 
-        let mut client_output = Vec::new();
-        let mut server_output = Vec::new();
-        let (mut client, mut server) =
-            make_pair_for_configs(client_config, server_config, &mut client_output);
-        let mut client_input = VecInput::default();
-        let mut server_input = VecInput::default();
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
 
-        assert_eq!(client.alpn_protocol(), None);
-        assert_eq!(server.alpn_protocol(), None);
-        let error = do_handshake_until_error(
-            &mut client_input,
-            &mut client_output,
-            &mut client,
-            &mut server_input,
-            &mut server_output,
-            &mut server,
-        );
-        assert_eq!(client.alpn_protocol(), agreed.as_ref());
-        assert_eq!(server.alpn_protocol(), agreed.as_ref());
-        assert_eq!(error.err(), expected_error);
-    }
+    assert_eq!(client.alpn_protocol(), None);
+    assert_eq!(server.alpn_protocol(), None);
+    let error = do_handshake_until_error(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+    assert_eq!(client.alpn_protocol(), agreed.as_ref());
+    assert_eq!(server.alpn_protocol(), agreed.as_ref());
+    assert_eq!(error.err(), expected_error);
 }
 
 fn alpn_test(
     server_protos: Vec<ApplicationProtocol<'static>>,
     client_protos: Vec<ApplicationProtocol<'static>>,
     agreed: Option<ApplicationProtocol<'static>>,
+    server_config: &Arc<ServerConfig>,
+    client_config: &Arc<ClientConfig>,
 ) {
-    alpn_test_error(server_protos, client_protos, agreed, None)
+    alpn_test_error(
+        server_protos,
+        client_protos,
+        agreed,
+        None,
+        server_config,
+        client_config,
+    )
 }
 
 #[test]
 fn alpn() {
-    // no support
-    alpn_test(vec![], vec![], None);
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        // no support
+        alpn_test(vec![], vec![], None, &server_config, &client_config);
 
-    // server support
-    alpn_test(vec![b"server-proto".into()], vec![], None);
+        // server support
+        alpn_test(
+            vec![b"server-proto".into()],
+            vec![],
+            None,
+            &server_config,
+            &client_config,
+        );
 
-    // client support
-    alpn_test(vec![], vec![b"client-proto".into()], None);
+        // client support
+        alpn_test(
+            vec![],
+            vec![b"client-proto".into()],
+            None,
+            &server_config,
+            &client_config,
+        );
 
-    // no overlap
-    alpn_test_error(
-        vec![b"server-proto".into()],
-        vec![b"client-proto".into()],
-        None,
-        Some(ErrorFromPeer::Server(Error::NoApplicationProtocol)),
-    );
+        // no overlap
+        alpn_test_error(
+            vec![b"server-proto".into()],
+            vec![b"client-proto".into()],
+            None,
+            Some(ErrorFromPeer::Server(Error::NoApplicationProtocol)),
+            &server_config,
+            &client_config,
+        );
 
-    // server chooses preference
-    alpn_test(
-        vec![b"server-proto".into(), b"client-proto".into()],
-        vec![b"client-proto".into(), b"server-proto".into()],
-        Some(b"server-proto".into()),
-    );
+        // server chooses preference
+        alpn_test(
+            vec![b"server-proto".into(), b"client-proto".into()],
+            vec![b"client-proto".into(), b"server-proto".into()],
+            Some(b"server-proto".into()),
+            &server_config,
+            &client_config,
+        );
 
-    // case sensitive
-    alpn_test_error(
-        vec![b"PROTO".into()],
-        vec![b"proto".into()],
-        None,
-        Some(ErrorFromPeer::Server(Error::NoApplicationProtocol)),
-    );
+        // case sensitive
+        alpn_test_error(
+            vec![b"PROTO".into()],
+            vec![b"proto".into()],
+            None,
+            Some(ErrorFromPeer::Server(Error::NoApplicationProtocol)),
+            &server_config,
+            &client_config,
+        );
+    }
 }
 
 #[test]
