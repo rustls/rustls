@@ -87,26 +87,24 @@ fn test_client_config_keyshare_mismatch() {
 fn exercise_all_key_exchange_methods() {
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
+    let key_type = KeyType::default();
 
-    for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+    for (version, provider) in [
+        (ProtocolVersion::TLSv1_2, provider::DEFAULT_TLS12_PROVIDER),
+        (ProtocolVersion::TLSv1_3, provider::DEFAULT_TLS13_PROVIDER),
+    ] {
         for kx_group in provider::ALL_KX_GROUPS {
             if !kx_group
                 .name()
-                .usable_for_version(expect.version)
+                .usable_for_version(version)
             {
                 continue;
             }
 
-            let client_config = make_client_config_with_kx_groups(
-                expect.key_type,
-                vec![*kx_group],
-                client_config.provider(),
-            );
-            let server_config = make_server_config_with_kx_groups(
-                expect.key_type,
-                vec![*kx_group],
-                server_config.provider(),
-            );
+            let client_config =
+                make_client_config_with_kx_groups(key_type, vec![*kx_group], &provider);
+            let server_config =
+                make_server_config_with_kx_groups(key_type, vec![*kx_group], &provider);
             let mut client_output = Vec::new();
             let mut server_output = Vec::new();
             let (mut client, mut server) =
@@ -120,6 +118,20 @@ fn exercise_all_key_exchange_methods() {
                 &mut server,
             )
             .unwrap();
+            assert_eq!(client.protocol_version(), Some(version));
+            assert_eq!(server.protocol_version(), Some(version));
+            assert_eq!(
+                client
+                    .negotiated_key_exchange_group()
+                    .map(|g| g.name()),
+                Some(kx_group.name())
+            );
+            assert_eq!(
+                server
+                    .negotiated_key_exchange_group()
+                    .map(|g| g.name()),
+                Some(kx_group.name())
+            );
             println!("kx_group {:?} is self-consistent", kx_group.name());
         }
     }
