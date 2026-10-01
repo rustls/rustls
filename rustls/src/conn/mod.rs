@@ -259,9 +259,9 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .send
             .may_send_application_data
         {
-            return Err(ApiMisuse::WriteTlsBeforeHandshakeComplete.into());
+            return Err(ApiMisuse::WriteBeforeHandshakeComplete.into());
         } else if self.common.send.has_sent_close_notify {
-            return Err(ApiMisuse::WriteTlsAfterSendPathClosed.into());
+            return Err(ApiMisuse::WriteAfterSendPathClosed.into());
         }
 
         self.common

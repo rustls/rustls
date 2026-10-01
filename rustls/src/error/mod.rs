@@ -1707,10 +1707,10 @@ pub enum ApiMisuse {
     },
 
     /// Plaintext cannot be encrypted before the handshake is complete.
-    WriteTlsBeforeHandshakeComplete,
+    WriteBeforeHandshakeComplete,
 
     /// Plaintext cannot be encrypted after the send path has been closed.
-    WriteTlsAfterSendPathClosed,
+    WriteAfterSendPathClosed,
 
     /// Secret extraction attempted while send data was pending.
     KernelConnectionWithPendingSendData,

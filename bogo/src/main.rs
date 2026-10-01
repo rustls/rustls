@@ -446,7 +446,7 @@ fn write_or_queue(
     }
 
     match sess.write(plaintext.into(), output) {
-        Err(Error::ApiMisuse(ApiMisuse::WriteTlsBeforeHandshakeComplete)) => {
+        Err(Error::ApiMisuse(ApiMisuse::WriteBeforeHandshakeComplete)) => {
             pending.extend_from_slice(plaintext);
             Ok(())
         }
@@ -542,7 +542,7 @@ fn after_read(
     if !pending.is_empty() {
         match sess.write(pending.as_slice().into(), output) {
             Ok(()) => pending.clear(),
-            Err(Error::ApiMisuse(ApiMisuse::WriteTlsBeforeHandshakeComplete)) => {}
+            Err(Error::ApiMisuse(ApiMisuse::WriteBeforeHandshakeComplete)) => {}
             Err(err) => panic!("cannot send queued plaintext: {err:?}"),
         }
     }

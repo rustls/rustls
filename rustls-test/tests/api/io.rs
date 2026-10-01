@@ -46,7 +46,7 @@ fn client_data_sent() {
             client
                 .write(b"hello".into(), &mut client_output)
                 .unwrap_err(),
-            ApiMisuse::WriteTlsBeforeHandshakeComplete.into()
+            ApiMisuse::WriteBeforeHandshakeComplete.into()
         );
 
         // The client's buffered plaintext may be delivered as part of the final handshake
@@ -90,7 +90,7 @@ fn server_data_sent() {
             server
                 .write(b"hello".into(), &mut server_output)
                 .unwrap_err(),
-            ApiMisuse::WriteTlsBeforeHandshakeComplete.into()
+            ApiMisuse::WriteBeforeHandshakeComplete.into()
         );
 
         // The server's buffered plaintext may be delivered as part of the final handshake
@@ -1698,7 +1698,7 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
         server
             .write(b"01234567890123456789".into(), &mut server_output)
             .unwrap_err(),
-        ApiMisuse::WriteTlsBeforeHandshakeComplete.into()
+        ApiMisuse::WriteBeforeHandshakeComplete.into()
     );
 
     // don't assert exact sizes here, to avoid a brittle test
@@ -2799,7 +2799,7 @@ fn test_data_after_close_notify_is_ignored() {
         client
             .write(b"after".into(), &mut client_output)
             .unwrap_err(),
-        ApiMisuse::WriteTlsAfterSendPathClosed.into()
+        ApiMisuse::WriteAfterSendPathClosed.into()
     );
     transfer(&mut client_output, &mut server_input);
 

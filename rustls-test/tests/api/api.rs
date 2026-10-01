@@ -1911,7 +1911,7 @@ fn test_client_sends_no_application_data_after_ech_rejection() {
         client
             .write(b"ech-inner-secret".into(), &mut client_output)
             .unwrap_err(),
-        ApiMisuse::WriteTlsBeforeHandshakeComplete.into()
+        ApiMisuse::WriteBeforeHandshakeComplete.into()
     );
     assert_eq!(
         client
