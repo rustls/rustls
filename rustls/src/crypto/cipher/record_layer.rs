@@ -11,10 +11,14 @@ use crate::tracing::trace;
 
 /// Record layer that tracks encryption keys.
 #[derive(Default)]
-pub(crate) struct EncryptionState {
-    record_encrypter: Option<Box<dyn RecordEncrypter>>,
-    write_seq_max: u64,
-    write_seq: u64,
+pub(crate) enum EncryptionState {
+    #[default]
+    Handshake,
+    Encrypting {
+        record_encrypter: Box<dyn RecordEncrypter>,
+        write_seq_max: u64,
+        write_seq: u64,
+    },
 }
 
 impl EncryptionState {
@@ -59,14 +63,21 @@ impl EncryptionState {
         out: &mut [u8],
     ) -> Result<usize, Error> {
         assert!(self.pre_encrypt_action(0) != Some(PreEncryptAction::Refuse));
-        let encrypter = self.record_encrypter.as_mut().unwrap();
+        let Self::Encrypting {
+            record_encrypter,
+            write_seq,
+            ..
+        } = self
+        else {
+            return Err(Error::EncryptError);
+        };
 
-        let seq = self.write_seq;
-        self.write_seq += 1;
+        let seq = *write_seq;
+        *write_seq += 1;
 
         #[cfg(debug_assertions)]
         let (out_ptr, out_len) = (out.as_ptr(), out.len());
-        let encrypted = encrypter.encrypt(plain, seq, &mut out[HEADER_SIZE..])?;
+        let encrypted = record_encrypter.encrypt(plain, seq, &mut out[HEADER_SIZE..])?;
 
         #[cfg(debug_assertions)]
         {
@@ -91,11 +102,11 @@ impl EncryptionState {
     /// record encryption.
     pub(crate) fn set_record_encrypter(
         &mut self,
-        cipher: Box<dyn RecordEncrypter>,
+        record_encrypter: Box<dyn RecordEncrypter>,
         max_records: u64,
     ) {
-        *self = Self {
-            record_encrypter: Some(cipher),
+        *self = Self::Encrypting {
+            record_encrypter,
             write_seq_max: min(SEQ_SOFT_LIMIT, max_records),
             write_seq: 0,
         };
@@ -106,18 +117,29 @@ impl EncryptionState {
     /// `add` is added to the current sequence number.  `add` as `0` means
     /// "the next record processed by `encrypt_outgoing`"
     pub(crate) fn pre_encrypt_action(&self, add: u64) -> Option<PreEncryptAction> {
-        match self.write_seq.saturating_add(add) {
-            v if v == self.write_seq_max => Some(PreEncryptAction::RefreshOrClose),
+        let Self::Encrypting {
+            write_seq_max,
+            write_seq,
+            ..
+        } = self
+        else {
+            return None;
+        };
+
+        match write_seq.saturating_add(add) {
+            v if v == *write_seq_max => Some(PreEncryptAction::RefreshOrClose),
             SEQ_HARD_LIMIT.. => Some(PreEncryptAction::Refuse),
             _ => None,
         }
     }
 
     pub(crate) fn encrypted_len(&self, payload_len: usize) -> usize {
-        self.record_encrypter
-            .as_ref()
-            .map(|enc| enc.encrypted_payload_len(payload_len))
-            .unwrap_or_default()
+        match self {
+            Self::Encrypting {
+                record_encrypter, ..
+            } => record_encrypter.encrypted_payload_len(payload_len),
+            Self::Handshake => 0,
+        }
     }
 
     /// Number of bytes added to a plaintext fragment by record protection.
@@ -126,11 +148,14 @@ impl EncryptionState {
     }
 
     pub(crate) fn is_encrypting(&self) -> bool {
-        self.record_encrypter.is_some()
+        matches!(self, Self::Encrypting { .. })
     }
 
-    pub(crate) fn write_seq(&self) -> u64 {
-        self.write_seq
+    pub(crate) fn write_seq(&self) -> Result<u64, Error> {
+        match self {
+            Self::Encrypting { write_seq, .. } => Ok(*write_seq),
+            _ => Err(Error::EncryptError),
+        }
     }
 }
 
