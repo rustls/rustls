@@ -266,13 +266,27 @@ impl<'a> OutboundPlain<'a> {
 
     /// The payload's single contiguous chunk, or `None` if it is fragmented.
     ///
-    /// An empty payload is treated as a single empty chunk, and a [`Self::Multiple`]
-    /// payload yields `None` even when its chunks happen to form a contiguous whole.
+    /// An empty payload is treated as a single empty chunk. A [`Self::Multiple`]
+    /// payload is contiguous when its selected range lies within one chunk.
+    /// Distinct chunks are never joined, even if their addresses are adjacent.
     pub fn single_chunk(&self) -> Option<&'a [u8]> {
-        match *self {
-            Self::Single(chunk) => Some(chunk),
-            Self::Multiple { .. } => None,
+        let (chunks, start, end) = match *self {
+            Self::Single(chunk) => return Some(chunk),
+            Self::Multiple { chunks, start, end } => (chunks, start, end),
+        };
+        let len = end - start;
+        if len == 0 {
+            return Some(&[]);
         }
+        let mut skip = start;
+        for chunk in chunks {
+            if skip >= chunk.len() {
+                skip -= chunk.len();
+                continue;
+            }
+            return (len <= chunk.len() - skip).then(|| &chunk[skip..skip + len]);
+        }
+        None
     }
 
     /// Split self in two, around an index
@@ -644,6 +658,73 @@ mod tests {
 
     use super::*;
     use crate::quic;
+
+    #[test]
+    fn single_chunk_with_multiple_slices() {
+        let chunks: &[&[u8]] = &[&[], &[1, 2, 3], &[], &[4, 5, 6, 7], &[]];
+        let expected = [1, 2, 3, 4, 5, 6, 7];
+        for start in 0..=7 {
+            for end in start..=7 {
+                let (_, tail) = OutboundPlain::new(chunks).split_at(start);
+                let (plain, _) = tail.split_at(end - start);
+                let contiguous = start == end || end <= 3 || start >= 3;
+                let single_chunk = plain.single_chunk();
+                assert_eq!(single_chunk.is_some(), contiguous);
+                let Some(slice) = single_chunk else {
+                    continue;
+                };
+                assert_eq!(slice, &expected[start..end]);
+                if !slice.is_empty() {
+                    let source = if end <= 3 { chunks[1] } else { chunks[3] };
+                    let offset = if end <= 3 { start } else { start - 3 };
+                    assert_eq!(slice.as_ptr(), source[offset..].as_ptr());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn single_chunk_with_out_of_bounds_range() {
+        for start in [3, 5, 6] {
+            let plain = OutboundPlain::Multiple {
+                chunks: &[&[1, 2, 3], &[], &[4, 5], &[]],
+                start,
+                end: 7,
+            };
+            assert!(plain.single_chunk().is_none());
+        }
+    }
+
+    #[test]
+    fn single_chunk_does_not_join_adjacent_slices() {
+        let owner = [1, 2, 3, 4];
+        let adjacent = [&owner[..2], &owner[2..]];
+        assert!(
+            OutboundPlain::new(&adjacent)
+                .single_chunk()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn single_chunk_empty_and_single_payloads() {
+        for plain in [
+            OutboundPlain::new_empty(),
+            OutboundPlain::new(&[]),
+            OutboundPlain::new(&[&[], &[]]),
+        ] {
+            assert_eq!(plain.single_chunk(), Some(&[][..]));
+        }
+        let data = [1, 2, 3];
+        for plain in [
+            OutboundPlain::from(data.as_slice()),
+            OutboundPlain::new(&[&data]),
+        ] {
+            let slice = plain.single_chunk().unwrap();
+            assert_eq!(slice, data);
+            assert_eq!(slice.as_ptr(), data.as_ptr());
+        }
+    }
 
     #[test]
     fn encrypt_buffer_appends() {
