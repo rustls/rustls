@@ -23,7 +23,6 @@ zlib = ["dep:zlib-rs"]
 [dependencies]
 brotli = { workspace = true, optional = true }
 brotli-decompressor = { workspace = true, optional = true }
-hashbrown = { workspace = true, optional = true }
 subtle = { workspace = true }
 tracing = { workspace = true, optional = true }
 webpki = { workspace = true, optional = true }
@@ -47,7 +46,7 @@ path = "examples/internal/test_ca.rs"
 
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)
-features = ["brotli", "hashbrown", "tracing", "zlib"]
+features = ["brotli", "tracing", "zlib"]
 rustdoc-args = ["--cfg", "rustls_docsrs"]
 
 [package.metadata.cargo_check_external_types]

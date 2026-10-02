@@ -41,9 +41,7 @@ use crate::{KeyLog, NoKeyLog, Tls12CipherSuite, Tls13CipherSuite, compress};
 /// * [`ServerConfig::max_fragment_size`]: the default is `None` (meaning 16kB).
 /// * [`ServerConfig::session_storage`]: if the `std` feature is enabled, the default stores 256
 ///   sessions in memory. If the `std` feature is not enabled, the default is to not store any
-///   sessions. In a no-std context, by enabling the `hashbrown` feature you may provide your
-///   own `session_storage` using [`ServerSessionMemoryCache`] and a `crate::lock::MakeMutex`
-///   implementation.
+///   sessions.
 /// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ServerConfig::key_log`]: key material is not logged.
 /// * [`ServerConfig::send_tls13_tickets`]: 2 tickets are sent, with a maximum of 2.
