@@ -572,6 +572,24 @@ impl UnknownExtension {
     }
 }
 
+/// RFC 9149: ServerTicketRequestHint extension payload.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ServerTicketRequestHint {
+    pub(crate) expected_count: u8,
+}
+
+impl Codec<'_> for ServerTicketRequestHint {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.expected_count.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            expected_count: u8::read(r)?,
+        })
+    }
+}
+
 static ZERO_RANDOM: Random = Random([0u8; 32]);
 
 #[cfg(test)]
@@ -627,23 +645,5 @@ mod tests {
             public_name: DnsName::try_from("example.com").unwrap(),
             extensions: vec![],
         }
-    }
-}
-
-/// RFC 9149: ServerTicketRequestHint extension payload.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct ServerTicketRequestHint {
-    pub(crate) expected_count: u8,
-}
-
-impl Codec<'_> for ServerTicketRequestHint {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.expected_count.encode(bytes);
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        Ok(Self {
-            expected_count: u8::read(r)?,
-        })
     }
 }
