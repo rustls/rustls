@@ -40,7 +40,7 @@ pub(crate) mod split;
 use split::SplitConnection;
 
 /// A trait generalizing over buffered client or server connections.
-pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
+pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> + DerefMut {
     /// The side (client or server) that this type implements.
     type Side: SideData;
 
@@ -64,21 +64,6 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
     ) -> MessageHandler<'a, 'm, Self::Side>;
-
-    /// Returns an object that can derive key material from the agreed connection secrets.
-    ///
-    /// See [RFC 5705][] for more details on what this is for.
-    ///
-    /// This function can be called at most once per connection.
-    ///
-    /// This function will error:
-    ///
-    /// - if called prior to the handshake completing; (check with
-    ///   [`Self::is_handshaking()`] first).
-    /// - if called more than once per connection.
-    ///
-    /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
-    fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error>;
 
     /// Extract secrets, so they can be used when configuring kTLS, for example.
     ///
@@ -169,6 +154,11 @@ impl<Side: SideData> NeedsInput<Side> {
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
         Side::tcp_handshake_from_core(self.0.process(input, tls)?)
+    }
+
+    /// Access the connection outputs.
+    pub fn outputs_mut(&mut self) -> &mut ConnectionOutputs {
+        &mut self.0.inner
     }
 }
 
@@ -345,14 +335,6 @@ impl<Side: SideData> ConnectionCommon<Side> {
         let external = KernelConnection::new(state, outputs, tls13_key_schedule)?;
 
         Ok((secrets, external))
-    }
-
-    pub(crate) fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        match self.common.exporter.take() {
-            Some(inner) => Ok(KeyingMaterialExporter { inner }),
-            None if self.common.is_handshaking() => Err(Error::HandshakeNotComplete),
-            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
-        }
     }
 }
 

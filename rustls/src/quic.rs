@@ -9,8 +9,8 @@ use crate::client::ClientSide;
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
 use crate::conn::{
-    Accepted, ConnectionCommon, Core, KeyingMaterialExporter, MessageIter, MessageIterMode,
-    ServerNext, SideData, Transport, VerifyPeerIdentity,
+    Accepted, ConnectionCommon, Core, MessageIter, MessageIterMode, ServerNext, SideData,
+    Transport, VerifyPeerIdentity,
 };
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
@@ -26,7 +26,7 @@ use crate::tls13::key_schedule::{
 use crate::{ClientData, ServerData, TlsInputBuffer};
 
 /// A QUIC client or server connection.
-pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
+pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> + DerefMut {
     /// Return the TLS-encoded transport parameters for the session's peer.
     ///
     /// While the transport parameters are technically available prior to the
@@ -76,23 +76,6 @@ impl ClientConnection {
             .tls13_tickets_received
     }
 
-    /// Returns an object that can derive key material from the agreed connection secrets.
-    ///
-    /// See [RFC 5705][] for more details on what this is for.
-    ///
-    /// This function can be called at most once per connection.
-    ///
-    /// This function will error:
-    ///
-    /// - if called prior to the handshake completing; (check with
-    ///   [`CommonState::is_handshaking`] first).
-    /// - if called more than once per connection.
-    ///
-    /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
-    pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.common.exporter()
-    }
-
     /// Returns data learned during the connection, specific to being a client.
     pub fn data(&self) -> &ClientData {
         &self.inner.common.side
@@ -128,6 +111,12 @@ impl Deref for ClientConnection {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl DerefMut for ClientConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
@@ -198,23 +187,6 @@ impl ServerConnection {
         }
     }
 
-    /// Returns an object that can derive key material from the agreed connection secrets.
-    ///
-    /// See [RFC 5705][] for more details on what this is for.
-    ///
-    /// This function can be called at most once per connection.
-    ///
-    /// This function will error:
-    ///
-    /// - if called prior to the handshake completing; (check with
-    ///   [`CommonState::is_handshaking`] first).
-    /// - if called more than once per connection.
-    ///
-    /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
-    pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.common.exporter()
-    }
-
     /// Returns data learned during the connection, specific to being a server.
     pub fn data(&self) -> &ServerData {
         &self.inner.common.side
@@ -250,6 +222,12 @@ impl Deref for ServerConnection {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl DerefMut for ServerConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
@@ -397,6 +375,12 @@ impl Deref for NeedsInput {
 
     fn deref(&self) -> &Self::Target {
         self.0.inner.deref()
+    }
+}
+
+impl DerefMut for NeedsInput {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0.inner.deref_mut()
     }
 }
 

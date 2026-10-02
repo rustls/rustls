@@ -60,17 +60,16 @@ fn test_early_exporter() {
                     .unwrap();
             }
 
-            let message = if let Some(mut early) = server.early_data() {
-                let secret = early
-                    .exporter()
-                    .unwrap()
-                    .derive(b"label", Some(b"context"), [0u8; 64])
-                    .unwrap();
-
+            let message = if !early_data.is_empty() {
                 let mut buf = b"early data: ".to_vec();
                 buf.extend_from_slice(&early_data);
                 buf.push(b'\n');
 
+                let secret = server
+                    .early_exporter()
+                    .unwrap()
+                    .derive(b"label", Some(b"context"), [0u8; 64])
+                    .unwrap();
                 buf.extend_from_slice(b"exported: ");
                 buf.extend_from_slice(format!("{:02x?}", secret).as_bytes());
                 buf.push(b'\n');
