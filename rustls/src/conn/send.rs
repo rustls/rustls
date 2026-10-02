@@ -271,7 +271,7 @@ impl SendOutput for SendPath {
 impl Default for SendPath {
     fn default() -> Self {
         Self {
-            encrypt_state: EncryptionState::new(),
+            encrypt_state: EncryptionState::default(),
             may_send_application_data: false,
             may_send_half_rtt_data: false,
             has_sent_fatal_alert: false,
