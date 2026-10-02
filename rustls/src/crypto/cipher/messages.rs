@@ -3,7 +3,6 @@ use core::ops::{Deref, DerefMut, Range};
 use core::{fmt, slice};
 
 use crate::Protocol;
-use crate::crypto::cipher::EncryptionState;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::{Codec, HEADER_SIZE, MAX_FRAGMENT_LEN, Reader, hex, read_record_header};
@@ -164,11 +163,6 @@ impl Record<OutboundPlain<'_>> {
         debug_assert!(len <= usize::from(u16::MAX));
         buf.extend_from_slice(&encode_record_header(self.typ, self.version, len as u16));
         self.payload.copy_to_vec(buf);
-    }
-
-    #[expect(dead_code)]
-    pub(crate) fn encoded_len(&self, record_layer: &EncryptionState) -> usize {
-        HEADER_SIZE + record_layer.encrypted_len(self.payload.len())
     }
 }
 
