@@ -10,6 +10,7 @@ use crate::msgs::{HEADER_SIZE, HandshakeAlignedProof};
 use crate::tracing::trace;
 
 /// Record layer that tracks encryption keys.
+#[derive(Default)]
 pub(crate) struct EncryptionState {
     record_encrypter: Option<Box<dyn RecordEncrypter>>,
     write_seq_max: u64,
@@ -17,15 +18,6 @@ pub(crate) struct EncryptionState {
 }
 
 impl EncryptionState {
-    /// Create new record layer with no keys.
-    pub(crate) fn new() -> Self {
-        Self {
-            record_encrypter: None,
-            write_seq_max: 0,
-            write_seq: 0,
-        }
-    }
-
     /// Encrypt a TLS record, returning the fully-encoded record.
     ///
     /// `plain` is a TLS record we'd like to send.  This function
