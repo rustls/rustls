@@ -63,7 +63,6 @@ clap = { version = "4.3.21", features = ["derive", "env"] }
 crabgrind = "0.3"
 criterion = "0.8"
 graviola = "0.4"
-hashbrown = { version = "0.17", default-features = false, features = ["default-hasher", "inline-more"] }
 hex = "0.4"
 hickory-resolver = { version = "0.26", features = ["https-aws-lc-rs", "webpki-roots"] }
 itertools = "0.15"
