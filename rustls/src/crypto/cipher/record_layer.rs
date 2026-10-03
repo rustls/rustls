@@ -14,11 +14,7 @@ use crate::tracing::trace;
 pub(crate) enum EncryptionState {
     #[default]
     Handshake,
-    Encrypting {
-        record_encrypter: Box<dyn RecordEncrypter>,
-        write_seq_max: u64,
-        write_seq: u64,
-    },
+    Encrypting(Encrypting),
     Retired,
 }
 
@@ -64,21 +60,18 @@ impl EncryptionState {
         out: &mut [u8],
     ) -> Result<usize, Error> {
         assert!(self.pre_encrypt_action(0) != Some(PreEncryptAction::Refuse));
-        let Self::Encrypting {
-            record_encrypter,
-            write_seq,
-            ..
-        } = self
-        else {
+        let Self::Encrypting(encrypting) = self else {
             return Err(Error::EncryptError);
         };
 
-        let seq = *write_seq;
-        *write_seq += 1;
+        let seq = encrypting.write_seq;
+        encrypting.write_seq += 1;
 
         #[cfg(debug_assertions)]
         let (out_ptr, out_len) = (out.as_ptr(), out.len());
-        let encrypted = record_encrypter.encrypt(plain, seq, &mut out[HEADER_SIZE..])?;
+        let encrypted = encrypting
+            .record_encrypter
+            .encrypt(plain, seq, &mut out[HEADER_SIZE..])?;
 
         #[cfg(debug_assertions)]
         {
@@ -111,11 +104,11 @@ impl EncryptionState {
             return;
         }
 
-        *self = Self::Encrypting {
+        *self = Self::Encrypting(Encrypting {
             record_encrypter,
             write_seq_max: min(SEQ_SOFT_LIMIT, max_records),
             write_seq: 0,
-        };
+        });
     }
 
     /// Stops any further encryptions from working.
@@ -131,17 +124,12 @@ impl EncryptionState {
     /// `add` is added to the current sequence number.  `add` as `0` means
     /// "the next record processed by `encrypt_outgoing`"
     pub(crate) fn pre_encrypt_action(&self, add: u64) -> Option<PreEncryptAction> {
-        let Self::Encrypting {
-            write_seq_max,
-            write_seq,
-            ..
-        } = self
-        else {
+        let Self::Encrypting(encrypting) = self else {
             return None;
         };
 
-        match write_seq.saturating_add(add) {
-            v if v == *write_seq_max => Some(PreEncryptAction::RefreshOrClose),
+        match encrypting.write_seq.saturating_add(add) {
+            v if v == encrypting.write_seq_max => Some(PreEncryptAction::RefreshOrClose),
             SEQ_HARD_LIMIT.. => Some(PreEncryptAction::Refuse),
             _ => None,
         }
@@ -149,9 +137,9 @@ impl EncryptionState {
 
     pub(crate) fn encrypted_len(&self, payload_len: usize) -> usize {
         match self {
-            Self::Encrypting {
-                record_encrypter, ..
-            } => record_encrypter.encrypted_payload_len(payload_len),
+            Self::Encrypting(encrypting) => encrypting
+                .record_encrypter
+                .encrypted_payload_len(payload_len),
             Self::Handshake | Self::Retired => 0,
         }
     }
@@ -167,10 +155,16 @@ impl EncryptionState {
 
     pub(crate) fn write_seq(&self) -> Result<u64, Error> {
         match self {
-            Self::Encrypting { write_seq, .. } => Ok(*write_seq),
+            Self::Encrypting(encrypting) => Ok(encrypting.write_seq),
             _ => Err(Error::EncryptError),
         }
     }
+}
+
+pub(crate) struct Encrypting {
+    record_encrypter: Box<dyn RecordEncrypter>,
+    write_seq_max: u64,
+    write_seq: u64,
 }
 
 /// Record layer that tracks decryption keys.
