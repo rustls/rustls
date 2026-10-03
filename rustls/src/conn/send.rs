@@ -172,7 +172,10 @@ impl SendPath {
 
     pub(super) fn export(&mut self) -> Result<(u64, Option<Box<KeyScheduleTrafficSend>>), Error> {
         Ok((
-            self.encrypt_state.write_seq()?,
+            match &self.encrypt_state {
+                EncryptionState::Encrypting(encrypting) => encrypting.write_seq,
+                _ => return Err(Error::EncryptError),
+            },
             self.tls13_key_schedule.take(),
         ))
     }
@@ -452,13 +455,6 @@ impl EncryptionState {
 
     pub(crate) fn is_encrypting(&self) -> bool {
         matches!(self, Self::Encrypting { .. })
-    }
-
-    pub(crate) fn write_seq(&self) -> Result<u64, Error> {
-        match self {
-            Self::Encrypting(encrypting) => Ok(encrypting.write_seq),
-            _ => Err(Error::EncryptError),
-        }
     }
 }
 
