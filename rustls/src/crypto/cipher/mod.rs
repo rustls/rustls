@@ -16,9 +16,6 @@ pub use messages::{
     EncodableVersion, EncryptBuffer, InboundOpaque, OutboundPlain, Payload, Record, RecordError,
 };
 
-mod record_layer;
-pub(crate) use record_layer::{Decrypted, DecryptionState, EncryptionState, PreEncryptAction};
-
 /// Factory trait for building [`RecordEncrypter`] and [`RecordDecrypter`] for a TLS1.3 cipher suite.
 pub trait Tls13AeadAlgorithm: Send + Sync {
     /// Build a [`RecordEncrypter`] for the given key/iv.

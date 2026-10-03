@@ -747,3 +747,12 @@ pub(crate) trait StateMachine: Sized {
         send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error>;
 }
+
+/// When to take action to avoid sequence space exhaustion.
+///
+/// This gives a margin in which any action can have an effect, prior to `SEQ_HARD_LIMIT`
+/// being reached.
+const SEQ_SOFT_LIMIT: u64 = u64::MAX - 0xffff;
+
+/// When to refuse further encryptions.
+const SEQ_HARD_LIMIT: u64 = u64::MAX - 1;
