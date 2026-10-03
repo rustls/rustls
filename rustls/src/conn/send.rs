@@ -14,16 +14,16 @@ use crate::tracing::{debug, error};
 
 /// The data path from us to the peer.
 pub(crate) struct SendPath {
-    pub(crate) encrypt_state: EncryptionState,
+    encrypt_state: EncryptionState,
     pub(crate) may_send_application_data: bool,
-    pub(crate) may_send_half_rtt_data: bool,
+    may_send_half_rtt_data: bool,
     /// If we signaled end of stream.
     has_sent_close_notify: bool,
     fragmenter: Fragmenter,
     key_update_local: KeyUpdateLocal,
     key_update_remote: KeyUpdateRemote,
     negotiated_version: Option<ProtocolVersion>,
-    pub(crate) tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
+    tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
 }
 
 impl SendPath {
@@ -169,6 +169,13 @@ impl SendPath {
         self.key_update_local = KeyUpdateLocal::Outstanding;
         self.tls13_key_schedule = Some(ks);
         Ok(())
+    }
+
+    pub(super) fn export(&mut self) -> Result<(u64, Option<Box<KeyScheduleTrafficSend>>), Error> {
+        Ok((
+            self.encrypt_state.write_seq()?,
+            self.tls13_key_schedule.take(),
+        ))
     }
 }
 
