@@ -1,9 +1,9 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
+use super::{SEQ_HARD_LIMIT, SEQ_SOFT_LIMIT};
 use crate::crypto::cipher::{
-    EncodableVersion, EncryptionState, OutboundPlain, Payload, PreEncryptAction, Record,
-    RecordEncrypter,
+    EncodableVersion, OutboundPlain, Payload, Record, RecordEncrypter, encode_record_header,
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, ApiMisuse, Error};
@@ -304,6 +304,177 @@ impl Default for SendPath {
             tls13_key_schedule: None,
         }
     }
+}
+
+/// Record layer that tracks encryption keys.
+#[derive(Default)]
+pub(crate) enum EncryptionState {
+    #[default]
+    Handshake,
+    Encrypting(Encrypting),
+    Retired,
+}
+
+impl EncryptionState {
+    /// Encrypt a TLS record, returning the fully-encoded record.
+    ///
+    /// `plain` is a TLS record we'd like to send.
+    ///
+    /// The result including framing is appended to `output`.
+    pub(crate) fn encrypt_outgoing(
+        &mut self,
+        plain: Record<OutboundPlain<'_>>,
+        output: &mut Vec<u8>,
+    ) -> Result<(), Error> {
+        if !self.is_encrypting() {
+            return Err(Error::EncryptError);
+        }
+
+        // Contents are fully overwritten below, so zeroing is pure cost.
+        // A fresh buffer gets pre-zeroed memory straight from the allocator
+        // while a reused one zeroes only what `resize` grows.
+        let needed = HEADER_SIZE + self.encrypted_len(plain.payload.len());
+        let start = output.len();
+        output.resize(start + needed, 0);
+        let written = self.encrypt_outgoing_into(plain, &mut output[start..])?;
+        debug_assert_eq!(
+            written, needed,
+            "RecordEncrypter::encrypt() returned wrong length"
+        );
+        output.truncate(start + written);
+        Ok(())
+    }
+
+    /// Encrypt a TLS record directly into `out`, returning the encoded
+    /// record's length.
+    ///
+    /// The record, header included, is written to the front of `out`,
+    /// which must be at least `HEADER_SIZE` plus
+    /// [`Self::encrypted_len()`](Self::encrypted_len) bytes long.
+    pub(crate) fn encrypt_outgoing_into(
+        &mut self,
+        plain: Record<OutboundPlain<'_>>,
+        out: &mut [u8],
+    ) -> Result<usize, Error> {
+        assert!(self.pre_encrypt_action(0) != Some(PreEncryptAction::Refuse));
+        let Self::Encrypting(encrypting) = self else {
+            return Err(Error::EncryptError);
+        };
+
+        let seq = encrypting.write_seq;
+        encrypting.write_seq += 1;
+
+        #[cfg(debug_assertions)]
+        let (out_ptr, out_len) = (out.as_ptr(), out.len());
+        let encrypted = encrypting
+            .record_encrypter
+            .encrypt(plain, seq, &mut out[HEADER_SIZE..])?;
+
+        #[cfg(debug_assertions)]
+        {
+            // `RecordEncrypter::encrypt()` requires the returned payload to be
+            // the written prefix of the passed-in buffer. Try to catch misbehaving
+            // implementations in debug mode. In release builds a violation would corrupt
+            // the sent stream.
+            debug_assert_eq!(
+                encrypted.payload.as_ptr(),
+                out_ptr.wrapping_add(HEADER_SIZE)
+            );
+            debug_assert!(encrypted.payload.len() <= out_len - HEADER_SIZE);
+        }
+
+        let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
+        debug_assert!(len <= usize::from(u16::MAX));
+        out[..HEADER_SIZE].copy_from_slice(&encode_record_header(typ, version, len as u16));
+        Ok(HEADER_SIZE + len)
+    }
+
+    /// Set and start using the given `RecordEncrypter` for future outgoing
+    /// record encryption.
+    pub(crate) fn set_record_encrypter(
+        &mut self,
+        record_encrypter: Box<dyn RecordEncrypter>,
+        max_records: u64,
+    ) {
+        if matches!(self, Self::Retired) {
+            // Retirement is permanent.
+            return;
+        }
+
+        *self = Self::Encrypting(Encrypting {
+            record_encrypter,
+            write_seq_max: Ord::min(SEQ_SOFT_LIMIT, max_records),
+            write_seq: 0,
+        });
+    }
+
+    /// Stops any further encryptions from working.
+    ///
+    /// Depending on the precise prior implementation of `record_encrypter`,
+    /// this has the opportunity to zeroise the key material needed for sending.
+    pub(crate) fn retire(&mut self) {
+        *self = Self::Retired;
+    }
+
+    /// Return a remedial action when we are near to encrypting too many records.
+    ///
+    /// `add` is added to the current sequence number.  `add` as `0` means
+    /// "the next record processed by `encrypt_outgoing`"
+    pub(crate) fn pre_encrypt_action(&self, add: u64) -> Option<PreEncryptAction> {
+        let Self::Encrypting(encrypting) = self else {
+            return None;
+        };
+
+        match encrypting.write_seq.saturating_add(add) {
+            v if v == encrypting.write_seq_max => Some(PreEncryptAction::RefreshOrClose),
+            SEQ_HARD_LIMIT.. => Some(PreEncryptAction::Refuse),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn encrypted_len(&self, payload_len: usize) -> usize {
+        match self {
+            Self::Encrypting(encrypting) => encrypting
+                .record_encrypter
+                .encrypted_payload_len(payload_len),
+            Self::Handshake | Self::Retired => 0,
+        }
+    }
+
+    /// Number of bytes added to a plaintext fragment by record protection.
+    pub(crate) fn encrypted_record_overhead(&self) -> usize {
+        self.encrypted_len(0)
+    }
+
+    pub(crate) fn is_encrypting(&self) -> bool {
+        matches!(self, Self::Encrypting { .. })
+    }
+
+    pub(crate) fn write_seq(&self) -> Result<u64, Error> {
+        match self {
+            Self::Encrypting(encrypting) => Ok(encrypting.write_seq),
+            _ => Err(Error::EncryptError),
+        }
+    }
+}
+
+pub(crate) struct Encrypting {
+    record_encrypter: Box<dyn RecordEncrypter>,
+    write_seq_max: u64,
+    write_seq: u64,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) enum PreEncryptAction {
+    /// A `key_update` request should be sent ASAP.
+    ///
+    /// If that is not possible (for example, the connection is TLS1.2), a `close_notify`
+    /// alert should be sent instead.
+    RefreshOrClose,
+
+    /// Do not call `encrypt_outgoing` further, it will panic rather than
+    /// over-use the key.
+    Refuse,
 }
 
 /// State machine for TLS1.3 key updates triggered by us.
