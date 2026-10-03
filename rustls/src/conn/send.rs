@@ -85,7 +85,7 @@ impl SendPath {
         Ok(len)
     }
 
-    pub(crate) fn start_outgoing_traffic(&mut self) {
+    pub(super) fn start_outgoing_traffic(&mut self) {
         self.may_send_application_data = true;
         debug_assert!(matches!(self.encrypt_state, EncryptionState::Encrypting(_)));
     }
@@ -99,7 +99,7 @@ impl SendPath {
             .set_max_fragment_size(new)
     }
 
-    pub(crate) fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
+    pub(super) fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
         if let KeyUpdateLocal::Outstanding = self.key_update_local {
             return Ok(());
         }
@@ -303,14 +303,14 @@ impl Default for SendPath {
 
 /// Record layer that tracks encryption keys.
 #[derive(Default)]
-pub(crate) enum EncryptionState {
+enum EncryptionState {
     #[default]
     Handshake,
     Encrypting(Encrypting),
     Retired,
 }
 
-pub(crate) struct Encrypting {
+struct Encrypting {
     record_encrypter: Box<dyn RecordEncrypter>,
     write_seq_max: u64,
     write_seq: u64,
@@ -355,7 +355,7 @@ impl Encrypting {
     /// `plain` is a TLS record we'd like to send.
     ///
     /// The result including framing is appended to `output`.
-    pub(crate) fn encrypt_outgoing(
+    fn encrypt_outgoing(
         &mut self,
         plain: Record<OutboundPlain<'_>>,
         output: &mut Vec<u8>,
@@ -381,7 +381,7 @@ impl Encrypting {
     /// The record, header included, is written to the front of `out`,
     /// which must be at least `HEADER_SIZE` plus
     /// [`Self::encrypted_len()`](Self::encrypted_len) bytes long.
-    pub(crate) fn encrypt_outgoing_into(
+    fn encrypt_outgoing_into(
         &mut self,
         plain: Record<OutboundPlain<'_>>,
         out: &mut [u8],
