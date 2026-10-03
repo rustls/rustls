@@ -26,15 +26,6 @@ pub(crate) struct SendPath {
 }
 
 impl SendPath {
-    pub(crate) fn send_close_notify(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
-        if self.has_sent_close_notify {
-            return Ok(());
-        }
-        debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
-        self.has_sent_close_notify = true;
-        self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify, tls)
-    }
-
     /// Encrypt application data from `payload` into TLS records, appended to `tls`.
     ///
     /// Unlike handshake messages, application data comes from the caller, may be arbitrarily
@@ -89,13 +80,13 @@ impl SendPath {
         Ok(len)
     }
 
-    pub(super) fn start_outgoing_traffic(&mut self) {
-        self.may_send_application_data = true;
-        debug_assert!(matches!(self.encrypt_state, EncryptionState::Encrypting(_)));
-    }
-
-    pub(super) fn has_queued_key_update(&self) -> bool {
-        matches!(self.key_update_remote, KeyUpdateRemote::Queued(_))
+    pub(crate) fn send_close_notify(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
+        if self.has_sent_close_notify {
+            return Ok(());
+        }
+        debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
+        self.has_sent_close_notify = true;
+        self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify, tls)
     }
 
     pub(crate) fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
@@ -103,26 +94,16 @@ impl SendPath {
             .set_max_fragment_size(new)
     }
 
+    pub(super) fn start_outgoing_traffic(&mut self) {
+        self.may_send_application_data = true;
+        debug_assert!(matches!(self.encrypt_state, EncryptionState::Encrypting(_)));
+    }
+
     pub(super) fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
         if let KeyUpdateLocal::Outstanding = self.key_update_local {
             return Ok(());
         }
         self.send_key_update_request(tls)
-    }
-
-    fn queue_local_key_update(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
-        match self.negotiated_version {
-            // driven by caller, as we don't have the `State` here
-            Some(ProtocolVersion::TLSv1_3) => {
-                self.key_update_local = KeyUpdateLocal::Requested;
-                Ok(())
-            }
-            _ => {
-                error!("traffic keys exhausted, closing connection to prevent security failure");
-                self.send_close_notify(tls)?;
-                Err(Error::EncryptError)
-            }
-        }
     }
 
     fn send_key_update_request(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
@@ -147,6 +128,25 @@ impl SendPath {
             },
             self.tls13_key_schedule.take(),
         ))
+    }
+
+    fn queue_local_key_update(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
+        match self.negotiated_version {
+            // driven by caller, as we don't have the `State` here
+            Some(ProtocolVersion::TLSv1_3) => {
+                self.key_update_local = KeyUpdateLocal::Requested;
+                Ok(())
+            }
+            _ => {
+                error!("traffic keys exhausted, closing connection to prevent security failure");
+                self.send_close_notify(tls)?;
+                Err(Error::EncryptError)
+            }
+        }
+    }
+
+    pub(super) fn has_queued_key_update(&self) -> bool {
+        matches!(self.key_update_remote, KeyUpdateRemote::Queued(_))
     }
 }
 
