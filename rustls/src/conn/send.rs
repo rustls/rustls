@@ -59,7 +59,7 @@ impl SendPath {
 
         let len = payload.len();
         self.perhaps_write_key_update(tls);
-        self.encrypt_records(
+        let need_local_key_update = self.encrypt_records(
             self.fragmenter.fragment(
                 ContentType::ApplicationData,
                 EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
@@ -68,17 +68,29 @@ impl SendPath {
                     .encrypted_record_overhead(),
             ),
             tls,
+            self.negotiated_version,
         )?;
-        self.maybe_refresh_traffic_keys(tls);
+
+        if need_local_key_update {
+            self.queue_local_key_update(tls)?;
+        }
+
+        if let KeyUpdateLocal::Requested = self.key_update_local {
+            let _ = self.send_key_update_request(tls);
+        }
+
         Ok(len)
     }
 
     /// Encrypt each fragment in `iter`, appending the resulting records to `tls`.
+    ///
+    /// The return value indicates whether a local key update is needed.
     fn encrypt_records<'a>(
         &mut self,
         iter: impl ExactSizeIterator<Item = Record<OutboundPlain<'a>>>,
         tls: &mut Vec<u8>,
-    ) -> Result<(), Error> {
+        version: Option<ProtocolVersion>,
+    ) -> Result<bool, Error> {
         let count = iter.len();
         let mut iter = iter.peekable();
         if let Some(first) = iter.peek() {
@@ -89,6 +101,7 @@ impl SendPath {
             tls.reserve(count * record_len);
         }
 
+        let mut need_local_key_update = false;
         for record in iter {
             let EncryptionState::Encrypting(encrypting) = &self.encrypt_state else {
                 return Err(Error::EncryptError);
@@ -101,18 +114,11 @@ impl SendPath {
             if encrypting.write_seq >= SEQ_HARD_LIMIT {
                 return Err(Error::EncryptError);
             } else if encrypting.write_seq == encrypting.write_seq_max {
-                match self.negotiated_version {
-                    // driven by caller, as we don't have the `State` here
-                    Some(ProtocolVersion::TLSv1_3) => {
-                        self.key_update_local = KeyUpdateLocal::Requested
-                    }
-                    _ => {
-                        error!(
-                            "traffic keys exhausted, closing connection to prevent security failure"
-                        );
-                        self.send_close_notify(tls)?;
-                        return Err(Error::EncryptError);
-                    }
+                match version {
+                    // Keep going and signal to the caller that we need a key update
+                    Some(ProtocolVersion::TLSv1_3) => need_local_key_update = true,
+                    // Key updates aren't available, so we're going to stop immediately
+                    _ => return Ok(true),
                 }
             }
 
@@ -120,7 +126,7 @@ impl SendPath {
                 .encrypt_outgoing(record, tls)?;
         }
 
-        Ok(())
+        Ok(need_local_key_update)
     }
 
     pub(crate) fn start_outgoing_traffic(&mut self) {
@@ -145,18 +151,26 @@ impl SendPath {
             .set_max_fragment_size(new)
     }
 
-    /// Trigger a `refresh_traffic_keys` if requested.
-    fn maybe_refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) {
-        if let KeyUpdateLocal::Requested = self.key_update_local {
-            let _ = self.send_key_update_request(tls);
-        }
-    }
-
     pub(crate) fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
         if let KeyUpdateLocal::Outstanding = self.key_update_local {
             return Ok(());
         }
         self.send_key_update_request(tls)
+    }
+
+    fn queue_local_key_update(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
+        match self.negotiated_version {
+            // driven by caller, as we don't have the `State` here
+            Some(ProtocolVersion::TLSv1_3) => {
+                self.key_update_local = KeyUpdateLocal::Requested;
+                Ok(())
+            }
+            _ => {
+                error!("traffic keys exhausted, closing connection to prevent security failure");
+                self.send_close_notify(tls)?;
+                Err(Error::EncryptError)
+            }
+        }
     }
 
     fn send_key_update_request(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
@@ -284,7 +298,10 @@ impl SendOutput for SendPath {
 
         if must_encrypt {
             self.perhaps_write_key_update(tls);
-            return self.encrypt_records(fragments, tls);
+            if self.encrypt_records(fragments, tls, self.negotiated_version)? {
+                self.queue_local_key_update(tls)?;
+            }
+            return Ok(());
         }
 
         let count = fragments.len();
