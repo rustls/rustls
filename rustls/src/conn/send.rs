@@ -54,6 +54,7 @@ impl SendPath {
         }
 
         let len = payload.len();
+        self.perhaps_write_key_update(tls);
         self.encrypt_records(
             self.fragmenter.fragment(
                 ContentType::ApplicationData,
@@ -74,7 +75,6 @@ impl SendPath {
         iter: impl ExactSizeIterator<Item = Record<OutboundPlain<'a>>>,
         tls: &mut Vec<u8>,
     ) -> Result<(), Error> {
-        self.perhaps_write_key_update(tls);
         let count = iter.len();
         let mut iter = iter.peekable();
         if let Some(first) = iter.peek() {
@@ -275,6 +275,7 @@ impl SendOutput for SendPath {
         );
 
         if must_encrypt {
+            self.perhaps_write_key_update(tls);
             return self.encrypt_records(fragments, tls);
         }
 
