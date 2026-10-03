@@ -377,7 +377,7 @@ impl<'a> WriteEarlyData<'a> {
 
         self.common
             .send
-            .send_appdata_encrypt(plaintext, tls)
+            .send_appdata_encrypt(plaintext, tls, true)
     }
 
     /// How many bytes you may send.  Writes will become short

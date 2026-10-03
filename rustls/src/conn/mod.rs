@@ -10,7 +10,7 @@ use crate::common_state::{
     CommonState, ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent,
 };
 use crate::crypto::VerifiedIdentity;
-use crate::crypto::cipher::{EncryptionState, OutboundPlain, Payload};
+use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
 use crate::msgs::{Delocator, Message, Random, ServerExtensionsInput};
@@ -254,21 +254,11 @@ impl<Side: SideData> ConnectionCommon<Side> {
     ) -> Result<(), Error> {
         if plaintext.is_empty() {
             return Ok(());
-        } else if !self
-            .common
-            .send
-            .may_send_application_data
-        {
-            return Err(ApiMisuse::WriteBeforeHandshakeComplete.into());
-        } else if self.common.send.has_sent_close_notify
-            || matches!(self.common.send.encrypt_state, EncryptionState::Retired)
-        {
-            return Err(ApiMisuse::WriteAfterSendPathClosed.into());
         }
 
         self.common
             .send
-            .send_appdata_encrypt(plaintext, tls)?;
+            .send_appdata_encrypt(plaintext, tls, false)?;
 
         Ok(())
     }
@@ -333,9 +323,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         }
 
         let read_seq = recv.decrypt_state.read_seq();
-        let write_seq = send.encrypt_state.write_seq()?;
-
-        let tls13_key_schedule = send.tls13_key_schedule.take();
+        let (write_seq, tls13_key_schedule) = send.export()?;
 
         let (secrets, state) = state.into_external_state(&tls13_key_schedule)?;
         let secrets = ExtractedSecrets {
@@ -765,3 +753,12 @@ pub(crate) trait StateMachine: Sized {
         send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error>;
 }
+
+/// When to take action to avoid sequence space exhaustion.
+///
+/// This gives a margin in which any action can have an effect, prior to `SEQ_HARD_LIMIT`
+/// being reached.
+const SEQ_SOFT_LIMIT: u64 = u64::MAX - 0xffff;
+
+/// When to refuse further encryptions.
+const SEQ_HARD_LIMIT: u64 = u64::MAX - 1;
