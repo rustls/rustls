@@ -90,14 +90,17 @@ impl SendPath {
         }
 
         for record in iter {
-            if let Some(action) = self.encrypt_state.pre_encrypt_action() {
-                match action {
-                    // Refuse to wrap counter at all costs. This is basically untestable unfortunately.
-                    PreEncryptAction::Refuse => return Err(Error::EncryptError),
-                    // Close connection once we start to run out of sequence space.
-                    PreEncryptAction::RefreshOrClose => {}
-                }
+            let EncryptionState::Encrypting(encrypting) = &self.encrypt_state else {
+                return Err(Error::EncryptError);
+            };
 
+            // Make sure we do the right thing when we're approaching the confidentiality limit
+            // of the encryption keys. When we reach the hard limit, we must not encrypt any
+            // more records with the current keys. If we reach the soft limit, we should either
+            // request a key update (for 1.3) or send a close notify (for 1.2).
+            if encrypting.write_seq >= SEQ_HARD_LIMIT {
+                return Err(Error::EncryptError);
+            } else if encrypting.write_seq == encrypting.write_seq_max {
                 match self.negotiated_version {
                     // driven by caller, as we don't have the `State` here
                     Some(ProtocolVersion::TLSv1_3) => {
@@ -363,11 +366,11 @@ impl EncryptionState {
         plain: Record<OutboundPlain<'_>>,
         out: &mut [u8],
     ) -> Result<usize, Error> {
-        assert!(self.pre_encrypt_action() != Some(PreEncryptAction::Refuse));
         let Self::Encrypting(encrypting) = self else {
             return Err(Error::EncryptError);
         };
 
+        assert!(encrypting.write_seq < SEQ_HARD_LIMIT);
         let seq = encrypting.write_seq;
         encrypting.write_seq += 1;
 
@@ -415,22 +418,6 @@ impl EncryptionState {
         });
     }
 
-    /// Return a remedial action when we are near to encrypting too many records.
-    ///
-    /// `add` is added to the current sequence number.  `add` as `0` means
-    /// "the next record processed by `encrypt_outgoing`"
-    pub(crate) fn pre_encrypt_action(&self) -> Option<PreEncryptAction> {
-        let Self::Encrypting(encrypting) = self else {
-            return None;
-        };
-
-        match encrypting.write_seq {
-            v if v == encrypting.write_seq_max => Some(PreEncryptAction::RefreshOrClose),
-            SEQ_HARD_LIMIT.. => Some(PreEncryptAction::Refuse),
-            _ => None,
-        }
-    }
-
     pub(crate) fn encrypted_len(&self, payload_len: usize) -> usize {
         match self {
             Self::Encrypting(encrypting) => encrypting
@@ -454,19 +441,6 @@ pub(crate) struct Encrypting {
     record_encrypter: Box<dyn RecordEncrypter>,
     write_seq_max: u64,
     write_seq: u64,
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub(crate) enum PreEncryptAction {
-    /// A `key_update` request should be sent ASAP.
-    ///
-    /// If that is not possible (for example, the connection is TLS1.2), a `close_notify`
-    /// alert should be sent instead.
-    RefreshOrClose,
-
-    /// Do not call `encrypt_outgoing` further, it will panic rather than
-    /// over-use the key.
-    Refuse,
 }
 
 /// State machine for TLS1.3 key updates triggered by us.
