@@ -317,9 +317,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         }
 
         let read_seq = recv.decrypt_state.read_seq();
-        let write_seq = send.encrypt_state.write_seq()?;
-
-        let tls13_key_schedule = send.tls13_key_schedule.take();
+        let (write_seq, tls13_key_schedule) = send.export()?;
 
         let (secrets, state) = state.into_external_state(&tls13_key_schedule)?;
         let secrets = ExtractedSecrets {
