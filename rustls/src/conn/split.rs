@@ -9,7 +9,7 @@ use crate::client::ClientSide;
 use crate::common_state::UnborrowedPayload;
 use crate::conn::kernel::KernelConnection;
 use crate::conn::{
-    ConnectionCommon, MessageIter, MessageIterMode, ReceivePath, SendOutput, SendPath,
+    ConnectionCommon, DataKind, MessageIter, MessageIterMode, ReceivePath, SendOutput, SendPath,
     TlsInputBuffer,
 };
 use crate::crypto::cipher::{OutboundPlain, RecordEncrypter};
@@ -144,7 +144,7 @@ impl SendTraffic {
         inner.pump(tls);
         inner
             .send
-            .send_appdata_encrypt(application_data, tls)
+            .send_appdata_encrypt(DataKind::Traffic(application_data), tls)
             .map(|_| ())
     }
 
@@ -625,6 +625,7 @@ mod tests {
     fn pending_send_data() {
         let mut send = SendPath::default();
         send.set_encrypter(Box::new(Tls13Cipher), 1234);
+        send.may_send_application_data = true;
 
         let mut inner = SendInner {
             send,
@@ -657,9 +658,9 @@ mod tests {
         assert_eq!(
             inner
                 .send
-                .send_appdata_encrypt(b"x".as_slice().into(), &mut tls)
+                .send_appdata_encrypt(DataKind::Traffic(b"x".as_slice().into()), &mut tls)
                 .unwrap_err(),
-            Error::EncryptError
+            Error::ApiMisuse(ApiMisuse::WriteAfterSendPathClosed)
         );
         assert!(tls.is_empty());
         assert!(!inner.pending_send_data());
