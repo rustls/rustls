@@ -242,7 +242,7 @@ impl SendOutput for SendPath {
         };
 
         if level == AlertLevel::Fatal {
-            self.encrypt_state.retire();
+            self.encrypt_state = EncryptionState::Retired;
         }
         result
     }
@@ -409,14 +409,6 @@ impl EncryptionState {
             write_seq_max: Ord::min(SEQ_SOFT_LIMIT, max_records),
             write_seq: 0,
         });
-    }
-
-    /// Stops any further encryptions from working.
-    ///
-    /// Depending on the precise prior implementation of `record_encrypter`,
-    /// this has the opportunity to zeroise the key material needed for sending.
-    pub(crate) fn retire(&mut self) {
-        *self = Self::Retired;
     }
 
     /// Return a remedial action when we are near to encrypting too many records.
