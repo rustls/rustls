@@ -186,7 +186,7 @@ version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03367707e92796b190a4207d4d39b0a4271d574503d2969c2b0cfbf5c87658ee"
 dependencies = [
- "bindgen",
+ "bindgen 0.72.1",
  "cc",
  "cmake",
  "dunce",
@@ -250,6 +250,25 @@ dependencies = [
  "rustc-hash",
  "shlex 1.3.0",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "bindgen"
+version = "0.73.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "787ef8ef523575546b106a58213d6e6b06198a05c2f757258c68a74273670cfa"
+dependencies = [
+ "bitflags",
+ "cexpr",
+ "clang-sys",
+ "log",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash",
+ "shlex 2.0.1",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -499,11 +518,11 @@ dependencies = [
 
 [[package]]
 name = "crabgrind"
-version = "0.3.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "035c801dc4b418e1d857a6536dc88b4d1929c7a1fd163389766e18d322d34a84"
+checksum = "e3f4bc9b199b6cfdf87ef7960ac7be99306a1ad4d6c442b1c3701cddb22ea47d"
 dependencies = [
- "bindgen",
+ "bindgen 0.73.2",
  "cc",
  "pkg-config",
  "rustversion",
