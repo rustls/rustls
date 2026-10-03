@@ -183,14 +183,14 @@ impl SendOutput for SendPath {
         }
     }
 
-    fn set_encrypter(&mut self, record_encrypter: Box<dyn RecordEncrypter>, max_records: u64) {
+    fn set_encrypter(&mut self, encrypter: Box<dyn RecordEncrypter>, max_records: u64) {
         if matches!(self.encrypt_state, EncryptionState::Retired) {
             // Retirement is permanent.
             return;
         }
 
         self.encrypt_state = EncryptionState::Encrypting(Encrypting {
-            record_encrypter,
+            encrypter,
             write_seq_max: Ord::min(SEQ_SOFT_LIMIT, max_records),
             write_seq: 0,
         });
@@ -315,7 +315,7 @@ enum EncryptionState {
 }
 
 struct Encrypting {
-    record_encrypter: Box<dyn RecordEncrypter>,
+    encrypter: Box<dyn RecordEncrypter>,
     write_seq_max: u64,
     write_seq: u64,
 }
@@ -403,7 +403,7 @@ impl Encrypting {
         #[cfg(debug_assertions)]
         let (out_ptr, out_len) = (out.as_ptr(), out.len());
         let encrypted = self
-            .record_encrypter
+            .encrypter
             .encrypt(plain, seq, &mut out[HEADER_SIZE..])?;
 
         #[cfg(debug_assertions)]
@@ -426,7 +426,7 @@ impl Encrypting {
     }
 
     fn encrypted_len(&self, payload_len: usize) -> usize {
-        self.record_encrypter
+        self.encrypter
             .encrypted_payload_len(payload_len)
     }
 }
