@@ -58,7 +58,7 @@ impl SendPath {
         }
 
         let len = payload.len();
-        self.perhaps_write_key_update(tls);
+        self.key_update_remote.write(tls);
         let need_local_key_update = self.encrypt_state.encrypt_records(
             self.fragmenter.fragment(
                 ContentType::ApplicationData,
@@ -85,14 +85,6 @@ impl SendPath {
     pub(crate) fn start_outgoing_traffic(&mut self) {
         self.may_send_application_data = true;
         debug_assert!(self.encrypt_state.is_encrypting());
-    }
-
-    fn perhaps_write_key_update(&mut self, tls: &mut Vec<u8>) {
-        let KeyUpdateRemote::Queued(message) = &mut self.key_update_remote else {
-            return;
-        };
-        tls.append(message);
-        self.key_update_remote = KeyUpdateRemote::Idle;
     }
 
     pub(super) fn has_queued_key_update(&self) -> bool {
@@ -205,7 +197,7 @@ impl SendOutput for SendPath {
         let record = record.borrow_outbound();
         let result = match self.encrypt_state.is_encrypting() {
             true => {
-                self.perhaps_write_key_update(tls);
+                self.key_update_remote.write(tls);
                 self.encrypt_state
                     .encrypt_outgoing(record, tls)
             }
@@ -250,7 +242,7 @@ impl SendOutput for SendPath {
         );
 
         if must_encrypt {
-            self.perhaps_write_key_update(tls);
+            self.key_update_remote.write(tls);
             if self
                 .encrypt_state
                 .encrypt_records(fragments, tls, self.negotiated_version)?
@@ -483,6 +475,16 @@ enum KeyUpdateRemote {
 
     /// A key update response is awaiting sending.
     Queued(Vec<u8>),
+}
+
+impl KeyUpdateRemote {
+    fn write(&mut self, tls: &mut Vec<u8>) {
+        let Self::Queued(message) = self else {
+            return;
+        };
+        tls.append(message);
+        *self = Self::Idle;
+    }
 }
 
 pub(crate) trait SendOutput {
