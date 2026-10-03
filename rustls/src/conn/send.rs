@@ -202,19 +202,21 @@ impl SendOutput for SendPath {
         desc: AlertDescription,
         tls: &mut Vec<u8>,
     ) -> Result<(), Error> {
-        if matches!(self.encrypt_state, EncryptionState::Retired) {
-            return Ok(());
-        }
+        let encrypting = match &mut self.encrypt_state {
+            EncryptionState::Encrypting(encrypting) => Some(encrypting),
+            EncryptionState::Handshake => None,
+            EncryptionState::Retired => return Ok(()),
+        };
 
         // Alerts always fit in a single record, and are never quashed by a `PreEncryptAction`.
         let record = Record::from(Message::build_alert(level, desc));
         let record = record.borrow_outbound();
-        let result = match &mut self.encrypt_state {
-            EncryptionState::Encrypting(encrypting) => {
+        let result = match encrypting {
+            Some(encrypting) => {
                 self.key_update_remote.write(tls);
                 encrypting.encrypt_outgoing(record, tls)
             }
-            _ => {
+            None => {
                 record.encode_unencrypted(tls);
                 Ok(())
             }
