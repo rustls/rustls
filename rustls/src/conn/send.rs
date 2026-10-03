@@ -86,7 +86,7 @@ impl SendPath {
         }
 
         for record in iter {
-            if let Some(action) = self.encrypt_state.pre_encrypt_action(0) {
+            if let Some(action) = self.encrypt_state.pre_encrypt_action() {
                 match action {
                     // Refuse to wrap counter at all costs. This is basically untestable unfortunately.
                     PreEncryptAction::Refuse => return Err(Error::EncryptError),
@@ -359,7 +359,7 @@ impl EncryptionState {
         plain: Record<OutboundPlain<'_>>,
         out: &mut [u8],
     ) -> Result<usize, Error> {
-        assert!(self.pre_encrypt_action(0) != Some(PreEncryptAction::Refuse));
+        assert!(self.pre_encrypt_action() != Some(PreEncryptAction::Refuse));
         let Self::Encrypting(encrypting) = self else {
             return Err(Error::EncryptError);
         };
@@ -415,12 +415,12 @@ impl EncryptionState {
     ///
     /// `add` is added to the current sequence number.  `add` as `0` means
     /// "the next record processed by `encrypt_outgoing`"
-    pub(crate) fn pre_encrypt_action(&self, add: u64) -> Option<PreEncryptAction> {
+    pub(crate) fn pre_encrypt_action(&self) -> Option<PreEncryptAction> {
         let Self::Encrypting(encrypting) = self else {
             return None;
         };
 
-        match encrypting.write_seq.saturating_add(add) {
+        match encrypting.write_seq {
             v if v == encrypting.write_seq_max => Some(PreEncryptAction::RefreshOrClose),
             SEQ_HARD_LIMIT.. => Some(PreEncryptAction::Refuse),
             _ => None,
