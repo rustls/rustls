@@ -59,7 +59,7 @@ impl SendPath {
 
         let len = payload.len();
         self.perhaps_write_key_update(tls);
-        let need_local_key_update = self.encrypt_records(
+        let need_local_key_update = self.encrypt_state.encrypt_records(
             self.fragmenter.fragment(
                 ContentType::ApplicationData,
                 EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
@@ -80,53 +80,6 @@ impl SendPath {
         }
 
         Ok(len)
-    }
-
-    /// Encrypt each fragment in `iter`, appending the resulting records to `tls`.
-    ///
-    /// The return value indicates whether a local key update is needed.
-    fn encrypt_records<'a>(
-        &mut self,
-        iter: impl ExactSizeIterator<Item = Record<OutboundPlain<'a>>>,
-        tls: &mut Vec<u8>,
-        version: Option<ProtocolVersion>,
-    ) -> Result<bool, Error> {
-        let count = iter.len();
-        let mut iter = iter.peekable();
-        if let Some(first) = iter.peek() {
-            let record_len = HEADER_SIZE
-                + self
-                    .encrypt_state
-                    .encrypted_len(first.payload.len());
-            tls.reserve(count * record_len);
-        }
-
-        let mut need_local_key_update = false;
-        for record in iter {
-            let EncryptionState::Encrypting(encrypting) = &self.encrypt_state else {
-                return Err(Error::EncryptError);
-            };
-
-            // Make sure we do the right thing when we're approaching the confidentiality limit
-            // of the encryption keys. When we reach the hard limit, we must not encrypt any
-            // more records with the current keys. If we reach the soft limit, we should either
-            // request a key update (for 1.3) or send a close notify (for 1.2).
-            if encrypting.write_seq >= SEQ_HARD_LIMIT {
-                return Err(Error::EncryptError);
-            } else if encrypting.write_seq == encrypting.write_seq_max {
-                match version {
-                    // Keep going and signal to the caller that we need a key update
-                    Some(ProtocolVersion::TLSv1_3) => need_local_key_update = true,
-                    // Key updates aren't available, so we're going to stop immediately
-                    _ => return Ok(true),
-                }
-            }
-
-            self.encrypt_state
-                .encrypt_outgoing(record, tls)?;
-        }
-
-        Ok(need_local_key_update)
     }
 
     pub(crate) fn start_outgoing_traffic(&mut self) {
@@ -298,7 +251,10 @@ impl SendOutput for SendPath {
 
         if must_encrypt {
             self.perhaps_write_key_update(tls);
-            if self.encrypt_records(fragments, tls, self.negotiated_version)? {
+            if self
+                .encrypt_state
+                .encrypt_records(fragments, tls, self.negotiated_version)?
+            {
                 self.queue_local_key_update(tls)?;
             }
             return Ok(());
@@ -344,6 +300,49 @@ pub(crate) enum EncryptionState {
 }
 
 impl EncryptionState {
+    /// Encrypt each fragment in `iter`, appending the resulting records to `tls`.
+    ///
+    /// The return value indicates whether a local key update is needed.
+    fn encrypt_records<'a>(
+        &mut self,
+        iter: impl ExactSizeIterator<Item = Record<OutboundPlain<'a>>>,
+        tls: &mut Vec<u8>,
+        version: Option<ProtocolVersion>,
+    ) -> Result<bool, Error> {
+        let count = iter.len();
+        let mut iter = iter.peekable();
+        if let Some(first) = iter.peek() {
+            let record_len = HEADER_SIZE + self.encrypted_len(first.payload.len());
+            tls.reserve(count * record_len);
+        }
+
+        let mut need_local_key_update = false;
+        for record in iter {
+            let EncryptionState::Encrypting(encrypting) = &self else {
+                return Err(Error::EncryptError);
+            };
+
+            // Make sure we do the right thing when we're approaching the confidentiality limit
+            // of the encryption keys. When we reach the hard limit, we must not encrypt any
+            // more records with the current keys. If we reach the soft limit, we should either
+            // request a key update (for 1.3) or send a close notify (for 1.2).
+            if encrypting.write_seq >= SEQ_HARD_LIMIT {
+                return Err(Error::EncryptError);
+            } else if encrypting.write_seq == encrypting.write_seq_max {
+                match version {
+                    // Keep going and signal to the caller that we need a key update
+                    Some(ProtocolVersion::TLSv1_3) => need_local_key_update = true,
+                    // Key updates aren't available, so we're going to stop immediately
+                    _ => return Ok(true),
+                }
+            }
+
+            self.encrypt_outgoing(record, tls)?;
+        }
+
+        Ok(need_local_key_update)
+    }
+
     /// Encrypt a TLS record, returning the fully-encoded record.
     ///
     /// `plain` is a TLS record we'd like to send.
