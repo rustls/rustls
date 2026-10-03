@@ -91,7 +91,7 @@ impl SendPath {
 
     pub(crate) fn start_outgoing_traffic(&mut self) {
         self.may_send_application_data = true;
-        debug_assert!(self.encrypt_state.is_encrypting());
+        debug_assert!(matches!(self.encrypt_state, EncryptionState::Encrypting(_)));
     }
 
     pub(super) fn has_queued_key_update(&self) -> bool {
@@ -312,12 +312,6 @@ pub(crate) enum EncryptionState {
     Handshake,
     Encrypting(Encrypting),
     Retired,
-}
-
-impl EncryptionState {
-    pub(crate) fn is_encrypting(&self) -> bool {
-        matches!(self, Self::Encrypting { .. })
-    }
 }
 
 pub(crate) struct Encrypting {
