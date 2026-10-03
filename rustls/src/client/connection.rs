@@ -11,8 +11,8 @@ use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event,
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    ClientNext, Connection, ConnectionCommon, Core, KeyingMaterialExporter, MessageHandler,
-    SideCommonOutput, SideData, Tcp, VerifyPeerIdentity,
+    ClientNext, Connection, ConnectionCommon, Core, DataKind, KeyingMaterialExporter,
+    MessageHandler, SideCommonOutput, SideData, Tcp, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -378,7 +378,7 @@ impl<'a> WriteEarlyData<'a> {
 
         self.common
             .send
-            .send_appdata_encrypt(plaintext, tls)
+            .send_appdata_encrypt(DataKind::Early(plaintext), tls)
     }
 
     /// How many bytes you may send.  Writes will become short

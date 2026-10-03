@@ -1,12 +1,13 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
+use crate::conn::DataKind;
 use crate::crypto::cipher::{
     EncodableVersion, EncryptionState, OutboundPlain, Payload, PreEncryptAction, Record,
     RecordEncrypter,
 };
 use crate::enums::{ContentType, ProtocolVersion};
-use crate::error::{AlertDescription, Error};
+use crate::error::{AlertDescription, ApiMisuse, Error};
 use crate::msgs::{AlertLevel, Fragmenter, HEADER_SIZE, Message, MessagePayload};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::tracing::{debug, error};
@@ -17,7 +18,7 @@ pub(crate) struct SendPath {
     pub(crate) may_send_application_data: bool,
     pub(crate) may_send_half_rtt_data: bool,
     /// If we signaled end of stream.
-    pub(crate) has_sent_close_notify: bool,
+    has_sent_close_notify: bool,
     fragmenter: Fragmenter,
     key_update_local: KeyUpdateLocal,
     key_update_remote: KeyUpdateRemote,
@@ -41,9 +42,22 @@ impl SendPath {
     /// large, and is always encrypted.
     pub(crate) fn send_appdata_encrypt(
         &mut self,
-        payload: OutboundPlain<'_>,
+        payload: DataKind<OutboundPlain<'_>>,
         tls: &mut Vec<u8>,
     ) -> Result<usize, Error> {
+        let (early, payload) = match payload {
+            DataKind::Early(data) => (true, data),
+            DataKind::Traffic(data) => (false, data),
+        };
+
+        if !early && !self.may_send_application_data {
+            return Err(ApiMisuse::WriteBeforeHandshakeComplete.into());
+        } else if self.has_sent_close_notify
+            || matches!(self.encrypt_state, EncryptionState::Retired)
+        {
+            return Err(ApiMisuse::WriteAfterSendPathClosed.into());
+        }
+
         let len = payload.len();
         self.encrypt_records(
             self.fragmenter.fragment(

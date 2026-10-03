@@ -10,7 +10,7 @@ use crate::common_state::{
     CommonState, ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent,
 };
 use crate::crypto::VerifiedIdentity;
-use crate::crypto::cipher::{EncryptionState, OutboundPlain, Payload};
+use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
 use crate::msgs::{Delocator, Message, Random, ServerExtensionsInput};
@@ -250,21 +250,11 @@ impl<Side: SideData> ConnectionCommon<Side> {
             return Err(err.clone());
         } else if plaintext.is_empty() {
             return Ok(());
-        } else if !self
-            .common
-            .send
-            .may_send_application_data
-        {
-            return Err(ApiMisuse::WriteBeforeHandshakeComplete.into());
-        } else if self.common.send.has_sent_close_notify
-            || matches!(self.common.send.encrypt_state, EncryptionState::Retired)
-        {
-            return Err(ApiMisuse::WriteAfterSendPathClosed.into());
         }
 
         self.common
             .send
-            .send_appdata_encrypt(plaintext, tls)?;
+            .send_appdata_encrypt(DataKind::Traffic(plaintext), tls)?;
 
         Ok(())
     }
