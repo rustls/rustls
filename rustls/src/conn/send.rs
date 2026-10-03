@@ -6,7 +6,7 @@ use crate::crypto::cipher::{
     RecordEncrypter,
 };
 use crate::enums::{ContentType, ProtocolVersion};
-use crate::error::{AlertDescription, Error};
+use crate::error::{AlertDescription, ApiMisuse, Error};
 use crate::msgs::{AlertLevel, Fragmenter, HEADER_SIZE, Message, MessagePayload};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::tracing::{debug, error};
@@ -17,7 +17,7 @@ pub(crate) struct SendPath {
     pub(crate) may_send_application_data: bool,
     pub(crate) may_send_half_rtt_data: bool,
     /// If we signaled end of stream.
-    pub(crate) has_sent_close_notify: bool,
+    has_sent_close_notify: bool,
     fragmenter: Fragmenter,
     key_update_local: KeyUpdateLocal,
     key_update_remote: KeyUpdateRemote,
@@ -43,7 +43,16 @@ impl SendPath {
         &mut self,
         payload: OutboundPlain<'_>,
         tls: &mut Vec<u8>,
+        early: bool,
     ) -> Result<usize, Error> {
+        if !early && !self.may_send_application_data {
+            return Err(ApiMisuse::WriteBeforeHandshakeComplete.into());
+        } else if self.has_sent_close_notify
+            || matches!(self.encrypt_state, EncryptionState::Retired)
+        {
+            return Err(ApiMisuse::WriteAfterSendPathClosed.into());
+        }
+
         let len = payload.len();
         self.encrypt_records(
             self.fragmenter.fragment(
