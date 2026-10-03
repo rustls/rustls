@@ -1,9 +1,11 @@
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::ops::Range;
 use core::{fmt, mem};
 use std::io::{self, Read};
 
+use super::SEQ_SOFT_LIMIT;
 use super::send::{SendOutput, SendPath};
 use super::split::SendAdapter;
 use crate::SideData;
@@ -12,7 +14,7 @@ use crate::common_state::{
 };
 use crate::conn::private::SideOutput;
 use crate::conn::{ConnectionCommon, StateMachine};
-use crate::crypto::cipher::{Decrypted, DecryptionState, EncodableVersion, Payload, Record};
+use crate::crypto::cipher::{EncodableVersion, InboundOpaque, Payload, Record, RecordDecrypter};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::msgs::{
@@ -531,6 +533,137 @@ enum DeframeResult<'b> {
     None,
 }
 
+/// Record layer that tracks decryption keys.
+pub(crate) struct DecryptionState {
+    record_decrypter: Option<Box<dyn RecordDecrypter>>,
+    read_seq: u64,
+    has_decrypted: bool,
+
+    // Records encrypted with other keys may be encountered, so failures
+    // should be swallowed by the caller.  This struct tracks the amount
+    // of record size this is allowed for.
+    trial_decryption_len: Option<usize>,
+}
+
+impl DecryptionState {
+    /// Create new record layer with no keys.
+    pub(crate) fn new() -> Self {
+        Self {
+            record_decrypter: None,
+            read_seq: 0,
+            has_decrypted: false,
+            trial_decryption_len: None,
+        }
+    }
+
+    /// Decrypt a TLS record.
+    ///
+    /// `encr` is a decoded record allegedly received from the peer.
+    /// If it can be decrypted, its decryption is returned.  Otherwise,
+    /// an error is returned.
+    pub(crate) fn decrypt_incoming<'a>(
+        &mut self,
+        encr: Record<InboundOpaque<'a>>,
+    ) -> Result<Option<Decrypted<'a>>, Error> {
+        let Some(decrypter) = &mut self.record_decrypter else {
+            return Ok(Some(Decrypted {
+                want_close_before_decrypt: false,
+                plaintext: encr.into_plain_record(),
+            }));
+        };
+
+        // Set to `true` if the peer appears to getting close to encrypting
+        // too many records with this key.
+        //
+        // Perhaps if we send an alert well before their counter wraps, a
+        // buggy peer won't make a terrible mistake here?
+        //
+        // Note that there's no reason to refuse to decrypt: the security
+        // failure has already happened.
+        let want_close_before_decrypt = self.read_seq == SEQ_SOFT_LIMIT;
+
+        let encrypted_len = encr.payload.len();
+        match decrypter.decrypt(encr, self.read_seq) {
+            Ok(plaintext) => {
+                self.read_seq += 1;
+                if !self.has_decrypted {
+                    self.has_decrypted = true;
+                }
+                Ok(Some(Decrypted {
+                    want_close_before_decrypt,
+                    plaintext,
+                }))
+            }
+            Err(Error::DecryptError) if self.doing_trial_decryption(encrypted_len) => {
+                trace!("Dropping undecryptable record after aborted early_data");
+                Ok(None)
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Set and start using the given `RecordDecrypter` for future incoming
+    /// record decryption.
+    pub(crate) fn set_record_decrypter(
+        &mut self,
+        cipher: Box<dyn RecordDecrypter>,
+        _proof: &HandshakeAlignedProof,
+    ) {
+        self.record_decrypter = Some(cipher);
+        self.read_seq = 0;
+        self.trial_decryption_len = None;
+    }
+
+    /// Set and start using the given `RecordDecrypter` for future incoming
+    /// record decryption, and enable "trial decryption" mode for when TLS1.3
+    /// 0-RTT is attempted but rejected by the server.
+    pub(crate) fn set_record_decrypter_with_trial_decryption(
+        &mut self,
+        cipher: Box<dyn RecordDecrypter>,
+        max_length: usize,
+        _proof: &HandshakeAlignedProof,
+    ) {
+        self.record_decrypter = Some(cipher);
+        self.read_seq = 0;
+        self.trial_decryption_len = Some(max_length);
+    }
+
+    pub(crate) fn finish_trial_decryption(&mut self) {
+        self.trial_decryption_len = None;
+    }
+
+    /// Return true if we have ever decrypted a record. This is used in place
+    /// of checking the read_seq since that will be reset on key updates.
+    pub(crate) fn has_decrypted(&self) -> bool {
+        self.has_decrypted
+    }
+
+    pub(crate) fn read_seq(&self) -> u64 {
+        self.read_seq
+    }
+
+    fn doing_trial_decryption(&mut self, requested: usize) -> bool {
+        match self
+            .trial_decryption_len
+            .and_then(|value| value.checked_sub(requested))
+        {
+            Some(remaining) => {
+                self.trial_decryption_len = Some(remaining);
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+/// Result of decryption.
+pub(crate) struct Decrypted<'a> {
+    /// Whether the peer appears to be getting close to encrypting too many records with this key.
+    pub(crate) want_close_before_decrypt: bool,
+    /// The decrypted record.
+    pub(crate) plaintext: Record<&'a [u8]>,
+}
+
 struct CaptureAppData<'a, 'j, 'm, Send: SendOutput + 'a> {
     recv: &'a mut ReceivePath,
     other: &'a mut JoinOutput<'j, Send>,
@@ -1026,6 +1159,54 @@ mod tests {
     use alloc::format;
 
     use super::*;
+
+    #[test]
+    fn test_has_decrypted() {
+        struct PassThroughDecrypter;
+        impl RecordDecrypter for PassThroughDecrypter {
+            fn decrypt<'a>(
+                &mut self,
+                record: Record<InboundOpaque<'a>>,
+                _: u64,
+            ) -> Result<Record<&'a [u8]>, Error> {
+                Ok(record.into_plain_record())
+            }
+        }
+
+        // A record layer starts out invalid, having never decrypted.
+        let mut record_layer = DecryptionState::new();
+        assert!(record_layer.record_decrypter.is_none());
+        assert_eq!(record_layer.read_seq, 0);
+        assert!(!record_layer.has_decrypted());
+
+        // Initializing the record layer should update the decrypt state, but shouldn't affect whether it
+        // has decrypted.
+        let deframer = Deframer::default();
+        record_layer
+            .set_record_decrypter(Box::new(PassThroughDecrypter), &deframer.aligned().unwrap());
+        assert!(record_layer.record_decrypter.is_some());
+        assert_eq!(record_layer.read_seq, 0);
+        assert!(!record_layer.has_decrypted());
+
+        // Decrypting a record should update the read_seq and track that we have now performed
+        // a decryption.
+        record_layer
+            .decrypt_incoming(Record::new(
+                ContentType::Handshake,
+                EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+                InboundOpaque(&mut [0xC0, 0xFF, 0xEE]),
+            ))
+            .unwrap();
+        assert_eq!(record_layer.read_seq, 1);
+        assert!(record_layer.has_decrypted());
+
+        // Resetting the record layer decrypter (as if a key update occurred) should reset
+        // the read_seq number, but not our knowledge of whether we have decrypted previously.
+        record_layer
+            .set_record_decrypter(Box::new(PassThroughDecrypter), &deframer.aligned().unwrap());
+        assert_eq!(record_layer.read_seq, 0);
+        assert!(record_layer.has_decrypted());
+    }
 
     #[test]
     fn debug_of_input_types() {
