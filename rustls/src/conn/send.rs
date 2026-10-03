@@ -179,9 +179,17 @@ impl SendOutput for SendPath {
         }
     }
 
-    fn set_encrypter(&mut self, encrypter: Box<dyn RecordEncrypter>, max_records: u64) {
-        self.encrypt_state
-            .set_record_encrypter(encrypter, max_records);
+    fn set_encrypter(&mut self, record_encrypter: Box<dyn RecordEncrypter>, max_records: u64) {
+        if matches!(self.encrypt_state, EncryptionState::Retired) {
+            // Retirement is permanent.
+            return;
+        }
+
+        self.encrypt_state = EncryptionState::Encrypting(Encrypting {
+            record_encrypter,
+            write_seq_max: Ord::min(SEQ_SOFT_LIMIT, max_records),
+            write_seq: 0,
+        });
     }
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>) {
@@ -303,25 +311,6 @@ pub(crate) enum EncryptionState {
 }
 
 impl EncryptionState {
-    /// Set and start using the given `RecordEncrypter` for future outgoing
-    /// record encryption.
-    pub(crate) fn set_record_encrypter(
-        &mut self,
-        record_encrypter: Box<dyn RecordEncrypter>,
-        max_records: u64,
-    ) {
-        if matches!(self, Self::Retired) {
-            // Retirement is permanent.
-            return;
-        }
-
-        *self = Self::Encrypting(Encrypting {
-            record_encrypter,
-            write_seq_max: Ord::min(SEQ_SOFT_LIMIT, max_records),
-            write_seq: 0,
-        });
-    }
-
     pub(crate) fn is_encrypting(&self) -> bool {
         matches!(self, Self::Encrypting { .. })
     }
