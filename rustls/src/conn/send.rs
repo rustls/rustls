@@ -149,10 +149,13 @@ impl SendOutput for SendPath {
             return Ok(());
         }
 
+        let EncryptionState::Encrypting(encrypting) = &mut self.encrypt_state else {
+            return Err(Error::EncryptError);
+        };
+
         let record = Record::<Payload<'static>>::from(Message::build_key_update_notify());
         let mut queued = Vec::new();
-        self.encrypt_state
-            .encrypt_outgoing(record.borrow_outbound(), &mut queued)?;
+        encrypting.encrypt_outgoing(record.borrow_outbound(), &mut queued)?;
         self.key_update_remote = KeyUpdateRemote::Queued(queued);
 
         if let Some(mut ks) = self.tls13_key_schedule.take() {
@@ -191,13 +194,12 @@ impl SendOutput for SendPath {
         // Alerts always fit in a single record, and are never quashed by a `PreEncryptAction`.
         let record = Record::from(Message::build_alert(level, desc));
         let record = record.borrow_outbound();
-        let result = match self.encrypt_state.is_encrypting() {
-            true => {
+        let result = match &mut self.encrypt_state {
+            EncryptionState::Encrypting(encrypting) => {
                 self.key_update_remote.write(tls);
-                self.encrypt_state
-                    .encrypt_outgoing(record, tls)
+                encrypting.encrypt_outgoing(record, tls)
             }
-            false => {
+            _ => {
                 record.encode_unencrypted(tls);
                 Ok(())
             }
@@ -304,7 +306,7 @@ impl EncryptionState {
 
         let mut need_local_key_update = false;
         for record in iter {
-            let EncryptionState::Encrypting(encrypting) = &self else {
+            let EncryptionState::Encrypting(encrypting) = self else {
                 return Err(Error::EncryptError);
             };
 
@@ -319,83 +321,10 @@ impl EncryptionState {
                 }
             }
 
-            self.encrypt_outgoing(record, tls)?;
+            encrypting.encrypt_outgoing(record, tls)?;
         }
 
         Ok(need_local_key_update)
-    }
-
-    /// Encrypt a TLS record, returning the fully-encoded record.
-    ///
-    /// `plain` is a TLS record we'd like to send.
-    ///
-    /// The result including framing is appended to `output`.
-    pub(crate) fn encrypt_outgoing(
-        &mut self,
-        plain: Record<OutboundPlain<'_>>,
-        output: &mut Vec<u8>,
-    ) -> Result<(), Error> {
-        if !self.is_encrypting() {
-            return Err(Error::EncryptError);
-        }
-
-        // Contents are fully overwritten below, so zeroing is pure cost.
-        // A fresh buffer gets pre-zeroed memory straight from the allocator
-        // while a reused one zeroes only what `resize` grows.
-        let needed = HEADER_SIZE + self.encrypted_len(plain.payload.len());
-        let start = output.len();
-        output.resize(start + needed, 0);
-        let written = self.encrypt_outgoing_into(plain, &mut output[start..])?;
-        debug_assert_eq!(
-            written, needed,
-            "RecordEncrypter::encrypt() returned wrong length"
-        );
-        output.truncate(start + written);
-        Ok(())
-    }
-
-    /// Encrypt a TLS record directly into `out`, returning the encoded
-    /// record's length.
-    ///
-    /// The record, header included, is written to the front of `out`,
-    /// which must be at least `HEADER_SIZE` plus
-    /// [`Self::encrypted_len()`](Self::encrypted_len) bytes long.
-    pub(crate) fn encrypt_outgoing_into(
-        &mut self,
-        plain: Record<OutboundPlain<'_>>,
-        out: &mut [u8],
-    ) -> Result<usize, Error> {
-        let Self::Encrypting(encrypting) = self else {
-            return Err(Error::EncryptError);
-        };
-
-        assert!(encrypting.write_seq < SEQ_HARD_LIMIT);
-        let seq = encrypting.write_seq;
-        encrypting.write_seq += 1;
-
-        #[cfg(debug_assertions)]
-        let (out_ptr, out_len) = (out.as_ptr(), out.len());
-        let encrypted = encrypting
-            .record_encrypter
-            .encrypt(plain, seq, &mut out[HEADER_SIZE..])?;
-
-        #[cfg(debug_assertions)]
-        {
-            // `RecordEncrypter::encrypt()` requires the returned payload to be
-            // the written prefix of the passed-in buffer. Try to catch misbehaving
-            // implementations in debug mode. In release builds a violation would corrupt
-            // the sent stream.
-            debug_assert_eq!(
-                encrypted.payload.as_ptr(),
-                out_ptr.wrapping_add(HEADER_SIZE)
-            );
-            debug_assert!(encrypted.payload.len() <= out_len - HEADER_SIZE);
-        }
-
-        let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
-        debug_assert!(len <= usize::from(u16::MAX));
-        out[..HEADER_SIZE].copy_from_slice(&encode_record_header(typ, version, len as u16));
-        Ok(HEADER_SIZE + len)
     }
 
     /// Set and start using the given `RecordEncrypter` for future outgoing
@@ -440,6 +369,78 @@ pub(crate) struct Encrypting {
     record_encrypter: Box<dyn RecordEncrypter>,
     write_seq_max: u64,
     write_seq: u64,
+}
+
+impl Encrypting {
+    /// Encrypt a TLS record, returning the fully-encoded record.
+    ///
+    /// `plain` is a TLS record we'd like to send.
+    ///
+    /// The result including framing is appended to `output`.
+    pub(crate) fn encrypt_outgoing(
+        &mut self,
+        plain: Record<OutboundPlain<'_>>,
+        output: &mut Vec<u8>,
+    ) -> Result<(), Error> {
+        // Contents are fully overwritten below, so zeroing is pure cost.
+        // A fresh buffer gets pre-zeroed memory straight from the allocator
+        // while a reused one zeroes only what `resize` grows.
+        let needed = HEADER_SIZE + self.encrypted_len(plain.payload.len());
+        let start = output.len();
+        output.resize(start + needed, 0);
+        let written = self.encrypt_outgoing_into(plain, &mut output[start..])?;
+        debug_assert_eq!(
+            written, needed,
+            "RecordEncrypter::encrypt() returned wrong length"
+        );
+        output.truncate(start + written);
+        Ok(())
+    }
+
+    /// Encrypt a TLS record directly into `out`, returning the encoded
+    /// record's length.
+    ///
+    /// The record, header included, is written to the front of `out`,
+    /// which must be at least `HEADER_SIZE` plus
+    /// [`Self::encrypted_len()`](Self::encrypted_len) bytes long.
+    pub(crate) fn encrypt_outgoing_into(
+        &mut self,
+        plain: Record<OutboundPlain<'_>>,
+        out: &mut [u8],
+    ) -> Result<usize, Error> {
+        assert!(self.write_seq < SEQ_HARD_LIMIT);
+        let seq = self.write_seq;
+        self.write_seq += 1;
+
+        #[cfg(debug_assertions)]
+        let (out_ptr, out_len) = (out.as_ptr(), out.len());
+        let encrypted = self
+            .record_encrypter
+            .encrypt(plain, seq, &mut out[HEADER_SIZE..])?;
+
+        #[cfg(debug_assertions)]
+        {
+            // `RecordEncrypter::encrypt()` requires the returned payload to be
+            // the written prefix of the passed-in buffer. Try to catch misbehaving
+            // implementations in debug mode. In release builds a violation would corrupt
+            // the sent stream.
+            debug_assert_eq!(
+                encrypted.payload.as_ptr(),
+                out_ptr.wrapping_add(HEADER_SIZE)
+            );
+            debug_assert!(encrypted.payload.len() <= out_len - HEADER_SIZE);
+        }
+
+        let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
+        debug_assert!(len <= usize::from(u16::MAX));
+        out[..HEADER_SIZE].copy_from_slice(&encode_record_header(typ, version, len as u16));
+        Ok(HEADER_SIZE + len)
+    }
+
+    fn encrypted_len(&self, payload_len: usize) -> usize {
+        self.record_encrypter
+            .encrypted_payload_len(payload_len)
+    }
 }
 
 /// State machine for TLS1.3 key updates triggered by us.
