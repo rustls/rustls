@@ -51,21 +51,28 @@ impl SendPath {
 
         if !early && !self.may_send_application_data {
             return Err(ApiMisuse::WriteBeforeHandshakeComplete.into());
-        } else if self.has_sent_close_notify
-            || matches!(self.encrypt_state, EncryptionState::Retired)
-        {
+        } else if self.has_sent_close_notify {
             return Err(ApiMisuse::WriteAfterSendPathClosed.into());
         }
 
+        let encrypting = match &mut self.encrypt_state {
+            EncryptionState::Encrypting(encrypting) => encrypting,
+            EncryptionState::Handshake => {
+                return Err(ApiMisuse::WriteBeforeHandshakeComplete.into());
+            }
+            EncryptionState::Retired => {
+                return Err(ApiMisuse::WriteAfterSendPathClosed.into());
+            }
+        };
+
         let len = payload.len();
         self.key_update_remote.write(tls);
-        let need_local_key_update = self.encrypt_state.encrypt_records(
+        let need_local_key_update = encrypting.encrypt_records(
             self.fragmenter.fragment(
                 ContentType::ApplicationData,
                 EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
                 payload,
-                self.encrypt_state
-                    .encrypted_record_overhead(),
+                encrypting.encrypted_len(0),
             ),
             tls,
             self.negotiated_version,
@@ -229,30 +236,36 @@ impl SendOutput for SendPath {
         must_encrypt: bool,
         tls: &mut Vec<u8>,
     ) -> Result<(), Error> {
-        if matches!(self.encrypt_state, EncryptionState::Retired) {
-            return Err(Error::EncryptError);
-        }
+        let encrypting = match &mut self.encrypt_state {
+            EncryptionState::Encrypting(encrypting) if must_encrypt => Some(encrypting),
+            EncryptionState::Encrypting(_) => None,
+            EncryptionState::Handshake if must_encrypt => {
+                return Err(ApiMisuse::WriteBeforeHandshakeComplete.into());
+            }
+            EncryptionState::Handshake => None,
+            EncryptionState::Retired => return Err(Error::EncryptError),
+        };
 
         debug_assert!(!matches!(m.payload, MessagePayload::Alert(_)));
         let record = Record::from(m);
-        let fragments = self.fragmenter.fragment(
-            record.typ,
-            record.version,
-            record.payload.bytes().into(),
-            self.encrypt_state
-                .encrypted_record_overhead(),
-        );
+        if let Some(encrypting) = encrypting {
+            let fragments = self.fragmenter.fragment(
+                record.typ,
+                record.version,
+                record.payload.bytes().into(),
+                encrypting.encrypted_len(0),
+            );
 
-        if must_encrypt {
             self.key_update_remote.write(tls);
-            if self
-                .encrypt_state
-                .encrypt_records(fragments, tls, self.negotiated_version)?
-            {
+            if encrypting.encrypt_records(fragments, tls, self.negotiated_version)? {
                 self.queue_local_key_update(tls)?;
             }
             return Ok(());
         }
+
+        let fragments =
+            self.fragmenter
+                .fragment(record.typ, record.version, record.payload.bytes().into(), 0);
 
         let count = fragments.len();
         let mut iter = fragments.peekable();
@@ -294,49 +307,6 @@ pub(crate) enum EncryptionState {
 }
 
 impl EncryptionState {
-    /// Encrypt each fragment in `iter`, appending the resulting records to `tls`.
-    ///
-    /// The return value indicates whether a local key update is needed.
-    fn encrypt_records<'a>(
-        &mut self,
-        iter: impl ExactSizeIterator<Item = Record<OutboundPlain<'a>>>,
-        tls: &mut Vec<u8>,
-        version: Option<ProtocolVersion>,
-    ) -> Result<bool, Error> {
-        let count = iter.len();
-        let mut iter = iter.peekable();
-        if let Some(first) = iter.peek() {
-            let record_len = HEADER_SIZE + self.encrypted_len(first.payload.len());
-            tls.reserve(count * record_len);
-        }
-
-        let mut need_local_key_update = false;
-        for record in iter {
-            let EncryptionState::Encrypting(encrypting) = self else {
-                return Err(Error::EncryptError);
-            };
-
-            // Make sure we do the right thing when we're approaching the confidentiality limit
-            // of the encryption keys. When we reach the hard limit, we must not encrypt any
-            // more records with the current keys. If we reach the soft limit, we should either
-            // request a key update (for 1.3) or send a close notify (for 1.2).
-            if encrypting.write_seq >= SEQ_HARD_LIMIT {
-                return Err(Error::EncryptError);
-            } else if encrypting.write_seq == encrypting.write_seq_max {
-                match version {
-                    // Keep going and signal to the caller that we need a key update
-                    Some(ProtocolVersion::TLSv1_3) => need_local_key_update = true,
-                    // Key updates aren't available, so we're going to stop immediately
-                    _ => return Ok(true),
-                }
-            }
-
-            encrypting.encrypt_outgoing(record, tls)?;
-        }
-
-        Ok(need_local_key_update)
-    }
-
     /// Set and start using the given `RecordEncrypter` for future outgoing
     /// record encryption.
     pub(crate) fn set_record_encrypter(
@@ -356,20 +326,6 @@ impl EncryptionState {
         });
     }
 
-    pub(crate) fn encrypted_len(&self, payload_len: usize) -> usize {
-        match self {
-            Self::Encrypting(encrypting) => encrypting
-                .record_encrypter
-                .encrypted_payload_len(payload_len),
-            Self::Handshake | Self::Retired => 0,
-        }
-    }
-
-    /// Number of bytes added to a plaintext fragment by record protection.
-    pub(crate) fn encrypted_record_overhead(&self) -> usize {
-        self.encrypted_len(0)
-    }
-
     pub(crate) fn is_encrypting(&self) -> bool {
         matches!(self, Self::Encrypting { .. })
     }
@@ -382,6 +338,45 @@ pub(crate) struct Encrypting {
 }
 
 impl Encrypting {
+    /// Encrypt each fragment in `iter`, appending the resulting records to `tls`.
+    ///
+    /// The return value indicates whether a local key update is needed.
+    fn encrypt_records<'a>(
+        &mut self,
+        iter: impl ExactSizeIterator<Item = Record<OutboundPlain<'a>>>,
+        tls: &mut Vec<u8>,
+        version: Option<ProtocolVersion>,
+    ) -> Result<bool, Error> {
+        let count = iter.len();
+        let mut iter = iter.peekable();
+        if let Some(first) = iter.peek() {
+            let record_len = HEADER_SIZE + self.encrypted_len(first.payload.len());
+            tls.reserve(count * record_len);
+        }
+
+        let mut need_local_key_update = false;
+        for record in iter {
+            // Make sure we do the right thing when we're approaching the confidentiality limit
+            // of the encryption keys. When we reach the hard limit, we must not encrypt any
+            // more records with the current keys. If we reach the soft limit, we should either
+            // request a key update (for 1.3) or send a close notify (for 1.2).
+            if self.write_seq >= SEQ_HARD_LIMIT {
+                return Err(Error::EncryptError);
+            } else if self.write_seq == self.write_seq_max {
+                match version {
+                    // Keep going and signal to the caller that we need a key update
+                    Some(ProtocolVersion::TLSv1_3) => need_local_key_update = true,
+                    // Key updates aren't available, so we're going to stop immediately
+                    _ => return Ok(true),
+                }
+            }
+
+            self.encrypt_outgoing(record, tls)?;
+        }
+
+        Ok(need_local_key_update)
+    }
+
     /// Encrypt a TLS record, returning the fully-encoded record.
     ///
     /// `plain` is a TLS record we'd like to send.
