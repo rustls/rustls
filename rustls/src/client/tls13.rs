@@ -197,6 +197,7 @@ pub(super) fn handle_server_hello(
             server_hello_encoded,
             suite.common.hash_provider,
             &mut server_name,
+            cx.common,
         )? {
             // The server accepted our ECH offer, so complete the inner transcript with the
             // server hello message, and switch the relevant state to the copies for the
