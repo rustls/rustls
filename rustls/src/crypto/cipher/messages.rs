@@ -279,16 +279,18 @@ impl<'a> OutboundPlain<'a> {
             }
             Self::Multiple { chunks, start, end } => {
                 let mid = Ord::min(start + mid, end);
+                let (left_chunks, left_start, left_end) = trim_consumed(chunks, start, mid);
+                let (right_chunks, right_start, right_end) = trim_consumed(chunks, mid, end);
                 (
                     Self::Multiple {
-                        chunks,
-                        start,
-                        end: mid,
+                        chunks: left_chunks,
+                        start: left_start,
+                        end: left_end,
                     },
                     Self::Multiple {
-                        chunks,
-                        start: mid,
-                        end,
+                        chunks: right_chunks,
+                        start: right_start,
+                        end: right_end,
                     },
                 )
             }
@@ -308,6 +310,27 @@ impl<'a> OutboundPlain<'a> {
             Self::Multiple { start, end, .. } => end - start,
         }
     }
+}
+
+/// Drop descriptors that `start` has already consumed, so later iteration
+/// does not rescan them. `start` and `end` are offsets from the beginning
+/// of `chunks`; the returned offsets use the trimmed slice.
+fn trim_consumed<'a>(
+    chunks: &'a [&'a [u8]],
+    mut start: usize,
+    mut end: usize,
+) -> (&'a [&'a [u8]], usize, usize) {
+    let mut index = 0;
+    while index < chunks.len() {
+        let len = chunks[index].len();
+        if start < len {
+            break;
+        }
+        start -= len;
+        end -= len;
+        index += 1;
+    }
+    (&chunks[index..], start, end)
 }
 
 /// Iterator over an [`OutboundPlain`]'s chunks, returned by [`OutboundPlain::chunks()`].
@@ -760,6 +783,25 @@ mod tests {
             fragment_count += 1;
         }
         assert_eq!(fragment_count, expected_fragments.len());
+    }
+
+    #[test]
+    fn split_at_drops_consumed_descriptors() {
+        let owner: Vec<Vec<u8>> = (0..64u8).map(|byte| vec![byte]).collect();
+        let slices: Vec<&[u8]> = owner.iter().map(Vec::as_slice).collect();
+        let payload = OutboundPlain::new(&slices);
+        let (head, tail) = payload.split_at(40);
+
+        assert_eq!(head.to_vec(), (0..40).collect::<Vec<_>>());
+        assert_eq!(tail.to_vec(), (40..64).collect::<Vec<_>>());
+        match tail {
+            OutboundPlain::Multiple { chunks, start, end } => {
+                assert_eq!(start, 0);
+                assert_eq!(end, 24);
+                assert_eq!(chunks.len(), 24);
+            }
+            OutboundPlain::Single(_) => panic!("expected fragmented payload"),
+        }
     }
 
     #[test]
