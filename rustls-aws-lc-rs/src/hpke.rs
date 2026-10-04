@@ -2,9 +2,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
 
-use aws_lc_rs::aead::{
-    self, Aad, BoundKey, NONCE_LEN, Nonce, NonceSequence, OpeningKey, SealingKey, UnboundKey,
-};
+use aws_lc_rs::aead::{self, Aad, LessSafeKey, NONCE_LEN, Nonce, UnboundKey};
 use aws_lc_rs::agreement;
 use aws_lc_rs::cipher::{AES_128_KEY_LEN, AES_256_KEY_LEN};
 use aws_lc_rs::digest::{SHA256_OUTPUT_LEN, SHA384_OUTPUT_LEN, SHA512_OUTPUT_LEN};
@@ -444,11 +442,16 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> HpkeSealer for Sealer<KEY_SIZ
 
         let key = UnboundKey::new(self.key_schedule.aead, &self.key_schedule.key.0)
             .map_err(unspecified_err)?;
-        let mut sealing_key = SealingKey::new(key, &mut self.key_schedule);
+        let sealing_key = LessSafeKey::new(key);
+
+        let nonce = self.key_schedule.compute_nonce();
+        self.key_schedule
+            .increment_seq_num()
+            .map_err(unspecified_err)?;
 
         let mut in_out_buffer = Vec::from(plaintext);
         sealing_key
-            .seal_in_place_append_tag(Aad::from(aad), &mut in_out_buffer)
+            .seal_in_place_append_tag(nonce, Aad::from(aad), &mut in_out_buffer)
             .map_err(unspecified_err)?;
 
         Ok(in_out_buffer)
@@ -498,11 +501,18 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> HpkeOpener for Opener<KEY_SIZ
 
         let key = UnboundKey::new(self.key_schedule.aead, &self.key_schedule.key.0)
             .map_err(unspecified_err)?;
-        let mut opening_key = OpeningKey::new(key, &mut self.key_schedule);
+        let opening_key = LessSafeKey::new(key);
 
         let mut in_out_buffer = Vec::from(ciphertext);
         let plaintext = opening_key
-            .open_in_place(Aad::from(aad), &mut in_out_buffer)
+            .open_in_place(
+                self.key_schedule.compute_nonce(),
+                Aad::from(aad),
+                &mut in_out_buffer,
+            )
+            .map_err(unspecified_err)?;
+        self.key_schedule
+            .increment_seq_num()
             .map_err(unspecified_err)?;
 
         Ok(plaintext.to_vec())
@@ -744,7 +754,7 @@ impl<const KEY_SIZE: usize> KeySchedule<KEY_SIZE> {
     /// See [RFC 9180 §5.2 "Encryption and Decryption"][0].
     ///
     /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-5.2
-    fn compute_nonce(&self) -> [u8; NONCE_LEN] {
+    fn compute_nonce(&self) -> Nonce {
         // def Context<ROLE>.ComputeNonce(seq):
         //   seq_bytes = I2OSP(seq, Nn)
         //   return xor(self.base_nonce, seq_bytes)
@@ -757,7 +767,7 @@ impl<const KEY_SIZE: usize> KeySchedule<KEY_SIZE> {
             *n ^= b;
         }
 
-        nonce
+        Nonce::assume_unique_for_key(nonce)
     }
 
     /// See [RFC 9180 §5.2 "Encryption and Decryption"][0].
@@ -779,14 +789,6 @@ impl<const KEY_SIZE: usize> KeySchedule<KEY_SIZE> {
 
         self.seq_num += 1;
         Ok(())
-    }
-}
-
-impl<const KEY_SIZE: usize> NonceSequence for &mut KeySchedule<KEY_SIZE> {
-    fn advance(&mut self) -> Result<Nonce, aws_lc_rs::error::Unspecified> {
-        let nonce = self.compute_nonce();
-        self.increment_seq_num()?;
-        Nonce::try_assume_unique_for_key(&nonce)
     }
 }
 
@@ -1035,6 +1037,29 @@ mod tests {
     }
 
     #[test]
+    fn failed_open_does_not_consume_sequence() {
+        for suite in ALL_SUPPORTED_SUITES {
+            let (pk, sk) = suite.generate_key_pair().unwrap();
+            let (enc, mut sealer) = suite
+                .setup_sealer(b"example", &pk)
+                .unwrap();
+            let ct0 = sealer
+                .seal(b"aad", b"message 0")
+                .unwrap();
+            let ct1 = sealer
+                .seal(b"aad", b"message 1")
+                .unwrap();
+
+            let mut opener = suite
+                .setup_opener(&enc, b"example", &sk)
+                .unwrap();
+            assert!(opener.open(b"wrong aad", &ct0).is_err());
+            assert_eq!(opener.open(b"aad", &ct0).unwrap(), b"message 0");
+            assert_eq!(opener.open(b"aad", &ct1).unwrap(), b"message 1");
+        }
+    }
+
+    #[test]
     fn seq_num_does_not_wrap() {
         let max_seq_num = (1u128 << (NONCE_LEN * 8)) - 1;
         let mut ks = KeySchedule::<AES_128_KEY_LEN> {
@@ -1045,6 +1070,21 @@ mod tests {
         };
         assert!(ks.increment_seq_num().is_err());
         assert_eq!(ks.seq_num, max_seq_num);
+    }
+
+    #[test]
+    fn seal_at_the_sequence_limit_fails_without_advancing() {
+        let max_seq_num = (1u128 << (NONCE_LEN * 8)) - 1;
+        let mut sealer = Sealer::<AES_128_KEY_LEN, 32> {
+            key_schedule: KeySchedule {
+                aead: &aead::AES_128_GCM,
+                key: AeadKey([0u8; AES_128_KEY_LEN]),
+                base_nonce: [0u8; NONCE_LEN],
+                seq_num: max_seq_num,
+            },
+        };
+        assert!(sealer.seal(b"aad", b"message").is_err());
+        assert_eq!(sealer.key_schedule.seq_num, max_seq_num);
     }
 }
 
