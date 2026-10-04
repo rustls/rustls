@@ -1178,6 +1178,7 @@ pub enum PeerMisbehaved {
     EarlyDataAttemptedInSecondClientHello,
     EarlyDataExtensionWithoutResumption,
     EarlyDataOfferedWithVariedCipherSuite,
+    EchAcceptanceVariedAfterRetry,
     EmptyFragment,
     HandshakeHashVariedAfterRetry,
     /// Received an alert with an undefined level and the given [`AlertDescription`]
