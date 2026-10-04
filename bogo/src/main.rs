@@ -874,9 +874,6 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::InvalidMessage(InvalidMessage::IllegalEmptyCertificateAuthoritiesExtension) => {
             quit(":ERROR_PARSING_EXTENSION:")
         }
-        Error::DecryptError if opts.ech_config_list.is_some() => {
-            quit(":INCONSISTENT_ECH_NEGOTIATION:")
-        }
         Error::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
         Error::NoApplicationProtocol => quit(":NO_APPLICATION_PROTOCOL:"),
         Error::PeerIncompatible(
@@ -948,6 +945,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         ) => quit(":SERVER_ECHOED_INVALID_SESSION_ID:"),
         Error::PeerMisbehaved(PeerMisbehaved::TooManyEmptyFragments) => {
             quit(":TOO_MANY_EMPTY_FRAGMENTS:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::EchAcceptanceVariedAfterRetry) => {
+            quit(":INCONSISTENT_ECH_NEGOTIATION:")
         }
         Error::PeerMisbehaved(PeerMisbehaved::IllegalHelloRetryRequestWithInvalidEch)
         | Error::PeerMisbehaved(PeerMisbehaved::UnsolicitedEchExtension) => {
