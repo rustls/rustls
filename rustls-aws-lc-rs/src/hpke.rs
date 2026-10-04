@@ -450,6 +450,11 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> HpkeSealer for Sealer<KEY_SIZ
         sealing_key
             .seal_in_place_append_tag(Aad::from(aad), &mut in_out_buffer)
             .map_err(unspecified_err)?;
+        // RFC 9180 §5.2 increments only after Seal succeeds. `NonceSequence::advance`
+        // is called by the AEAD before that, so it must not consume the sequence.
+        self.key_schedule
+            .increment_seq_num()
+            .map_err(unspecified_err)?;
 
         Ok(in_out_buffer)
     }
@@ -503,6 +508,11 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> HpkeOpener for Opener<KEY_SIZ
         let mut in_out_buffer = Vec::from(ciphertext);
         let plaintext = opening_key
             .open_in_place(Aad::from(aad), &mut in_out_buffer)
+            .map_err(unspecified_err)?;
+        // RFC 9180 §5.2 increments only after Open succeeds. A failed
+        // authentication must leave the sequence where it was.
+        self.key_schedule
+            .increment_seq_num()
             .map_err(unspecified_err)?;
 
         Ok(plaintext.to_vec())
@@ -784,8 +794,14 @@ impl<const KEY_SIZE: usize> KeySchedule<KEY_SIZE> {
 
 impl<const KEY_SIZE: usize> NonceSequence for &mut KeySchedule<KEY_SIZE> {
     fn advance(&mut self) -> Result<Nonce, aws_lc_rs::error::Unspecified> {
+        // Hand out the nonce for the current sequence. The caller increments
+        // only after seal/open succeeds; doing it here would consume a
+        // sequence number when authentication fails.
+        let max_seq_num = (1u128 << (NONCE_LEN * 8)) - 1;
+        if self.seq_num >= max_seq_num {
+            return Err(aws_lc_rs::error::Unspecified);
+        }
         let nonce = self.compute_nonce();
-        self.increment_seq_num()?;
         Nonce::try_assume_unique_for_key(&nonce)
     }
 }
@@ -1031,6 +1047,29 @@ mod tests {
                     "expected non-FIPS compatible suite"
                 ),
             }
+        }
+    }
+
+    #[test]
+    fn failed_open_does_not_consume_sequence() {
+        for suite in ALL_SUPPORTED_SUITES {
+            let (pk, sk) = suite.generate_key_pair().unwrap();
+            let (enc, mut sealer) = suite
+                .setup_sealer(b"example", &pk)
+                .unwrap();
+            let ct0 = sealer
+                .seal(b"aad", b"message 0")
+                .unwrap();
+            let ct1 = sealer
+                .seal(b"aad", b"message 1")
+                .unwrap();
+
+            let mut opener = suite
+                .setup_opener(&enc, b"example", &sk)
+                .unwrap();
+            assert!(opener.open(b"wrong aad", &ct0).is_err());
+            assert_eq!(opener.open(b"aad", &ct0).unwrap(), b"message 0");
+            assert_eq!(opener.open(b"aad", &ct1).unwrap(), b"message 1");
         }
     }
 
