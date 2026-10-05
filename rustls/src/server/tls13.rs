@@ -49,7 +49,7 @@ use crate::{ConnectionTrafficSecrets, compress};
 
 mod client_hello {
     use super::*;
-    use crate::common_state::{EarlyDataEvent, Protocol};
+    use crate::common_state::Protocol;
     use crate::compress::CertCompressor;
     use crate::conn::Exporter;
     use crate::crypto::cipher::{EncodableVersion, Payload};
@@ -348,7 +348,6 @@ mod client_hello {
                     max_length,
                     early_exporter,
                 } => {
-                    output.emit(Event::EarlyData(EarlyDataEvent::Accepted));
                     output.output(OutputEvent::EarlyExporter(early_exporter));
                     Some(max_length)
                 }
