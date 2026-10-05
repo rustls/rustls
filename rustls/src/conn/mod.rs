@@ -341,10 +341,9 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 
     pub(crate) fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        match self.common.exporter.take() {
-            Some(inner) => Ok(KeyingMaterialExporter { inner }),
-            None if self.common.is_handshaking() => Err(Error::HandshakeNotComplete),
-            None => Err(ApiMisuse::ExporterNotAvailable.into()),
+        match self.common.is_handshaking() {
+            true => Err(Error::HandshakeNotComplete),
+            false => self.common.outputs.exporter(),
         }
     }
 }

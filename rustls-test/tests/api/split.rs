@@ -42,13 +42,13 @@ fn split_pairwise() {
     let SplitConnection {
         send: mut client_send,
         receive: mut client_recv,
-        outputs: client_outputs,
+        outputs: mut client_outputs,
         side_outputs: client_side_outputs,
     } = client_split;
     let SplitConnection {
         send: mut server_send,
         receive: mut server_recv,
-        outputs: server_outputs,
+        outputs: mut server_outputs,
         side_outputs: server_side_outputs,
     } = server.split().unwrap();
 
@@ -78,6 +78,26 @@ fn split_pairwise() {
         server_outputs
             .negotiated_key_exchange_group()
             .map(|kxg| kxg.name()),
+    );
+    assert_eq!(
+        client_outputs
+            .exporter()
+            .unwrap()
+            .derive(b"label", Some(b"context"), [0u8; 32])
+            .unwrap(),
+        server_outputs
+            .exporter()
+            .unwrap()
+            .derive(b"label", Some(b"context"), [0u8; 32])
+            .unwrap(),
+    );
+    assert_eq!(
+        client_outputs.exporter().unwrap_err(),
+        ApiMisuse::ExporterNotAvailable.into()
+    );
+    assert_eq!(
+        server_outputs.exporter().unwrap_err(),
+        ApiMisuse::ExporterNotAvailable.into()
     );
 
     assert_eq!(client_side_outputs.ech_status(), EchStatus::NotOffered);
