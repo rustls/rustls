@@ -83,6 +83,11 @@ impl ClientConnection {
         WriteEarlyData::new(&mut side.early_data, common)
     }
 
+    #[doc = include_str!("../doc/early_exporter.md")]
+    pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        self.inner.early_exporter()
+    }
+
     /// Returns the number of TLS1.3 tickets that have been received.
     pub fn tls13_tickets_received(&self) -> u32 {
         self.inner
@@ -380,11 +385,6 @@ impl<'a> WriteEarlyData<'a> {
     /// once this reaches zero.
     pub fn bytes_left(&self) -> usize {
         self.early_data.left
-    }
-
-    #[doc = include_str!("../doc/early_exporter.md")]
-    pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.common.early_exporter()
     }
 }
 
