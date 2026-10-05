@@ -158,6 +158,11 @@ impl<Side: SideData> NeedsInput<Side> {
     ) -> Result<Side::Handshake, Error> {
         Side::tcp_handshake_from_core(self.0.process(input, tls)?)
     }
+
+    #[doc = include_str!("../doc/early_exporter.md")]
+    pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        self.0.inner.early_exporter()
+    }
 }
 
 impl<S: SideData> fmt::Debug for NeedsInput<S> {

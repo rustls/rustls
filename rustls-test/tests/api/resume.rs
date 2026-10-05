@@ -736,17 +736,9 @@ fn early_data_is_available_on_resumption() {
             .unwrap(),
         5
     );
-    let client_early_exporter = client
-        .early_data()
-        .unwrap()
-        .exporter()
-        .unwrap();
+    let client_early_exporter = client.early_exporter().unwrap();
     assert_eq!(
-        client
-            .early_data()
-            .unwrap()
-            .exporter()
-            .err(),
+        client.early_exporter().err(),
         Some(Error::ApiMisuse(ApiMisuse::ExporterNotAvailable)),
     );
     let mut received_early_data = Vec::new();

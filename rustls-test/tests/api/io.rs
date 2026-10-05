@@ -2152,10 +2152,12 @@ fn client_handshake_sends_early_data() {
             .start_handshake(&mut client_output)
             .unwrap();
 
+        client
+            .early_exporter()
+            .expect("early exporter not available");
         let mut early_data = client
             .early_data()
             .expect("early data not available");
-        early_data.exporter().unwrap();
         assert_eq!(
             early_data
                 .write(b"early hello world".into(), &mut client_output)
