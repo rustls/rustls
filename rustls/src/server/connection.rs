@@ -6,7 +6,7 @@ use core::ops::Deref;
 use pki_types::{DnsName, FipsStatus};
 
 use super::config::ServerConfig;
-use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
+use crate::common_state::{CommonState, ConnectionOutputs, Event, Protocol, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
@@ -267,7 +267,6 @@ impl crate::conn::private::Side for ServerSide {
 pub struct ServerData {
     sni: Option<DnsName<'static>>,
     received_resumption_data: Option<Vec<u8>>,
-    early_data: EarlyDataState,
 }
 
 impl ServerData {
@@ -300,7 +299,6 @@ impl ServerData {
 impl SideOutput for ServerData {
     fn emit(&mut self, ev: Event) {
         match ev {
-            Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accept(),
             Event::ReceivedServerName(sni) => self.sni = sni,
             Event::ResumptionData(data) => self.received_resumption_data = Some(data),
             _ => unreachable!(),
@@ -312,20 +310,6 @@ impl fmt::Debug for ServerData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ServerData")
             .field("sni", &self.sni)
-            .field("early_data", &self.early_data)
             .finish_non_exhaustive()
-    }
-}
-
-#[derive(Debug, Default)]
-pub(super) enum EarlyDataState {
-    #[default]
-    New,
-    Accepted,
-}
-
-impl EarlyDataState {
-    fn accept(&mut self) {
-        *self = Self::Accepted;
     }
 }
