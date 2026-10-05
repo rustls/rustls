@@ -88,7 +88,7 @@ pub struct ConnectionOutputs {
     alpn_protocol: Option<ApplicationProtocol<'static>>,
     peer_identity: Option<VerifiedIdentity<'static>>,
     extended_main_secret: Option<bool>,
-    pub(crate) exporter: Option<Box<dyn Exporter>>,
+    exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
 }
 
@@ -165,6 +165,14 @@ impl ConnectionOutputs {
     #[doc = include_str!("doc/early_exporter.md")]
     pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         match self.early_exporter.take() {
+            Some(inner) => Ok(KeyingMaterialExporter { inner }),
+            None => Err(ApiMisuse::ExporterNotAvailable.into()),
+        }
+    }
+
+    #[doc = include_str!("doc/exporter.md")]
+    pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        match self.exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None => Err(ApiMisuse::ExporterNotAvailable.into()),
         }
