@@ -9,8 +9,8 @@ use crate::common_state::{CommonState, EarlyDataEvent, Event, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    ClientNext, Connection, DataKind, NeedsInput, SideCommonOutput, SideData, Tcp, Transport,
-    VerifyPeerIdentity,
+    ClientNext, Connection, DataKind, NeedsInput, Processed, SideCommonOutput, SideData, Tcp,
+    Transport, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -202,6 +202,14 @@ pub enum ClientHandshake {
     ///
     /// Now see [`SplitConnection`] to continue the connection.
     Complete(SplitConnection<ClientSide>),
+}
+
+impl TryFrom<Processed<ClientSide, Tcp>> for ClientHandshake {
+    type Error = Error;
+
+    fn try_from(processed: Processed<ClientSide, Tcp>) -> Result<Self, Error> {
+        Self::try_from(processed.into_progress()?)
+    }
 }
 
 impl TryFrom<Connection<ClientSide, Tcp>> for ClientHandshake {
