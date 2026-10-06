@@ -366,7 +366,7 @@ pub(crate) mod transport {
     use std::io::Cursor;
 
     use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-    use rustls::{ClientConnection, ConnectionCommon, ServerConnection, SideData, Tcp, VecInput};
+    use rustls::{ClientConnection, Connection, ServerConnection, SideData, Tcp, VecInput};
 
     use super::async_io::{AsyncRead, AsyncWrite};
 
@@ -403,7 +403,7 @@ pub(crate) mod transport {
     pub(crate) async fn read_handshake_message(
         input: &mut VecInput,
         output: &mut Vec<u8>,
-        conn: &mut ConnectionCommon<impl SideData, Tcp>,
+        conn: &mut Connection<impl SideData, Tcp>,
         reader: &mut dyn AsyncRead,
         buf: &mut [u8],
     ) -> anyhow::Result<usize> {

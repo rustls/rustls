@@ -10,8 +10,7 @@ use crate::common_state::{CommonState, Event, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Accepted, ConnectionCommon, NeedsInput, ServerNext, SideData, Tcp, Transport,
-    VerifyPeerIdentity,
+    Accepted, Connection, NeedsInput, ServerNext, SideData, Tcp, Transport, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -24,10 +23,10 @@ use crate::verify::ClientIdentity;
 
 /// This represents a single TLS server connection.
 ///
-/// Encrypt data destined for the peer using [`ConnectionCommon::write()`].
-/// Process received data from the peer using [`ConnectionCommon::read_tls()`].
+/// Encrypt data destined for the peer using [`Connection::write()`].
+/// Process received data from the peer using [`Connection::read_tls()`].
 pub struct ServerConnection {
-    pub(super) inner: ConnectionCommon<ServerSide, Tcp>,
+    pub(super) inner: Connection<ServerSide, Tcp>,
 }
 
 impl ServerConnection {
@@ -35,7 +34,7 @@ impl ServerConnection {
     /// we behave in the TLS protocol.
     pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
         Ok(Self {
-            inner: ConnectionCommon::for_server(config, ServerExtensionsInput::default(), Tcp)?,
+            inner: Connection::for_server(config, ServerExtensionsInput::default(), Tcp)?,
         })
     }
 
@@ -55,14 +54,14 @@ impl ServerConnection {
         }
     }
 
-    /// Temporary hack to allow access to methods that take [`ConnectionCommon`] ownership.
-    pub fn into_inner(self) -> ConnectionCommon<ServerSide, Tcp> {
+    /// Temporary hack to allow access to methods that take [`Connection`] ownership.
+    pub fn into_inner(self) -> Connection<ServerSide, Tcp> {
         self.inner
     }
 }
 
 impl Deref for ServerConnection {
-    type Target = ConnectionCommon<ServerSide, Tcp>;
+    type Target = Connection<ServerSide, Tcp>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -82,7 +81,7 @@ impl fmt::Debug for ServerConnection {
     }
 }
 
-impl<T: Transport> ConnectionCommon<ServerSide, T> {
+impl<T: Transport> Connection<ServerSide, T> {
     pub(crate) fn for_server(
         config: Arc<ServerConfig>,
         extra_exts: ServerExtensionsInput,
@@ -152,14 +151,14 @@ impl ServerHandshake {
     ///
     /// The returned object should be fed data from a single potential client.
     pub fn start() -> NeedsInput<ServerSide> {
-        NeedsInput::new(ConnectionCommon::for_acceptor(Tcp))
+        NeedsInput::new(Connection::for_acceptor(Tcp))
     }
 }
 
-impl TryFrom<ConnectionCommon<ServerSide, Tcp>> for ServerHandshake {
+impl TryFrom<Connection<ServerSide, Tcp>> for ServerHandshake {
     type Error = Error;
 
-    fn try_from(conn: ConnectionCommon<ServerSide, Tcp>) -> Result<Self, Error> {
+    fn try_from(conn: Connection<ServerSide, Tcp>) -> Result<Self, Error> {
         Ok(match ServerNext::try_from(conn)? {
             ServerNext::NeedsInput(conn) => Self::NeedsInput(NeedsInput(conn)),
 
@@ -212,14 +211,12 @@ impl SideData for ServerSide {
 
     type PeerIdentity<'a> = ClientIdentity<'static, 'a>;
 
-    fn tcp_handshake_from_conn(
-        conn: ConnectionCommon<Self, Tcp>,
-    ) -> Result<Self::Handshake, Error> {
+    fn tcp_handshake_from_conn(conn: Connection<Self, Tcp>) -> Result<Self::Handshake, Error> {
         ServerHandshake::try_from(conn)
     }
 
     fn quic_handshake_from_conn(
-        conn: ConnectionCommon<Self, Quic>,
+        conn: Connection<Self, Quic>,
         outputs: &mut Vec<QuicEvent>,
     ) -> Result<Self::QuicHandshake, Error> {
         QuicServerHandshake::from_conn(conn, outputs)

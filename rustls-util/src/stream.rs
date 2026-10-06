@@ -4,12 +4,12 @@ use std::marker::PhantomData;
 use std::ops::DerefMut;
 
 use rustls::crypto::cipher::OutboundPlain;
-use rustls::{ConnectionCommon, SideData, Tcp, TlsInputBuffer, VecInput};
+use rustls::{Connection, SideData, Tcp, TlsInputBuffer, VecInput};
 
 use crate::{complete_io, write_and_drain};
 
 /// This type implements `io::Read` and `io::Write`, encapsulating
-/// a [`ConnectionCommon`] for side `S` and an underlying transport `T`, such as a socket.
+/// a [`Connection`] for side `S` and an underlying transport `T`, such as a socket.
 ///
 /// Relies on [`complete_io()`] to perform the necessary I/O.
 ///
@@ -20,7 +20,7 @@ use crate::{complete_io, write_and_drain};
 #[derive(Debug)]
 pub struct Stream<'a, S: SideData, T: 'a + Read + Write + ?Sized> {
     /// Our TLS connection
-    pub conn: &'a mut ConnectionCommon<S, Tcp>,
+    pub conn: &'a mut Connection<S, Tcp>,
 
     /// The underlying transport, like a socket
     pub sock: &'a mut T,
@@ -51,13 +51,13 @@ where
     S: SideData,
     T: 'a + Read + Write,
 {
-    /// Make a new Stream using the [`ConnectionCommon`] `conn` and socket-like object
+    /// Make a new Stream using the [`Connection`] `conn` and socket-like object
     /// `sock`.  This does not fail and does no IO.
     pub fn new(
         input: &'a mut VecInput,
         received_plaintext: &'a mut Vec<u8>,
         output: &'a mut Vec<u8>,
-        conn: &'a mut ConnectionCommon<S, Tcp>,
+        conn: &'a mut Connection<S, Tcp>,
         sock: &'a mut T,
     ) -> Self {
         Self {
@@ -289,7 +289,7 @@ where
 ///
 /// Relies on [`complete_io()`] to perform the necessary I/O.
 ///
-/// This allows you to use a rustls [`ConnectionCommon`] like a normal stream.
+/// This allows you to use a rustls [`Connection`] like a normal stream.
 ///
 /// [`complete_io()`]: crate::complete_io()
 #[expect(clippy::exhaustive_structs)]
@@ -326,7 +326,7 @@ pub struct StreamOwned<C: Sized, S: SideData, T: Read + Write + Sized> {
 
 impl<C, S, T> StreamOwned<C, S, T>
 where
-    C: DerefMut<Target = ConnectionCommon<S, Tcp>>,
+    C: DerefMut<Target = Connection<S, Tcp>>,
     S: SideData,
     T: Read + Write,
 {
@@ -368,7 +368,7 @@ where
 
 impl<'a, C, S, T> StreamOwned<C, S, T>
 where
-    C: DerefMut<Target = ConnectionCommon<S, Tcp>>,
+    C: DerefMut<Target = Connection<S, Tcp>>,
     S: SideData,
     T: Read + Write,
 {
@@ -386,7 +386,7 @@ where
 
 impl<C, S, T> Read for StreamOwned<C, S, T>
 where
-    C: DerefMut<Target = ConnectionCommon<S, Tcp>>,
+    C: DerefMut<Target = Connection<S, Tcp>>,
     S: SideData,
     T: Read + Write,
 {
@@ -397,7 +397,7 @@ where
 
 impl<C, S, T> BufRead for StreamOwned<C, S, T>
 where
-    C: DerefMut<Target = ConnectionCommon<S, Tcp>>,
+    C: DerefMut<Target = Connection<S, Tcp>>,
     S: SideData,
     T: Read + Write,
 {
@@ -413,7 +413,7 @@ where
 
 impl<C, S, T> Write for StreamOwned<C, S, T>
 where
-    C: DerefMut<Target = ConnectionCommon<S, Tcp>>,
+    C: DerefMut<Target = Connection<S, Tcp>>,
     S: SideData,
     T: Read + Write,
 {

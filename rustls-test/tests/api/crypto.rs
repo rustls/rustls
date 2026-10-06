@@ -12,7 +12,7 @@ use rustls::crypto::{Credentials, CryptoProvider};
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{ApiMisuse, PeerMisbehaved};
 use rustls::{
-    ClientConfig, ClientConnection, ConnectionCommon, ConnectionTrafficSecrets, Error, KeyLog,
+    ClientConfig, ClientConnection, Connection, ConnectionTrafficSecrets, Error, KeyLog,
     ServerConfig, ServerConnection, SideData, SupportedCipherSuite, Tcp, Tls13CipherSuite,
     VecInput,
 };
@@ -690,10 +690,10 @@ fn test_refresh_traffic_keys_is_idempotent() {
     fn test(
         left_input: &mut VecInput,
         left_output: &mut Vec<u8>,
-        left: &mut ConnectionCommon<impl SideData, Tcp>,
+        left: &mut Connection<impl SideData, Tcp>,
         right_input: &mut VecInput,
         right_output: &mut Vec<u8>,
-        right: &mut ConnectionCommon<impl SideData, Tcp>,
+        right: &mut Connection<impl SideData, Tcp>,
     ) {
         // left sends a request
         left.refresh_traffic_keys(left_output)

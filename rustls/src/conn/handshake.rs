@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 use core::{fmt, mem};
 
 use super::{
-    ConnectionCommon, NeedsInput, SideCommonOutput, SideData, StateMachine, VerifySidePeerIdentity,
+    Connection, NeedsInput, SideCommonOutput, SideData, StateMachine, VerifySidePeerIdentity,
 };
 use crate::client::{ClientSide, ClientState};
 use crate::common_state::{Protocol, maybe_send_fatal_alert};
@@ -29,16 +29,16 @@ use crate::tracing::trace;
 
 /// The states a server handshake can be in, for any transport.
 pub(crate) enum ServerNext<T: Transport> {
-    NeedsInput(ConnectionCommon<ServerSide, T>),
+    NeedsInput(Connection<ServerSide, T>),
     ChooseConfig(Accepted<T>),
     VerifyClientIdentity(VerifyPeerIdentity<ServerSide, T>),
-    Complete(ConnectionCommon<ServerSide, T>),
+    Complete(Connection<ServerSide, T>),
 }
 
-impl<T: Transport> TryFrom<ConnectionCommon<ServerSide, T>> for ServerNext<T> {
+impl<T: Transport> TryFrom<Connection<ServerSide, T>> for ServerNext<T> {
     type Error = Error;
 
-    fn try_from(mut conn: ConnectionCommon<ServerSide, T>) -> Result<Self, Error> {
+    fn try_from(mut conn: Connection<ServerSide, T>) -> Result<Self, Error> {
         const MISUSED: Error = Error::Unreachable("forgot to restore state");
 
         Ok(match mem::replace(&mut conn.state, Err(MISUSED))? {
@@ -69,15 +69,15 @@ impl<T: Transport> TryFrom<ConnectionCommon<ServerSide, T>> for ServerNext<T> {
 
 /// The states a client handshake can be in, for any transport.
 pub(crate) enum ClientNext<T: Transport> {
-    NeedsInput(ConnectionCommon<ClientSide, T>),
+    NeedsInput(Connection<ClientSide, T>),
     VerifyServerIdentity(VerifyPeerIdentity<ClientSide, T>),
-    Complete(ConnectionCommon<ClientSide, T>),
+    Complete(Connection<ClientSide, T>),
 }
 
-impl<T: Transport> TryFrom<ConnectionCommon<ClientSide, T>> for ClientNext<T> {
+impl<T: Transport> TryFrom<Connection<ClientSide, T>> for ClientNext<T> {
     type Error = Error;
 
-    fn try_from(mut conn: ConnectionCommon<ClientSide, T>) -> Result<Self, Error> {
+    fn try_from(mut conn: Connection<ClientSide, T>) -> Result<Self, Error> {
         const MISUSED: Error = Error::Unreachable("forgot to restore state");
 
         Ok(match mem::replace(&mut conn.state, Err(MISUSED))? {
@@ -107,7 +107,7 @@ impl<T: Transport> TryFrom<ConnectionCommon<ClientSide, T>> for ClientNext<T> {
 /// [`Self::client_hello()`] and providing it to [`Self::choose_config()`].
 pub struct Accepted<T: Transport> {
     // invariant: `core.inner.state` is `Err(_)` and requires restoring
-    conn: ConnectionCommon<ServerSide, T>,
+    conn: Connection<ServerSide, T>,
     choose_config: Box<ChooseConfig>,
 }
 
@@ -124,7 +124,7 @@ impl<T: Transport> Accepted<T> {
         config: Arc<ServerConfig>,
         exts: ServerExtensionsInput,
         tls: &mut Vec<u8>,
-    ) -> Result<ConnectionCommon<ServerSide, T>, Error> {
+    ) -> Result<Connection<ServerSide, T>, Error> {
         let Self {
             mut conn,
             choose_config,
@@ -231,7 +231,7 @@ impl<T: Transport> fmt::Debug for Accepted<T> {
 /// [`quic::ServerHandshake::NeedsInput`]: crate::quic::ServerHandshake::NeedsInput
 pub struct VerifyPeerIdentity<Side: SideData, T: Transport> {
     // invariant: `core.inner.state` is `Err(_)` and requires restoring
-    conn: ConnectionCommon<Side, T>,
+    conn: Connection<Side, T>,
     verify_identity: Box<dyn VerifySidePeerIdentity<Side>>,
 }
 
@@ -298,7 +298,7 @@ impl<Side: SideData, T: Transport> VerifyPeerIdentity<Side, T> {
         self,
         verification_result: Result<VerifiedIdentity<'static>, Error>,
         tls: &mut Vec<u8>,
-    ) -> Result<ConnectionCommon<Side, T>, Error> {
+    ) -> Result<Connection<Side, T>, Error> {
         let Self {
             mut conn,
             verify_identity,
