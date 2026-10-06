@@ -266,7 +266,13 @@ where
 
         // Always flush the transport, even if we had no TLS output: an earlier
         // flush (for example, from within `write()`) may have failed.
-        self.sock.flush()
+        self.sock.flush()?;
+
+        // Report any fatal error the connection encountered after an earlier `write()`
+        // had already accepted its plaintext (for example, while processing received data).
+        self.conn
+            .write(OutboundPlain::new_empty(), self.output)
+            .map_err(|err| Error::new(ErrorKind::InvalidData, err))
     }
 }
 

@@ -1636,6 +1636,64 @@ impl Write for FailsFirstFlush {
     }
 }
 
+/// See <https://github.com/rustls/rustls/issues/3306>.
+#[test]
+fn stream_reports_error_after_write_accepted_plaintext() {
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair(
+        KeyType::default(),
+        &provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+
+    server
+        .write(b"hello".into(), &mut server_output)
+        .unwrap();
+    *server_output.last_mut().unwrap() ^= 1;
+
+    // the transport blocks writes, so the first `write()` goes on to read the corrupt record
+    let mut pipe = TestNonBlockIo {
+        writes: vec![],
+        reads: vec![mem::take(&mut server_output)],
+    };
+    let mut received_plaintext = Vec::new();
+    let mut client_stream = Stream::new(
+        &mut client_input,
+        &mut received_plaintext,
+        &mut client_output,
+        &mut client,
+        &mut pipe,
+    );
+
+    assert_eq!(client_stream.write(b"before").unwrap(), 6);
+
+    client_stream
+        .sock
+        .writes
+        .push(usize::MAX);
+    let err = client_stream
+        .write(b"after")
+        .unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert_eq!(err.to_string(), Error::DecryptError.to_string());
+    assert!(client_stream.output.is_empty());
+
+    let err = client_stream.flush().unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert_eq!(err.to_string(), Error::DecryptError.to_string());
+}
+
 #[test]
 fn client_stream_handshake_error() {
     let (client_config, server_config) = make_disjoint_suite_configs(provider::DEFAULT_PROVIDER);
