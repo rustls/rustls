@@ -332,22 +332,17 @@ impl Encrypting {
         tls: &mut Vec<u8>,
         version: Option<ProtocolVersion>,
     ) -> Result<bool, Error> {
+        // Make sure we do the right thing when we're approaching the confidentiality limit
+        // of the encryption keys. When we reach the hard limit, we must not encrypt any
+        // more records with the current keys. If we reach the soft limit, we should either
+        // request a key update (for 1.3) or send a close notify (for 1.2).
         let count = iter.len();
-        let mut iter = iter.peekable();
-        if let Some(first) = iter.peek() {
-            let record_len = HEADER_SIZE + self.encrypted_len(first.payload.len());
-            tls.reserve(count * record_len);
-        }
-
         let mut need_local_key_update = false;
-        for record in iter {
-            // Make sure we do the right thing when we're approaching the confidentiality limit
-            // of the encryption keys. When we reach the hard limit, we must not encrypt any
-            // more records with the current keys. If we reach the soft limit, we should either
-            // request a key update (for 1.3) or send a close notify (for 1.2).
-            if self.write_seq >= SEQ_HARD_LIMIT {
+        if let Some(last) = (count as u64).checked_sub(1) {
+            let last = self.write_seq.saturating_add(last);
+            if last >= SEQ_HARD_LIMIT {
                 return Err(Error::EncryptError);
-            } else if self.write_seq >= self.write_seq_max {
+            } else if last >= self.write_seq_max {
                 match version {
                     // Keep going and signal to the caller that we need a key update
                     Some(ProtocolVersion::TLSv1_3) => need_local_key_update = true,
@@ -355,7 +350,15 @@ impl Encrypting {
                     _ => return Ok(true),
                 }
             }
+        }
 
+        let mut iter = iter.peekable();
+        if let Some(first) = iter.peek() {
+            let record_len = HEADER_SIZE + self.encrypted_len(first.payload.len());
+            tls.reserve(count * record_len);
+        }
+
+        for record in iter {
             self.encrypt_outgoing(record, tls)?;
         }
 
@@ -494,4 +497,48 @@ pub(crate) trait SendOutput {
         must_encrypt: bool,
         tls: &mut Vec<u8>,
     ) -> Result<(), Error>;
+}
+
+#[cfg(test)]
+mod tests {
+    use core::iter;
+
+    use super::*;
+    use crate::crypto::test_provider::Tls13Cipher;
+
+    #[test]
+    fn encrypt_records_checks_limits_for_all_records() {
+        let encrypt = |write_seq_max, write_seq, records| {
+            let mut encrypting = Encrypting {
+                encrypter: Box::new(Tls13Cipher),
+                write_seq_max,
+                write_seq,
+            };
+
+            let record = Record::new(
+                ContentType::ApplicationData,
+                EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+                OutboundPlain::new_empty(),
+            );
+            let close = encrypting.encrypt_records(
+                iter::repeat_n(record, records),
+                &mut Vec::new(),
+                Some(ProtocolVersion::TLSv1_2),
+            )?;
+            Ok::<_, Error>((close, encrypting.write_seq))
+        };
+
+        assert_eq!(encrypt(10, 8, 0), Ok((false, 8)));
+        assert_eq!(encrypt(10, 8, 2), Ok((false, 10)));
+        assert_eq!(encrypt(10, 8, 3), Ok((true, 8)));
+        assert_eq!(encrypt(10, 11, 1), Ok((true, 11)));
+        assert_eq!(
+            encrypt(SEQ_SOFT_LIMIT, SEQ_HARD_LIMIT - 1, 1),
+            Ok((true, SEQ_HARD_LIMIT - 1))
+        );
+        assert_eq!(
+            encrypt(SEQ_SOFT_LIMIT, SEQ_HARD_LIMIT - 1, 2),
+            Err(Error::EncryptError)
+        );
+    }
 }
