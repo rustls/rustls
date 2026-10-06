@@ -1094,6 +1094,11 @@ impl io::Write for TestNonBlockIo {
 
 impl Drop for TestNonBlockIo {
     fn drop(&mut self) {
+        // avoid aborting on a double panic, which would hide the original failure
+        if std::thread::panicking() {
+            return;
+        }
+
         // ensure the object was exhausted as expected
         assert!(self.reads.is_empty());
         assert!(self.writes.is_empty());
@@ -1560,6 +1565,14 @@ impl RawTls {
     }
 
     pub fn encrypt_and_send(&mut self, msg: &Record<Payload<'_>>, peer_input: &mut VecInput) {
+        let record = self.encrypt(msg);
+        peer_input
+            .read(&mut io::Cursor::new(record))
+            .unwrap();
+    }
+
+    /// Encrypt `msg` into a complete TLS record, including its header
+    pub fn encrypt(&mut self, msg: &Record<Payload<'_>>) -> Vec<u8> {
         /// The length of a TLS record header: 1 byte type, 2 bytes version, 2 bytes length.
         const HEADER_SIZE: usize = 5;
 
@@ -1588,9 +1601,7 @@ impl RawTls {
         record[3..5].copy_from_slice(&(len as u16).to_be_bytes());
 
         self.enc_seq += 1;
-        peer_input
-            .read(&mut io::Cursor::new(record))
-            .unwrap();
+        record
     }
 
     pub fn receive_and_decrypt(&mut self, peer_output: &mut Vec<u8>, f: impl Fn(Record<&[u8]>)) {

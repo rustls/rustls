@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use pki_types::DnsName;
 use rustls::client::ClientHandshake;
+use rustls::crypto::cipher::{EncodableVersion, Payload, Record};
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
@@ -20,7 +21,7 @@ use rustls::{
     ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection, SliceInput, VecInput,
 };
 use rustls_test::{
-    ClientConfigExt, KeyType, MultiTest, OtherSession, ServerConfigExt, TestNonBlockIo,
+    ClientConfigExt, KeyType, MultiTest, OtherSession, RawTls, ServerConfigExt, TestNonBlockIo,
     check_fill_buf, check_fill_buf_err, check_iter, check_read, check_read_err, do_handshake,
     do_handshake_collecting, encoding, make_client_config, make_client_config_with_auth,
     make_client_config_with_kx_groups, make_disjoint_suite_configs, make_pair,
@@ -1121,6 +1122,80 @@ fn test_server_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
             test_stream_read(read_kind, stream, data)
         }
     }
+}
+
+#[test]
+fn client_stream_read_after_renegotiation_refusal() {
+    test_client_stream_read_after_renegotiation_refusal(StreamKind::Ref, ReadKind::Buf);
+    test_client_stream_read_after_renegotiation_refusal(StreamKind::Owned, ReadKind::Buf);
+    test_client_stream_read_after_renegotiation_refusal(StreamKind::Ref, ReadKind::BufRead);
+    test_client_stream_read_after_renegotiation_refusal(StreamKind::Owned, ReadKind::BufRead);
+}
+
+/// Sending the `no_renegotiation` alert must not be mistaken for EOF.
+///
+/// See <https://github.com/rustls/rustls/issues/3304>.
+fn test_client_stream_read_after_renegotiation_refusal(
+    stream_kind: StreamKind,
+    read_kind: ReadKind,
+) {
+    let provider = provider::DEFAULT_TLS12_PROVIDER;
+    let client_config = make_client_config(KeyType::default(), &provider);
+    let mut server_config = make_server_config(KeyType::default(), &provider);
+    server_config.enable_secret_extraction = true;
+
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let mut received_plaintext = Vec::new();
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+
+    let mut raw_server = RawTls::new_server(server);
+    let hello_request = raw_server.encrypt(&Record {
+        typ: ContentType::Handshake,
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        payload: Payload::new(encoding::handshake_framing(
+            HandshakeType::HelloRequest,
+            vec![],
+        )),
+    });
+
+    let data = b"world";
+    let app_data = raw_server.encrypt(&Record {
+        typ: ContentType::ApplicationData,
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        payload: Payload::new(data.to_vec()),
+    });
+
+    // Deliver each record in its own read, followed by EOF, so the alert is
+    // written before any plaintext is available.
+    let mut pipe = TestNonBlockIo {
+        writes: vec![usize::MAX],
+        reads: vec![vec![], app_data, hello_request],
+    };
+
+    let stream: Box<dyn BufRead> = match stream_kind {
+        StreamKind::Ref => Box::new(Stream::new(
+            &mut client_input,
+            &mut received_plaintext,
+            &mut client_output,
+            &mut client,
+            &mut pipe,
+        )),
+        StreamKind::Owned => Box::new(StreamOwned::new(client, pipe, client_output)),
+    };
+
+    test_stream_read(read_kind, stream, data)
 }
 
 struct FailsWrites {
