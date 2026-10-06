@@ -783,11 +783,38 @@ fn test_automatic_refresh_traffic_keys() {
 
 #[test]
 fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
+    let (mut client, mut client_output, mut server) = tls12_pair_with_limited_confidentiality();
+
+    for i in 0..CONFIDENTIALITY_LIMIT {
+        let message = format!("{i:08}");
+        let result = client.write(message.as_bytes().into(), &mut client_output);
+        let (received, peer_closed) = server.receive(&mut client_output);
+
+        match i {
+            1023 => {
+                assert_eq!(result, Err(Error::EncryptError));
+                assert!(peer_closed);
+                assert_eq!(received.len(), 0);
+            }
+            _ => {
+                result.unwrap();
+                assert!(!peer_closed);
+                assert_eq!(&received, message.as_bytes());
+            }
+        }
+    }
+}
+
+/// Complete a TLS 1.2 handshake using a suite limited to [`CONFIDENTIALITY_LIMIT`] records.
+///
+/// Returns the client, its pending output, and the server. The client's `Finished` message
+/// used sequence number 0.
+fn tls12_pair_with_limited_confidentiality() -> (ClientConnection, Vec<u8>, LimitedServer) {
     let provider = Arc::new(CryptoProvider {
         tls13_cipher_suites: Default::default(),
-        ..Arc::unwrap_or_clone(aes_128_gcm_with_1024_confidentiality_limit(dbg!(
-            provider::DEFAULT_PROVIDER
-        )))
+        ..Arc::unwrap_or_clone(aes_128_gcm_with_1024_confidentiality_limit(
+            provider::DEFAULT_PROVIDER,
+        ))
     });
 
     let kt = KeyType::EcdsaP256;
@@ -809,30 +836,33 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
         &mut server,
     );
 
-    for i in 0..CONFIDENTIALITY_LIMIT {
-        let message = format!("{i:08}");
-        let result = client.write(message.as_bytes().into(), &mut client_output);
-        let transferred = transfer(&mut client_output, &mut server_input);
+    let server = LimitedServer {
+        conn: server,
+        input: server_input,
+        output: server_output,
+    };
+    (client, client_output, server)
+}
 
-        let mut buf = Vec::new();
-        let state = server
-            .read_tls(&mut server_input, &mut server_output)
-            .handle_all(&mut buf)
+struct LimitedServer {
+    conn: ServerConnection,
+    input: VecInput,
+    output: Vec<u8>,
+}
+
+impl LimitedServer {
+    /// Deliver `flight` to the server.
+    ///
+    /// Returns the application data received, and whether the client has closed.
+    fn receive(&mut self, flight: &mut Vec<u8>) -> (Vec<u8>, bool) {
+        transfer(flight, &mut self.input);
+        let mut received = Vec::new();
+        let state = self
+            .conn
+            .read_tls(&mut self.input, &mut self.output)
+            .handle_all(&mut received)
             .unwrap();
-        println!("{}: {} -> {:?}", i, transferred, state);
-
-        match i {
-            1023 => {
-                assert_eq!(result, Err(Error::EncryptError));
-                assert!(state.peer_has_closed());
-                assert_eq!(buf.len(), 0);
-            }
-            _ => {
-                result.unwrap();
-                assert!(!state.peer_has_closed());
-                assert_eq!(&buf, message.as_bytes());
-            }
-        }
+        (received, state.peer_has_closed())
     }
 }
 
