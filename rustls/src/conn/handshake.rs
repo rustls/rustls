@@ -26,6 +26,29 @@ use crate::server::{
 use crate::sync::Arc;
 use crate::tracing::trace;
 
+/// The result of processing handshake input.
+pub(crate) enum Processed<Side: SideData, T: Transport> {
+    /// The handshake progressed as far as the available input allows.
+    Progress(Connection<Side, T>),
+
+    /// A piece of early data was received.
+    #[expect(dead_code)]
+    EarlyData {
+        conn: Connection<Side, T>,
+        data: Vec<u8>,
+    },
+}
+
+impl<Side: SideData, T: Transport> Processed<Side, T> {
+    /// Returns the connection, for transports or sides that never receive early data.
+    pub(crate) fn into_progress(self) -> Result<Connection<Side, T>, Error> {
+        match self {
+            Self::Progress(conn) => Ok(conn),
+            Self::EarlyData { .. } => Err(Error::Unreachable("unexpected early data")),
+        }
+    }
+}
+
 /// The states a server handshake can be in, for any transport.
 pub(crate) enum ServerNext<T: Transport> {
     NeedsInput(Connection<ServerSide, T>),

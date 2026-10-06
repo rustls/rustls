@@ -9,7 +9,8 @@ use crate::common_state::{CommonState, Event, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Accepted, Connection, NeedsInput, ServerNext, SideData, Tcp, Transport, VerifyPeerIdentity,
+    Accepted, Connection, NeedsInput, Processed, ServerNext, SideData, Tcp, Transport,
+    VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -100,6 +101,14 @@ impl ServerHandshake {
     /// The returned object should be fed data from a single potential client.
     pub fn start() -> NeedsInput<ServerSide> {
         NeedsInput::new(Connection::for_acceptor(Tcp))
+    }
+}
+
+impl TryFrom<Processed<ServerSide, Tcp>> for ServerHandshake {
+    type Error = Error;
+
+    fn try_from(processed: Processed<ServerSide, Tcp>) -> Result<Self, Error> {
+        Self::try_from(processed.into_progress()?)
     }
 }
 
