@@ -7,7 +7,7 @@ use std::io;
 use std::sync::Arc;
 
 use rustls::server::{Accepted, ServerHandshake};
-use rustls::{Connection, Error, ServerConfig, ServerConnection, Tcp, VecInput};
+use rustls::{Error, ServerConfig, ServerConnection, Tcp, VecInput};
 
 fuzz_target!(|data: &[u8]| {
     match data.split_first() {

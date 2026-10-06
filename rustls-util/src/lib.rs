@@ -1,6 +1,6 @@
 use std::io;
 
-use rustls::{Connection, VecInput};
+use rustls::{ConnectionCommon, SideData, Tcp, VecInput};
 
 mod key_log_file;
 pub use key_log_file::KeyLogFile;
@@ -39,13 +39,13 @@ pub use crate::stream::{Stream, StreamOwned};
 /// are wrapped in an `io::ErrorKind::InvalidData`-kind error.
 ///
 /// [`is_handshaking()`]: rustls::CommonState::is_handshaking
-/// [`read_tls()`]: rustls::Connection::read_tls
+/// [`read_tls()`]: rustls::ConnectionCommon::read_tls
 pub fn complete_io(
     io: &mut (impl io::Read + io::Write),
     input: &mut VecInput,
     received_plaintext: &mut Vec<u8>,
     output: &mut Vec<u8>,
-    conn: &mut impl Connection,
+    conn: &mut ConnectionCommon<impl SideData, Tcp>,
 ) -> Result<(usize, usize), io::Error> {
     let mut eof = false;
     let mut wrlen = 0;
@@ -179,7 +179,7 @@ pub fn complete_io(
 ///
 /// After the handshake, we stop reading while there is unconsumed plaintext, so that a
 /// peer cannot make us buffer an unbounded amount of it.
-fn wants_read(conn: &impl Connection, received_plaintext: &[u8]) -> bool {
+fn wants_read(conn: &ConnectionCommon<impl SideData, Tcp>, received_plaintext: &[u8]) -> bool {
     conn.is_handshaking() || received_plaintext.is_empty()
 }
 

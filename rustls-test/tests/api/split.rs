@@ -12,7 +12,7 @@ use rustls::crypto::cipher::OutboundPlain;
 use rustls::error::{AlertDescription, ApiMisuse, InvalidMessage};
 use rustls::server::ServerSide;
 use rustls::split::{ReceiveTraffic, ReceiveTrafficState, SplitConnection};
-use rustls::{Connection, Error, SideData, SliceInput, VecInput};
+use rustls::{Error, SideData, SliceInput, VecInput};
 use rustls_test::{
     KeyType, do_handshake, make_client_config, make_pair, make_pair_for_configs, make_server_config,
 };

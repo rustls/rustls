@@ -13,8 +13,7 @@ use rustls::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use rustls::error::{CertificateError, Error, PeerMisbehaved};
 use rustls::server::{ClientHello, ServerCredentialResolver, ServerNameResolver};
 use rustls::{
-    ClientConfig, Connection, DistinguishedName, ServerConfig, ServerConnection,
-    SupportedCipherSuite, VecInput,
+    ClientConfig, DistinguishedName, ServerConfig, ServerConnection, SupportedCipherSuite, VecInput,
 };
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, MultiTest, ServerCheckCertResolve,

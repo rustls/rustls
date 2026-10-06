@@ -117,8 +117,8 @@
 //! In the _receive_ direction [`read_tls()`] takes received TLS data and yields application data.
 //! In the _send_ direction [`write()`] takes application data and yields TLS data to send.
 //!
-//! [`write()`]: Connection::write
-//! [`read_tls()`]: Connection::read_tls
+//! [`write()`]: ConnectionCommon::write
+//! [`read_tls()`]: ConnectionCommon::read_tls
 //!
 //! ```text
 //!          TLS                                   Plaintext
@@ -235,7 +235,7 @@
 //! #   panic!();
 //! # }
 //! use std::io;
-//! use rustls::{Connection, VecInput};
+//! use rustls::VecInput;
 //!
 //! let mut socket = connect("example.com", 443);
 //! let mut input = VecInput::default();
@@ -392,8 +392,8 @@ pub mod internal {
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
 pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind, Protocol};
 pub use crate::conn::{
-    Connection, IoState, KeyingMaterialExporter, MessageHandler, NeedsInput, SideData, SliceInput,
-    Tcp, TlsInputBuffer, Transport, VecInput, VerifyPeerIdentity, kernel,
+    ConnectionCommon, IoState, KeyingMaterialExporter, MessageHandler, NeedsInput, SideData,
+    SliceInput, Tcp, TlsInputBuffer, Transport, VecInput, VerifyPeerIdentity, kernel,
 };
 /// Types related to "split" mode.
 ///

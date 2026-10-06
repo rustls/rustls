@@ -17,9 +17,7 @@ use rustls::error::{
 };
 use rustls::server::ServerHandshake;
 use rustls::split::ReceiveTrafficState;
-use rustls::{
-    ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection, SliceInput, VecInput,
-};
+use rustls::{ClientConfig, HandshakeKind, ServerConfig, ServerConnection, SliceInput, VecInput};
 use rustls_test::{
     ClientConfigExt, KeyType, MultiTest, OtherSession, RawTls, ServerConfigExt, TestNonBlockIo,
     check_fill_buf, check_fill_buf_err, check_iter, check_read, check_read_err, do_handshake,

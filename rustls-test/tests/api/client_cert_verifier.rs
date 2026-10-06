@@ -10,8 +10,7 @@ use rustls::enums::ProtocolVersion;
 use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage, PeerMisbehaved};
 use rustls::server::{ServerHandshake, ServerSide};
 use rustls::{
-    ClientConfig, Connection, ServerConfig, ServerConnection, SliceInput, Tcp, VecInput,
-    VerifyPeerIdentity,
+    ClientConfig, ServerConfig, ServerConnection, SliceInput, Tcp, VecInput, VerifyPeerIdentity,
 };
 use rustls_test::{
     ErrorFromPeer, MockClientVerifier, MultiTest, do_handshake, do_handshake_until_both_error,

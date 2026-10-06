@@ -23,8 +23,8 @@ use rustls::crypto::{CipherSuite, CryptoProvider, GetRandomFailed, SecureRandom,
 use rustls::enums::ProtocolVersion;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
-    ClientConfig, ClientConnection, Connection, HandshakeKind, RootCertStore, ServerConfig,
-    ServerConnection, VecInput,
+    ClientConfig, ClientConnection, HandshakeKind, RootCertStore, ServerConfig, ServerConnection,
+    VecInput,
 };
 use rustls_test::KeyType;
 

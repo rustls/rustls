@@ -14,7 +14,7 @@ use rustls::crypto::kx::{
 };
 use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
-use rustls::{ClientConfig, Connection, HandshakeKind, ServerConfig, VecInput};
+use rustls::{ClientConfig, HandshakeKind, ServerConfig, VecInput};
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, MultiTest,
     OtherSession, ServerConfigExt, do_handshake, do_handshake_until_error, encoding,

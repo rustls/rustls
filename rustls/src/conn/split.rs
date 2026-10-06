@@ -5,7 +5,7 @@ use core::ops::Range;
 use std::sync::MutexGuard;
 
 use super::receive::{Discard, JoinOutput};
-use super::{ConnectionOutputs, Error, ExtractedSecrets, SideData, Tcp, Transport};
+use super::{ConnectionOutputs, Error, ExtractedSecrets, SideData, Tcp};
 use crate::client::ClientSide;
 use crate::common_state::UnborrowedPayload;
 use crate::conn::kernel::KernelConnection;
@@ -97,10 +97,10 @@ impl<Side: SideData> SplitConnection<Side> {
     }
 }
 
-impl<Side: SideData, T: Transport> TryFrom<ConnectionCommon<Side, T>> for SplitConnection<Side> {
+impl<Side: SideData> TryFrom<ConnectionCommon<Side, Tcp>> for SplitConnection<Side> {
     type Error = Error;
 
-    fn try_from(conn: ConnectionCommon<Side, T>) -> Result<Self, Error> {
+    fn try_from(conn: ConnectionCommon<Side, Tcp>) -> Result<Self, Error> {
         // `SplitConnection` cannot be used to progress a handshake.
         if conn.is_handshaking() {
             return Err(ApiMisuse::SplitDuringHandshake.into());
@@ -140,7 +140,7 @@ impl SendTraffic {
     /// When you need to handle a [`ReceiveTrafficState::FlushSender`] state, you can call this
     /// method with [`OutboundPlain::new_empty()`] to flush any pending TLS data to the peer.
     ///
-    /// See [`Connection::write()`][crate::Connection::write] for the conditions under which
+    /// See [`ConnectionCommon::write()`][crate::ConnectionCommon::write] for the conditions under which
     /// this fails.
     pub fn write(
         &mut self,

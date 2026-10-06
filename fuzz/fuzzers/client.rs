@@ -6,7 +6,7 @@ extern crate rustls;
 use std::io;
 use std::sync::Arc;
 
-use rustls::{ClientConfig, Connection, VecInput};
+use rustls::{ClientConfig, VecInput};
 
 fuzz_target!(|data: &[u8]| {
     let config = Arc::new(

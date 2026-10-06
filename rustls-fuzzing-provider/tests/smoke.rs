@@ -2,7 +2,7 @@ use std::fs;
 use std::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
-use rustls::{ClientConfig, Connection, ServerConfig, ServerConnection, SliceInput};
+use rustls::{ClientConfig, ServerConfig, ServerConnection, SliceInput};
 
 // These tests exercise rustls_fuzzing_provider and makes sure it can
 // handshake with itself without errors.

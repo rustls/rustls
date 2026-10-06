@@ -893,8 +893,6 @@ mod tests {
         ClientSessionKey, ClientSessionMemoryCache, ClientSessionStore, Resumption,
         Tls13ClientSessionInput, VerifiedIdentity,
     };
-    use crate::common_state::Side;
-    use crate::conn::Connection;
     use crate::crypto::cipher::Record;
     use crate::crypto::hpke::{HpkeAead, HpkeKdf};
     use crate::crypto::kx::SharedSecret;
@@ -903,6 +901,7 @@ mod tests {
         Compression, Deframer, HelloRetryRequestExtensions, NewSessionTicketPayloadTls13, Random,
         Reader, ServerExtensions, SessionId, SupportedProtocolVersions,
     };
+    use crate::quic::Side;
     use crate::sync::Arc;
     use crate::tls13::Tls13ProtocolSuite;
     use crate::tls13::key_schedule::KeySchedulePreHandshake;

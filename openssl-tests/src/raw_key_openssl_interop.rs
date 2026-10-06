@@ -169,7 +169,7 @@ mod server {
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
-    use rustls::{Connection, DistinguishedName, ServerConfig, ServerConnection, VecInput};
+    use rustls::{DistinguishedName, ServerConfig, ServerConnection, VecInput};
     use rustls_aws_lc_rs as provider;
     use rustls_util::complete_io;
 
