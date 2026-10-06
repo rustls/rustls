@@ -137,85 +137,6 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
     fn fips(&self) -> FipsStatus;
 }
 
-/// More data needs to be supplied to make progress.
-///
-/// Provide the data to [`Self::process()`].
-pub struct NeedsInput<Side: SideData>(pub(crate) ConnectionCommon<Side, Tcp>);
-
-impl<Side: SideData> NeedsInput<Side> {
-    pub(crate) fn new(inner: ConnectionCommon<Side, Tcp>) -> Self {
-        Self(inner)
-    }
-
-    /// Progress the handshake by receiving further data.
-    ///
-    /// The data is obtained via `input`.  Any output produced is appended to `tls` and
-    /// should be sent to the peer (including if this function returns an error, because
-    /// `tls` may contain an alert.)
-    ///
-    /// An error from this function is otherwise fatal to the connection, as it consumes
-    /// the [`NeedsInput`] object.
-    ///
-    /// On success, this returns a handshake object specifying what to do to progress
-    /// the connection.  If this contains another [`NeedsInput`] object then obtaining more
-    /// input (eg, from a socket or other source) is certainly necessary.
-    pub fn process(
-        mut self,
-        input: &mut dyn TlsInputBuffer,
-        tls: &mut Vec<u8>,
-    ) -> Result<Side::Handshake, Error> {
-        self.0.process(input, tls)?;
-        Side::tcp_handshake_from_conn(self.0)
-    }
-
-    #[doc = include_str!("../doc/early_exporter.md")]
-    pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.0.early_exporter()
-    }
-}
-
-impl<S: SideData> fmt::Debug for NeedsInput<S> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NeedsInput")
-            .finish_non_exhaustive()
-    }
-}
-
-/// Dynamically-dispatched state machine, to maintain static unreachability of
-/// per-protocol-version code.
-pub(crate) trait State<Side: SideData>: Send + Sync {
-    /// Advance the state machine using `input` and emitting data to `output`.
-    fn handle<'m>(
-        self: Box<Self>,
-        input: Input<'m>,
-        output: &mut dyn Output<'m>,
-    ) -> Result<Side::State, Error>;
-
-    fn is_traffic(&self) -> bool {
-        false
-    }
-
-    fn handle_decrypt_error(&mut self) {}
-
-    fn into_external_state(
-        self: Box<Self>,
-        _send_keys: &Option<Box<KeyScheduleTrafficSend>>,
-    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
-        Err(Error::HandshakeNotComplete)
-    }
-}
-
-/// Trait to maintain static unreachablity of per-protocol-version code.
-pub(crate) trait VerifySidePeerIdentity<Side: SideData>: Send + Sync {
-    fn presented_identity(&self) -> Result<Side::PeerIdentity<'_>, Error>;
-    fn verify_with_config(&self) -> Result<VerifiedIdentity<'static>, Error>;
-    fn continue_with(
-        self: Box<Self>,
-        verified: VerifiedIdentity<'static>,
-        output: &mut dyn Output<'_>,
-    ) -> Result<Side::State, Error>;
-}
-
 /// TLS connection state with side-specific data (`Side`).
 ///
 /// This is one of the core abstractions of the rustls API. It represents a single connection
@@ -543,6 +464,85 @@ impl<S: SideData> fmt::Debug for MessageHandler<'_, '_, S> {
             .field("done", &self.done)
             .finish_non_exhaustive()
     }
+}
+
+/// More data needs to be supplied to make progress.
+///
+/// Provide the data to [`Self::process()`].
+pub struct NeedsInput<Side: SideData>(pub(crate) ConnectionCommon<Side, Tcp>);
+
+impl<Side: SideData> NeedsInput<Side> {
+    pub(crate) fn new(inner: ConnectionCommon<Side, Tcp>) -> Self {
+        Self(inner)
+    }
+
+    /// Progress the handshake by receiving further data.
+    ///
+    /// The data is obtained via `input`.  Any output produced is appended to `tls` and
+    /// should be sent to the peer (including if this function returns an error, because
+    /// `tls` may contain an alert.)
+    ///
+    /// An error from this function is otherwise fatal to the connection, as it consumes
+    /// the [`NeedsInput`] object.
+    ///
+    /// On success, this returns a handshake object specifying what to do to progress
+    /// the connection.  If this contains another [`NeedsInput`] object then obtaining more
+    /// input (eg, from a socket or other source) is certainly necessary.
+    pub fn process(
+        mut self,
+        input: &mut dyn TlsInputBuffer,
+        tls: &mut Vec<u8>,
+    ) -> Result<Side::Handshake, Error> {
+        self.0.process(input, tls)?;
+        Side::tcp_handshake_from_conn(self.0)
+    }
+
+    #[doc = include_str!("../doc/early_exporter.md")]
+    pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        self.0.early_exporter()
+    }
+}
+
+impl<S: SideData> fmt::Debug for NeedsInput<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NeedsInput")
+            .finish_non_exhaustive()
+    }
+}
+
+/// Dynamically-dispatched state machine, to maintain static unreachability of
+/// per-protocol-version code.
+pub(crate) trait State<Side: SideData>: Send + Sync {
+    /// Advance the state machine using `input` and emitting data to `output`.
+    fn handle<'m>(
+        self: Box<Self>,
+        input: Input<'m>,
+        output: &mut dyn Output<'m>,
+    ) -> Result<Side::State, Error>;
+
+    fn is_traffic(&self) -> bool {
+        false
+    }
+
+    fn handle_decrypt_error(&mut self) {}
+
+    fn into_external_state(
+        self: Box<Self>,
+        _send_keys: &Option<Box<KeyScheduleTrafficSend>>,
+    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
+        Err(Error::HandshakeNotComplete)
+    }
+}
+
+/// Trait to maintain static unreachablity of per-protocol-version code.
+pub(crate) trait VerifySidePeerIdentity<Side: SideData>: Send + Sync {
+    fn presented_identity(&self) -> Result<Side::PeerIdentity<'_>, Error>;
+    fn verify_with_config(&self) -> Result<VerifiedIdentity<'static>, Error>;
+    fn continue_with(
+        self: Box<Self>,
+        verified: VerifiedIdentity<'static>,
+        output: &mut dyn Output<'_>,
+    ) -> Result<Side::State, Error>;
 }
 
 /// An object of this type can export keying material.
