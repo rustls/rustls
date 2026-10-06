@@ -98,20 +98,22 @@ where
         self.complete_prior_io()?;
 
         // We call complete_io() in a loop since a single call may read only
-        // a partial packet from the underlying transport. A full packet is
-        // needed to get more plaintext, which we must do if EOF has not been
-        // hit. We stop as soon as we have some plaintext to return, since
-        // `wants_read()` stays true even when plaintext is available.
+        // a partial packet from the underlying transport, or may only write
+        // pending TLS data (like an alert queued while processing received
+        // records). A full packet is needed to get more plaintext, which we
+        // must do if EOF has not been hit. We stop as soon as we have some
+        // plaintext to return, since `wants_read()` stays true even when
+        // plaintext is available.
         while self.received_plaintext.is_empty() && self.conn.wants_read() {
-            if complete_io(
+            let (read, written) = complete_io(
                 self.sock,
                 self.input,
                 self.received_plaintext,
                 self.output,
                 self.conn,
-            )?
-            .0 == 0
-            {
+            )?;
+
+            if read == 0 && written == 0 {
                 break;
             }
         }
