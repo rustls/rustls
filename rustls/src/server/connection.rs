@@ -85,7 +85,7 @@ impl ServerConnection {
     }
 
     /// Returns data learned during the connection, specific to being a server.
-    pub fn data(&self) -> &ServerSide {
+    pub fn side(&self) -> &ServerSide {
         &self.inner.side
     }
 }

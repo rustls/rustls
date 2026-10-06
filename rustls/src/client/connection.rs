@@ -97,7 +97,7 @@ impl ClientConnection {
     }
 
     /// Returns data learned during the connection, specific to being a client.
-    pub fn data(&self) -> &ClientSide {
+    pub fn side(&self) -> &ClientSide {
         &self.inner.side
     }
 }
