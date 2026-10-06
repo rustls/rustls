@@ -232,30 +232,6 @@ impl TryFrom<Core<ServerSide, Tcp>> for ServerHandshake {
     }
 }
 
-impl SideData for ServerSide {
-    type Handshake = ServerHandshake;
-    type QuicHandshake = QuicServerHandshake;
-
-    type PeerIdentity<'a> = ClientIdentity<'static, 'a>;
-
-    #[expect(private_interfaces)]
-    fn tcp_handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error> {
-        ServerHandshake::try_from(core)
-    }
-
-    #[expect(private_interfaces)]
-    fn quic_handshake_from_core(
-        core: Core<Self, Quic>,
-        outputs: &mut Vec<QuicEvent>,
-    ) -> Result<Self::QuicHandshake, Error> {
-        QuicServerHandshake::from_core(core, outputs)
-    }
-}
-
-impl crate::conn::private::Side for ServerSide {
-    type State = ServerState;
-}
-
 /// State associated with a server connection.
 #[derive(Default)]
 pub struct ServerSide {
@@ -290,6 +266,26 @@ impl ServerSide {
     }
 }
 
+impl SideData for ServerSide {
+    type Handshake = ServerHandshake;
+    type QuicHandshake = QuicServerHandshake;
+
+    type PeerIdentity<'a> = ClientIdentity<'static, 'a>;
+
+    #[expect(private_interfaces)]
+    fn tcp_handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error> {
+        ServerHandshake::try_from(core)
+    }
+
+    #[expect(private_interfaces)]
+    fn quic_handshake_from_core(
+        core: Core<Self, Quic>,
+        outputs: &mut Vec<QuicEvent>,
+    ) -> Result<Self::QuicHandshake, Error> {
+        QuicServerHandshake::from_core(core, outputs)
+    }
+}
+
 impl SideOutput for ServerSide {
     fn emit(&mut self, ev: Event) {
         match ev {
@@ -298,6 +294,10 @@ impl SideOutput for ServerSide {
             _ => unreachable!(),
         }
     }
+}
+
+impl crate::conn::private::Side for ServerSide {
+    type State = ServerState;
 }
 
 impl fmt::Debug for ServerSide {
