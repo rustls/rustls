@@ -533,6 +533,9 @@ impl KeyScheduleTraffic {
         common.send_msg_encrypt(Message::build_key_update_request().into());
         let secret = self.next_application_traffic_secret(common.side);
         self.ks.set_encrypter(&secret, common);
+        // Sending the request with the exhausted keys asked for another update,
+        // which the new keys make unnecessary.
+        common.refresh_traffic_keys_pending = false;
         Ok(())
     }
 
