@@ -852,6 +852,40 @@ fn tls12_connection_fails_after_alert_at_confidentiality_limit() {
     });
 }
 
+#[test]
+fn tls12_write_is_not_split_across_confidentiality_limit() {
+    let (mut client, mut client_output, mut server) = tls12_pair_with_limited_confidentiality();
+
+    // Leave three records before the limit.
+    for i in 1..CONFIDENTIALITY_LIMIT - 3 {
+        client
+            .write(format!("{i:08}").as_bytes().into(), &mut client_output)
+            .unwrap();
+    }
+
+    let (received, peer_closed) = server.receive(&mut client_output);
+    assert!(!peer_closed);
+    assert_eq!(received.len(), (CONFIDENTIALITY_LIMIT as usize - 4) * 8);
+
+    // A write that fits in the remaining records is sent in full.
+    let two_records = vec![b'a'; MAX_FRAGMENT_LEN + 1];
+    client
+        .write(two_records.as_slice().into(), &mut client_output)
+        .unwrap();
+    let (received, peer_closed) = server.receive(&mut client_output);
+    assert!(!peer_closed);
+    assert_eq!(received, two_records);
+
+    // With one record left, none of a two-record write is sent.
+    assert_eq!(
+        client.write(two_records.as_slice().into(), &mut client_output),
+        Err(Error::EncryptError)
+    );
+    let (received, peer_closed) = server.receive(&mut client_output);
+    assert!(peer_closed);
+    assert_eq!(received.len(), 0);
+}
+
 /// Complete a TLS 1.2 handshake using a suite limited to [`CONFIDENTIALITY_LIMIT`] records.
 ///
 /// Returns the client, its pending output, and the server. The client's `Finished` message
@@ -891,6 +925,9 @@ fn tls12_pair_with_limited_confidentiality() -> (ClientConnection, Vec<u8>, Limi
     };
     (client, client_output, server)
 }
+
+/// Default maximum plaintext length of a record.
+const MAX_FRAGMENT_LEN: usize = 16_384;
 
 struct LimitedServer {
     conn: ServerConnection,
