@@ -271,37 +271,37 @@ impl<'a> OutboundPlain<'a> {
     /// Split self in two, around an index
     /// Works similarly to `split_at` in the core library, except it doesn't panic if out of bound
     pub(crate) fn split_at(&self, mid: usize) -> (Self, Self) {
-        match *self {
+        let (chunks, start, end) = match *self {
+            Self::Multiple { chunks, start, end } => (chunks, start, end),
             Self::Single(chunk) => {
                 let mid = Ord::min(mid, chunk.len());
-                (Self::Single(&chunk[..mid]), Self::Single(&chunk[mid..]))
+                return (Self::Single(&chunk[..mid]), Self::Single(&chunk[mid..]));
             }
-            Self::Multiple { chunks, start, end } => {
-                let mid = Ord::min(start + mid, end);
-                let mut skip = 0;
-                let mut consumed = 0;
-                for chunk in chunks {
-                    if consumed + chunk.len() > mid {
-                        break;
-                    }
-                    consumed += chunk.len();
-                    skip += 1;
-                }
+        };
 
-                (
-                    Self::Multiple {
-                        chunks,
-                        start,
-                        end: mid,
-                    },
-                    Self::Multiple {
-                        chunks: &chunks[skip..],
-                        start: mid - consumed,
-                        end: end - consumed,
-                    },
-                )
+        let mid = Ord::min(start + mid, end);
+        let mut skip = 0;
+        let mut consumed = 0;
+        for chunk in chunks {
+            if consumed + chunk.len() > mid {
+                break;
             }
+            consumed += chunk.len();
+            skip += 1;
         }
+
+        (
+            Self::Multiple {
+                chunks,
+                start,
+                end: mid,
+            },
+            Self::Multiple {
+                chunks: &chunks[skip..],
+                start: mid - consumed,
+                end: end - consumed,
+            },
+        )
     }
 
     /// Returns true if the payload is empty
