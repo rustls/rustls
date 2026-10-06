@@ -56,8 +56,12 @@ pub enum Error {
     /// We couldn't decrypt a message.  This is invariably fatal.
     DecryptError,
 
-    /// We couldn't encrypt a message because it was larger than the allowed message size.
-    /// This should never happen if the application is using valid record sizes.
+    /// We couldn't encrypt a message.
+    ///
+    /// This happens if the message was larger than the allowed message size (which should never
+    /// happen if the application is using valid record sizes), or if the traffic keys have been
+    /// used for as many records as the cipher suite's
+    /// [`confidentiality_limit`][crate::crypto::CipherSuiteCommon::confidentiality_limit] allows.
     EncryptError,
 
     /// The peer doesn't support a protocol version/feature we require.
