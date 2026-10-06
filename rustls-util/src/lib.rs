@@ -27,6 +27,10 @@ pub use crate::stream::{Stream, StreamOwned};
 /// - Otherwise, if [`wants_read()`] is true, [`VecInput::read()`] is invoked
 ///   once.
 ///
+/// Once the handshake is complete, no further data is read from `io` while
+/// `received_plaintext` is not empty. This provides backpressure: the caller must
+/// consume received plaintext before more is read from the peer.
+///
 /// The return value is the number of bytes read from and written
 /// to `io`, respectively. Once both `read()` and `write()` yield `WouldBlock`,
 /// this function will propagate the error.
@@ -51,7 +55,7 @@ pub fn complete_io(
         let (mut blocked_write, mut blocked_read) = (None, None);
         let until_handshaked = conn.is_handshaking();
 
-        if output.is_empty() && !conn.wants_read() {
+        if output.is_empty() && !wants_read(conn, received_plaintext) {
             // We will make no further progress.
             return Ok((rdlen, wrlen));
         }
@@ -100,14 +104,14 @@ pub fn complete_io(
 
         // If we want to write, but are WouldBlocked by the underlying IO, *and*
         // have no desire to read; that is everything.
-        if let (Some(_), false) = (&blocked_write, conn.wants_read()) {
+        if let (Some(_), false) = (&blocked_write, wants_read(conn, received_plaintext)) {
             return match wrlen {
                 0 => Err(blocked_write.unwrap()),
                 _ => Ok((rdlen, wrlen)),
             };
         }
 
-        while !eof && conn.wants_read() {
+        while !eof && wants_read(conn, received_plaintext) {
             let read_size = match input.read(io) {
                 Ok(0) => {
                     eof = true;
@@ -170,6 +174,14 @@ pub fn complete_io(
             _ => {}
         }
     }
+}
+
+/// Whether [`complete_io()`] should read more data from the transport.
+///
+/// After the handshake, we stop reading while there is unconsumed plaintext, so that a
+/// peer cannot make us buffer an unbounded amount of it.
+fn wants_read(conn: &impl Connection, received_plaintext: &[u8]) -> bool {
+    conn.wants_read() && (conn.is_handshaking() || received_plaintext.is_empty())
 }
 
 /// Write the front of `output` to `io`, draining the bytes that were written.
