@@ -3507,6 +3507,48 @@ impl Write for FailsFirstFlush {
     }
 }
 
+/// See <https://github.com/rustls/rustls/issues/3306>.
+#[test]
+fn stream_reports_error_after_write_accepted_plaintext() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    do_handshake(&mut client, &mut server);
+
+    server
+        .writer()
+        .write_all(b"hello")
+        .unwrap();
+    let mut server_output = Vec::new();
+    server
+        .write_tls(&mut server_output)
+        .unwrap();
+    *server_output.last_mut().unwrap() ^= 1;
+
+    // the transport blocks writes, so the first `write()` goes on to read the corrupt record
+    let mut pipe = TestNonBlockIo {
+        writes: vec![],
+        reads: vec![server_output],
+    };
+    let mut client_stream = Stream::new(&mut client, &mut pipe);
+
+    assert_eq!(client_stream.write(b"before").unwrap(), 6);
+
+    // one write for each of the pending records: our data and the fatal alert
+    client_stream
+        .sock
+        .writes
+        .extend([usize::MAX, usize::MAX]);
+    let err = client_stream
+        .write(b"after")
+        .unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert_eq!(err.to_string(), Error::DecryptError.to_string());
+    assert!(!client_stream.conn.wants_write());
+
+    let err = client_stream.flush().unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert_eq!(err.to_string(), Error::DecryptError.to_string());
+}
+
 fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let kt = KeyType::Rsa2048;
     let client_provider = CryptoProvider {
