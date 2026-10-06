@@ -2,7 +2,7 @@ use std::fs;
 use std::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
-use rustls::{ClientConfig, ServerConfig, ServerConnection, SliceInput};
+use rustls::{ClientConfig, Connection, ServerConfig, SliceInput};
 
 // These tests exercise rustls_fuzzing_provider and makes sure it can
 // handshake with itself without errors.
@@ -78,7 +78,7 @@ fn test_version(provider: CryptoProvider) -> Transcript {
         .with_no_client_auth()
         .with_server_credential_resolver(rustls_fuzzing_provider::server_cert_resolver())
         .unwrap();
-    let mut server = ServerConnection::new(server_config.into()).unwrap();
+    let mut server = Connection::new(server_config.into()).unwrap();
 
     let client_config = Arc::new(
         ClientConfig::builder(provider.into())

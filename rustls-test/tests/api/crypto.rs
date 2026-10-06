@@ -12,9 +12,8 @@ use rustls::crypto::{Credentials, CryptoProvider};
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{ApiMisuse, PeerMisbehaved};
 use rustls::{
-    ClientConfig, ClientConnection, Connection, ConnectionTrafficSecrets, Error, KeyLog,
-    ServerConfig, ServerConnection, SideData, SupportedCipherSuite, Tcp, Tls13CipherSuite,
-    VecInput,
+    ClientConfig, ClientSide, Connection, ConnectionTrafficSecrets, Error, KeyLog, ServerConfig,
+    ServerSide, SideData, SupportedCipherSuite, Tcp, Tls13CipherSuite, VecInput,
 };
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, MultiTest, RawTls, ServerConfigExt,
@@ -280,11 +279,9 @@ fn test_secret_extraction_enabled() {
 
         // The handshake is finished, we're now able to extract traffic secrets
         let client_secrets = client
-            .into_inner()
             .dangerous_extract_secrets()
             .unwrap();
         let server_secrets = server
-            .into_inner()
             .dangerous_extract_secrets()
             .unwrap();
 
@@ -348,11 +345,9 @@ fn test_secret_extract_produces_correct_variant() {
         );
 
         let client_secrets = client
-            .into_inner()
             .dangerous_extract_secrets()
             .unwrap();
         let server_secrets = server
-            .into_inner()
             .dangerous_extract_secrets()
             .unwrap();
 
@@ -419,18 +414,12 @@ fn test_secret_extraction_disabled_or_too_early() {
             make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
 
         assert_eq!(
-            client
-                .into_inner()
-                .dangerous_extract_secrets()
-                .err(),
+            client.dangerous_extract_secrets().err(),
             Some(Error::HandshakeNotComplete),
             "extraction should fail until handshake completes"
         );
         assert_eq!(
-            server
-                .into_inner()
-                .dangerous_extract_secrets()
-                .err(),
+            server.dangerous_extract_secrets().err(),
             Some(Error::HandshakeNotComplete),
             "extraction should fail until handshake completes"
         );
@@ -452,14 +441,12 @@ fn test_secret_extraction_disabled_or_too_early() {
         assert_eq!(
             server_enable,
             server
-                .into_inner()
                 .dangerous_extract_secrets()
                 .is_ok()
         );
         assert_eq!(
             client_enable,
             client
-                .into_inner()
                 .dangerous_extract_secrets()
                 .is_ok()
         );
@@ -468,7 +455,7 @@ fn test_secret_extraction_disabled_or_too_early() {
 
 #[test]
 fn test_secret_extraction_fails_with_pending_send_data() {
-    fn server_with_queued_key_update() -> ServerConnection {
+    fn server_with_queued_key_update() -> Connection<ServerSide, Tcp> {
         let mut server_config = make_server_config(KeyType::default(), &provider::DEFAULT_PROVIDER);
         server_config.enable_secret_extraction = true;
 
@@ -507,7 +494,6 @@ fn test_secret_extraction_fails_with_pending_send_data() {
     // having already consumed a send sequence number
     assert_eq!(
         server_with_queued_key_update()
-            .into_inner()
             .dangerous_extract_secrets()
             .err(),
         Some(ApiMisuse::KernelConnectionWithPendingSendData.into())
@@ -520,7 +506,6 @@ fn test_secret_extraction_fails_with_pending_send_data() {
         .write(b"flush".into(), &mut server_output)
         .unwrap();
     server
-        .into_inner()
         .dangerous_extract_secrets()
         .unwrap();
 }
@@ -571,10 +556,10 @@ fn test_refresh_traffic_keys() {
     fn check_both_directions(
         client_input: &mut VecInput,
         client_output: &mut Vec<u8>,
-        client: &mut ClientConnection,
+        client: &mut Connection<ClientSide, Tcp>,
         server_input: &mut VecInput,
         server_output: &mut Vec<u8>,
-        server: &mut ServerConnection,
+        server: &mut Connection<ServerSide, Tcp>,
     ) {
         client
             .write(b"to-server-1".into(), client_output)
@@ -905,7 +890,8 @@ fn tls12_write_is_not_split_across_confidentiality_limit() {
 ///
 /// Returns the client, its pending output, and the server. The client's `Finished` message
 /// used sequence number 0. The server has secret extraction enabled.
-fn tls12_pair_with_limited_confidentiality() -> (ClientConnection, Vec<u8>, LimitedServer) {
+fn tls12_pair_with_limited_confidentiality() -> (Connection<ClientSide, Tcp>, Vec<u8>, LimitedServer)
+{
     let provider = Arc::new(CryptoProvider {
         tls13_cipher_suites: Default::default(),
         ..Arc::unwrap_or_clone(aes_128_gcm_with_1024_confidentiality_limit(
@@ -945,7 +931,7 @@ fn tls12_pair_with_limited_confidentiality() -> (ClientConnection, Vec<u8>, Limi
 const MAX_FRAGMENT_LEN: usize = 16_384;
 
 struct LimitedServer {
-    conn: ServerConnection,
+    conn: Connection<ServerSide, Tcp>,
     input: VecInput,
     output: Vec<u8>,
 }

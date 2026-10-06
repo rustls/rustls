@@ -1,7 +1,5 @@
 #![allow(clippy::std_instead_of_core)] // awaits core::io::IoSlice in stable (1.98)
 use std::io::{BufRead, Error, ErrorKind, IoSlice, Read, Result, Write};
-use std::marker::PhantomData;
-use std::ops::DerefMut;
 
 use rustls::crypto::cipher::OutboundPlain;
 use rustls::{Connection, SideData, Tcp, TlsInputBuffer, VecInput};
@@ -294,9 +292,9 @@ where
 /// [`complete_io()`]: crate::complete_io()
 #[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
-pub struct StreamOwned<C: Sized, S: SideData, T: Read + Write + Sized> {
+pub struct StreamOwned<S: SideData, T: Read + Write + Sized> {
     /// Our connection
-    pub conn: C,
+    pub conn: Connection<S, Tcp>,
 
     /// The underlying transport, like a socket
     pub sock: T,
@@ -320,13 +318,10 @@ pub struct StreamOwned<C: Sized, S: SideData, T: Read + Write + Sized> {
     ///
     /// Defaults to 64KB.
     pub limit: usize,
-
-    pub side: PhantomData<S>,
 }
 
-impl<C, S, T> StreamOwned<C, S, T>
+impl<S, T> StreamOwned<S, T>
 where
-    C: DerefMut<Target = Connection<S, Tcp>>,
     S: SideData,
     T: Read + Write,
 {
@@ -338,7 +333,7 @@ where
     ///
     /// This is the same as `Stream::new` except `conn` and `sock` are
     /// moved into the StreamOwned.
-    pub fn new(conn: C, sock: T, output: Vec<u8>) -> Self {
+    pub fn new(conn: Connection<S, Tcp>, sock: T, output: Vec<u8>) -> Self {
         Self {
             conn,
             sock,
@@ -346,7 +341,6 @@ where
             received_plaintext: Vec::new(),
             output,
             limit: DEFAULT_BUFFER_LIMIT,
-            side: PhantomData,
         }
     }
 
@@ -361,20 +355,19 @@ where
     }
 
     /// Destructure this object into its `conn` and `sock` parts
-    pub fn into_parts(self) -> (C, T) {
+    pub fn into_parts(self) -> (Connection<S, Tcp>, T) {
         (self.conn, self.sock)
     }
 }
 
-impl<'a, C, S, T> StreamOwned<C, S, T>
+impl<'a, S, T> StreamOwned<S, T>
 where
-    C: DerefMut<Target = Connection<S, Tcp>>,
     S: SideData,
     T: Read + Write,
 {
     fn as_stream(&'a mut self) -> Stream<'a, S, T> {
         Stream {
-            conn: &mut *self.conn,
+            conn: &mut self.conn,
             sock: &mut self.sock,
             input: &mut self.input,
             received_plaintext: &mut self.received_plaintext,
@@ -384,9 +377,8 @@ where
     }
 }
 
-impl<C, S, T> Read for StreamOwned<C, S, T>
+impl<S, T> Read for StreamOwned<S, T>
 where
-    C: DerefMut<Target = Connection<S, Tcp>>,
     S: SideData,
     T: Read + Write,
 {
@@ -395,9 +387,8 @@ where
     }
 }
 
-impl<C, S, T> BufRead for StreamOwned<C, S, T>
+impl<S, T> BufRead for StreamOwned<S, T>
 where
-    C: DerefMut<Target = Connection<S, Tcp>>,
     S: SideData,
     T: Read + Write,
 {
@@ -411,9 +402,8 @@ where
     }
 }
 
-impl<C, S, T> Write for StreamOwned<C, S, T>
+impl<S, T> Write for StreamOwned<S, T>
 where
-    C: DerefMut<Target = Connection<S, Tcp>>,
     S: SideData,
     T: Read + Write,
 {
@@ -433,22 +423,22 @@ const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
 mod tests {
     use std::net::TcpStream;
 
-    use rustls::{ClientConnection, ClientSide, ServerConnection, ServerSide};
+    use rustls::{ClientSide, ServerSide};
 
     use super::{Stream, StreamOwned};
 
     #[test]
     fn stream_can_be_created_for_connection_and_tcpstream() {
-        type _Test<'a> = Stream<'a, ClientConnection, TcpStream>;
+        type _Test<'a> = Stream<'a, ClientSide, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_client_and_tcpstream() {
-        type _Test = StreamOwned<ClientConnection, ClientSide, TcpStream>;
+        type _Test = StreamOwned<ClientSide, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_server_and_tcpstream() {
-        type _Test = StreamOwned<ServerConnection, ServerSide, TcpStream>;
+        type _Test = StreamOwned<ServerSide, TcpStream>;
     }
 }

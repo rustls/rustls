@@ -4,13 +4,13 @@
 
 use std::sync::Arc;
 
-use rustls::client::ClientConnection;
 use rustls::crypto::VerifiedIdentity;
 use rustls::enums::ProtocolVersion;
 use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage, PeerMisbehaved};
 use rustls::server::{ServerHandshake, ServerSide};
 use rustls::{
-    ClientConfig, ServerConfig, ServerConnection, SliceInput, Tcp, VecInput, VerifyPeerIdentity,
+    ClientConfig, ClientSide, Connection, ServerConfig, SliceInput, Tcp, VecInput,
+    VerifyPeerIdentity,
 };
 use rustls_test::{
     ErrorFromPeer, MockClientVerifier, MultiTest, do_handshake, do_handshake_until_both_error,
@@ -106,7 +106,7 @@ fn client_verifier_no_auth_yes_root() {
             Arc::new(MockClientVerifier::new(ver_unreachable, kt, &provider))
         }))
     {
-        let mut server = ServerConnection::new(server_config).unwrap();
+        let mut server = Connection::new(server_config).unwrap();
 
         let mut client_output = Vec::new();
         let mut server_output = Vec::new();
@@ -151,7 +151,7 @@ fn client_verifier_fails_properly() {
             Arc::new(MockClientVerifier::new(ver_err, kt, &provider))
         }))
     {
-        let mut server = ServerConnection::new(server_config).unwrap();
+        let mut server = Connection::new(server_config).unwrap();
         let mut client_output = Vec::new();
         let mut server_output = Vec::new();
         let mut client = client_config
@@ -255,13 +255,14 @@ fn server_external_verifier_error_sends_alert() {
     }
 }
 
+#[expect(clippy::type_complexity)]
 fn server_external_verifier_test_setup(
     client_config: Arc<ClientConfig>,
     server_config: Arc<ServerConfig>,
 ) -> (
     VerifyPeerIdentity<ServerSide, Tcp>,
     Vec<u8>,
-    ClientConnection,
+    Connection<ClientSide, Tcp>,
     Vec<u8>,
 ) {
     let mut client_output = Vec::new();

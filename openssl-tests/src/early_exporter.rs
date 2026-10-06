@@ -36,7 +36,7 @@ fn test_early_exporter() {
 
         let mut received_plaintext = Vec::new();
         for _ in 0..ITERS {
-            let mut server = rustls::ServerConnection::new(config.clone()).unwrap();
+            let mut server = rustls::Connection::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
             let mut input = VecInput::default();
             let mut output = Vec::new();

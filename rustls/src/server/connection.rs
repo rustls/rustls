@@ -1,7 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
-use core::ops::{Deref, DerefMut};
 
 use pki_types::{DnsName, FipsStatus};
 
@@ -21,21 +20,12 @@ use crate::server::hs::{ExpectClientHello, ReadClientHello, ServerState};
 use crate::sync::Arc;
 use crate::verify::ClientIdentity;
 
-/// This represents a single TLS server connection.
-///
-/// Encrypt data destined for the peer using [`Connection::write()`].
-/// Process received data from the peer using [`Connection::read_tls()`].
-pub struct ServerConnection {
-    pub(super) inner: Connection<ServerSide, Tcp>,
-}
-
-impl ServerConnection {
-    /// Make a new ServerConnection.  `config` controls how
-    /// we behave in the TLS protocol.
+impl Connection<ServerSide, Tcp> {
+    /// Make a new [`ServerSide`] [`Connection`].
+    ///
+    /// `config` controls how we behave in the TLS protocol.
     pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
-        Ok(Self {
-            inner: Connection::for_server(config, ServerExtensionsInput::default(), Tcp)?,
-        })
+        Self::for_server(config, ServerExtensionsInput::default(), Tcp)
     }
 
     /// Set the resumption data to embed in future resumption tickets supplied to the client.
@@ -48,36 +38,10 @@ impl ServerConnection {
     /// from the client is desired, encrypt the data separately.
     pub fn set_resumption_data(&mut self, data: &[u8]) -> Result<(), Error> {
         assert!(data.len() < 2usize.pow(15));
-        match &mut self.inner.state {
+        match &mut self.state {
             Ok(st) => st.set_resumption_data(data),
             Err(e) => Err(e.clone()),
         }
-    }
-
-    /// Temporary hack to allow access to methods that take [`Connection`] ownership.
-    pub fn into_inner(self) -> Connection<ServerSide, Tcp> {
-        self.inner
-    }
-}
-
-impl Deref for ServerConnection {
-    type Target = Connection<ServerSide, Tcp>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for ServerConnection {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-impl fmt::Debug for ServerConnection {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ServerConnection")
-            .finish_non_exhaustive()
     }
 }
 
@@ -92,27 +56,27 @@ impl<T: Transport> Connection<ServerSide, T> {
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
         let protocol = transport.protocol();
-        Ok(Self::new(
-            Box::new(ExpectClientHello::new(
+        Ok(Self {
+            state: Ok(Box::new(ExpectClientHello::new(
                 config,
                 extra_exts,
                 Vec::new(),
                 protocol,
             ))
-            .into(),
-            ServerSide::default(),
+            .into()),
+            side: ServerSide::default(),
             transport,
             common,
-        ))
+        })
     }
 
     pub(crate) fn for_acceptor(transport: T) -> Self {
-        Self::new(
-            ReadClientHello::new(transport.protocol()).into(),
-            ServerSide::default(),
+        Self {
+            state: Ok(ReadClientHello::new(transport.protocol()).into()),
+            side: ServerSide::default(),
             transport,
-            CommonState::new(Side::Server, FipsStatus::Unvalidated),
-        )
+            common: CommonState::new(Side::Server, FipsStatus::Unvalidated),
+        }
     }
 }
 

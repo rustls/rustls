@@ -1681,10 +1681,10 @@ pub enum ApiMisuse {
         maximum: usize,
     },
 
-    /// Calling [`ServerConnection::set_resumption_data()`] must be done before
+    /// Calling [`Connection::set_resumption_data()`] must be done before
     /// any resumption is offered.
     ///
-    /// [`ServerConnection::set_resumption_data()`]: crate::server::ServerConnection::set_resumption_data()
+    /// [`Connection::set_resumption_data()`]: crate::Connection::set_resumption_data()
     ResumptionDataProvidedTooLate,
 
     /// [`KernelConnection::update_tx_secret()`] and associated are not available for TLS1.2 connections.

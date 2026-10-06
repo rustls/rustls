@@ -7,7 +7,7 @@ use pki_types::UnixTime;
 
 use super::hs::ClientHelloInput;
 use super::{
-    CommonServerSessionValue, ServerConfig, ServerConnection, ServerSessionKey, ServerSessionValue,
+    CommonServerSessionValue, ServerConfig, ServerSessionKey, ServerSessionValue,
     Tls13ServerSessionValue,
 };
 use crate::conn::{Input, VecInput};
@@ -41,6 +41,7 @@ use crate::tls13::key_schedule::KeyScheduleEarlyServer;
 use crate::tls13::{Tls13CipherSuite, Tls13ProtocolSuite};
 use crate::verify::VerifiedIdentity;
 use crate::version::TLS12_VERSION;
+use crate::{Connection, ServerSide, Tcp};
 
 #[test]
 fn serversessionvalue_no_sni() {
@@ -138,7 +139,7 @@ fn test_server_preference_cipher_suite_selection() {
         CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
         CipherSuite::TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
     ]);
-    let selected_suite = select_cipher_suite(ServerConnection::new(config.into()).unwrap(), ch);
+    let selected_suite = select_cipher_suite(Connection::new(config.into()).unwrap(), ch);
     assert_eq!(
         selected_suite.unwrap(),
         CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256
@@ -147,7 +148,7 @@ fn test_server_preference_cipher_suite_selection() {
 
 // Process the `ClientHelloPayload` and return the `CipherSuite` from the resulting ServerHello.
 fn select_cipher_suite(
-    mut conn: ServerConnection,
+    mut conn: Connection<ServerSide, Tcp>,
     client_hello: ClientHelloPayload,
 ) -> Result<CipherSuite, Box<dyn error::Error>> {
     let ch = Message {
@@ -184,7 +185,7 @@ fn test_server_rejects_no_extended_main_secret_extension_when_require_ems_or_fip
     } else {
         config.require_ems = true;
     }
-    let mut conn = ServerConnection::new(config.into()).unwrap();
+    let mut conn = Connection::new(config.into()).unwrap();
     let mut input = VecInput::default();
 
     let mut ch = minimal_client_hello();
@@ -214,7 +215,7 @@ fn test_server_rejects_non_empty_renegotiation_info_in_initial_handshake() {
         .with_no_client_auth()
         .with_single_cert(server_identity(), server_key())
         .unwrap();
-    let mut conn = ServerConnection::new(config.into()).unwrap();
+    let mut conn = Connection::new(config.into()).unwrap();
     let mut input = VecInput::default();
 
     // a client behaving as if it were renegotiating an existing connection:
@@ -254,7 +255,7 @@ fn server_picks_ffdhe_group_when_clienthello_has_no_ffdhe_group_in_groups_ext() 
             .suite,
     );
 
-    server_chooses_ffdhe_group_for_client_hello(ServerConnection::new(config.into()).unwrap(), ch);
+    server_chooses_ffdhe_group_for_client_hello(Connection::new(config.into()).unwrap(), ch);
 }
 
 #[test]
@@ -275,7 +276,7 @@ fn server_picks_ffdhe_group_when_clienthello_has_no_groups_ext() {
     );
     ch.extensions.named_groups.take();
 
-    server_chooses_ffdhe_group_for_client_hello(ServerConnection::new(config.into()).unwrap(), ch);
+    server_chooses_ffdhe_group_for_client_hello(Connection::new(config.into()).unwrap(), ch);
 }
 
 #[test]
@@ -296,11 +297,11 @@ fn server_accepts_client_with_no_ecpoints_extension_and_only_ffdhe_cipher_suites
     );
     ch.extensions.ec_point_formats.take();
 
-    server_chooses_ffdhe_group_for_client_hello(ServerConnection::new(config.into()).unwrap(), ch);
+    server_chooses_ffdhe_group_for_client_hello(Connection::new(config.into()).unwrap(), ch);
 }
 
 fn server_chooses_ffdhe_group_for_client_hello(
-    mut conn: ServerConnection,
+    mut conn: Connection<ServerSide, Tcp>,
     client_hello: ClientHelloPayload,
 ) {
     let mut input = VecInput::default();
@@ -346,7 +347,7 @@ fn second_client_hello_cannot_withdraw_psk_offer() {
         .with_no_client_auth()
         .with_single_cert(server_identity(), server_key())
         .unwrap();
-    let mut conn = ServerConnection::new(config.into()).unwrap();
+    let mut conn = Connection::new(config.into()).unwrap();
     let mut input = VecInput::default();
 
     let encode = |hello| {
@@ -405,7 +406,7 @@ fn second_client_hello_cannot_change_cipher_suite() {
         .with_no_client_auth()
         .with_single_cert(server_identity(), server_key())
         .unwrap();
-    let mut conn = ServerConnection::new(config.into()).unwrap();
+    let mut conn = Connection::new(config.into()).unwrap();
     let mut input = VecInput::default();
 
     let encode = |hello| {
@@ -534,7 +535,7 @@ fn resume_with_early_data(index: usize) -> (Option<u16>, bool) {
         .read(&mut ch.into_wire_bytes().as_slice())
         .unwrap();
 
-    let mut conn = ServerConnection::new(config.into()).unwrap();
+    let mut conn = Connection::new(config.into()).unwrap();
     let mut flight = vec![];
     conn.read_tls(&mut input, &mut flight)
         .handle_all(&mut Vec::new())
@@ -566,7 +567,7 @@ fn test_server_requiring_rpk_client_rejects_x509_client() {
         ))),
     };
 
-    let mut conn = ServerConnection::new(Arc::new(server_config)).unwrap();
+    let mut conn = Connection::new(Arc::new(server_config)).unwrap();
     let mut input = VecInput::default();
     input
         .read(&mut ch.into_wire_bytes().as_slice())
@@ -590,7 +591,7 @@ fn test_rpk_only_server_rejects_x509_only_client() {
         ))),
     };
 
-    let mut conn = ServerConnection::new(Arc::new(server_config)).unwrap();
+    let mut conn = Connection::new(Arc::new(server_config)).unwrap();
     let mut input = VecInput::default();
     input
         .read(&mut ch.into_wire_bytes().as_slice())
@@ -742,7 +743,7 @@ fn minimal_client_hello() -> ClientHelloPayload {
     }
 }
 
-fn process(input: &mut VecInput, conn: &mut ServerConnection) -> Result<(), Error> {
+fn process(input: &mut VecInput, conn: &mut Connection<ServerSide, Tcp>) -> Result<(), Error> {
     conn.read_tls(input, &mut Vec::new())
         .handle_all(&mut Vec::new())?;
     Ok(())
