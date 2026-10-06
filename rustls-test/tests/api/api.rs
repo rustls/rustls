@@ -868,6 +868,76 @@ fn server_error_is_sticky() {
         .unwrap_err();
 }
 
+#[test]
+fn write_reports_sticky_error() {
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair(
+        KeyType::default(),
+        &provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+
+    // corrupt a record, so the server fails and sends a fatal alert
+    client
+        .write(b"hello".into(), &mut client_output)
+        .unwrap();
+    *client_output.last_mut().unwrap() ^= 1;
+    transfer(&mut client_output, &mut server_input);
+    assert_eq!(
+        server
+            .read_tls(&mut server_input, &mut server_output)
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        Error::DecryptError
+    );
+
+    let mut tls = Vec::new();
+    assert_eq!(
+        server
+            .write(b"world".into(), &mut tls)
+            .unwrap_err(),
+        Error::DecryptError
+    );
+    assert_eq!(
+        server
+            .write(b"".into(), &mut tls)
+            .unwrap_err(),
+        Error::DecryptError
+    );
+    assert!(tls.is_empty());
+
+    // the client receives the alert, but has not sent one itself
+    transfer(&mut server_output, &mut client_input);
+    let expected = Error::AlertReceived(AlertDescription::BadRecordMac);
+    assert_eq!(
+        client
+            .read_tls(&mut client_input, &mut client_output)
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        expected
+    );
+    assert!(client_output.is_empty());
+
+    assert_eq!(
+        client
+            .write(b"world".into(), &mut tls)
+            .unwrap_err(),
+        expected
+    );
+    assert!(tls.is_empty());
+}
+
 #[allow(clippy::unnecessary_operation)]
 #[test]
 fn server_is_send_and_sync() {
@@ -1907,12 +1977,12 @@ fn test_client_sends_no_application_data_after_ech_rejection() {
     assert_eq!(client.exporter().unwrap_err(), Error::HandshakeNotComplete);
 
     let queued = client_output.len();
-    assert_eq!(
+    assert!(matches!(
         client
             .write(b"ech-inner-secret".into(), &mut client_output)
             .unwrap_err(),
-        ApiMisuse::WriteBeforeHandshakeComplete.into()
-    );
+        Error::RejectedEch(_)
+    ));
     assert_eq!(
         client
             .refresh_traffic_keys(&mut client_output)

@@ -51,6 +51,10 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
     /// This will fail if either the handshake is not complete yet (because we don't yet have the
     /// keys to encrypt application data) or if the send path has been closed by sending a
     /// `close_notify` alert.
+    ///
+    /// If the connection previously encountered a fatal error (for example, while processing
+    /// received data in [`Self::read_tls()`]), this returns that error, even if `plaintext`
+    /// is empty.
     fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error>;
 
     /// Returns true if the caller should call [`Self::read_tls()`] as soon as possible.
@@ -252,7 +256,9 @@ impl<Side: SideData> ConnectionCommon<Side> {
         plaintext: OutboundPlain<'_>,
         tls: &mut Vec<u8>,
     ) -> Result<(), Error> {
-        if plaintext.is_empty() {
+        if let Err(err) = &self.state {
+            return Err(err.clone());
+        } else if plaintext.is_empty() {
             return Ok(());
         } else if !self
             .common
