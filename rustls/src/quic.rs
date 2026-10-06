@@ -10,8 +10,8 @@ use crate::client::ClientSide;
 pub use crate::common_state::Side;
 use crate::common_state::{ConnectionOutputs, Protocol};
 use crate::conn::{
-    Accepted, ConnectionCommon, KeyingMaterialExporter, MessageIter, MessageIterMode, ServerNext,
-    SideData, Transport, VerifyPeerIdentity, sealed,
+    Accepted, ConnectionCommon, MessageIter, MessageIterMode, ServerNext, SideData, Transport,
+    VerifyPeerIdentity, sealed,
 };
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
@@ -31,27 +31,12 @@ pub struct ClientConnection {
 }
 
 impl ClientConnection {
-    /// Return the FIPS validation status of the connection.
-    pub fn fips(&self) -> FipsStatus {
-        self.inner.fips
-    }
-
     /// Returns the number of TLS1.3 tickets that have been received.
     pub fn tls13_tickets_received(&self) -> u32 {
         self.inner
             .common
             .recv
             .tls13_tickets_received
-    }
-
-    #[doc = include_str!("doc/exporter.md")]
-    pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.exporter()
-    }
-
-    /// Returns data learned during the connection, specific to being a client.
-    pub fn side(&self) -> &ClientSide {
-        &self.inner.side
     }
 }
 
@@ -116,11 +101,6 @@ impl ServerConnection {
         })
     }
 
-    /// Return the FIPS validation status of the connection.
-    pub fn fips(&self) -> FipsStatus {
-        self.inner.fips
-    }
-
     /// Set the resumption data to embed in future resumption tickets supplied to the client.
     ///
     /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other
@@ -135,16 +115,6 @@ impl ServerConnection {
             Ok(st) => st.set_resumption_data(resumption_data),
             Err(e) => Err(e.clone()),
         }
-    }
-
-    #[doc = include_str!("doc/exporter.md")]
-    pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.exporter()
-    }
-
-    /// Returns data learned during the connection, specific to being a server.
-    pub fn side(&self) -> &ServerSide {
-        &self.inner.side
     }
 }
 
