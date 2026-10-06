@@ -25,7 +25,7 @@ pub mod kernel;
 
 mod handshake;
 pub use handshake::{Accepted, Tcp, Transport, VerifyPeerIdentity};
-pub(crate) use handshake::{ClientNext, ServerNext, sealed};
+pub(crate) use handshake::{ClientNext, Processed, ServerNext, sealed};
 
 mod receive;
 pub(crate) use receive::{
@@ -62,11 +62,11 @@ pub struct Connection<Side: SideData, T: Transport> {
 
 impl<Side: SideData, T: Transport> Connection<Side, T> {
     pub(crate) fn process(
-        &mut self,
+        mut self,
         input: &mut dyn TlsInputBuffer,
         tls: &mut Vec<u8>,
-    ) -> Result<(), Error> {
-        let mut iter = MessageIter::new(input, tls, self, MessageIterMode::Handshake);
+    ) -> Result<Processed<Side, T>, Error> {
+        let mut iter = MessageIter::new(input, tls, &mut self, MessageIterMode::Handshake);
         let result = loop {
             match iter.next(false) {
                 Some(Ok(_)) => {}
@@ -78,7 +78,7 @@ impl<Side: SideData, T: Transport> Connection<Side, T> {
         input.discard(self.common.recv.deframer.take_discard());
 
         result?;
-        Ok(())
+        Ok(Processed::Progress(self))
     }
 
     #[doc = include_str!("../doc/exporter.md")]
@@ -316,7 +316,7 @@ impl<T: Transport> Connection<ServerSide, T> {
 
 impl<Side: SideData> Connection<Side, Tcp> {
     fn into_handshake(self) -> Result<Side::Handshake, Error> {
-        Side::Handshake::try_from(self)
+        Side::Handshake::try_from(Processed::Progress(self))
     }
 }
 
@@ -513,12 +513,11 @@ impl<Side: SideData> NeedsInput<Side> {
     /// the connection.  If this contains another [`NeedsInput`] object then obtaining more
     /// input (eg, from a socket or other source) is certainly necessary.
     pub fn process(
-        mut self,
+        self,
         input: &mut dyn TlsInputBuffer,
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
-        self.0.process(input, tls)?;
-        self.0.into_handshake()
+        Side::Handshake::try_from(self.0.process(input, tls)?)
     }
 
     #[doc = include_str!("../doc/early_exporter.md")]
@@ -735,7 +734,7 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
 #[expect(private_bounds)]
 pub trait SideData: SideOutput + fmt::Debug + private::Side + Sized + 'static {
     /// Type representing an in-progress TCP handshake.
-    type Handshake: TryFrom<Connection<Self, Tcp>, Error = Error>;
+    type Handshake: TryFrom<Processed<Self, Tcp>, Error = Error>;
     /// Type representing an in-progress QUIC handshake.
     type QuicHandshake: quic::FromConn<Self>;
 
