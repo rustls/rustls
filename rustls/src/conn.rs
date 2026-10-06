@@ -327,6 +327,10 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         /// TLS handshake completes, and sends it as soon
         /// as it can.  See [`ConnectionCommon::set_buffer_limit`] to control
         /// the size of this buffer.
+        ///
+        /// If the connection previously encountered a fatal error (for example, while
+        /// processing received data in [`Connection::process_new_packets`]), this returns
+        /// that error, even if `buf` is empty.
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             self.sink.write(buf)
         }
@@ -351,8 +355,19 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         fn flush(&mut self) -> io::Result<()>;
     }
 
+    impl<T> ConnectionCommon<T> {
+        /// Return the fatal error this connection previously encountered, if any.
+        fn check_error(&self) -> io::Result<()> {
+            match &self.core.state {
+                Ok(_) => Ok(()),
+                Err(err) => Err(io::Error::new(io::ErrorKind::InvalidData, err.clone())),
+            }
+        }
+    }
+
     impl<T> PlaintextSink for ConnectionCommon<T> {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.check_error()?;
             let len = self
                 .core
                 .common_state
@@ -362,6 +377,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         }
 
         fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+            self.check_error()?;
             let payload_owner: Vec<&[u8]>;
             let payload = match bufs.len() {
                 0 => return Ok(0),
