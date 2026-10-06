@@ -61,15 +61,6 @@ pub struct Connection<Side: SideData, T: Transport> {
 }
 
 impl<Side: SideData, T: Transport> Connection<Side, T> {
-    pub(crate) fn new(state: Side::State, side: Side, transport: T, common: CommonState) -> Self {
-        Self {
-            state: Ok(state),
-            side,
-            common,
-            transport,
-        }
-    }
-
     pub(crate) fn process(
         &mut self,
         input: &mut dyn TlsInputBuffer,
@@ -722,7 +713,7 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
 
 /// Data specific to the peer's side (client or server).
 #[expect(private_bounds)]
-pub trait SideData: SideOutput + fmt::Debug + private::Side + Sized {
+pub trait SideData: SideOutput + fmt::Debug + private::Side + Sized + 'static {
     /// Type representing an in-progress TCP handshake.
     type Handshake;
     /// Type representing an in-progress QUIC handshake.

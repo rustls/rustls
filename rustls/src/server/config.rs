@@ -88,13 +88,13 @@ pub struct ServerConfig {
     /// A value of None is equivalent to the [TLS maximum] of 16 kB.
     ///
     /// rustls enforces an arbitrary minimum of 32 bytes for this field.
-    /// Out of range values are reported as errors from [ServerConnection::new].
+    /// Out of range values are reported as errors from [Connection::new].
     ///
     /// Setting this value to a little less than the TCP MSS may improve latency
     /// for stream-y workloads.
     ///
     /// [TLS maximum]: https://datatracker.ietf.org/doc/html/rfc9846#section-5.1
-    /// [ServerConnection::new]: crate::server::ServerConnection::new
+    /// [Connection::new]: crate::Connection::new
     pub max_fragment_size: Option<usize>,
 
     /// How to store client sessions.

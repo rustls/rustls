@@ -169,7 +169,7 @@ mod server {
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
-    use rustls::{DistinguishedName, ServerConfig, ServerConnection, VecInput};
+    use rustls::{Connection, DistinguishedName, ServerConfig, VecInput};
     use rustls_aws_lc_rs as provider;
     use rustls_util::complete_io;
 
@@ -215,7 +215,7 @@ mod server {
     ) -> Result<String, io::Error> {
         let (mut stream, _) = listener.accept()?;
 
-        let mut conn = ServerConnection::new(Arc::new(config)).unwrap();
+        let mut conn = Connection::new(Arc::new(config)).unwrap();
         let mut input = VecInput::default();
         let mut received_plaintext = Vec::new();
         let mut output = Vec::new();

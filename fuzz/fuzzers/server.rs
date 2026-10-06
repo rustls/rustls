@@ -7,7 +7,7 @@ use std::io;
 use std::sync::Arc;
 
 use rustls::server::{Accepted, ServerHandshake};
-use rustls::{Error, ServerConfig, ServerConnection, Tcp, VecInput};
+use rustls::{Connection, Error, ServerConfig, ServerSide, Tcp, VecInput};
 
 fuzz_target!(|data: &[u8]| {
     match data.split_first() {
@@ -25,7 +25,7 @@ fn fuzz_buffered_api(data: &[u8]) {
             .unwrap(),
     );
     let mut stream = io::Cursor::new(data);
-    let mut server = ServerConnection::new(config).unwrap();
+    let mut server = Connection::new(config).unwrap();
 
     service_connection(&mut stream, &mut VecInput::default(), &mut server);
 }
@@ -72,7 +72,7 @@ fn choose_config(accepted: Accepted<Tcp>, output: &mut Vec<u8>) -> Result<Server
 fn service_connection(
     stream: &mut dyn io::Read,
     input: &mut VecInput,
-    server: &mut ServerConnection,
+    server: &mut Connection<ServerSide, Tcp>,
 ) {
     loop {
         let rd = input.read(stream);

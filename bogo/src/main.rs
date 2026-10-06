@@ -8,7 +8,6 @@ use core::any::Any;
 use core::fmt::Debug;
 use std::borrow::Cow;
 use std::io::{self, Read, Write};
-use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::{env, net, process, thread, time};
 
@@ -16,7 +15,7 @@ use std::{env, net, process, thread, time};
 use nix::sys::signal::{self, Signal};
 #[cfg(unix)]
 use nix::unistd::Pid;
-use rustls::client::{ClientConfig, ClientConnection, EchStatus};
+use rustls::client::{ClientConfig, EchStatus};
 use rustls::crypto::hpke::Hpke;
 use rustls::crypto::{
     Credentials, CryptoProvider, Identity, SignatureScheme, WebPkiSupportedAlgorithms,
@@ -28,9 +27,10 @@ use rustls::error::{
 };
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
-use rustls::server::{ServerConfig, ServerConnection};
+use rustls::server::ServerConfig;
 use rustls::{
-    Connection, HandshakeKind, IoState, RootCertStore, SideData, Tcp, TlsInputBuffer, VecInput,
+    ClientSide, Connection, HandshakeKind, IoState, RootCertStore, ServerSide, SideData, Tcp,
+    TlsInputBuffer, VecInput,
 };
 use rustls_aws_lc_rs::{
     ECDSA_P256_SHA256, ECDSA_P256_SHA384, ECDSA_P256_SHA512, ECDSA_P384_SHA256, ECDSA_P384_SHA384,
@@ -118,7 +118,7 @@ pub fn main() {
                 exec(&opts, sess, output, &key_log, i);
             }
             SideConfig::Server(config) => {
-                let sess = ServerConnection::new(config.clone()).unwrap();
+                let sess = Connection::new(config.clone()).unwrap();
                 exec(&opts, sess, Vec::new(), &key_log, i);
             }
         }
@@ -148,7 +148,7 @@ pub fn main() {
 
 fn exec(
     opts: &Options,
-    mut sess: impl DerefMut<Target = Connection<impl SideData, Tcp>> + 'static,
+    mut sess: Connection<impl SideData, Tcp>,
     mut output: Vec<u8>,
     key_log: &KeyLogMemo,
     count: usize,
@@ -424,13 +424,13 @@ enum SideConfig {
     Server(Arc<ServerConfig>),
 }
 
-fn client(conn: &mut dyn Any) -> &mut ClientConnection {
-    conn.downcast_mut::<ClientConnection>()
+fn client(conn: &mut dyn Any) -> &mut Connection<ClientSide, Tcp> {
+    conn.downcast_mut::<Connection<ClientSide, Tcp>>()
         .unwrap()
 }
 
-fn server(conn: &mut dyn Any) -> &mut ServerConnection {
-    conn.downcast_mut::<ServerConnection>()
+fn server(conn: &mut dyn Any) -> &mut Connection<ServerSide, Tcp> {
+    conn.downcast_mut::<Connection<ServerSide, Tcp>>()
         .unwrap()
 }
 
@@ -439,7 +439,7 @@ fn server(conn: &mut dyn Any) -> &mut ServerConnection {
 ///
 /// Queued plaintext is sent by `after_read()` once the handshake completes.
 fn write_or_queue(
-    sess: &mut impl DerefMut<Target = Connection<impl SideData, Tcp>>,
+    sess: &mut Connection<impl SideData, Tcp>,
     plaintext: &[u8],
     pending: &mut Vec<u8>,
     output: &mut Vec<u8>,
@@ -463,7 +463,7 @@ fn read_n_bytes(
     input: &mut VecInput,
     output: &mut Vec<u8>,
     pending: &mut Vec<u8>,
-    sess: &mut (impl DerefMut<Target = Connection<impl SideData, Tcp>> + 'static),
+    sess: &mut Connection<impl SideData, Tcp>,
     conn: &mut net::TcpStream,
     n: usize,
 ) -> Option<IoState> {
@@ -488,7 +488,7 @@ fn read_all_bytes(
     input: &mut VecInput,
     output: &mut Vec<u8>,
     pending: &mut Vec<u8>,
-    sess: &mut (impl DerefMut<Target = Connection<impl SideData, Tcp>> + 'static),
+    sess: &mut Connection<impl SideData, Tcp>,
     conn: &mut net::TcpStream,
 ) -> Option<IoState> {
     match input.read(conn) {
@@ -506,7 +506,7 @@ fn after_read(
     input: &mut VecInput,
     output: &mut Vec<u8>,
     pending: &mut Vec<u8>,
-    sess: &mut (impl DerefMut<Target = Connection<impl SideData, Tcp>> + 'static),
+    sess: &mut Connection<impl SideData, Tcp>,
     conn: &mut net::TcpStream,
 ) -> Option<IoState> {
     let mut early_data = Vec::new();

@@ -17,8 +17,8 @@ use rustls::crypto::{CipherSuite, CryptoProvider, Identity};
 use rustls::enums::ProtocolVersion;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
-    ClientConfig, ClientConnection, Connection, HandshakeKind, RootCertStore, ServerConfig,
-    ServerConnection, SideData, Tcp, VecInput,
+    ClientConfig, ClientSide, Connection, HandshakeKind, RootCertStore, ServerConfig, ServerSide,
+    SideData, Tcp, VecInput,
 };
 use rustls_test::KeyType;
 
@@ -304,7 +304,7 @@ fn bench_handshake_buffered(
         });
         let mut client_input = VecInput::default();
         let mut server = time(&mut server_time, || {
-            ServerConnection::new(server_config.clone()).unwrap()
+            Connection::new(server_config.clone()).unwrap()
         });
         let mut server_input = VecInput::default();
 
@@ -496,7 +496,7 @@ fn bench_bulk_buffered(
         .build(&mut client_buffers.tls)
         .unwrap();
     let mut client_input = VecInput::default();
-    let mut server = ServerConnection::new(server_config).unwrap();
+    let mut server = Connection::new(server_config).unwrap();
     let mut server_buffers = TempBuffers::new();
     let mut server_input = VecInput::default();
 
@@ -567,7 +567,7 @@ fn bench_memory(
         servers.push((
             VecInput::default(),
             TempBuffers::new(),
-            ServerConnection::new(server_config.clone()).unwrap(),
+            Connection::new(server_config.clone()).unwrap(),
         ));
         let server_name = "localhost".try_into().unwrap();
         let mut client_buffers = TempBuffers::new();
@@ -994,10 +994,10 @@ impl From<RequestedKeyType> for KeyType {
 fn do_handshake_step(
     client_input: &mut VecInput,
     client_buffers: &mut TempBuffers,
-    client: &mut ClientConnection,
+    client: &mut Connection<ClientSide, Tcp>,
     server_input: &mut VecInput,
     server_buffers: &mut TempBuffers,
-    server: &mut ServerConnection,
+    server: &mut Connection<ServerSide, Tcp>,
 ) -> bool {
     if server.is_handshaking() || client.is_handshaking() {
         transfer(client_buffers, server_input, server_buffers, server, None);
@@ -1011,10 +1011,10 @@ fn do_handshake_step(
 fn do_handshake(
     client_input: &mut VecInput,
     client_buffers: &mut TempBuffers,
-    client: &mut ClientConnection,
+    client: &mut Connection<ClientSide, Tcp>,
     server_input: &mut VecInput,
     server_buffers: &mut TempBuffers,
-    server: &mut ServerConnection,
+    server: &mut Connection<ServerSide, Tcp>,
 ) {
     while do_handshake_step(
         client_input,

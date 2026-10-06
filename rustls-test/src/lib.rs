@@ -1,5 +1,4 @@
 use core::hash::Hasher;
-use core::ops::DerefMut;
 use core::{fmt, mem};
 use std::borrow::Cow;
 use std::io;
@@ -30,9 +29,9 @@ use rustls::server::{
     ClientHello, ClientVerifierBuilder, ServerCredentialResolver, WebPkiClientVerifier,
 };
 use rustls::{
-    ClientConfig, ClientConnection, ClientSide, ConfigBuilder, Connection,
-    ConnectionTrafficSecrets, DistinguishedName, MessageHandler, RootCertStore, ServerConfig,
-    ServerConnection, ServerSide, SideData, SupportedCipherSuite, Tcp, VecInput, WantsVerifier,
+    ClientConfig, ClientSide, ConfigBuilder, Connection, ConnectionTrafficSecrets,
+    DistinguishedName, MessageHandler, RootCertStore, ServerConfig, ServerSide, SideData,
+    SupportedCipherSuite, Tcp, VecInput, WantsVerifier,
 };
 use tracing::{Event, Level, Metadata, field, span, subscriber};
 
@@ -826,7 +825,7 @@ pub fn make_pair(
     kt: KeyType,
     provider: &CryptoProvider,
     client_output: &mut Vec<u8>,
-) -> (ClientConnection, ServerConnection) {
+) -> (Connection<ClientSide, Tcp>, Connection<ServerSide, Tcp>) {
     make_pair_for_configs(
         make_client_config(kt, provider),
         make_server_config(kt, provider),
@@ -838,7 +837,7 @@ pub fn make_pair_for_configs(
     client_config: ClientConfig,
     server_config: ServerConfig,
     client_output: &mut Vec<u8>,
-) -> (ClientConnection, ServerConnection) {
+) -> (Connection<ClientSide, Tcp>, Connection<ServerSide, Tcp>) {
     make_pair_for_arc_configs(
         &Arc::new(client_config),
         &Arc::new(server_config),
@@ -850,13 +849,13 @@ pub fn make_pair_for_arc_configs(
     client_config: &Arc<ClientConfig>,
     server_config: &Arc<ServerConfig>,
     client_output: &mut Vec<u8>,
-) -> (ClientConnection, ServerConnection) {
+) -> (Connection<ClientSide, Tcp>, Connection<ServerSide, Tcp>) {
     (
         client_config
             .connect(server_name("localhost"))
             .build(client_output)
             .unwrap(),
-        ServerConnection::new(server_config.clone()).unwrap(),
+        Connection::new(server_config.clone()).unwrap(),
     )
 }
 
@@ -942,7 +941,7 @@ pub fn do_handshake_collecting_early_data(
     client: &mut Connection<ClientSide, Tcp>,
     server_input: &mut VecInput,
     server_output: &mut Vec<u8>,
-    server: &mut ServerConnection,
+    server: &mut Connection<ServerSide, Tcp>,
     server_early_data: &mut Vec<u8>,
 ) {
     while server.is_handshaking() || client.is_handshaking() {
@@ -971,10 +970,10 @@ pub enum ErrorFromPeer {
 pub fn do_handshake_until_error(
     client_input: &mut VecInput,
     client_output: &mut Vec<u8>,
-    client: &mut ClientConnection,
+    client: &mut Connection<ClientSide, Tcp>,
     server_input: &mut VecInput,
     server_output: &mut Vec<u8>,
-    server: &mut ServerConnection,
+    server: &mut Connection<ServerSide, Tcp>,
 ) -> Result<(), ErrorFromPeer> {
     while server.is_handshaking() || client.is_handshaking() {
         transfer(client_output, server_input);
@@ -995,10 +994,10 @@ pub fn do_handshake_until_error(
 pub fn do_handshake_until_both_error(
     client_input: &mut VecInput,
     client_output: &mut Vec<u8>,
-    client: &mut ClientConnection,
+    client: &mut Connection<ClientSide, Tcp>,
     server_input: &mut VecInput,
     server_output: &mut Vec<u8>,
-    server: &mut ServerConnection,
+    server: &mut Connection<ServerSide, Tcp>,
 ) -> Result<(), Vec<ErrorFromPeer>> {
     match do_handshake_until_error(
         client_input,
@@ -1492,23 +1491,21 @@ pub struct RawTls {
 
 impl RawTls {
     /// conn must be post-handshake, and must have been created with `enable_secret_extraction`
-    pub fn new_client(conn: ClientConnection) -> Self {
+    pub fn new_client(conn: Connection<ClientSide, Tcp>) -> Self {
         let suite = conn.negotiated_cipher_suite().unwrap();
         Self::new(
             suite,
-            conn.into_inner()
-                .dangerous_extract_secrets()
+            conn.dangerous_extract_secrets()
                 .unwrap(),
         )
     }
 
     /// conn must be post-handshake, and must have been created with `enable_secret_extraction`
-    pub fn new_server(conn: ServerConnection) -> Self {
+    pub fn new_server(conn: Connection<ServerSide, Tcp>) -> Self {
         let suite = conn.negotiated_cipher_suite().unwrap();
         Self::new(
             suite,
-            conn.into_inner()
-                .dangerous_extract_secrets()
+            conn.dangerous_extract_secrets()
                 .unwrap(),
         )
     }
@@ -1801,8 +1798,8 @@ impl ServerCredentialResolver for ServerCheckCertResolve {
     }
 }
 
-pub struct OtherSession<'a, C: DerefMut<Target = Connection<S, Tcp>>, S: SideData> {
-    sess: &'a mut C,
+pub struct OtherSession<'a, S: SideData> {
+    sess: &'a mut Connection<S, Tcp>,
     input: &'a mut VecInput,
     output: &'a mut Vec<u8>,
     pub reads: usize,
@@ -1816,8 +1813,12 @@ pub struct OtherSession<'a, C: DerefMut<Target = Connection<S, Tcp>>, S: SideDat
     pub received: Vec<u8>,
 }
 
-impl<'a, C: DerefMut<Target = Connection<S, Tcp>>, S: SideData> OtherSession<'a, C, S> {
-    pub fn new(input: &'a mut VecInput, output: &'a mut Vec<u8>, sess: &'a mut C) -> Self {
+impl<'a, S: SideData> OtherSession<'a, S> {
+    pub fn new(
+        input: &'a mut VecInput,
+        output: &'a mut Vec<u8>,
+        sess: &'a mut Connection<S, Tcp>,
+    ) -> Self {
         OtherSession {
             sess,
             input,
@@ -1833,13 +1834,21 @@ impl<'a, C: DerefMut<Target = Connection<S, Tcp>>, S: SideData> OtherSession<'a,
         }
     }
 
-    pub fn new_buffered(input: &'a mut VecInput, output: &'a mut Vec<u8>, sess: &'a mut C) -> Self {
+    pub fn new_buffered(
+        input: &'a mut VecInput,
+        output: &'a mut Vec<u8>,
+        sess: &'a mut Connection<S, Tcp>,
+    ) -> Self {
         let mut os = OtherSession::new(input, output, sess);
         os.buffered = true;
         os
     }
 
-    pub fn new_fails(input: &'a mut VecInput, output: &'a mut Vec<u8>, sess: &'a mut C) -> Self {
+    pub fn new_fails(
+        input: &'a mut VecInput,
+        output: &'a mut Vec<u8>,
+        sess: &'a mut Connection<S, Tcp>,
+    ) -> Self {
         let mut os = OtherSession::new(input, output, sess);
         os.fail_ok = true;
         os
@@ -1922,7 +1931,7 @@ impl<'a, C: DerefMut<Target = Connection<S, Tcp>>, S: SideData> OtherSession<'a,
     }
 }
 
-impl<C: DerefMut<Target = Connection<S, Tcp>>, S: SideData> io::Read for OtherSession<'_, C, S> {
+impl<S: SideData> io::Read for OtherSession<'_, S> {
     fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
         self.reads += 1;
         let n = Ord::min(b.len(), self.output.len());
@@ -1932,7 +1941,7 @@ impl<C: DerefMut<Target = Connection<S, Tcp>>, S: SideData> io::Read for OtherSe
     }
 }
 
-impl<C: DerefMut<Target = Connection<S, Tcp>>, S: SideData> io::Write for OtherSession<'_, C, S> {
+impl<S: SideData> io::Write for OtherSession<'_, S> {
     fn write(&mut self, b: &[u8]) -> io::Result<usize> {
         self.write_vectored(&[io::IoSlice::new(b)])
     }

@@ -1,6 +1,4 @@
 use alloc::vec::Vec;
-use core::fmt;
-use core::ops::{Deref, DerefMut};
 
 use pki_types::ServerName;
 
@@ -25,15 +23,7 @@ use crate::sync::Arc;
 use crate::tracing::trace;
 use crate::verify::ServerIdentity;
 
-/// This represents a single TLS client connection.
-///
-/// Encrypt data destined for the peer using [`Connection::write()`].
-/// Process received data from the peer using [`Connection::read_tls()`].
-pub struct ClientConnection {
-    inner: Connection<ClientSide, Tcp>,
-}
-
-impl ClientConnection {
+impl Connection<ClientSide, Tcp> {
     /// Allows writing TLS1.3 0RTT/"early" data.
     ///
     /// This returns None in many circumstances when the capability to
@@ -52,46 +42,17 @@ impl ClientConnection {
     /// in this case the data is lost but the connection continues.  You
     /// can tell this happened using [`ClientSide::is_early_data_accepted()`].
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
-        let Connection { side, common, .. } = &mut self.inner;
+        let Self { side, common, .. } = self;
         WriteEarlyData::new(&mut side.early_data, common)
-    }
-
-    /// Temporary hack to allow access to methods that take [`Connection`] ownership.
-    pub fn into_inner(self) -> Connection<ClientSide, Tcp> {
-        self.inner
     }
 
     /// Returns the number of TLS1.3 tickets that have been received.
     pub fn tls13_tickets_received(&self) -> u32 {
-        self.inner
-            .common
-            .recv
-            .tls13_tickets_received
+        self.common.recv.tls13_tickets_received
     }
 }
 
-impl Deref for ClientConnection {
-    type Target = Connection<ClientSide, Tcp>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for ClientConnection {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-impl fmt::Debug for ClientConnection {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ClientConnection")
-            .finish_non_exhaustive()
-    }
-}
-
-/// Builder for [`ClientConnection`] values.
+/// Builder for client [`Connection`] values.
 ///
 /// Create one with [`ClientConfig::connect()`].
 pub struct ClientConnectionBuilder {
@@ -107,8 +68,8 @@ impl ClientConnectionBuilder {
         self
     }
 
-    /// Finalize the builder and create the `ClientConnection`.
-    pub fn build(self, tls: &mut Vec<u8>) -> Result<ClientConnection, Error> {
+    /// Finalize the builder and create the [`Connection`].
+    pub fn build(self, tls: &mut Vec<u8>) -> Result<Connection<ClientSide, Tcp>, Error> {
         let Self {
             config,
             name,
@@ -116,18 +77,16 @@ impl ClientConnectionBuilder {
         } = self;
 
         let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
-        Ok(ClientConnection {
-            inner: Connection::for_client(
-                config,
-                name,
-                ClientExtensionsInput::from_alpn(alpn_protocols),
-                Tcp,
-                tls,
-            )?,
-        })
+        Connection::for_client(
+            config,
+            name,
+            ClientExtensionsInput::from_alpn(alpn_protocols),
+            Tcp,
+            tls,
+        )
     }
 
-    /// Finalize the builder and create a QUIC `ClientConnection`.
+    /// Finalize the builder and create a [`QuicClientConnection`].
     ///
     /// This differs from `ClientConnectionBuilder::build()` in that it takes an extra `params`
     /// argument, which contains the TLS-encoded transport parameters to send, and an extra
@@ -328,24 +287,29 @@ impl<T: Transport> Connection<ClientSide, T> {
         mut transport: T,
         tls: &mut Vec<u8>,
     ) -> Result<Self, Error> {
-        let mut common_state = CommonState::new(Side::Client, config.fips());
-        common_state
+        let mut common = CommonState::new(Side::Client, config.fips());
+        common
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
-        let mut data = ClientSide::default();
+        let mut side = ClientSide::default();
 
         let protocol = transport.protocol();
         let mut output = SideCommonOutput {
-            side: &mut data,
+            side: &mut side,
             quic: transport.quic(),
-            common: &mut common_state,
+            common: &mut common,
             tls,
         };
 
         let input = ClientHelloInput::new(name, &extra_exts, protocol, &mut output, config)?;
         let state = input.start_handshake(extra_exts, &mut output)?;
 
-        Ok(Self::new(state, data, transport, common_state))
+        Ok(Self {
+            state: Ok(state),
+            side,
+            common,
+            transport,
+        })
     }
 }
 

@@ -366,7 +366,7 @@ pub(crate) mod transport {
     use std::io::Cursor;
 
     use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-    use rustls::{ClientConnection, Connection, ServerConnection, SideData, Tcp, VecInput};
+    use rustls::{ClientSide, Connection, ServerSide, SideData, Tcp, VecInput};
 
     use super::async_io::{AsyncRead, AsyncWrite};
 
@@ -444,7 +444,7 @@ pub(crate) mod transport {
     pub(crate) async fn read_plaintext_to_end_bounded(
         input: &mut VecInput,
         output: &mut Vec<u8>,
-        client: &mut ClientConnection,
+        client: &mut Connection<ClientSide, Tcp>,
         reader: &mut dyn AsyncRead,
     ) -> anyhow::Result<usize> {
         let mut chunk_buf = [0u8; 262_144];
@@ -495,7 +495,7 @@ pub(crate) mod transport {
 
     /// Writes a plaintext of size `plaintext_size`, using a bounded amount of memory
     pub(crate) async fn write_all_plaintext_bounded(
-        server: &mut ServerConnection,
+        server: &mut Connection<ServerSide, Tcp>,
         output: &mut Vec<u8>,
         writer: &mut dyn AsyncWrite,
         plaintext_size: usize,

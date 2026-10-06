@@ -8,7 +8,7 @@ use openssl::ssl::{SslAcceptor, SslConnector, SslFiletype, SslMethod};
 use rustls::crypto::{CryptoProvider, Identity};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
-use rustls::{ClientConfig, RootCertStore, ServerConfig, ServerConnection, VecInput};
+use rustls::{ClientConfig, Connection, RootCertStore, ServerConfig, VecInput};
 use rustls_aws_lc_rs as provider;
 use rustls_util::complete_io;
 
@@ -37,7 +37,7 @@ fn test_rustls_server_with_ffdhe_kx(provider: CryptoProvider, iters: usize) {
         let config = Arc::new(server_config_with_ffdhe_kx(provider));
         let mut received_plaintext = Vec::new();
         for _ in 0..iters {
-            let mut server = ServerConnection::new(config.clone()).unwrap();
+            let mut server = Connection::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
             let mut input = VecInput::default();
             let mut output = Vec::new();

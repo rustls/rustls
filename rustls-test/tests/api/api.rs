@@ -25,8 +25,8 @@ use rustls::server::{
     ClientHello, ParsedCertificate, PreferServerOrder, ServerCredentialResolver, ServerHandshake,
 };
 use rustls::{
-    ClientConfig, ClientConnection, HandshakeKind, KeyingMaterialExporter, ServerConfig,
-    ServerConnection, SliceInput, SupportedCipherSuite, VecInput,
+    ClientConfig, ClientSide, Connection, HandshakeKind, KeyingMaterialExporter, ServerConfig,
+    ServerSide, SliceInput, SupportedCipherSuite, Tcp, VecInput,
 };
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls_test::{
@@ -159,7 +159,7 @@ fn connection_level_alpn_protocols() {
         .connect(server_name("localhost"))
         .build(&mut client_output)
         .unwrap();
-    let mut server = ServerConnection::new(server_config.clone()).unwrap();
+    let mut server = Connection::new(server_config.clone()).unwrap();
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     let mut server_output = Vec::new();
@@ -181,7 +181,7 @@ fn connection_level_alpn_protocols() {
         .with_alpn(vec![ApplicationProtocol::Http11])
         .build(&mut client_output)
         .unwrap();
-    let mut server = ServerConnection::new(server_config).unwrap();
+    let mut server = Connection::new(server_config).unwrap();
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     let mut server_output = Vec::new();
@@ -1005,7 +1005,7 @@ fn server_exposes_offered_sni() {
             .build(&mut client_output)
             .unwrap();
 
-        let mut server = ServerConnection::new(server_config).unwrap();
+        let mut server = Connection::new(server_config).unwrap();
         assert_eq!(None, server.side().server_name());
 
         let mut client_input = VecInput::default();
@@ -1036,7 +1036,7 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
             .build(&mut client_output)
             .unwrap();
 
-        let mut server = ServerConnection::new(server_config).unwrap();
+        let mut server = Connection::new(server_config).unwrap();
 
         assert_eq!(None, server.side().server_name());
         let mut client_input = VecInput::default();
@@ -1530,8 +1530,8 @@ fn assert_lt(left: usize, right: usize) {
 #[test]
 fn connection_types_are_not_huge() {
     // Arbitrary sizes
-    assert_lt(size_of::<ServerConnection>(), 1600);
-    assert_lt(size_of::<ClientConnection>(), 1600);
+    assert_lt(size_of::<Connection<ServerSide, Tcp>>(), 1600);
+    assert_lt(size_of::<Connection<ClientSide, Tcp>>(), 1600);
 }
 
 #[test]
@@ -1733,7 +1733,7 @@ fn test_client_construction_requires_66_bytes_of_random_material() {
     Arc::new(client_config)
         .connect(server_name("localhost"))
         .build(&mut Vec::new())
-        .expect("check how much random material ClientConnection::new consumes");
+        .expect("check how much random material Connection<ClientSide, Tcp>::new consumes");
 }
 
 #[test]
@@ -1955,7 +1955,7 @@ fn test_client_sends_no_application_data_after_ech_rejection() {
         .connect(server_name("private.example"))
         .build(&mut client_output)
         .unwrap();
-    let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+    let mut server = Connection::new(Arc::new(server_config)).unwrap();
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -2483,7 +2483,7 @@ fn server_invalid_sni_policy() {
             .connect(server_name(SERVER_NAME_GOOD))
             .build(&mut client_output)
             .unwrap();
-        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+        let mut server = Connection::new(Arc::new(server_config)).unwrap();
         let mut server_input = VecInput::default();
         let mut server_output = Vec::new();
 

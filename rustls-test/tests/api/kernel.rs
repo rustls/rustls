@@ -198,13 +198,11 @@ fn kernel_pair(
 
     (
         client
-            .into_inner()
             .split()
             .unwrap()
             .dangerous_into_kernel_connection()
             .unwrap(),
         server
-            .into_inner()
             .split()
             .unwrap()
             .dangerous_into_kernel_connection()

@@ -13,7 +13,7 @@ use rustls::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use rustls::error::{CertificateError, Error, PeerMisbehaved};
 use rustls::server::{ClientHello, ServerCredentialResolver, ServerNameResolver};
 use rustls::{
-    ClientConfig, DistinguishedName, ServerConfig, ServerConnection, SupportedCipherSuite, VecInput,
+    ClientConfig, Connection, DistinguishedName, ServerConfig, SupportedCipherSuite, VecInput,
 };
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, MultiTest, ServerCheckCertResolve,
@@ -43,7 +43,7 @@ fn server_cert_resolve_with_sni() {
             .connect(server_name("the.value.from.sni"))
             .build(&mut client_output)
             .unwrap();
-        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+        let mut server = Connection::new(Arc::new(server_config)).unwrap();
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
 
@@ -85,7 +85,7 @@ fn server_cert_resolve_with_alpn() {
             .build(&mut client_output)
             .unwrap();
 
-        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+        let mut server = Connection::new(Arc::new(server_config)).unwrap();
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let err = do_handshake_until_error(
@@ -160,7 +160,7 @@ fn client_trims_terminating_dot() {
             .connect(server_name("some-host.com."))
             .build(&mut client_output)
             .unwrap();
-        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+        let mut server = Connection::new(Arc::new(server_config)).unwrap();
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
 
@@ -203,7 +203,7 @@ fn check_sigalgs_reduced_by_ciphersuite(
         .connect(server_name("localhost"))
         .build(&mut client_output)
         .unwrap();
-    let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+    let mut server = Connection::new(Arc::new(server_config)).unwrap();
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -294,7 +294,7 @@ fn client_with_sni_disabled_does_not_send_sni() {
             .build(&mut client_output)
             .unwrap();
 
-        let mut server = ServerConnection::new(server_config).unwrap();
+        let mut server = Connection::new(server_config).unwrap();
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let err = do_handshake_until_error(
@@ -518,7 +518,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
         server_config.cert_resolver = resolver.clone();
         let server_config = Arc::new(server_config);
 
-        let mut server = ServerConnection::new(server_config).unwrap();
+        let mut server = Connection::new(server_config).unwrap();
         let mut client_output = Vec::new();
         let mut server_output = Vec::new();
         let _client = client_config
@@ -560,7 +560,7 @@ fn sni_resolver_works() {
     server_config.cert_resolver = Arc::new(resolver);
     let server_config = Arc::new(server_config);
 
-    let mut server1 = ServerConnection::new(server_config.clone()).unwrap();
+    let mut server1 = Connection::new(server_config.clone()).unwrap();
     let mut client_output = Vec::new();
     let mut server_output = Vec::new();
     let mut client1 = Arc::new(make_client_config(kt, &provider))
@@ -579,7 +579,7 @@ fn sni_resolver_works() {
     );
     assert_eq!(err, Ok(()));
 
-    let mut server2 = ServerConnection::new(server_config).unwrap();
+    let mut server2 = Connection::new(server_config).unwrap();
     let mut client_output = Vec::new();
     let mut server_output = Vec::new();
     let mut client2 = Arc::new(make_client_config(kt, &provider))
@@ -646,7 +646,7 @@ fn sni_resolver_lower_cases_configured_names() {
     server_config.cert_resolver = Arc::new(resolver);
     let server_config = Arc::new(server_config);
 
-    let mut server1 = ServerConnection::new(server_config).unwrap();
+    let mut server1 = Connection::new(server_config).unwrap();
     let mut client_output = Vec::new();
     let mut server_output = Vec::new();
     let mut client1 = Arc::new(make_client_config(kt, &provider))
@@ -686,7 +686,7 @@ fn sni_resolver_lower_cases_queried_names() {
     server_config.cert_resolver = Arc::new(resolver);
     let server_config = Arc::new(server_config);
 
-    let mut server1 = ServerConnection::new(server_config).unwrap();
+    let mut server1 = Connection::new(server_config).unwrap();
     let mut client_output = Vec::new();
     let mut server_output = Vec::new();
     let mut client1 = Arc::new(make_client_config(kt, &provider))

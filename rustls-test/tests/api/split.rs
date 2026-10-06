@@ -36,7 +36,7 @@ fn split_pairwise() {
         &mut server,
     );
 
-    let client_split = client.into_inner().split().unwrap();
+    let client_split = client.split().unwrap();
     println!("{client_split:?}");
 
     let SplitConnection {
@@ -50,7 +50,7 @@ fn split_pairwise() {
         receive: mut server_recv,
         outputs: mut server_outputs,
         side_outputs: server_side_outputs,
-    } = server.into_inner().split().unwrap();
+    } = server.split().unwrap();
 
     println!("{client_side_outputs:?}");
     println!("{server_side_outputs:?}");
@@ -170,7 +170,7 @@ fn split_sender_refuses_data_after_close_notify() {
     let SplitConnection {
         send: mut client_send,
         ..
-    } = client.into_inner().split().unwrap();
+    } = client.split().unwrap();
 
     let mut flight = Vec::new();
     assert_eq!(
@@ -209,13 +209,13 @@ fn split_incremental() {
         receive: _,
         outputs: _,
         side_outputs: _,
-    } = client.into_inner().split().unwrap();
+    } = client.split().unwrap();
     let SplitConnection {
         send: _,
         receive: mut server_recv,
         outputs: _,
         side_outputs: _,
-    } = server.into_inner().split().unwrap();
+    } = server.split().unwrap();
 
     let mut flight = Vec::new();
     client_send
@@ -259,7 +259,6 @@ fn split_client_tickets_received() {
 
     assert_eq!(
         client
-            .into_inner()
             .split()
             .unwrap()
             .receive
@@ -277,11 +276,11 @@ fn split_fails_during_handshake() {
         &mut client_output,
     );
     assert_eq!(
-        client.into_inner().split().err(),
+        client.split().err(),
         Some(Error::ApiMisuse(ApiMisuse::SplitDuringHandshake))
     );
     assert_eq!(
-        server.into_inner().split().err(),
+        server.split().err(),
         Some(Error::ApiMisuse(ApiMisuse::SplitDuringHandshake))
     );
 }
@@ -309,12 +308,12 @@ fn key_update() {
         send: mut client_send,
         receive: client_recv,
         ..
-    } = client.into_inner().split().unwrap();
+    } = client.split().unwrap();
     let SplitConnection {
         send: mut server_send,
         receive: mut server_recv,
         ..
-    } = server.into_inner().split().unwrap();
+    } = server.split().unwrap();
 
     let mut flight = Vec::new();
     client_send
@@ -378,11 +377,11 @@ fn key_update_alongside_data() {
     let SplitConnection {
         send: mut client_send,
         ..
-    } = client.into_inner().split().unwrap();
+    } = client.split().unwrap();
     let SplitConnection {
         receive: server_recv,
         ..
-    } = server.into_inner().split().unwrap();
+    } = server.split().unwrap();
 
     // arrange a flight that contains a key-update followed by application data.
     // both the application data and `FlushSender` should be emitted.
@@ -427,11 +426,11 @@ fn close_alongside_data() {
     let SplitConnection {
         send: mut client_send,
         ..
-    } = client.into_inner().split().unwrap();
+    } = client.split().unwrap();
     let SplitConnection {
         receive: server_recv,
         ..
-    } = server.into_inner().split().unwrap();
+    } = server.split().unwrap();
 
     let mut flight = Vec::new();
     client_send
@@ -472,7 +471,7 @@ fn read_invalid_data_and_send_alert() {
         &mut server,
     );
 
-    let SplitConnection { send, receive, .. } = client.into_inner().split().unwrap();
+    let SplitConnection { send, receive, .. } = client.split().unwrap();
 
     let err = receive
         .read(&mut SliceInput::new(&mut [0u8; 5]))
@@ -560,13 +559,13 @@ fn split_server_with_queued_key_update() -> SplitConnection<ServerSide> {
     let SplitConnection {
         send: mut client_send,
         ..
-    } = client.into_inner().split().unwrap();
+    } = client.split().unwrap();
     let SplitConnection {
         send: server_send,
         receive: server_recv,
         outputs: server_outputs,
         side_outputs,
-    } = server.into_inner().split().unwrap();
+    } = server.split().unwrap();
 
     let mut flight = Vec::new();
     client_send
