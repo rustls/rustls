@@ -4,7 +4,7 @@ use std::io::{BufRead, Error, ErrorKind, IoSlice, Read, Result, Write};
 use rustls::crypto::cipher::OutboundPlain;
 use rustls::{Connection, TlsInputBuffer, VecInput};
 
-use crate::complete_io;
+use crate::{complete_io, write_and_drain};
 
 /// This type implements `io::Read` and `io::Write`, encapsulating
 /// a Connection `C` and an underlying transport `T`, such as a socket.
@@ -251,7 +251,22 @@ where
     }
 
     fn flush(&mut self) -> Result<()> {
-        self.complete_prior_io()
+        self.complete_prior_io()?;
+
+        // `complete_prior_io()` may return after making only partial progress, so
+        // keep writing until all TLS output has been handed to the transport.
+        while !self.output.is_empty() {
+            match write_and_drain(self.sock, self.output) {
+                Ok(0) => return Err(ErrorKind::WriteZero.into()),
+                Ok(_) => {}
+                Err(err) if err.kind() == ErrorKind::Interrupted => {}
+                Err(err) => return Err(err),
+            }
+        }
+
+        // Always flush the transport, even if we had no TLS output: an earlier
+        // flush (for example, from within `write()`) may have failed.
+        self.sock.flush()
     }
 }
 

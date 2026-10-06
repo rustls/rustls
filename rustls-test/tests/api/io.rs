@@ -1507,6 +1507,136 @@ fn stream_write_vectored_respects_output_limit() {
 }
 
 #[test]
+fn stream_flush_would_block_with_pending_output() {
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair(
+        KeyType::default(),
+        &provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+
+    client
+        .write(b"hello".into(), &mut client_output)
+        .unwrap();
+    let pending = client_output.len();
+
+    // the transport accepts a single byte, then blocks
+    let mut pipe = TestNonBlockIo {
+        writes: vec![1],
+        reads: vec![],
+    };
+    let mut received_plaintext = Vec::new();
+    let mut client_stream = Stream::new(
+        &mut client_input,
+        &mut received_plaintext,
+        &mut client_output,
+        &mut client,
+        &mut pipe,
+    );
+
+    assert_eq!(
+        client_stream
+            .flush()
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::WouldBlock
+    );
+    assert_eq!(client_stream.output.len(), pending - 1);
+
+    client_stream
+        .sock
+        .writes
+        .push(usize::MAX);
+    client_stream.flush().unwrap();
+    assert!(client_stream.output.is_empty());
+}
+
+#[test]
+fn stream_flush_retries_failed_transport_flush() {
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair(
+        KeyType::default(),
+        &provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+
+    let mut pipe = FailsFirstFlush::default();
+    let mut received_plaintext = Vec::new();
+    let mut client_stream = Stream::new(
+        &mut client_input,
+        &mut received_plaintext,
+        &mut client_output,
+        &mut client,
+        &mut pipe,
+    );
+
+    // `write()` hands all TLS output to the transport, but ignores its flush failure
+    assert_eq!(client_stream.write(b"hello").unwrap(), 5);
+    assert!(client_stream.output.is_empty());
+    assert!(!client_stream.sock.buffered.is_empty());
+
+    client_stream.flush().unwrap();
+    assert!(client_stream.sock.buffered.is_empty());
+
+    transfer(&mut pipe.flushed, &mut server_input);
+    let iter = server.read_tls(&mut server_input, &mut server_output);
+    check_iter(iter, b"hello");
+}
+
+/// A buffering transport whose first `flush()` fails
+#[derive(Default)]
+struct FailsFirstFlush {
+    buffered: Vec<u8>,
+    flushed: Vec<u8>,
+    failed: bool,
+}
+
+impl Read for FailsFirstFlush {
+    fn read(&mut self, _b: &mut [u8]) -> io::Result<usize> {
+        Err(io::ErrorKind::WouldBlock.into())
+    }
+}
+
+impl Write for FailsFirstFlush {
+    fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+        self.buffered.extend_from_slice(b);
+        Ok(b.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if !self.failed {
+            self.failed = true;
+            return Err(io::ErrorKind::Interrupted.into());
+        }
+
+        self.flushed.append(&mut self.buffered);
+        Ok(())
+    }
+}
+
+#[test]
 fn client_stream_handshake_error() {
     let (client_config, server_config) = make_disjoint_suite_configs(provider::DEFAULT_PROVIDER);
     let mut client_output = Vec::new();
