@@ -52,6 +52,11 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
     /// keys to encrypt application data) or if the send path has been closed by sending a
     /// `close_notify` alert.
     ///
+    /// For TLS 1.2, this also fails with [`Error::EncryptError`] if encrypting `plaintext` would
+    /// exceed the negotiated cipher suite's
+    /// [`confidentiality_limit`][crate::crypto::CipherSuiteCommon::confidentiality_limit]. In that
+    /// case, none of `plaintext` is sent; a `close_notify` alert is appended to `tls` instead.
+    ///
     /// If the connection previously encountered a fatal error (for example, while processing
     /// received data in [`Self::read_tls()`]), this returns that error, even if `plaintext`
     /// is empty.
