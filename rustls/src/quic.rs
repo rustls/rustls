@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::ops::Deref;
+use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
 
 use pki_types::FipsStatus;
@@ -24,37 +24,6 @@ use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
 };
-
-/// A QUIC client or server connection.
-pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
-    /// Return the TLS-encoded transport parameters for the session's peer.
-    ///
-    /// While the transport parameters are technically available prior to the
-    /// completion of the handshake, they cannot be fully trusted until the
-    /// handshake completes, and reliance on them should be minimized.
-    /// However, any tampering with the parameters will cause the handshake
-    /// to fail.
-    fn quic_transport_parameters(&self) -> Option<&[u8]>;
-
-    /// Compute the keys for encrypting/decrypting 0-RTT packets, if available
-    fn zero_rtt_keys(&self) -> Option<DirectionalKeys>;
-
-    /// Consume unencrypted TLS handshake data.
-    ///
-    /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
-    ///
-    /// How much of the `input` buffer is consumed is recorded by a call to
-    /// [`TlsInputBuffer::discard()`].  Unconsumed data should be presented again on the next call.
-    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error>;
-
-    /// Obtain pending events that the caller should process.
-    ///
-    /// All pending events are returned as an iterator.
-    fn events(&mut self) -> impl Iterator<Item = QuicEvent>;
-
-    /// Returns true if the connection is currently performing the TLS handshake.
-    fn is_handshaking(&self) -> bool;
-}
 
 /// A QUIC client connection.
 pub struct ClientConnection {
@@ -86,37 +55,17 @@ impl ClientConnection {
     }
 }
 
-impl Connection for ClientConnection {
-    fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.inner
-            .transport
-            .transport_parameters()
-    }
-
-    fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
-        self.inner
-            .transport
-            .zero_rtt_keys(&self.inner)
-    }
-
-    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
-        self.inner.read_hs(input)
-    }
-
-    fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
-        self.inner.events()
-    }
-
-    fn is_handshaking(&self) -> bool {
-        self.inner.is_handshaking()
-    }
-}
-
 impl Deref for ClientConnection {
-    type Target = ConnectionOutputs;
+    type Target = ConnectionCommon<ClientSide, Quic>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl DerefMut for ClientConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
@@ -199,37 +148,17 @@ impl ServerConnection {
     }
 }
 
-impl Connection for ServerConnection {
-    fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.inner
-            .transport
-            .transport_parameters()
-    }
-
-    fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
-        self.inner
-            .transport
-            .zero_rtt_keys(&self.inner)
-    }
-
-    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
-        self.inner.read_hs(input)
-    }
-
-    fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
-        self.inner.events()
-    }
-
-    fn is_handshaking(&self) -> bool {
-        self.inner.is_handshaking()
-    }
-}
-
 impl Deref for ServerConnection {
-    type Target = ConnectionOutputs;
+    type Target = ConnectionCommon<ServerSide, Quic>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl DerefMut for ServerConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
@@ -411,7 +340,13 @@ pub enum QuicEvent {
 }
 
 impl<Side: SideData> ConnectionCommon<Side, Quic> {
-    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
+    /// Consume unencrypted TLS handshake data.
+    ///
+    /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
+    ///
+    /// How much of the `input` buffer is consumed is recorded by a call to
+    /// [`TlsInputBuffer::discard()`].  Unconsumed data should be presented again on the next call.
+    pub fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
         self.common
             .recv
             .deframer
@@ -429,8 +364,27 @@ impl<Side: SideData> ConnectionCommon<Side, Quic> {
         result
     }
 
-    fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
+    /// Obtain pending events that the caller should process.
+    ///
+    /// All pending events are returned as an iterator.
+    pub fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
         self.transport.events()
+    }
+
+    /// Compute the keys for encrypting/decrypting 0-RTT packets, if available
+    pub fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
+        self.transport.zero_rtt_keys(self)
+    }
+
+    /// Return the TLS-encoded transport parameters for the session's peer.
+    ///
+    /// While the transport parameters are technically available prior to the
+    /// completion of the handshake, they cannot be fully trusted until the
+    /// handshake completes, and reliance on them should be minimized.
+    /// However, any tampering with the parameters will cause the handshake
+    /// to fail.
+    pub fn quic_transport_parameters(&self) -> Option<&[u8]> {
+        self.transport.transport_parameters()
     }
 }
 
@@ -997,10 +951,10 @@ impl Keys {
 /// QUIC uses 4 different sets of keys (and progressive key updates for long-running connections):
 ///
 /// * Initial: these can be created from [`Keys::initial()`]
-/// * 0-RTT keys: can be retrieved from [`Connection::zero_rtt_keys()`]
-/// * Handshake: these are returned from [`Connection::events()`] after `ClientHello` and
+/// * 0-RTT keys: can be retrieved from [`ConnectionCommon::zero_rtt_keys()`]
+/// * Handshake: these are returned from [`ConnectionCommon::events()`] after `ClientHello` and
 ///   `ServerHello` messages have been exchanged
-/// * 1-RTT keys: these are returned from [`Connection::events()`] after the handshake is done
+/// * 1-RTT keys: these are returned from [`ConnectionCommon::events()`] after the handshake is done
 ///
 /// Once the 1-RTT keys have been exchanged, either side may initiate a key update. Progressive
 /// update keys can be obtained from the [`Secrets`] returned in [`KeyChange::OneRtt`]. Note that
