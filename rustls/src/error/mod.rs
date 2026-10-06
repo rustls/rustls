@@ -1564,11 +1564,11 @@ pub enum ApiMisuse {
 
     /// The [`KeyingMaterialExporter`][] was already consumed or is not yet available.
     ///
-    /// Methods that obtain an exporter (eg, [`ConnectionCommon::exporter()`][]) can only
+    /// Methods that obtain an exporter (eg, [`Connection::exporter()`][]) can only
     /// be used once.  This error is returned on subsequent calls.
     ///
     /// [`KeyingMaterialExporter`]: crate::KeyingMaterialExporter
-    /// [`ConnectionCommon::exporter()`]: crate::ConnectionCommon::exporter()
+    /// [`Connection::exporter()`]: crate::Connection::exporter()
     ExporterNotAvailable,
 
     /// The `context` parameter to [`KeyingMaterialExporter::derive()`][] was too long.
@@ -1640,7 +1640,7 @@ pub enum ApiMisuse {
 
     /// Secret extraction operation attempted without opting-in to secret extraction.
     ///
-    /// This is possible from [`ConnectionCommon::dangerous_extract_secrets()`][crate::ConnectionCommon::dangerous_extract_secrets].
+    /// This is possible from [`Connection::dangerous_extract_secrets()`][crate::Connection::dangerous_extract_secrets].
     ///
     /// You must set [`ServerConfig::enable_secret_extraction`][crate::server::ServerConfig::enable_secret_extraction] or
     /// [`ClientConfig::enable_secret_extraction`][crate::client::ClientConfig::enable_secret_extraction] to true before this
@@ -1697,7 +1697,7 @@ pub enum ApiMisuse {
     /// [`KernelConnection::handle_new_session_ticket()`]: crate::conn::kernel::KernelConnection::handle_new_session_ticket()
     KernelSessionTicketHandlingNotAvailableForTls12,
 
-    /// [`ConnectionCommon::split()`][crate::ConnectionCommon::split()] called during handshake.
+    /// [`Connection::split()`][crate::Connection::split()] called during handshake.
     SplitDuringHandshake,
 
     /// An output buffer provided for encryption was too small.

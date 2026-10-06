@@ -17,7 +17,7 @@ use rustls::crypto::{CipherSuite, CryptoProvider, Identity};
 use rustls::enums::ProtocolVersion;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
-    ClientConfig, ClientConnection, ConnectionCommon, HandshakeKind, RootCertStore, ServerConfig,
+    ClientConfig, ClientConnection, Connection, HandshakeKind, RootCertStore, ServerConfig,
     ServerConnection, SideData, Tcp, VecInput,
 };
 use rustls_test::KeyType;
@@ -1041,7 +1041,7 @@ fn transfer(
     left_buffers: &mut TempBuffers,
     right_input: &mut VecInput,
     right_buffers: &mut TempBuffers,
-    right: &mut ConnectionCommon<impl SideData, Tcp>,
+    right: &mut Connection<impl SideData, Tcp>,
     expect_data: Option<usize>,
 ) -> f64 {
     let mut read_time = 0f64;

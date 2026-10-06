@@ -10,7 +10,7 @@ use crate::client::ClientSide;
 use crate::common_state::UnborrowedPayload;
 use crate::conn::kernel::KernelConnection;
 use crate::conn::{
-    ConnectionCommon, DataKind, MessageIter, MessageIterMode, ReceivePath, SendOutput, SendPath,
+    Connection, DataKind, MessageIter, MessageIterMode, ReceivePath, SendOutput, SendPath,
     TlsInputBuffer,
 };
 use crate::crypto::cipher::{OutboundPlain, RecordEncrypter};
@@ -88,7 +88,7 @@ impl<Side: SideData> SplitConnection<Side> {
             return Err(ApiMisuse::KernelConnectionWithPendingSendData.into());
         }
 
-        ConnectionCommon::<Side, Tcp>::from_parts_into_kernel_connection(
+        Connection::<Side, Tcp>::from_parts_into_kernel_connection(
             &mut send.send,
             recv,
             outputs,
@@ -97,10 +97,10 @@ impl<Side: SideData> SplitConnection<Side> {
     }
 }
 
-impl<Side: SideData> TryFrom<ConnectionCommon<Side, Tcp>> for SplitConnection<Side> {
+impl<Side: SideData> TryFrom<Connection<Side, Tcp>> for SplitConnection<Side> {
     type Error = Error;
 
-    fn try_from(conn: ConnectionCommon<Side, Tcp>) -> Result<Self, Error> {
+    fn try_from(conn: Connection<Side, Tcp>) -> Result<Self, Error> {
         // `SplitConnection` cannot be used to progress a handshake.
         if conn.is_handshaking() {
             return Err(ApiMisuse::SplitDuringHandshake.into());
@@ -140,7 +140,7 @@ impl SendTraffic {
     /// When you need to handle a [`ReceiveTrafficState::FlushSender`] state, you can call this
     /// method with [`OutboundPlain::new_empty()`] to flush any pending TLS data to the peer.
     ///
-    /// See [`ConnectionCommon::write()`][crate::ConnectionCommon::write] for the conditions under which
+    /// See [`Connection::write()`][crate::Connection::write] for the conditions under which
     /// this fails.
     pub fn write(
         &mut self,

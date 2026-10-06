@@ -8,7 +8,7 @@ use std::io::{self, Read};
 use super::private::SideOutput;
 use super::send::{SendOutput, SendPath};
 use super::split::SendAdapter;
-use super::{ConnectionCommon, SEQ_SOFT_LIMIT, SideData, StateMachine, Transport};
+use super::{Connection, SEQ_SOFT_LIMIT, SideData, StateMachine, Transport};
 use crate::common_state::{
     ConnectionOutput, Event, Output, OutputEvent, Side, UnborrowedPayload, maybe_send_fatal_alert,
 };
@@ -35,7 +35,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
     pub(crate) fn new<T: Transport>(
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
-        conn: &'a mut ConnectionCommon<Side, T>,
+        conn: &'a mut Connection<Side, T>,
         mode: MessageIterMode,
     ) -> Self {
         Self {
@@ -954,7 +954,7 @@ impl VecInput {
     ///
     /// Once the buffer contains 64 kB of data, we will not read any more bytes until some
     /// are consumed by reading from the buffer via
-    /// [`ConnectionCommon::read_tls()`][super::ConnectionCommon::read_tls()].
+    /// [`Connection::read_tls()`][super::Connection::read_tls()].
     pub fn read(&mut self, rd: &mut dyn Read) -> io::Result<usize> {
         if self.received_close_notify {
             return Ok(0);

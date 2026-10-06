@@ -11,7 +11,7 @@ use crate::common_state::{CommonState, EarlyDataEvent, Event, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    ClientNext, ConnectionCommon, DataKind, NeedsInput, SideCommonOutput, SideData, Tcp, Transport,
+    ClientNext, Connection, DataKind, NeedsInput, SideCommonOutput, SideData, Tcp, Transport,
     VerifyPeerIdentity,
 };
 #[cfg(doc)]
@@ -27,10 +27,10 @@ use crate::verify::ServerIdentity;
 
 /// This represents a single TLS client connection.
 ///
-/// Encrypt data destined for the peer using [`ConnectionCommon::write()`].
-/// Process received data from the peer using [`ConnectionCommon::read_tls()`].
+/// Encrypt data destined for the peer using [`Connection::write()`].
+/// Process received data from the peer using [`Connection::read_tls()`].
 pub struct ClientConnection {
-    inner: ConnectionCommon<ClientSide, Tcp>,
+    inner: Connection<ClientSide, Tcp>,
 }
 
 impl ClientConnection {
@@ -52,12 +52,12 @@ impl ClientConnection {
     /// in this case the data is lost but the connection continues.  You
     /// can tell this happened using [`ClientSide::is_early_data_accepted()`].
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
-        let ConnectionCommon { side, common, .. } = &mut self.inner;
+        let Connection { side, common, .. } = &mut self.inner;
         WriteEarlyData::new(&mut side.early_data, common)
     }
 
-    /// Temporary hack to allow access to methods that take [`ConnectionCommon`] ownership.
-    pub fn into_inner(self) -> ConnectionCommon<ClientSide, Tcp> {
+    /// Temporary hack to allow access to methods that take [`Connection`] ownership.
+    pub fn into_inner(self) -> Connection<ClientSide, Tcp> {
         self.inner
     }
 
@@ -71,7 +71,7 @@ impl ClientConnection {
 }
 
 impl Deref for ClientConnection {
-    type Target = ConnectionCommon<ClientSide, Tcp>;
+    type Target = Connection<ClientSide, Tcp>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -117,7 +117,7 @@ impl ClientConnectionBuilder {
 
         let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
         Ok(ClientConnection {
-            inner: ConnectionCommon::for_client(
+            inner: Connection::for_client(
                 config,
                 name,
                 ClientExtensionsInput::from_alpn(alpn_protocols),
@@ -171,7 +171,7 @@ impl ClientConnectionBuilder {
         };
 
         let mut tls = Vec::new();
-        let inner = ConnectionCommon::for_client(self.config, self.name, exts, quic, &mut tls)?;
+        let inner = Connection::for_client(self.config, self.name, exts, quic, &mut tls)?;
 
         // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
         debug_assert!(tls.is_empty());
@@ -196,7 +196,7 @@ impl ClientConnectionBuilder {
         } = self;
 
         let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
-        Ok(NeedsInput::new(ConnectionCommon::for_client(
+        Ok(NeedsInput::new(Connection::for_client(
             config,
             name,
             ClientExtensionsInput::from_alpn(alpn_protocols),
@@ -226,10 +226,10 @@ pub enum ClientHandshake {
     Complete(SplitConnection<ClientSide>),
 }
 
-impl TryFrom<ConnectionCommon<ClientSide, Tcp>> for ClientHandshake {
+impl TryFrom<Connection<ClientSide, Tcp>> for ClientHandshake {
     type Error = Error;
 
-    fn try_from(conn: ConnectionCommon<ClientSide, Tcp>) -> Result<Self, Error> {
+    fn try_from(conn: Connection<ClientSide, Tcp>) -> Result<Self, Error> {
         Ok(match ClientNext::try_from(conn)? {
             ClientNext::NeedsInput(conn) => Self::NeedsInput(NeedsInput(conn)),
 
@@ -260,7 +260,7 @@ impl NeedsInput<ClientSide> {
     /// in this case the data is lost but the connection continues.  You
     /// can tell this happened using [`ClientSide::is_early_data_accepted()`].
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
-        let ConnectionCommon { side, common, .. } = &mut self.0;
+        let Connection { side, common, .. } = &mut self.0;
         WriteEarlyData::new(&mut side.early_data, common)
     }
 }
@@ -320,7 +320,7 @@ impl<'a> WriteEarlyData<'a> {
     }
 }
 
-impl<T: Transport> ConnectionCommon<ClientSide, T> {
+impl<T: Transport> Connection<ClientSide, T> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
@@ -384,14 +384,12 @@ impl SideData for ClientSide {
 
     type PeerIdentity<'a> = ServerIdentity<'static, 'a>;
 
-    fn tcp_handshake_from_conn(
-        conn: ConnectionCommon<Self, Tcp>,
-    ) -> Result<Self::Handshake, Error> {
+    fn tcp_handshake_from_conn(conn: Connection<Self, Tcp>) -> Result<Self::Handshake, Error> {
         ClientHandshake::try_from(conn)
     }
 
     fn quic_handshake_from_conn(
-        _core: ConnectionCommon<Self, Quic>,
+        _core: Connection<Self, Quic>,
         _output: &mut Vec<quic::QuicEvent>,
     ) -> Result<Self::QuicHandshake, Error> {
         todo!("nyi")

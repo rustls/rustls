@@ -49,18 +49,18 @@ use split::SplitConnection;
 /// or [`ServerSide`]. While most of the API for a connection is shared between both types, some
 /// API is asymmetric, which is reflected by the type parameter. As such, some methods
 /// (including constructors) are specific on the `Side` type. See the implementations
-/// for [`ClientSide`](#impl-ConnectionCommon<ClientSide>) and [`ServerSide`](#impl-ConnectionCommon<ServerSide>) below.
+/// for [`ClientSide`](#impl-Connection<ClientSide>) and [`ServerSide`](#impl-Connection<ServerSide>) below.
 ///
 /// [`ClientSide`]: crate::client::ClientSide
 /// [`ServerSide`]: crate::server::ServerSide
-pub struct ConnectionCommon<Side: SideData, T: Transport> {
+pub struct Connection<Side: SideData, T: Transport> {
     pub(crate) state: Result<Side::State, Error>,
     pub(crate) side: Side,
     pub(crate) common: CommonState,
     pub(crate) transport: T,
 }
 
-impl<Side: SideData, T: Transport> ConnectionCommon<Side, T> {
+impl<Side: SideData, T: Transport> Connection<Side, T> {
     pub(crate) fn new(state: Side::State, side: Side, transport: T, common: CommonState) -> Self {
         Self {
             state: Ok(state),
@@ -122,7 +122,7 @@ impl<Side: SideData, T: Transport> ConnectionCommon<Side, T> {
     }
 }
 
-impl<Side: SideData> ConnectionCommon<Side, Tcp> {
+impl<Side: SideData> Connection<Side, Tcp> {
     /// Build a [`MessageHandler`] to process messages from the `input` buffer.
     ///
     /// Any data appended to `tls` should be sent to the peer.
@@ -207,8 +207,8 @@ impl<Side: SideData> ConnectionCommon<Side, Tcp> {
     ///
     /// This fails if:
     ///
-    /// - the handshake is not complete. Check with [`ConnectionCommon::is_handshaking()`].
-    /// - there is any buffered TLS data to send.  Obtain it first with [`ConnectionCommon::write()`].
+    /// - the handshake is not complete. Check with [`Connection::is_handshaking()`].
+    /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write()`].
     pub fn split(self) -> Result<SplitConnection<Side>, Error> {
         SplitConnection::try_from(self)
     }
@@ -284,7 +284,7 @@ impl<Side: SideData> ConnectionCommon<Side, Tcp> {
     }
 }
 
-impl<T: Transport> ConnectionCommon<ServerSide, T> {
+impl<T: Transport> Connection<ServerSide, T> {
     pub(crate) fn accepted(
         &mut self,
         choose: Box<ChooseConfig>,
@@ -309,7 +309,7 @@ impl<T: Transport> ConnectionCommon<ServerSide, T> {
     }
 }
 
-impl<S: SideData, T: Transport> fmt::Debug for ConnectionCommon<S, T> {
+impl<S: SideData, T: Transport> fmt::Debug for Connection<S, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self {
             state: _,
@@ -318,14 +318,14 @@ impl<S: SideData, T: Transport> fmt::Debug for ConnectionCommon<S, T> {
             transport: _,
         } = self;
 
-        f.debug_struct("ConnectionCommon")
+        f.debug_struct("Connection")
             .field("side", side)
             .field("common", common)
             .finish_non_exhaustive()
     }
 }
 
-impl<Side: SideData, T: Transport> Deref for ConnectionCommon<Side, T> {
+impl<Side: SideData, T: Transport> Deref for Connection<Side, T> {
     type Target = CommonState;
 
     fn deref(&self) -> &Self::Target {
@@ -350,7 +350,7 @@ impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
     pub(crate) fn new(
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
-        conn: &'a mut ConnectionCommon<Side, impl Transport>,
+        conn: &'a mut Connection<Side, impl Transport>,
     ) -> Self {
         Self {
             iter: MessageIter::new(input, tls, conn, MessageIterMode::All),
@@ -368,7 +368,7 @@ impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
     /// an error is received from this function, you should not continue to fill up the buffer.
     ///
     /// However, you may call the other methods on the connection, including
-    /// [`ConnectionCommon::send_close_notify()`]. Any alert produced by the error will have
+    /// [`Connection::send_close_notify()`]. Any alert produced by the error will have
     /// been appended to the `tls` buffer; most likely you will want to send that data
     /// to the peer and then close the underlying connection.
     pub fn handle_all(mut self, buf: &mut Vec<u8>) -> Result<IoState, Error> {
@@ -482,10 +482,10 @@ impl<S: SideData> fmt::Debug for MessageHandler<'_, '_, S> {
 /// More data needs to be supplied to make progress.
 ///
 /// Provide the data to [`Self::process()`].
-pub struct NeedsInput<Side: SideData>(pub(crate) ConnectionCommon<Side, Tcp>);
+pub struct NeedsInput<Side: SideData>(pub(crate) Connection<Side, Tcp>);
 
 impl<Side: SideData> NeedsInput<Side> {
-    pub(crate) fn new(inner: ConnectionCommon<Side, Tcp>) -> Self {
+    pub(crate) fn new(inner: Connection<Side, Tcp>) -> Self {
         Self(inner)
     }
 
@@ -732,12 +732,11 @@ pub trait SideData: SideOutput + fmt::Debug + private::Side + Sized {
     type PeerIdentity<'a>;
 
     #[doc(hidden)]
-    fn tcp_handshake_from_conn(conn: ConnectionCommon<Self, Tcp>)
-    -> Result<Self::Handshake, Error>;
+    fn tcp_handshake_from_conn(conn: Connection<Self, Tcp>) -> Result<Self::Handshake, Error>;
 
     #[doc(hidden)]
     fn quic_handshake_from_conn(
-        core: ConnectionCommon<Self, Quic>,
+        core: Connection<Self, Quic>,
         output: &mut Vec<QuicEvent>,
     ) -> Result<Self::QuicHandshake, Error>;
 }

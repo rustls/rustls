@@ -117,8 +117,8 @@
 //! In the _receive_ direction [`read_tls()`] takes received TLS data and yields application data.
 //! In the _send_ direction [`write()`] takes application data and yields TLS data to send.
 //!
-//! [`write()`]: ConnectionCommon::write
-//! [`read_tls()`]: ConnectionCommon::read_tls
+//! [`write()`]: Connection::write
+//! [`read_tls()`]: Connection::read_tls
 //!
 //! ```text
 //!          TLS                                   Plaintext
@@ -392,8 +392,8 @@ pub mod internal {
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
 pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind, Protocol};
 pub use crate::conn::{
-    ConnectionCommon, IoState, KeyingMaterialExporter, MessageHandler, NeedsInput, SideData,
-    SliceInput, Tcp, TlsInputBuffer, Transport, VecInput, VerifyPeerIdentity, kernel,
+    Connection, IoState, KeyingMaterialExporter, MessageHandler, NeedsInput, SideData, SliceInput,
+    Tcp, TlsInputBuffer, Transport, VecInput, VerifyPeerIdentity, kernel,
 };
 /// Types related to "split" mode.
 ///

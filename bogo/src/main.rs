@@ -30,8 +30,7 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use rustls::server::{ServerConfig, ServerConnection};
 use rustls::{
-    ConnectionCommon, HandshakeKind, IoState, RootCertStore, SideData, Tcp, TlsInputBuffer,
-    VecInput,
+    Connection, HandshakeKind, IoState, RootCertStore, SideData, Tcp, TlsInputBuffer, VecInput,
 };
 use rustls_aws_lc_rs::{
     ECDSA_P256_SHA256, ECDSA_P256_SHA384, ECDSA_P256_SHA512, ECDSA_P384_SHA256, ECDSA_P384_SHA384,
@@ -149,7 +148,7 @@ pub fn main() {
 
 fn exec(
     opts: &Options,
-    mut sess: impl DerefMut<Target = ConnectionCommon<impl SideData, Tcp>> + 'static,
+    mut sess: impl DerefMut<Target = Connection<impl SideData, Tcp>> + 'static,
     mut output: Vec<u8>,
     key_log: &KeyLogMemo,
     count: usize,
@@ -440,7 +439,7 @@ fn server(conn: &mut dyn Any) -> &mut ServerConnection {
 ///
 /// Queued plaintext is sent by `after_read()` once the handshake completes.
 fn write_or_queue(
-    sess: &mut impl DerefMut<Target = ConnectionCommon<impl SideData, Tcp>>,
+    sess: &mut impl DerefMut<Target = Connection<impl SideData, Tcp>>,
     plaintext: &[u8],
     pending: &mut Vec<u8>,
     output: &mut Vec<u8>,
@@ -464,7 +463,7 @@ fn read_n_bytes(
     input: &mut VecInput,
     output: &mut Vec<u8>,
     pending: &mut Vec<u8>,
-    sess: &mut (impl DerefMut<Target = ConnectionCommon<impl SideData, Tcp>> + 'static),
+    sess: &mut (impl DerefMut<Target = Connection<impl SideData, Tcp>> + 'static),
     conn: &mut net::TcpStream,
     n: usize,
 ) -> Option<IoState> {
@@ -489,7 +488,7 @@ fn read_all_bytes(
     input: &mut VecInput,
     output: &mut Vec<u8>,
     pending: &mut Vec<u8>,
-    sess: &mut (impl DerefMut<Target = ConnectionCommon<impl SideData, Tcp>> + 'static),
+    sess: &mut (impl DerefMut<Target = Connection<impl SideData, Tcp>> + 'static),
     conn: &mut net::TcpStream,
 ) -> Option<IoState> {
     match input.read(conn) {
@@ -507,7 +506,7 @@ fn after_read(
     input: &mut VecInput,
     output: &mut Vec<u8>,
     pending: &mut Vec<u8>,
-    sess: &mut (impl DerefMut<Target = ConnectionCommon<impl SideData, Tcp>> + 'static),
+    sess: &mut (impl DerefMut<Target = Connection<impl SideData, Tcp>> + 'static),
     conn: &mut net::TcpStream,
 ) -> Option<IoState> {
     let mut early_data = Vec::new();

@@ -10,7 +10,7 @@ use crate::client::ClientSide;
 pub use crate::common_state::Side;
 use crate::common_state::{ConnectionOutputs, Protocol};
 use crate::conn::{
-    Accepted, ConnectionCommon, MessageIter, MessageIterMode, ServerNext, SideData, Transport,
+    Accepted, Connection, MessageIter, MessageIterMode, ServerNext, SideData, Transport,
     VerifyPeerIdentity, sealed,
 };
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
@@ -27,7 +27,7 @@ use crate::tls13::key_schedule::{
 
 /// A QUIC client connection.
 pub struct ClientConnection {
-    inner: ConnectionCommon<ClientSide, Quic>,
+    inner: Connection<ClientSide, Quic>,
 }
 
 impl ClientConnection {
@@ -41,7 +41,7 @@ impl ClientConnection {
 }
 
 impl Deref for ClientConnection {
-    type Target = ConnectionCommon<ClientSide, Quic>;
+    type Target = Connection<ClientSide, Quic>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -61,15 +61,15 @@ impl fmt::Debug for ClientConnection {
     }
 }
 
-impl From<ConnectionCommon<ClientSide, Quic>> for ClientConnection {
-    fn from(inner: ConnectionCommon<ClientSide, Quic>) -> Self {
+impl From<Connection<ClientSide, Quic>> for ClientConnection {
+    fn from(inner: Connection<ClientSide, Quic>) -> Self {
         Self { inner }
     }
 }
 
 /// A QUIC server connection.
 pub struct ServerConnection {
-    inner: ConnectionCommon<ServerSide, Quic>,
+    inner: Connection<ServerSide, Quic>,
 }
 
 impl ServerConnection {
@@ -90,7 +90,7 @@ impl ServerConnection {
         };
 
         Ok(Self {
-            inner: ConnectionCommon::for_server(
+            inner: Connection::for_server(
                 config,
                 exts,
                 Quic {
@@ -119,7 +119,7 @@ impl ServerConnection {
 }
 
 impl Deref for ServerConnection {
-    type Target = ConnectionCommon<ServerSide, Quic>;
+    type Target = Connection<ServerSide, Quic>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -172,14 +172,14 @@ impl ServerHandshake {
     ///
     /// The returned object should be fed data from a single potential client.
     pub fn start(version: Version) -> NeedsInput {
-        NeedsInput(ConnectionCommon::for_acceptor(Quic {
+        NeedsInput(Connection::for_acceptor(Quic {
             version,
             ..Quic::default()
         }))
     }
 
     pub(crate) fn from_conn(
-        mut conn: ConnectionCommon<ServerSide, Quic>,
+        mut conn: Connection<ServerSide, Quic>,
         output: &mut Vec<QuicEvent>,
     ) -> Result<Self, Error> {
         output.extend(conn.transport.events());
@@ -202,7 +202,7 @@ impl ServerHandshake {
 ///
 /// This type dereferences to [`ConnectionOutputs`]. Individual outputs are `None`
 /// until they are learned during the handshake.
-pub struct NeedsInput(ConnectionCommon<ServerSide, Quic>);
+pub struct NeedsInput(Connection<ServerSide, Quic>);
 
 impl NeedsInput {
     /// Return the TLS-encoded transport parameters received from the peer.
@@ -309,7 +309,7 @@ pub enum QuicEvent {
     KeyChange(KeyChange),
 }
 
-impl<Side: SideData> ConnectionCommon<Side, Quic> {
+impl<Side: SideData> Connection<Side, Quic> {
     /// Consume unencrypted TLS handshake data.
     ///
     /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
@@ -921,10 +921,10 @@ impl Keys {
 /// QUIC uses 4 different sets of keys (and progressive key updates for long-running connections):
 ///
 /// * Initial: these can be created from [`Keys::initial()`]
-/// * 0-RTT keys: can be retrieved from [`ConnectionCommon::zero_rtt_keys()`]
-/// * Handshake: these are returned from [`ConnectionCommon::events()`] after `ClientHello` and
+/// * 0-RTT keys: can be retrieved from [`Connection::zero_rtt_keys()`]
+/// * Handshake: these are returned from [`Connection::events()`] after `ClientHello` and
 ///   `ServerHello` messages have been exchanged
-/// * 1-RTT keys: these are returned from [`ConnectionCommon::events()`] after the handshake is done
+/// * 1-RTT keys: these are returned from [`Connection::events()`] after the handshake is done
 ///
 /// Once the 1-RTT keys have been exchanged, either side may initiate a key update. Progressive
 /// update keys can be obtained from the [`Secrets`] returned in [`KeyChange::OneRtt`]. Note that
