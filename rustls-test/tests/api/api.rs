@@ -1006,7 +1006,7 @@ fn server_exposes_offered_sni() {
             .unwrap();
 
         let mut server = ServerConnection::new(server_config).unwrap();
-        assert_eq!(None, server.data().server_name());
+        assert_eq!(None, server.side().server_name());
 
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
@@ -1021,7 +1021,7 @@ fn server_exposes_offered_sni() {
         );
         assert_eq!(
             Some(&DnsName::try_from("second.testserver.com").unwrap()),
-            server.data().server_name()
+            server.side().server_name()
         );
     }
 }
@@ -1038,7 +1038,7 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
 
         let mut server = ServerConnection::new(server_config).unwrap();
 
-        assert_eq!(None, server.data().server_name());
+        assert_eq!(None, server.side().server_name());
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let mut server_output = Vec::new();
@@ -1052,7 +1052,7 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
         );
         assert_eq!(
             Some(&DnsName::try_from("second.testserver.com").unwrap()),
-            server.data().server_name()
+            server.side().server_name()
         );
     }
 }
@@ -1968,7 +1968,7 @@ fn test_client_sends_no_application_data_after_ech_rejection() {
     )
     .unwrap_err();
     assert!(matches!(err, ErrorFromPeer::Client(Error::RejectedEch(_))));
-    assert_eq!(client.data().ech_status(), EchStatus::Rejected);
+    assert_eq!(client.side().ech_status(), EchStatus::Rejected);
 
     // The connection is only authenticated for the `public_name`, so it must not become
     // usable for application data intended for the inner server name.

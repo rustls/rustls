@@ -200,7 +200,7 @@ fn resumption_combinations() {
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
         assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
         assert_eq!(
-            server.data().received_resumption_data(),
+            server.side().received_resumption_data(),
             Some(resumption_data.as_bytes())
         );
         if expect.version == ProtocolVersion::TLSv1_2 {
@@ -1009,7 +1009,7 @@ fn early_data_and_traffic_are_kept_separate() {
         .handle_all(&mut Vec::new())
         .unwrap();
     assert!(!client.is_handshaking());
-    assert!(client.data().is_early_data_accepted());
+    assert!(client.side().is_early_data_accepted());
     client
         .write(b"normal".into(), &mut client_output)
         .unwrap();
@@ -1096,7 +1096,7 @@ fn unread_early_data_is_dropped() {
         .read_tls(&mut client_input, &mut client_output)
         .handle_all(&mut Vec::new())
         .unwrap();
-    assert!(client.data().is_early_data_accepted());
+    assert!(client.side().is_early_data_accepted());
     client
         .write(b"normal".into(), &mut client_output)
         .unwrap();
@@ -1258,7 +1258,7 @@ fn rejected_early_data_is_skipped() {
         &mut received_early_data,
     );
     assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
-    assert!(!client.data().is_early_data_accepted());
+    assert!(!client.side().is_early_data_accepted());
     assert!(client.early_data().is_none());
     assert!(received_early_data.is_empty());
 

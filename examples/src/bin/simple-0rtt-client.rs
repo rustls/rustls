@@ -72,7 +72,7 @@ fn start_connection(config: &Arc<ClientConfig>, domain_name: &str, port: u16) {
     // then send the request as normal.
     if !stream
         .conn
-        .data()
+        .side()
         .is_early_data_accepted()
     {
         stream
