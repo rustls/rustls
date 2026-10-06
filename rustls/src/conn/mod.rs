@@ -195,8 +195,27 @@ impl<Side: SideData> ConnectionCommon<Side, Tcp> {
             .refresh_traffic_keys(tls)
     }
 
-    pub(crate) fn split(self) -> Result<SplitConnection<Side>, Error> {
+    /// Split a post-handshake connection into a [`SplitConnection`].
+    ///
+    /// This allows the two directions (transmit and receive) of the connection to be progressed
+    /// separately (including by different threads, which would allow dedicating a CPU core for each
+    /// direction rather than one per connection; this can dramatically improve performance for
+    /// full-duplex protocols).
+    ///
+    /// It also separates out the [`ConnectionOutputs`] which gives the application direct control
+    /// of how long this is kept.
+    ///
+    /// This fails if:
+    ///
+    /// - the handshake is not complete. Check with [`ConnectionCommon::is_handshaking()`].
+    /// - there is any buffered TLS data to send.  Obtain it first with [`ConnectionCommon::write()`].
+    pub fn split(self) -> Result<SplitConnection<Side>, Error> {
         SplitConnection::try_from(self)
+    }
+
+    #[doc = include_str!("../doc/early_exporter.md")]
+    pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        self.common.early_exporter()
     }
 
     /// Extract secrets, so they can be used when configuring kTLS, for example.

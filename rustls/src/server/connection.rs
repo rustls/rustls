@@ -10,8 +10,8 @@ use crate::common_state::{CommonState, Event, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Accepted, ConnectionCommon, KeyingMaterialExporter, NeedsInput, ServerNext, SideData, Tcp,
-    Transport, VerifyPeerIdentity,
+    Accepted, ConnectionCommon, NeedsInput, ServerNext, SideData, Tcp, Transport,
+    VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -39,24 +39,6 @@ impl ServerConnection {
         })
     }
 
-    /// Split a post-handshake connection into a [`SplitConnection`].
-    ///
-    /// This allows the two directions (transmit and receive) of the connection to be progressed
-    /// separately (including by different threads, which would allow dedicating a CPU core for each
-    /// direction rather than one per connection; this can dramatically improve performance for
-    /// full-duplex protocols).
-    ///
-    /// It also separates out the [`ConnectionOutputs`][crate::ConnectionOutputs] which gives the application direct control
-    /// of how long this is kept.
-    ///
-    /// This fails if:
-    ///
-    /// - the handshake is not complete. Check with [`ConnectionCommon::is_handshaking()`].
-    /// - there is any buffered TLS data to send.  Obtain it first with [`ConnectionCommon::write()`].
-    pub fn split(self) -> Result<SplitConnection<ServerSide>, Error> {
-        self.inner.split()
-    }
-
     /// Set the resumption data to embed in future resumption tickets supplied to the client.
     ///
     /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other
@@ -73,19 +55,9 @@ impl ServerConnection {
         }
     }
 
-    #[doc = include_str!("../doc/early_exporter.md")]
-    pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.common.early_exporter()
-    }
-
     /// Temporary hack to allow access to methods that take [`ConnectionCommon`] ownership.
     pub fn into_inner(self) -> ConnectionCommon<ServerSide, Tcp> {
         self.inner
-    }
-
-    /// Returns data learned during the connection, specific to being a server.
-    pub fn side(&self) -> &ServerSide {
-        &self.inner.side
     }
 }
 
