@@ -42,7 +42,7 @@ impl SendPath {
 
         if !early && !self.may_send_application_data {
             return Err(ApiMisuse::WriteBeforeHandshakeComplete.into());
-        } else if self.has_sent_close_notify {
+        } else if self.has_sent_close_notify && !payload.is_empty() {
             return Err(ApiMisuse::WriteAfterSendPathClosed.into());
         }
 

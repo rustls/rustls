@@ -146,6 +146,46 @@ fn split_pairwise() {
 }
 
 #[test]
+fn split_sender_refuses_data_after_close_notify() {
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair(
+        KeyType::default(),
+        &super::provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
+    let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+
+    client
+        .send_close_notify(&mut client_output)
+        .unwrap();
+    let SplitConnection {
+        send: mut client_send,
+        ..
+    } = client.split().unwrap();
+
+    let mut flight = Vec::new();
+    assert_eq!(
+        client_send.write(b"data".as_slice().into(), &mut flight),
+        Err(ApiMisuse::WriteAfterSendPathClosed.into())
+    );
+    assert!(flight.is_empty());
+
+    // Flushing pending data is still possible.
+    client_send
+        .write(OutboundPlain::new_empty(), &mut flight)
+        .unwrap();
+}
+
+#[test]
 fn split_incremental() {
     let mut client_output = Vec::new();
     let mut server_output = Vec::new();
