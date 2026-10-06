@@ -8551,6 +8551,34 @@ fn test_automatic_refresh_traffic_keys() {
 #[cfg(feature = "tls12")]
 #[test]
 fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
+    let (mut client, mut server) = tls12_pair_with_limited_confidentiality();
+
+    for i in 0..CONFIDENTIALITY_LIMIT {
+        let message = format!("{i:08}");
+        client
+            .writer()
+            .write_all(message.as_bytes())
+            .unwrap();
+        let (received, peer_closed) = receive(&mut client, &mut server);
+
+        match i {
+            1023 => {
+                assert!(peer_closed);
+                assert_eq!(received.len(), 0);
+            }
+            _ => {
+                assert!(!peer_closed);
+                assert_eq!(&received, message.as_bytes());
+            }
+        }
+    }
+}
+
+/// Complete a TLS 1.2 handshake using a suite limited to [`CONFIDENTIALITY_LIMIT`] records.
+///
+/// The client's `Finished` message used sequence number 0.
+#[cfg(feature = "tls12")]
+fn tls12_pair_with_limited_confidentiality() -> (ClientConnection, ServerConnection) {
     let provider = aes_128_gcm_with_1024_confidentiality_limit(provider::default_provider());
 
     let client_config = finish_client_config(
@@ -8568,29 +8596,22 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake(&mut client, &mut server);
+    (client, server)
+}
 
-    for i in 0..CONFIDENTIALITY_LIMIT {
-        let message = format!("{i:08}");
-        client
-            .writer()
-            .write_all(message.as_bytes())
-            .unwrap();
-        let transferred = transfer(&mut client, &mut server);
-        println!(
-            "{}: {} -> {:?}",
-            i,
-            transferred,
-            server.process_new_packets().unwrap()
-        );
-
-        let mut buf = [0u8; 32];
-        let recvd = server.reader().read(&mut buf).unwrap();
-
-        match i {
-            1023 => assert_eq!(recvd, 0),
-            _ => assert_eq!(&buf[..recvd], message.as_bytes()),
-        }
-    }
+/// Deliver the client's pending TLS data to the server.
+///
+/// Returns the application data received, and whether the client has closed.
+#[cfg(feature = "tls12")]
+fn receive(client: &mut ClientConnection, server: &mut ServerConnection) -> (Vec<u8>, bool) {
+    transfer(client, server);
+    let state = server.process_new_packets().unwrap();
+    let mut received = vec![0u8; state.plaintext_bytes_to_read()];
+    server
+        .reader()
+        .read_exact(&mut received)
+        .unwrap();
+    (received, state.peer_has_closed())
 }
 
 #[test]
