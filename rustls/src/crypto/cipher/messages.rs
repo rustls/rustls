@@ -197,8 +197,7 @@ pub enum OutboundPlain<'a> {
         /// Offset of the payload's first byte within the logical
         /// concatenation of all `chunks`.
         ///
-        /// This may point beyond the first chunk (for example, after
-        /// `split_at()`).
+        /// This may point beyond the first chunk.
         start: usize,
         /// Offset one past the payload's last byte within the logical
         /// concatenation of all `chunks`, so `end - start` is the payload's
@@ -279,6 +278,16 @@ impl<'a> OutboundPlain<'a> {
             }
             Self::Multiple { chunks, start, end } => {
                 let mid = Ord::min(start + mid, end);
+                let mut skip = 0;
+                let mut consumed = 0;
+                for chunk in chunks {
+                    if consumed + chunk.len() > mid {
+                        break;
+                    }
+                    consumed += chunk.len();
+                    skip += 1;
+                }
+
                 (
                     Self::Multiple {
                         chunks,
@@ -286,9 +295,9 @@ impl<'a> OutboundPlain<'a> {
                         end: mid,
                     },
                     Self::Multiple {
-                        chunks,
-                        start: mid,
-                        end,
+                        chunks: &chunks[skip..],
+                        start: mid - consumed,
+                        end: end - consumed,
                     },
                 )
             }
@@ -720,6 +729,39 @@ mod tests {
         println!("before:{before:?}\nafter:{after:?}");
         assert_eq!(before.to_vec(), &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         assert_eq!(after.to_vec(), &[11, 12]);
+    }
+
+    #[test]
+    fn split_at_drops_consumed_chunks() {
+        let owner = vec![&[0, 1, 2][..], &[], &[3, 4], &[5], &[]];
+        let payload = OutboundPlain::new(&owner);
+
+        let (before, after) = payload.split_at(4);
+        assert_eq!(before.to_vec(), &[0, 1, 2, 3]);
+        assert_eq!(after.to_vec(), &[4, 5]);
+        let OutboundPlain::Multiple { chunks, start, end } = after else {
+            panic!("expected multiple chunks");
+        };
+        assert_eq!(chunks, &owner[2..]);
+        assert_eq!((start, end), (1, 3));
+
+        let (before, after) = after.split_at(1);
+        assert_eq!(before.to_vec(), &[4]);
+        assert_eq!(after.to_vec(), &[5]);
+        let OutboundPlain::Multiple { chunks, start, end } = after else {
+            panic!("expected multiple chunks");
+        };
+        assert_eq!(chunks, &owner[3..]);
+        assert_eq!((start, end), (0, 1));
+
+        let (before, after) = after.split_at(1);
+        assert_eq!(before.to_vec(), &[5]);
+        assert!(after.is_empty());
+        let OutboundPlain::Multiple { chunks, start, end } = after else {
+            panic!("expected multiple chunks");
+        };
+        assert!(chunks.is_empty());
+        assert_eq!((start, end), (0, 0));
     }
 
     #[test]
