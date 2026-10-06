@@ -3360,6 +3360,105 @@ fn test_client_stream_read_after_renegotiation_refusal(
     test_stream_read(read_kind, stream, data)
 }
 
+#[test]
+fn stream_flush_would_block_with_pending_output() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    do_handshake(&mut client, &mut server);
+
+    client
+        .writer()
+        .write_all(b"hello")
+        .unwrap();
+    let pending = client
+        .process_new_packets()
+        .unwrap()
+        .tls_bytes_to_write();
+
+    // the transport accepts a single byte, then blocks
+    let mut pipe = TestNonBlockIo {
+        writes: vec![1],
+        reads: vec![],
+    };
+    let mut client_stream = Stream::new(&mut client, &mut pipe);
+
+    assert_eq!(
+        client_stream
+            .flush()
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::WouldBlock
+    );
+    assert_eq!(
+        client_stream
+            .conn
+            .process_new_packets()
+            .unwrap()
+            .tls_bytes_to_write(),
+        pending - 1
+    );
+
+    client_stream
+        .sock
+        .writes
+        .push(usize::MAX);
+    client_stream.flush().unwrap();
+    assert!(!client_stream.conn.wants_write());
+}
+
+#[test]
+fn stream_flush_retries_failed_transport_flush() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    do_handshake(&mut client, &mut server);
+
+    let mut pipe = FailsFirstFlush::default();
+    let mut client_stream = Stream::new(&mut client, &mut pipe);
+
+    // `write()` hands all TLS output to the transport, but ignores its flush failure
+    assert_eq!(client_stream.write(b"hello").unwrap(), 5);
+    assert!(!client_stream.conn.wants_write());
+    assert!(!client_stream.sock.buffered.is_empty());
+
+    client_stream.flush().unwrap();
+    assert!(client_stream.sock.buffered.is_empty());
+
+    server
+        .read_tls(&mut pipe.flushed.as_slice())
+        .unwrap();
+    server.process_new_packets().unwrap();
+    check_read(&mut server.reader(), b"hello");
+}
+
+/// A buffering transport whose first `flush()` fails
+#[derive(Default)]
+struct FailsFirstFlush {
+    buffered: Vec<u8>,
+    flushed: Vec<u8>,
+    failed: bool,
+}
+
+impl Read for FailsFirstFlush {
+    fn read(&mut self, _b: &mut [u8]) -> io::Result<usize> {
+        Err(io::ErrorKind::WouldBlock.into())
+    }
+}
+
+impl Write for FailsFirstFlush {
+    fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+        self.buffered.extend_from_slice(b);
+        Ok(b.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if !self.failed {
+            self.failed = true;
+            return Err(io::ErrorKind::Interrupted.into());
+        }
+
+        self.flushed.append(&mut self.buffered);
+        Ok(())
+    }
+}
+
 fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let kt = KeyType::Rsa2048;
     let client_provider = CryptoProvider {
