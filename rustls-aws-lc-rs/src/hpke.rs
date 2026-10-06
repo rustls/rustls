@@ -450,8 +450,6 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> HpkeSealer for Sealer<KEY_SIZ
         sealing_key
             .seal_in_place_append_tag(Aad::from(aad), &mut in_out_buffer)
             .map_err(unspecified_err)?;
-        // RFC 9180 §5.2 increments only after Seal succeeds. `NonceSequence::advance`
-        // is called by the AEAD before that, so it must not consume the sequence.
         self.key_schedule
             .increment_seq_num()
             .map_err(unspecified_err)?;
@@ -509,8 +507,6 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> HpkeOpener for Opener<KEY_SIZ
         let plaintext = opening_key
             .open_in_place(Aad::from(aad), &mut in_out_buffer)
             .map_err(unspecified_err)?;
-        // RFC 9180 §5.2 increments only after Open succeeds. A failed
-        // authentication must leave the sequence where it was.
         self.key_schedule
             .increment_seq_num()
             .map_err(unspecified_err)?;
@@ -794,13 +790,6 @@ impl<const KEY_SIZE: usize> KeySchedule<KEY_SIZE> {
 
 impl<const KEY_SIZE: usize> NonceSequence for &mut KeySchedule<KEY_SIZE> {
     fn advance(&mut self) -> Result<Nonce, aws_lc_rs::error::Unspecified> {
-        // Hand out the nonce for the current sequence. The caller increments
-        // only after seal/open succeeds; doing it here would consume a
-        // sequence number when authentication fails.
-        let max_seq_num = (1u128 << (NONCE_LEN * 8)) - 1;
-        if self.seq_num >= max_seq_num {
-            return Err(aws_lc_rs::error::Unspecified);
-        }
         let nonce = self.compute_nonce();
         Nonce::try_assume_unique_for_key(&nonce)
     }
@@ -1084,6 +1073,21 @@ mod tests {
         };
         assert!(ks.increment_seq_num().is_err());
         assert_eq!(ks.seq_num, max_seq_num);
+    }
+
+    #[test]
+    fn seal_at_the_sequence_limit_fails_without_advancing() {
+        let max_seq_num = (1u128 << (NONCE_LEN * 8)) - 1;
+        let mut sealer = Sealer::<AES_128_KEY_LEN, 32> {
+            key_schedule: KeySchedule {
+                aead: &aead::AES_128_GCM,
+                key: AeadKey([0u8; AES_128_KEY_LEN]),
+                base_nonce: [0u8; NONCE_LEN],
+                seq_num: max_seq_num,
+            },
+        };
+        assert!(sealer.seal(b"aad", b"message").is_err());
+        assert_eq!(sealer.key_schedule.seq_num, max_seq_num);
     }
 }
 
