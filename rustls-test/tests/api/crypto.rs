@@ -16,7 +16,7 @@ use rustls::{
     ServerConfig, ServerConnection, SupportedCipherSuite, Tls13CipherSuite, VecInput,
 };
 use rustls_test::{
-    ClientConfigExt, ErrorFromPeer, KeyType, MultiTest, ServerConfigExt,
+    ClientConfigExt, ErrorFromPeer, KeyType, MultiTest, RawTls, ServerConfigExt,
     aes_128_gcm_with_1024_confidentiality_limit, do_handshake, do_handshake_until_error, encoding,
     make_client_config, make_pair, make_pair_for_arc_configs, make_pair_for_configs,
     make_server_config, provider_with_one_suite, transfer,
@@ -805,10 +805,57 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
     }
 }
 
+#[test]
+fn tls12_connection_fails_after_alert_at_confidentiality_limit() {
+    let (mut client, mut client_output, mut server) = tls12_pair_with_limited_confidentiality();
+
+    for i in 1..CONFIDENTIALITY_LIMIT {
+        client
+            .write(format!("{i:08}").as_bytes().into(), &mut client_output)
+            .unwrap();
+    }
+
+    let (received, peer_closed) = server.receive(&mut client_output);
+    assert!(!peer_closed);
+    assert_eq!(received.len(), (CONFIDENTIALITY_LIMIT as usize - 1) * 8);
+
+    // Alerts are not subject to the limit, so the client's rejection of a renegotiation
+    // request takes the last sequence number before it.
+    let mut raw_server = RawTls::new_server(server.conn);
+    let hello_request = Record {
+        typ: ContentType::Handshake,
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        payload: Payload::new(encoding::handshake_framing(
+            HandshakeType::HelloRequest,
+            vec![],
+        )),
+    };
+    let mut client_input = VecInput::default();
+    raw_server.encrypt_and_send(&hello_request, &mut client_input);
+    client
+        .read_tls(&mut client_input, &mut client_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    raw_server.receive_and_decrypt(&mut client_output, |m| {
+        assert_eq!(m.typ, ContentType::Alert);
+        assert_eq!(m.payload, &[0x01, 100]); // Warning=1, NoRenegotiation=100
+    });
+
+    // No application data may be encrypted with the exhausted key.
+    assert_eq!(
+        client.write(b"later".as_slice().into(), &mut client_output),
+        Err(Error::EncryptError)
+    );
+    raw_server.receive_and_decrypt(&mut client_output, |m| {
+        assert_eq!(m.typ, ContentType::Alert);
+        assert_eq!(m.payload, &[0x01, 0]); // Warning=1, CloseNotify=0
+    });
+}
+
 /// Complete a TLS 1.2 handshake using a suite limited to [`CONFIDENTIALITY_LIMIT`] records.
 ///
 /// Returns the client, its pending output, and the server. The client's `Finished` message
-/// used sequence number 0.
+/// used sequence number 0. The server has secret extraction enabled.
 fn tls12_pair_with_limited_confidentiality() -> (ClientConnection, Vec<u8>, LimitedServer) {
     let provider = Arc::new(CryptoProvider {
         tls13_cipher_suites: Default::default(),
@@ -819,7 +866,8 @@ fn tls12_pair_with_limited_confidentiality() -> (ClientConnection, Vec<u8>, Limi
 
     let kt = KeyType::EcdsaP256;
     let client_config = ClientConfig::builder(provider.clone()).finish(kt);
-    let server_config = ServerConfig::builder(provider).finish(kt);
+    let mut server_config = ServerConfig::builder(provider).finish(kt);
+    server_config.enable_secret_extraction = true;
 
     let mut client_output = Vec::new();
     let mut server_output = Vec::new();
