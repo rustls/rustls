@@ -339,6 +339,8 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
             self.sink.write_vectored(bufs)
         }
 
+        /// This does not do any I/O, but returns the fatal error the connection previously
+        /// encountered, if any.
         fn flush(&mut self) -> io::Result<()> {
             self.sink.flush()
         }
@@ -400,7 +402,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         }
 
         fn flush(&mut self) -> io::Result<()> {
-            Ok(())
+            self.check_error()
         }
     }
 }
