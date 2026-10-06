@@ -417,6 +417,35 @@ impl ConnectionCommon<ClientSide> {
     }
 }
 
+/// TLS client-specific information determined during a connection.
+#[derive(Debug, Default)]
+pub struct ClientSide {
+    early_data: Option<EarlyData>,
+    ech_status: EchStatus,
+}
+
+impl ClientSide {
+    /// Returns True if the server signalled it will process early data.
+    ///
+    /// If you sent early data and this returns false at the end of the
+    /// handshake then the server will not process the data.  This
+    /// is not an error, but you may wish to resend the data.
+    pub fn is_early_data_accepted(&self) -> bool {
+        matches!(
+            &self.early_data,
+            Some(EarlyData {
+                state: EarlyDataState::Accepted | EarlyDataState::AcceptedFinished,
+                ..
+            })
+        )
+    }
+
+    /// Return the connection's Encrypted Client Hello (ECH) status.
+    pub fn ech_status(&self) -> EchStatus {
+        self.ech_status
+    }
+}
+
 impl SideData for ClientSide {
     type Handshake = ClientHandshake;
     type QuicHandshake = ();
@@ -435,10 +464,6 @@ impl SideData for ClientSide {
     ) -> Result<Self::QuicHandshake, Error> {
         todo!("nyi")
     }
-}
-
-impl crate::conn::private::Side for ClientSide {
-    type State = ClientState;
 }
 
 impl SideOutput for ClientSide {
@@ -471,33 +496,8 @@ impl SideOutput for ClientSide {
     }
 }
 
-/// TLS client-specific information determined during a connection.
-#[derive(Debug, Default)]
-pub struct ClientSide {
-    early_data: Option<EarlyData>,
-    ech_status: EchStatus,
-}
-
-impl ClientSide {
-    /// Returns True if the server signalled it will process early data.
-    ///
-    /// If you sent early data and this returns false at the end of the
-    /// handshake then the server will not process the data.  This
-    /// is not an error, but you may wish to resend the data.
-    pub fn is_early_data_accepted(&self) -> bool {
-        matches!(
-            &self.early_data,
-            Some(EarlyData {
-                state: EarlyDataState::Accepted | EarlyDataState::AcceptedFinished,
-                ..
-            })
-        )
-    }
-
-    /// Return the connection's Encrypted Client Hello (ECH) status.
-    pub fn ech_status(&self) -> EchStatus {
-        self.ech_status
-    }
+impl crate::conn::private::Side for ClientSide {
+    type State = ClientState;
 }
 
 #[derive(Debug)]
