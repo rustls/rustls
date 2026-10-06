@@ -347,7 +347,7 @@ impl Encrypting {
             // request a key update (for 1.3) or send a close notify (for 1.2).
             if self.write_seq >= SEQ_HARD_LIMIT {
                 return Err(Error::EncryptError);
-            } else if self.write_seq == self.write_seq_max {
+            } else if self.write_seq >= self.write_seq_max {
                 match version {
                     // Keep going and signal to the caller that we need a key update
                     Some(ProtocolVersion::TLSv1_3) => need_local_key_update = true,
