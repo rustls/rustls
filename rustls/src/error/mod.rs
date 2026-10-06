@@ -1697,10 +1697,7 @@ pub enum ApiMisuse {
     /// [`KernelConnection::handle_new_session_ticket()`]: crate::conn::kernel::KernelConnection::handle_new_session_ticket()
     KernelSessionTicketHandlingNotAvailableForTls12,
 
-    /// [`ClientConnection::split()`] or [`ServerConnection::split()`] called during handshake.
-    ///
-    /// [`ServerConnection::split()`]: crate::server::ServerConnection::split()
-    /// [`ClientConnection::split()`]: crate::client::ClientConnection::split()
+    /// [`ConnectionCommon::split()`][crate::ConnectionCommon::split()] called during handshake.
     SplitDuringHandshake,
 
     /// An output buffer provided for encryption was too small.

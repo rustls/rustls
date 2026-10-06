@@ -11,8 +11,8 @@ use crate::common_state::{CommonState, EarlyDataEvent, Event, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    ClientNext, ConnectionCommon, DataKind, KeyingMaterialExporter, NeedsInput, SideCommonOutput,
-    SideData, Tcp, Transport, VerifyPeerIdentity,
+    ClientNext, ConnectionCommon, DataKind, NeedsInput, SideCommonOutput, SideData, Tcp, Transport,
+    VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -34,24 +34,6 @@ pub struct ClientConnection {
 }
 
 impl ClientConnection {
-    /// Split a post-handshake connection into a [`SplitConnection`].
-    ///
-    /// This allows the two directions (transmit and receive) of the connection to be progressed
-    /// separately (including by different threads, which would allow dedicating a CPU core for each
-    /// direction rather than one per connection; this can dramatically improve performance for
-    /// full-duplex protocols).
-    ///
-    /// It also separates out the [`ConnectionOutputs`][crate::ConnectionOutputs] which gives the application direct control
-    /// of how long this is kept.
-    ///
-    /// This fails if:
-    ///
-    /// - the handshake is not complete. Check with [`ConnectionCommon::is_handshaking()`].
-    /// - there is any buffered TLS data to send.  Obtain it first with [`ConnectionCommon::write()`].
-    pub fn split(self) -> Result<SplitConnection<ClientSide>, Error> {
-        self.inner.split()
-    }
-
     /// Allows writing TLS1.3 0RTT/"early" data.
     ///
     /// This returns None in many circumstances when the capability to
@@ -79,22 +61,12 @@ impl ClientConnection {
         self.inner
     }
 
-    #[doc = include_str!("../doc/early_exporter.md")]
-    pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.common.early_exporter()
-    }
-
     /// Returns the number of TLS1.3 tickets that have been received.
     pub fn tls13_tickets_received(&self) -> u32 {
         self.inner
             .common
             .recv
             .tls13_tickets_received
-    }
-
-    /// Returns data learned during the connection, specific to being a client.
-    pub fn side(&self) -> &ClientSide {
-        &self.inner.side
     }
 }
 
