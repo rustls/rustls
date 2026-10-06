@@ -34,7 +34,7 @@ use rustls::crypto::{CryptoProvider, Identity};
 use rustls::enums::{ApplicationProtocol, ProtocolVersion};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
-use rustls::{ClientConfig, ClientConnection, Connection, RootCertStore, VecInput};
+use rustls::{ClientConfig, ClientConnection, RootCertStore, VecInput};
 use rustls_aws_lc_rs as provider;
 use tracing::Level;
 

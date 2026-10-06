@@ -21,7 +21,7 @@ use std::{env, io};
 use rustls::crypto::Identity;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::{Connection, ServerConfig, ServerConnection, VecInput};
+use rustls::{ServerConfig, ServerConnection, VecInput};
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 use rustls_util::complete_io;
 

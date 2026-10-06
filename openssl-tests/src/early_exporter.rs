@@ -7,7 +7,7 @@ use openssl::ssl::{SslConnector, SslMethod, SslSession, SslStream};
 use rustls::crypto::Identity;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::{Connection, ServerConfig, VecInput};
+use rustls::{ServerConfig, VecInput};
 use rustls_aws_lc_rs as provider;
 use rustls_util::complete_io;
 

@@ -1,33 +1,31 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
-use core::ops::Deref;
+use core::ops::{Deref, DerefMut};
 
 use pki_types::{DnsName, FipsStatus};
 
 use super::config::ServerConfig;
-use crate::common_state::{CommonState, ConnectionOutputs, Event, Side};
+use crate::common_state::{CommonState, Event, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Accepted, Connection, ConnectionCommon, KeyingMaterialExporter, MessageHandler, NeedsInput,
-    ServerNext, SideData, Tcp, TlsInputBuffer, Transport, VerifyPeerIdentity,
+    Accepted, ConnectionCommon, KeyingMaterialExporter, NeedsInput, ServerNext, SideData, Tcp,
+    Transport, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::cipher::OutboundPlain;
 use crate::error::Error;
 use crate::msgs::ServerExtensionsInput;
 use crate::quic::{Quic, QuicEvent, ServerHandshake as QuicServerHandshake};
 use crate::server::hs::{ExpectClientHello, ReadClientHello, ServerState};
-use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::verify::ClientIdentity;
 
 /// This represents a single TLS server connection.
 ///
-/// Encrypt data destined for the peer using [`Connection::write()`].
-/// Process received data from the peer using [`Connection::read_tls()`].
+/// Encrypt data destined for the peer using [`ConnectionCommon::write()`].
+/// Process received data from the peer using [`ConnectionCommon::read_tls()`].
 pub struct ServerConnection {
     pub(super) inner: ConnectionCommon<ServerSide, Tcp>,
 }
@@ -48,13 +46,13 @@ impl ServerConnection {
     /// direction rather than one per connection; this can dramatically improve performance for
     /// full-duplex protocols).
     ///
-    /// It also separates out the [`ConnectionOutputs`] which gives the application direct control
+    /// It also separates out the [`ConnectionOutputs`][crate::ConnectionOutputs] which gives the application direct control
     /// of how long this is kept.
     ///
     /// This fails if:
     ///
-    /// - the handshake is not complete. Check with [`Connection::is_handshaking()`].
-    /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write()`].
+    /// - the handshake is not complete. Check with [`ConnectionCommon::is_handshaking()`].
+    /// - there is any buffered TLS data to send.  Obtain it first with [`ConnectionCommon::write()`].
     pub fn split(self) -> Result<SplitConnection<ServerSide>, Error> {
         self.inner.split()
     }
@@ -80,58 +78,28 @@ impl ServerConnection {
         self.inner.common.early_exporter()
     }
 
+    /// Temporary hack to allow access to methods that take [`ConnectionCommon`] ownership.
+    pub fn into_inner(self) -> ConnectionCommon<ServerSide, Tcp> {
+        self.inner
+    }
+
     /// Returns data learned during the connection, specific to being a server.
     pub fn side(&self) -> &ServerSide {
         &self.inner.side
     }
 }
 
-impl Connection for ServerConnection {
-    type Side = ServerSide;
-    type Transport = Tcp;
-
-    fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error> {
-        self.inner.write(plaintext, tls)
-    }
-
-    fn read_tls<'a, 'm>(
-        &'a mut self,
-        input: &'m mut dyn TlsInputBuffer,
-        tls: &'a mut Vec<u8>,
-    ) -> MessageHandler<'a, 'm, Self::Side> {
-        self.inner.read_tls(input, tls)
-    }
-
-    fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.exporter()
-    }
-
-    fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.inner.dangerous_extract_secrets()
-    }
-
-    fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
-        self.inner.refresh_traffic_keys(tls)
-    }
-
-    fn send_close_notify(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
-        self.inner.common.send_close_notify(tls)
-    }
-
-    fn is_handshaking(&self) -> bool {
-        self.inner.is_handshaking()
-    }
-
-    fn fips(&self) -> FipsStatus {
-        self.inner.fips
-    }
-}
-
 impl Deref for ServerConnection {
-    type Target = ConnectionOutputs;
+    type Target = ConnectionCommon<ServerSide, Tcp>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl DerefMut for ServerConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
@@ -272,14 +240,12 @@ impl SideData for ServerSide {
 
     type PeerIdentity<'a> = ClientIdentity<'static, 'a>;
 
-    #[expect(private_interfaces)]
     fn tcp_handshake_from_conn(
         conn: ConnectionCommon<Self, Tcp>,
     ) -> Result<Self::Handshake, Error> {
         ServerHandshake::try_from(conn)
     }
 
-    #[expect(private_interfaces)]
     fn quic_handshake_from_conn(
         conn: ConnectionCommon<Self, Quic>,
         outputs: &mut Vec<QuicEvent>,

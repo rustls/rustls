@@ -8,7 +8,7 @@ use openssl::ssl::{SslAcceptor, SslConnector, SslFiletype, SslMethod};
 use rustls::crypto::{CryptoProvider, Identity};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
-use rustls::{ClientConfig, Connection, RootCertStore, ServerConfig, ServerConnection, VecInput};
+use rustls::{ClientConfig, RootCertStore, ServerConfig, ServerConnection, VecInput};
 use rustls_aws_lc_rs as provider;
 use rustls_util::complete_io;
 

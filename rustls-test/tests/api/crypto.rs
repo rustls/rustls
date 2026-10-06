@@ -12,8 +12,9 @@ use rustls::crypto::{Credentials, CryptoProvider};
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{ApiMisuse, PeerMisbehaved};
 use rustls::{
-    ClientConfig, ClientConnection, Connection, ConnectionTrafficSecrets, Error, KeyLog,
-    ServerConfig, ServerConnection, SupportedCipherSuite, Tls13CipherSuite, VecInput,
+    ClientConfig, ClientConnection, ConnectionCommon, ConnectionTrafficSecrets, Error, KeyLog,
+    ServerConfig, ServerConnection, SideData, SupportedCipherSuite, Tcp, Tls13CipherSuite,
+    VecInput,
 };
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, MultiTest, RawTls, ServerConfigExt,
@@ -279,9 +280,11 @@ fn test_secret_extraction_enabled() {
 
         // The handshake is finished, we're now able to extract traffic secrets
         let client_secrets = client
+            .into_inner()
             .dangerous_extract_secrets()
             .unwrap();
         let server_secrets = server
+            .into_inner()
             .dangerous_extract_secrets()
             .unwrap();
 
@@ -345,9 +348,11 @@ fn test_secret_extract_produces_correct_variant() {
         );
 
         let client_secrets = client
+            .into_inner()
             .dangerous_extract_secrets()
             .unwrap();
         let server_secrets = server
+            .into_inner()
             .dangerous_extract_secrets()
             .unwrap();
 
@@ -414,12 +419,18 @@ fn test_secret_extraction_disabled_or_too_early() {
             make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
 
         assert_eq!(
-            client.dangerous_extract_secrets().err(),
+            client
+                .into_inner()
+                .dangerous_extract_secrets()
+                .err(),
             Some(Error::HandshakeNotComplete),
             "extraction should fail until handshake completes"
         );
         assert_eq!(
-            server.dangerous_extract_secrets().err(),
+            server
+                .into_inner()
+                .dangerous_extract_secrets()
+                .err(),
             Some(Error::HandshakeNotComplete),
             "extraction should fail until handshake completes"
         );
@@ -441,12 +452,14 @@ fn test_secret_extraction_disabled_or_too_early() {
         assert_eq!(
             server_enable,
             server
+                .into_inner()
                 .dangerous_extract_secrets()
                 .is_ok()
         );
         assert_eq!(
             client_enable,
             client
+                .into_inner()
                 .dangerous_extract_secrets()
                 .is_ok()
         );
@@ -494,6 +507,7 @@ fn test_secret_extraction_fails_with_pending_send_data() {
     // having already consumed a send sequence number
     assert_eq!(
         server_with_queued_key_update()
+            .into_inner()
             .dangerous_extract_secrets()
             .err(),
         Some(ApiMisuse::KernelConnectionWithPendingSendData.into())
@@ -506,6 +520,7 @@ fn test_secret_extraction_fails_with_pending_send_data() {
         .write(b"flush".into(), &mut server_output)
         .unwrap();
     server
+        .into_inner()
         .dangerous_extract_secrets()
         .unwrap();
 }
@@ -675,10 +690,10 @@ fn test_refresh_traffic_keys_is_idempotent() {
     fn test(
         left_input: &mut VecInput,
         left_output: &mut Vec<u8>,
-        left: &mut impl Connection,
+        left: &mut ConnectionCommon<impl SideData, Tcp>,
         right_input: &mut VecInput,
         right_output: &mut Vec<u8>,
-        right: &mut impl Connection,
+        right: &mut ConnectionCommon<impl SideData, Tcp>,
     ) {
         // left sends a request
         left.refresh_traffic_keys(left_output)

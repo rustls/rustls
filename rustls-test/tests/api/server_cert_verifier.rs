@@ -21,8 +21,8 @@ use rustls::error::{
 };
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{
-    ClientConfig, Connection, DistinguishedName, RootCertStore, ServerConfig, ServerConnection,
-    SliceInput, Tcp, VecInput, VerifyPeerIdentity,
+    ClientConfig, DistinguishedName, RootCertStore, ServerConfig, ServerConnection, SliceInput,
+    Tcp, VecInput, VerifyPeerIdentity,
 };
 use rustls_test::{
     ErrorFromPeer, KeyType, MockServerVerifier, MultiTest, certificate_error_expecting_name,

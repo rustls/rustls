@@ -13,8 +13,7 @@ use rustls::enums::ProtocolVersion;
 use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
 use rustls::server::{ServerSessionKey, Tls13Tickets};
 use rustls::{
-    ClientConfig, ClientConnection, Connection, HandshakeKind, ServerConfig, ServerConnection,
-    VecInput,
+    ClientConfig, ClientConnection, HandshakeKind, ServerConfig, ServerConnection, VecInput,
 };
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, MultiTest,

@@ -48,10 +48,10 @@ impl CommonState {
     /// Returns true if the connection is currently performing the TLS handshake.
     ///
     /// During this time plaintext written to the connection is buffered in memory. After
-    /// [`Connection::read_tls()`] has been called, this might start to return `false`
+    /// [`ConnectionCommon::read_tls()`] has been called, this might start to return `false`
     /// while the final handshake packets still need to be extracted from the connection's buffers.
     ///
-    /// [`Connection::read_tls()`]: crate::Connection::read_tls
+    /// [`ConnectionCommon::read_tls()`]: crate::ConnectionCommon::read_tls
     pub fn is_handshaking(&self) -> bool {
         !(self.send.may_send_application_data && self.recv.may_receive_application_data)
     }

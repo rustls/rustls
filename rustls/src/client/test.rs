@@ -45,9 +45,7 @@ use crate::verify::{
     HandshakeSignatureValid, ServerIdentity, ServerVerifier, SignatureVerificationInput,
     VerifiedIdentity,
 };
-use crate::{
-    Connection, DigitallySignedStruct, DistinguishedName, KeyLog, RootCertStore, VecInput,
-};
+use crate::{DigitallySignedStruct, DistinguishedName, KeyLog, RootCertStore, VecInput};
 
 #[test]
 fn tls12_client_session_value_roundtrip() {

@@ -25,8 +25,8 @@ use rustls::server::{
     ClientHello, ParsedCertificate, PreferServerOrder, ServerCredentialResolver, ServerHandshake,
 };
 use rustls::{
-    ClientConfig, ClientConnection, Connection as _, HandshakeKind, KeyingMaterialExporter,
-    ServerConfig, ServerConnection, SliceInput, SupportedCipherSuite, VecInput,
+    ClientConfig, ClientConnection, HandshakeKind, KeyingMaterialExporter, ServerConfig,
+    ServerConnection, SliceInput, SupportedCipherSuite, VecInput,
 };
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls_test::{
