@@ -193,8 +193,8 @@
 //! Now you should do appropriate IO for the `client` object.  Operations that produce TLS
 //! data to send to the peer -- such as `build()` above and `client.read_tls()` --
 //! append it to the `Vec<u8>` you pass; write those bytes to the underlying connection
-//! whenever it is able to send data.  If `client.wants_read()` yields true, you should
-//! call `client.read_tls()` with the data from the underlying connection.
+//! whenever it is able to send data. If no error has been received and no received plaintext is
+//! buffered, you should call `client.read_tls()` with the data from the underlying connection.
 //! You should continue doing this as long as the connection is valid.
 //!
 //! [`read_tls()`] will yield a [`MessageHandler`], which can be used to read all
@@ -240,10 +240,10 @@
 //! let mut socket = connect("example.com", 443);
 //! let mut input = VecInput::default();
 //! let mut sent_request = false;
+//! let mut plaintext = Vec::new();
 //! loop {
-//!   if client.wants_read() && socket.ready_for_read() {
+//!   if plaintext.is_empty() && socket.ready_for_read() {
 //!     input.read(&mut socket).unwrap();
-//!     let mut plaintext = Vec::new();
 //!     client
 //!       .read_tls(&mut input, &mut output)
 //!       .handle_all(&mut plaintext)

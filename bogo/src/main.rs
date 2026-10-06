@@ -215,7 +215,7 @@ fn exec(
             flush(&mut output, &mut conn);
         }
 
-        if sess.wants_read() {
+        if buf.is_empty() {
             state = read_all_bytes(
                 &mut buf,
                 opts,

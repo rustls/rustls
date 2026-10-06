@@ -3103,9 +3103,7 @@ fn test_complete_io_with_no_io_needed() {
 
     // neither want any IO: both directions are closed.
     assert!(client_output.is_empty());
-    assert!(!client.wants_read());
     assert!(server_output.is_empty());
-    assert!(!server.wants_read());
 
     assert_eq!(
         complete_io(

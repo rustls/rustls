@@ -201,10 +201,9 @@ impl TlsClient {
             .unwrap();
     }
 
-    /// Use wants_read and buffered TLS output to register for different
-    /// mio-level IO readiness events.
+    /// Use buffer contents to register for different mio-level IO readiness events.
     fn event_set(&self) -> mio::Interest {
-        let rd = self.tls_conn.wants_read();
+        let rd = !self.received_plaintext.is_empty();
         let wr = !self.output.is_empty();
 
         if rd && wr {

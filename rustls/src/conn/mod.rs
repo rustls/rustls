@@ -57,9 +57,6 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
     /// is empty.
     fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error>;
 
-    /// Returns true if the caller should call [`Self::read_tls()`] as soon as possible.
-    fn wants_read(&self) -> bool;
-
     /// Build a [`MessageHandler`] to process messages from the `input` buffer.
     ///
     /// Any data appended to `tls` should be sent to the peer.
@@ -277,15 +274,6 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .send_appdata_encrypt(plaintext, tls)?;
 
         Ok(())
-    }
-
-    pub(crate) fn wants_read(&self) -> bool {
-        // We want to read more data all the time, except after the peer has sent us
-        // a close notification.
-        !self
-            .common
-            .recv
-            .has_received_close_notify
     }
 
     pub(crate) fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
