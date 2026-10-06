@@ -2295,6 +2295,54 @@ fn server_error_is_sticky() {
 }
 
 #[test]
+fn write_reports_sticky_error() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    do_handshake(&mut client, &mut server);
+
+    // corrupt a record, so the server fails and sends a fatal alert
+    client
+        .writer()
+        .write_all(b"hello")
+        .unwrap();
+    let mut client_output = Vec::new();
+    client
+        .write_tls(&mut client_output)
+        .unwrap();
+    *client_output.last_mut().unwrap() ^= 1;
+    server
+        .read_tls(&mut client_output.as_slice())
+        .unwrap();
+    assert_eq!(server.process_new_packets(), Err(Error::DecryptError));
+    let mut server_output = Vec::new();
+    server
+        .write_tls(&mut server_output)
+        .unwrap();
+
+    for data in [&b"world"[..], b""] {
+        let err = server.writer().write(data).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(err.to_string(), Error::DecryptError.to_string());
+    }
+    assert!(!server.wants_write());
+
+    // the client receives the alert, but has not sent one itself
+    client
+        .read_tls(&mut server_output.as_slice())
+        .unwrap();
+    let expected = Error::AlertReceived(AlertDescription::BadRecordMac);
+    assert_eq!(client.process_new_packets(), Err(expected.clone()));
+    assert!(!client.wants_write());
+
+    let err = client
+        .writer()
+        .write(b"world")
+        .unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert_eq!(err.to_string(), expected.to_string());
+    assert!(!client.wants_write());
+}
+
+#[test]
 fn server_flush_does_nothing() {
     let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
     assert!(matches!(server.writer().flush(), Ok(())));
