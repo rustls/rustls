@@ -9,6 +9,7 @@
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::ops::Range;
 use core::{fmt, mem};
 
 use super::{
@@ -39,11 +40,11 @@ impl<Side: SideData, T: Transport> Core<Side, T> {
         Self { inner, transport }
     }
 
-    pub(crate) fn process(
+    pub(crate) fn process<'a>(
         self,
-        input: &mut dyn TlsInputBuffer,
+        input: &'a mut dyn TlsInputBuffer,
         tls: &mut Vec<u8>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Processed<'a, Side, T>, Error> {
         let Self {
             mut inner,
             mut transport,
@@ -73,7 +74,35 @@ impl<Side: SideData, T: Transport> Core<Side, T> {
         );
 
         result?;
-        Ok(Self { inner, transport })
+        Ok(Processed::Progress(Self { inner, transport }))
+    }
+}
+
+/// The result of processing handshake input.
+pub(crate) enum Processed<'a, Side: SideData, T: Transport> {
+    /// The handshake progressed as far as the available input allows.
+    Progress(Core<Side, T>),
+
+    /// A piece of early data was received.
+    ///
+    /// `range` locates the data within `input`, and `pending_discard` is the number
+    /// of bytes of `input` to discard once the caller has finished with it.
+    #[expect(dead_code)]
+    EarlyData {
+        core: Core<Side, T>,
+        input: &'a mut dyn TlsInputBuffer,
+        range: Range<usize>,
+        pending_discard: usize,
+    },
+}
+
+impl<Side: SideData, T: Transport> Processed<'_, Side, T> {
+    /// Returns the core, for transports or sides that never receive early data.
+    pub(crate) fn into_progress(self) -> Result<Core<Side, T>, Error> {
+        match self {
+            Self::Progress(core) => Ok(core),
+            Self::EarlyData { .. } => Err(Error::Unreachable("unexpected early data")),
+        }
     }
 }
 
@@ -316,7 +345,7 @@ impl<Side: SideData> VerifyPeerIdentity<Side, Tcp> {
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
         let core = self.partial_continue_with(verification_result, tls)?;
-        Side::tcp_handshake_from_core(core)
+        Side::tcp_handshake_from_core(Processed::Progress(core))
     }
 }
 

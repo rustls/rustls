@@ -25,7 +25,7 @@ pub mod kernel;
 
 mod handshake;
 pub use handshake::{Accepted, Tcp, Transport, VerifyPeerIdentity};
-pub(crate) use handshake::{ClientNext, Core, ServerNext, sealed};
+pub(crate) use handshake::{ClientNext, Core, Processed, ServerNext, sealed};
 
 mod receive;
 pub(crate) use receive::{
@@ -707,7 +707,9 @@ pub trait SideData: private::Side + Sized {
 
     #[doc(hidden)]
     #[expect(private_interfaces)]
-    fn tcp_handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error>;
+    fn tcp_handshake_from_core<'a>(
+        processed: Processed<'a, Self, Tcp>,
+    ) -> Result<Self::Handshake, Error>;
 
     #[doc(hidden)]
     #[expect(private_interfaces)]

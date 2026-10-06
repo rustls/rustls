@@ -12,7 +12,7 @@ use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
     ClientNext, Connection, ConnectionCommon, Core, KeyingMaterialExporter, MessageHandler,
-    SideCommonOutput, SideData, Tcp, VerifyPeerIdentity,
+    Processed, SideCommonOutput, SideData, Tcp, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -430,8 +430,10 @@ impl SideData for ClientSide {
     type PeerIdentity<'a> = ServerIdentity<'static, 'a>;
 
     #[expect(private_interfaces)]
-    fn tcp_handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error> {
-        ClientHandshake::try_from(core)
+    fn tcp_handshake_from_core<'a>(
+        processed: Processed<'a, Self, Tcp>,
+    ) -> Result<Self::Handshake, Error> {
+        ClientHandshake::try_from(processed.into_progress()?)
     }
 
     #[expect(private_interfaces)]

@@ -359,7 +359,12 @@ impl NeedsInput {
             .deframer
             .input_quic(input.slice_mut())?;
 
-        ServerHandshake::from_core(self.0.process(input, &mut Vec::new())?, output)
+        ServerHandshake::from_core(
+            self.0
+                .process(input, &mut Vec::new())?
+                .into_progress()?,
+            output,
+        )
     }
 
     /// Returns data learned during the connection, specific to being a server.
