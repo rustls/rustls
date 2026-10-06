@@ -8574,9 +8574,59 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
     }
 }
 
+#[cfg(feature = "tls12")]
+#[test]
+fn tls12_connection_fails_after_alert_at_confidentiality_limit() {
+    let (mut client, mut server) = tls12_pair_with_limited_confidentiality();
+
+    for i in 1..CONFIDENTIALITY_LIMIT {
+        let message = format!("{i:08}");
+        client
+            .writer()
+            .write_all(message.as_bytes())
+            .unwrap();
+        let (received, peer_closed) = receive(&mut client, &mut server);
+        assert!(!peer_closed);
+        assert_eq!(&received, message.as_bytes());
+    }
+
+    // Alerts are not subject to the limit, so the client's rejection of a renegotiation
+    // request takes the last sequence number before it.
+    let mut raw_server = RawTls::new_server(server);
+    let hello_request = PlainMessage {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_2,
+        payload: Payload::new(encoding::handshake_framing(
+            HandshakeType::HelloRequest,
+            vec![],
+        )),
+    };
+    raw_server.encrypt_and_send(&hello_request, &mut client);
+    client.process_new_packets().unwrap();
+    raw_server.receive_and_decrypt(&mut client, |m| {
+        assert_eq!(
+            format!("{m:?}"),
+            "Message { version: TLSv1_2, payload: Alert(AlertMessagePayload { level: Warning, description: NoRenegotiation }) }"
+        );
+    });
+
+    // No application data may be encrypted with the exhausted key.
+    client
+        .writer()
+        .write_all(b"later")
+        .unwrap();
+    raw_server.receive_and_decrypt(&mut client, |m| {
+        assert_eq!(
+            format!("{m:?}"),
+            "Message { version: TLSv1_2, payload: Alert(AlertMessagePayload { level: Warning, description: CloseNotify }) }"
+        );
+    });
+}
+
 /// Complete a TLS 1.2 handshake using a suite limited to [`CONFIDENTIALITY_LIMIT`] records.
 ///
-/// The client's `Finished` message used sequence number 0.
+/// The client's `Finished` message used sequence number 0. The server has secret extraction
+/// enabled.
 #[cfg(feature = "tls12")]
 fn tls12_pair_with_limited_confidentiality() -> (ClientConnection, ServerConnection) {
     let provider = aes_128_gcm_with_1024_confidentiality_limit(provider::default_provider());
@@ -8587,12 +8637,13 @@ fn tls12_pair_with_limited_confidentiality() -> (ClientConnection, ServerConnect
             .with_protocol_versions(&[&rustls::version::TLS12])
             .unwrap(),
     );
-    let server_config = finish_server_config(
+    let mut server_config = finish_server_config(
         KeyType::Ed25519,
         ServerConfig::builder_with_provider(provider)
             .with_safe_default_protocol_versions()
             .unwrap(),
     );
+    server_config.enable_secret_extraction = true;
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake(&mut client, &mut server);
