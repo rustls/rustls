@@ -144,7 +144,7 @@ fn test_quic_handshake() {
     quic_transfer(&mut server, &mut client).unwrap();
     quic_transfer(&mut client, &mut server).unwrap();
     quic_transfer(&mut server, &mut client).unwrap();
-    assert!(client.data().is_early_data_accepted());
+    assert!(client.side().is_early_data_accepted());
 
     // failed handshake
     let mut client = client_config
@@ -319,7 +319,7 @@ fn test_quic_acceptor() {
         assert!(server.zero_rtt_keys().is_none());
         assert_eq!(
             server
-                .data()
+                .side()
                 .server_name()
                 .map(AsRef::as_ref),
             Some("localhost")
@@ -941,7 +941,7 @@ fn test_quic_resumption_data_basic() {
             .unwrap();
 
     // Initially, no resumption data should be received
-    assert_eq!(server.data().received_resumption_data(), None);
+    assert_eq!(server.side().received_resumption_data(), None);
 
     // Set resumption data
     let test_data1 = b"test resumption data 1";
@@ -949,7 +949,7 @@ fn test_quic_resumption_data_basic() {
         .set_resumption_data(test_data1)
         .unwrap();
     // Still no received data (server has set data, but hasn't received any from client)
-    assert_eq!(server.data().received_resumption_data(), None);
+    assert_eq!(server.side().received_resumption_data(), None);
 
     // Update resumption data with different content
     let test_data2 = b"test resumption data 2";
@@ -957,11 +957,11 @@ fn test_quic_resumption_data_basic() {
         .set_resumption_data(test_data2)
         .unwrap();
     // Still no received data
-    assert_eq!(server.data().received_resumption_data(), None);
+    assert_eq!(server.side().received_resumption_data(), None);
 
     // Test empty resumption data
     server.set_resumption_data(b"").unwrap();
-    assert_eq!(server.data().received_resumption_data(), None);
+    assert_eq!(server.side().received_resumption_data(), None);
 }
 
 #[test]
@@ -1005,7 +1005,7 @@ fn test_quic_resumption_data_0rtt() {
         .unwrap();
     assert_eq!(
         server1
-            .data()
+            .side()
             .received_resumption_data(),
         None
     );
@@ -1022,7 +1022,7 @@ fn test_quic_resumption_data_0rtt() {
     assert_eq!(server1.handshake_kind(), Some(HandshakeKind::Full));
     assert_eq!(
         server1
-            .data()
+            .side()
             .received_resumption_data(),
         None
     );
@@ -1059,7 +1059,7 @@ fn test_quic_resumption_data_0rtt() {
     assert_eq!(server2.handshake_kind(), Some(HandshakeKind::Resumed));
     assert_eq!(
         server2
-            .data()
+            .side()
             .received_resumption_data(),
         Some(quic_0rtt_params.as_slice()),
         "Server should receive QUIC 0-RTT parameters from resumption data"
@@ -1067,7 +1067,7 @@ fn test_quic_resumption_data_0rtt() {
 
     // Verify server can parse and use the received 0-RTT parameters
     if let Some(received_params) = server2
-        .data()
+        .side()
         .received_resumption_data()
     {
         let params_str = core::str::from_utf8(received_params).unwrap();
