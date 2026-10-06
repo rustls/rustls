@@ -1694,6 +1694,73 @@ fn stream_reports_error_after_write_accepted_plaintext() {
     assert_eq!(err.to_string(), Error::DecryptError.to_string());
 }
 
+/// See <https://github.com/rustls/rustls/issues/3307>.
+#[test]
+fn stream_write_applies_backpressure_to_received_plaintext() {
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) = make_pair(
+        KeyType::default(),
+        &provider::DEFAULT_PROVIDER,
+        &mut client_output,
+    );
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+
+    // the peer sends several records, but never reads what we send
+    let mut reads = Vec::new();
+    for _ in 0..3 {
+        server
+            .write(b"hello".into(), &mut server_output)
+            .unwrap();
+        reads.insert(0, mem::take(&mut server_output));
+    }
+
+    let mut pipe = TestNonBlockIo {
+        writes: vec![],
+        reads,
+    };
+    let mut received_plaintext = Vec::new();
+    let mut client_stream = Stream::new(
+        &mut client_input,
+        &mut received_plaintext,
+        &mut client_output,
+        &mut client,
+        &mut pipe,
+    );
+
+    // writing only reads more data while no received plaintext is buffered
+    assert_eq!(client_stream.write(b"world").unwrap(), 5);
+    for _ in 0..5 {
+        assert_eq!(
+            client_stream
+                .write(b"world")
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::WouldBlock
+        );
+    }
+    assert_eq!(
+        client_stream
+            .received_plaintext
+            .as_slice(),
+        b"hello"
+    );
+
+    // buffered plaintext is still readable while writes are blocked
+    for _ in 0..3 {
+        check_read(&mut client_stream, b"hello");
+    }
+}
+
 #[test]
 fn client_stream_handshake_error() {
     let (client_config, server_config) = make_disjoint_suite_configs(provider::DEFAULT_PROVIDER);

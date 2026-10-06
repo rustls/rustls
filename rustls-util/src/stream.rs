@@ -95,6 +95,12 @@ where
     }
 
     fn prepare_read(&mut self) -> Result<()> {
+        // Return buffered plaintext without doing any IO: `complete_io()` does not read
+        // while plaintext is buffered, so blocked writes would otherwise hide it.
+        if !self.received_plaintext.is_empty() {
+            return Ok(());
+        }
+
         self.complete_prior_io()?;
 
         // We call complete_io() in a loop since a single call may read only
