@@ -110,7 +110,7 @@ where
         // must do if EOF has not been hit. We stop as soon as we have some
         // plaintext to return, since `wants_read()` stays true even when
         // plaintext is available.
-        while self.received_plaintext.is_empty() && self.conn.wants_read() {
+        while self.received_plaintext.is_empty() {
             let (read, written) = complete_io(
                 self.sock,
                 self.input,

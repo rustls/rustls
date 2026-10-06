@@ -24,7 +24,7 @@ pub use crate::stream::{Stream, StreamOwned};
 ///   the handshake is complete.
 /// - Otherwise, if `output` is not empty, it is written until it is
 ///   all written.
-/// - Otherwise, if [`wants_read()`] is true, [`VecInput::read()`] is invoked
+/// - Otherwise, if there's no received plaintext in the buffer, [`VecInput::read()`] is invoked
 ///   once.
 ///
 /// Once the handshake is complete, no further data is read from `io` while
@@ -39,7 +39,6 @@ pub use crate::stream::{Stream, StreamOwned};
 /// are wrapped in an `io::ErrorKind::InvalidData`-kind error.
 ///
 /// [`is_handshaking()`]: rustls::CommonState::is_handshaking
-/// [`wants_read()`]: rustls::Connection::wants_read
 /// [`read_tls()`]: rustls::Connection::read_tls
 pub fn complete_io(
     io: &mut (impl io::Read + io::Write),
@@ -181,7 +180,7 @@ pub fn complete_io(
 /// After the handshake, we stop reading while there is unconsumed plaintext, so that a
 /// peer cannot make us buffer an unbounded amount of it.
 fn wants_read(conn: &impl Connection, received_plaintext: &[u8]) -> bool {
-    conn.wants_read() && (conn.is_handshaking() || received_plaintext.is_empty())
+    conn.is_handshaking() || received_plaintext.is_empty()
 }
 
 /// Write the front of `output` to `io`, draining the bytes that were written.

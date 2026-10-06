@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
             }
             stream.flush()?;
 
-            while conn.wants_read() {
+            loop {
                 match input.read(&mut stream) {
                     Ok(0) => return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into()),
                     Ok(_) => break,

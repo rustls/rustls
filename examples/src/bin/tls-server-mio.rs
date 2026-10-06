@@ -413,10 +413,9 @@ impl OpenConnection {
         }
     }
 
-    /// What IO events we're currently waiting for,
-    /// based on wants_read and buffered TLS output.
+    /// What IO events we're currently waiting for, based on buffered TLS output.
     fn event_set(&self) -> mio::Interest {
-        let rd = self.tls_conn.wants_read();
+        let rd = true;
         let wr = !self.output.is_empty();
 
         if rd && wr {

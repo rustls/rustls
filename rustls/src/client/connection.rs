@@ -104,10 +104,6 @@ impl Connection for ClientConnection {
         self.inner.write(plaintext, tls)
     }
 
-    fn wants_read(&self) -> bool {
-        self.inner.wants_read()
-    }
-
     fn read_tls<'a, 'm>(
         &'a mut self,
         input: &'m mut dyn TlsInputBuffer,
