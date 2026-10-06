@@ -3549,6 +3549,57 @@ fn stream_reports_error_after_write_accepted_plaintext() {
     assert_eq!(err.to_string(), Error::DecryptError.to_string());
 }
 
+#[test]
+fn stream_write_applies_backpressure_to_received_plaintext() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    do_handshake(&mut client, &mut server);
+
+    // the peer sends several records, but never reads what we send
+    let mut reads = Vec::new();
+    for _ in 0..3 {
+        server
+            .writer()
+            .write_all(b"hello")
+            .unwrap();
+        let mut server_output = Vec::new();
+        server
+            .write_tls(&mut server_output)
+            .unwrap();
+        reads.insert(0, server_output);
+    }
+
+    let mut pipe = TestNonBlockIo {
+        writes: vec![],
+        reads,
+    };
+    let mut client_stream = Stream::new(&mut client, &mut pipe);
+
+    // writing only reads more data while no received plaintext is buffered
+    assert_eq!(client_stream.write(b"world").unwrap(), 5);
+    for _ in 0..5 {
+        assert_eq!(
+            client_stream
+                .write(b"world")
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::WouldBlock
+        );
+    }
+    assert_eq!(
+        client_stream
+            .conn
+            .process_new_packets()
+            .unwrap()
+            .plaintext_bytes_to_read(),
+        5
+    );
+
+    // buffered plaintext is still readable while writes are blocked
+    for _ in 0..3 {
+        check_read(&mut client_stream, b"hello");
+    }
+}
+
 fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let kt = KeyType::Rsa2048;
     let client_provider = CryptoProvider {
