@@ -274,6 +274,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn pre_encrypt_action_checks_limits() {
+        let action = |write_seq_max, write_seq, add| {
+            let mut record_layer = RecordLayer::new();
+            record_layer.write_seq_max = write_seq_max;
+            record_layer.write_seq = write_seq;
+            record_layer.pre_encrypt_action(add)
+        };
+
+        assert_eq!(action(10, 8, 1), PreEncryptAction::Nothing);
+        assert_eq!(action(10, 8, 2), PreEncryptAction::RefreshOrClose);
+        assert_eq!(action(10, 11, 0), PreEncryptAction::RefreshOrClose);
+        assert_eq!(
+            action(SEQ_SOFT_LIMIT, SEQ_HARD_LIMIT - 1, 0),
+            PreEncryptAction::RefreshOrClose
+        );
+        assert_eq!(
+            action(SEQ_SOFT_LIMIT, SEQ_HARD_LIMIT - 1, 1),
+            PreEncryptAction::Refuse
+        );
+    }
+
+    #[test]
     fn test_has_decrypted() {
         use crate::{ContentType, ProtocolVersion};
 

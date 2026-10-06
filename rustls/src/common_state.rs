@@ -337,6 +337,15 @@ impl CommonState {
                 ProtocolVersion::TLSv1_2,
                 payload.split_at(len).0,
             );
+
+        // Check the record limit for the last fragment before encrypting any of them, so
+        // that a write crossing the limit is not sent in part.
+        if let Some(last) = (iter.len() as u64).checked_sub(1) {
+            if !self.check_pre_encrypt_action(last) {
+                return len;
+            }
+        }
+
         for m in iter {
             self.send_single_fragment(m);
         }
@@ -352,39 +361,45 @@ impl CommonState {
             return;
         }
 
-        match self
-            .record_layer
-            .next_pre_encrypt_action()
-        {
-            PreEncryptAction::Nothing => {}
-
-            // Close connection once we start to run out of
-            // sequence space.
-            PreEncryptAction::RefreshOrClose => {
-                match self.negotiated_version {
-                    Some(ProtocolVersion::TLSv1_3) => {
-                        // driven by caller, as we don't have the `State` here
-                        self.refresh_traffic_keys_pending = true;
-                    }
-                    _ => {
-                        error!(
-                            "traffic keys exhausted, closing connection to prevent security failure"
-                        );
-                        self.send_close_notify();
-                        return;
-                    }
-                }
-            }
-
-            // Refuse to wrap counter at all costs.  This
-            // is basically untestable unfortunately.
-            PreEncryptAction::Refuse => {
-                return;
-            }
-        };
+        if !self.check_pre_encrypt_action(0) {
+            return;
+        }
 
         let em = self.record_layer.encrypt_outgoing(m);
         self.queue_tls_message(em);
+    }
+
+    /// Take the remedial action needed before encrypting the record `add` records after the next.
+    ///
+    /// Returns `false` if that record must not be encrypted.
+    fn check_pre_encrypt_action(&mut self, add: u64) -> bool {
+        match self
+            .record_layer
+            .pre_encrypt_action(add)
+        {
+            PreEncryptAction::Nothing => true,
+
+            // Close connection once we start to run out of
+            // sequence space.
+            PreEncryptAction::RefreshOrClose => match self.negotiated_version {
+                Some(ProtocolVersion::TLSv1_3) => {
+                    // driven by caller, as we don't have the `State` here
+                    self.refresh_traffic_keys_pending = true;
+                    true
+                }
+                _ => {
+                    error!(
+                        "traffic keys exhausted, closing connection to prevent security failure"
+                    );
+                    self.send_close_notify();
+                    false
+                }
+            },
+
+            // Refuse to wrap counter at all costs.  This
+            // is basically untestable unfortunately.
+            PreEncryptAction::Refuse => false,
+        }
     }
 
     fn send_plain_non_buffering(&mut self, payload: OutboundChunks<'_>, limit: Limit) -> usize {

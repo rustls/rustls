@@ -8623,6 +8623,43 @@ fn tls12_connection_fails_after_alert_at_confidentiality_limit() {
     });
 }
 
+#[cfg(feature = "tls12")]
+#[test]
+fn tls12_write_is_not_split_across_confidentiality_limit() {
+    let (mut client, mut server) = tls12_pair_with_limited_confidentiality();
+
+    // Leave three records before the limit.
+    for i in 1..CONFIDENTIALITY_LIMIT - 3 {
+        let message = format!("{i:08}");
+        client
+            .writer()
+            .write_all(message.as_bytes())
+            .unwrap();
+        let (received, peer_closed) = receive(&mut client, &mut server);
+        assert!(!peer_closed);
+        assert_eq!(&received, message.as_bytes());
+    }
+
+    // A write that fits in the remaining records is sent in full.
+    let two_records = vec![b'a'; MAX_FRAGMENT_LEN + 1];
+    client
+        .writer()
+        .write_all(&two_records)
+        .unwrap();
+    let (received, peer_closed) = receive(&mut client, &mut server);
+    assert!(!peer_closed);
+    assert_eq!(received, two_records);
+
+    // With one record left, none of a two-record write is sent.
+    client
+        .writer()
+        .write_all(&two_records)
+        .unwrap();
+    let (received, peer_closed) = receive(&mut client, &mut server);
+    assert!(peer_closed);
+    assert_eq!(received.len(), 0);
+}
+
 /// Complete a TLS 1.2 handshake using a suite limited to [`CONFIDENTIALITY_LIMIT`] records.
 ///
 /// The client's `Finished` message used sequence number 0. The server has secret extraction
@@ -8820,6 +8857,10 @@ impl ActiveKeyExchange for FakeHybridActive {
 }
 
 const CONFIDENTIALITY_LIMIT: u64 = 1024;
+
+/// Default maximum plaintext length of a record.
+#[cfg(feature = "tls12")]
+const MAX_FRAGMENT_LEN: usize = 16_384;
 
 #[test]
 fn tls13_ticket_request_new_vs_resumed() {
