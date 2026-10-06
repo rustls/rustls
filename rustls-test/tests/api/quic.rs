@@ -12,9 +12,12 @@ use rustls::error::{
     AlertDescription, ApiMisuse, CertificateError, Error, InvalidMessage, PeerIncompatible,
     PeerMisbehaved,
 };
-use rustls::quic::{self, Connection, QuicEvent, ServerHandshake, Side};
+use rustls::quic::{self, Quic, QuicEvent, ServerHandshake, Side};
 use rustls::server::Tls13Tickets;
-use rustls::{CipherSuiteCommon, HandshakeKind, SliceInput, Tls13CipherSuite, VecInput};
+use rustls::{
+    CipherSuiteCommon, ClientSide, ConnectionCommon, HandshakeKind, ServerSide, SideData,
+    SliceInput, Tls13CipherSuite, VecInput,
+};
 use rustls_test::{
     ClientStorage, KeyType, MultiTest, do_handshake, encoding, make_client_config,
     make_client_config_with_kx_groups, make_pair_for_arc_configs, make_server_config,
@@ -859,7 +862,10 @@ fn test_quic_client_rejects_tls12_server() {
     );
 }
 
-fn do_quic_handshake(client: &mut impl Connection, server: &mut impl Connection) {
+fn do_quic_handshake(
+    client: &mut ConnectionCommon<ClientSide, Quic>,
+    server: &mut ConnectionCommon<ServerSide, Quic>,
+) {
     while client.is_handshaking() || server.is_handshaking() {
         quic_transfer(client, server).unwrap();
         quic_transfer(server, client).unwrap();
@@ -867,8 +873,8 @@ fn do_quic_handshake(client: &mut impl Connection, server: &mut impl Connection)
 }
 
 fn quic_transfer(
-    sender: &mut impl Connection,
-    receiver: &mut impl Connection,
+    sender: &mut ConnectionCommon<impl SideData, Quic>,
+    receiver: &mut ConnectionCommon<impl SideData, Quic>,
 ) -> Result<KeyChanges, Error> {
     let events = sender.events().collect();
     println!("{sender:?}: events {events:?}");
@@ -877,7 +883,7 @@ fn quic_transfer(
 
 fn quic_insert(
     events: Vec<QuicEvent>,
-    receiver: &mut impl Connection,
+    receiver: &mut ConnectionCommon<impl SideData, Quic>,
 ) -> Result<KeyChanges, Error> {
     let mut changes = KeyChanges::default();
 
@@ -906,7 +912,7 @@ struct KeyChanges {
 }
 
 // Obtains and concatenates all messages from `send`
-fn flatten_events(send: &mut impl Connection) -> Vec<u8> {
+fn flatten_events(send: &mut ConnectionCommon<impl SideData, Quic>) -> Vec<u8> {
     let mut out = vec![];
     for e in send.events() {
         match e {
