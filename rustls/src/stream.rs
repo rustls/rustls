@@ -1,5 +1,5 @@
 use core::ops::{Deref, DerefMut};
-use std::io::{BufRead, IoSlice, Read, Result, Write};
+use std::io::{BufRead, ErrorKind, IoSlice, Read, Result, Write};
 
 use crate::conn::{ConnectionCommon, SideData};
 
@@ -149,10 +149,21 @@ where
         self.complete_prior_io()?;
 
         self.conn.writer().flush()?;
-        if self.conn.wants_write() {
-            self.conn.complete_io(self.sock)?;
+
+        // `complete_prior_io()` may return after making only partial progress, so
+        // keep writing until all TLS output has been handed to the transport.
+        while self.conn.wants_write() {
+            match self.conn.write_tls(self.sock) {
+                Ok(0) => return Err(ErrorKind::WriteZero.into()),
+                Ok(_) => {}
+                Err(err) if err.kind() == ErrorKind::Interrupted => {}
+                Err(err) => return Err(err),
+            }
         }
-        Ok(())
+
+        // Always flush the transport, even if we had no TLS output: an earlier
+        // flush (for example, from within `write()`) may have failed.
+        self.sock.flush()
     }
 }
 
