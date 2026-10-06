@@ -3302,6 +3302,64 @@ fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
     assert_eq!(format!("{rc:?}"), "Ok(5)");
 }
 
+#[cfg(feature = "tls12")]
+#[test]
+fn client_stream_read_after_renegotiation_refusal() {
+    test_client_stream_read_after_renegotiation_refusal(StreamKind::Ref, ReadKind::Buf);
+    test_client_stream_read_after_renegotiation_refusal(StreamKind::Owned, ReadKind::Buf);
+    test_client_stream_read_after_renegotiation_refusal(StreamKind::Ref, ReadKind::BufRead);
+    test_client_stream_read_after_renegotiation_refusal(StreamKind::Owned, ReadKind::BufRead);
+}
+
+/// Sending the `no_renegotiation` alert must not be mistaken for EOF.
+///
+/// See <https://github.com/rustls/rustls/issues/3304>.
+#[cfg(feature = "tls12")]
+fn test_client_stream_read_after_renegotiation_refusal(
+    stream_kind: StreamKind,
+    read_kind: ReadKind,
+) {
+    let provider = provider::default_provider();
+    let client_config =
+        make_client_config_with_versions(KeyType::Rsa2048, &[&rustls::version::TLS12], &provider);
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    server_config.enable_secret_extraction = true;
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    do_handshake(&mut client, &mut server);
+
+    let mut raw_server = RawTls::new_server(server);
+    let hello_request = raw_server.encrypt(&PlainMessage {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_2,
+        payload: Payload::new(encoding::handshake_framing(
+            HandshakeType::HelloRequest,
+            vec![],
+        )),
+    });
+
+    let data = b"world";
+    let app_data = raw_server.encrypt(&PlainMessage {
+        typ: ContentType::ApplicationData,
+        version: ProtocolVersion::TLSv1_2,
+        payload: Payload::new(data.to_vec()),
+    });
+
+    // Deliver each record in its own read, followed by EOF, so the alert is
+    // written before any plaintext is available.
+    let mut pipe = TestNonBlockIo {
+        writes: vec![usize::MAX],
+        reads: vec![vec![], app_data, hello_request],
+    };
+
+    let stream: Box<dyn BufRead> = match stream_kind {
+        StreamKind::Ref => Box::new(Stream::new(&mut client, &mut pipe)),
+        StreamKind::Owned => Box::new(StreamOwned::new(client, pipe)),
+    };
+
+    test_stream_read(read_kind, stream, data)
+}
+
 fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let kt = KeyType::Rsa2048;
     let client_provider = CryptoProvider {
