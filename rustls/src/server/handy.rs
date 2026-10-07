@@ -33,7 +33,7 @@ mod cache {
     use crate::sync::Arc;
 
     /// An implementer of `StoresServerSessions` that stores everything
-    /// in memory.  If enforces a limit on the number of stored sessions
+    /// in memory.  It enforces a limit on the number of stored sessions
     /// to bound memory usage.
     pub struct ServerSessionMemoryCache {
         cache: Mutex<limited_cache::LimitedCache<Vec<u8>, Vec<u8>>>,
