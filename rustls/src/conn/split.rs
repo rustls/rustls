@@ -80,7 +80,10 @@ impl<Side: SideData> SplitConnection<Side> {
             state, recv, send, ..
         } = receive;
 
-        let mut send = send.lock().unwrap();
+        let send = Arc::into_inner(send)
+            .unwrap()
+            .into_inner()
+            .unwrap();
 
         // pending data has consumed send sequence numbers so discarding it here
         // would leave the extracted secrets ahead of what the peer receives.
@@ -89,7 +92,7 @@ impl<Side: SideData> SplitConnection<Side> {
         }
 
         Connection::<Side, Tcp>::from_parts_into_kernel_connection(
-            &mut send.send,
+            send.send,
             recv,
             outputs,
             state,
