@@ -9,8 +9,8 @@ use crate::common_state::{CommonState, Event, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Accepted, Connection, NeedsInput, Processed, ServerNext, SideData, Tcp, Transport,
-    VerifyPeerIdentity,
+    Accepted, Connection, KeyingMaterialExporter, NeedsInput, Processed, ServerNext, SideData, Tcp,
+    Transport, VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -83,6 +83,11 @@ pub enum ServerHandshake {
     /// See [`VerifyPeerIdentity`] for how to proceed.
     VerifyClientIdentity(VerifyPeerIdentity<ServerSide, Tcp>),
 
+    /// A piece of TLS1.3 0RTT/"early" data has been received from the client.
+    ///
+    /// Read it via [`ReceivedEarlyData::into_next()`] to continue the handshake.
+    EarlyData(ReceivedEarlyData),
+
     /// The handshake is complete.
     ///
     /// Now see [`SplitConnection`] to continue the connection.
@@ -108,7 +113,12 @@ impl TryFrom<Processed<ServerSide, Tcp>> for ServerHandshake {
     type Error = Error;
 
     fn try_from(processed: Processed<ServerSide, Tcp>) -> Result<Self, Error> {
-        Self::try_from(processed.into_progress()?)
+        match processed {
+            Processed::Progress(conn) => Self::try_from(conn),
+            Processed::EarlyData { conn, data } => {
+                Ok(Self::EarlyData(ReceivedEarlyData { data, conn }))
+            }
+        }
     }
 }
 
@@ -187,6 +197,44 @@ impl fmt::Debug for ServerSide {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ServerSide")
             .field("sni", &self.sni)
+            .finish_non_exhaustive()
+    }
+}
+
+/// A piece of early data received from the client during the handshake.
+///
+/// "Early data" is also known as "0-RTT data".
+///
+/// **Beware** that early data is subject to replay by an attacker; see [RFC 9846
+/// appendix F.5][] for more detail.
+///
+/// The data is received in arbitrary-sized pieces.  Avoid writing your application to be
+/// sensitive to the boundaries.
+///
+/// [RFC 9846 appendix F.5]: https://datatracker.ietf.org/doc/html/rfc9846#appendix-F.5
+pub struct ReceivedEarlyData {
+    data: Vec<u8>,
+    conn: Connection<ServerSide, Tcp>,
+}
+
+impl ReceivedEarlyData {
+    /// Obtain the received early data.
+    ///
+    /// The returned [`NeedsInput`] should be given the same input buffer: it may
+    /// already contain further messages from the client.
+    pub fn into_next(self) -> (Vec<u8>, NeedsInput<ServerSide>) {
+        (self.data, NeedsInput(self.conn))
+    }
+
+    #[doc = include_str!("../doc/early_exporter.md")]
+    pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        self.conn.common.early_exporter()
+    }
+}
+
+impl fmt::Debug for ReceivedEarlyData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ReceivedEarlyData")
             .finish_non_exhaustive()
     }
 }
