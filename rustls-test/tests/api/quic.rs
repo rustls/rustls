@@ -76,7 +76,7 @@ fn test_quic_handshake() {
         .unwrap();
     assert_eq!(client.fips(), client_config.fips());
 
-    let mut server = quic::ServerConnection::new(
+    let mut server = Connection::new_quic(
         server_config.clone(),
         quic::Version::V1,
         server_params.into(),
@@ -127,7 +127,7 @@ fn test_quic_handshake() {
             .is_some()
     );
 
-    let mut server = quic::ServerConnection::new(
+    let mut server = Connection::new_quic(
         server_config.clone(),
         quic::Version::V1,
         server_params.into(),
@@ -156,8 +156,7 @@ fn test_quic_handshake() {
         .unwrap();
 
     let mut server =
-        quic::ServerConnection::new(server_config, quic::Version::V1, server_params.into())
-            .unwrap();
+        Connection::new_quic(server_config, quic::Version::V1, server_params.into()).unwrap();
 
     quic_transfer(&mut client, &mut server).unwrap();
     let err = quic_transfer(&mut server, &mut client)
@@ -225,7 +224,7 @@ fn test_quic_handshake_with_hello_retry_request() {
         .connect(server_name("localhost"))
         .build_quic(quic::Version::V1, b"client params".to_vec())
         .unwrap();
-    let mut server = quic::ServerConnection::new(
+    let mut server = Connection::new_quic(
         Arc::new(server_config),
         quic::Version::V1,
         b"server params".to_vec(),
@@ -413,7 +412,7 @@ fn test_quic_acceptor_exposes_zero_rtt_keys_before_completion() {
         .connect(server_name("localhost"))
         .build_quic(quic::Version::V1, client_params.into())
         .unwrap();
-    let mut server = quic::ServerConnection::new(
+    let mut server = Connection::new_quic(
         server_config.clone(),
         quic::Version::V1,
         server_params.to_vec(),
@@ -666,8 +665,7 @@ fn test_quic_rejects_missing_alpn() {
             .build_quic(quic::Version::V1, client_params.into())
             .unwrap();
         let mut server =
-            quic::ServerConnection::new(server_config, quic::Version::V1, server_params.into())
-                .unwrap();
+            Connection::new_quic(server_config, quic::Version::V1, server_params.into()).unwrap();
 
         let err = quic_transfer(&mut client, &mut server)
             .err()
@@ -700,8 +698,7 @@ fn test_quic_no_tls13_error() {
     let server_config = Arc::new(server_config);
 
     assert_eq!(
-        quic::ServerConnection::new(server_config, quic::Version::V1, b"server params".to_vec(),)
-            .err(),
+        Connection::new_quic(server_config, quic::Version::V1, b"server params".to_vec(),).err(),
         Some(ApiMisuse::QuicRequiresTls13Support.into())
     );
 }
@@ -727,8 +724,7 @@ fn test_quic_invalid_early_data_size() {
 
         let wrapped = Arc::new(server_config.clone());
         assert_eq!(
-            quic::ServerConnection::new(wrapped, quic::Version::V1, b"server params".to_vec(),)
-                .is_ok(),
+            Connection::new_quic(wrapped, quic::Version::V1, b"server params".to_vec(),).is_ok(),
             ok
         );
     }
@@ -741,8 +737,7 @@ fn test_quic_read_deframer_failure() {
     let server_config = Arc::new(server_config);
 
     let mut server =
-        quic::ServerConnection::new(server_config, quic::Version::V1, b"server params".to_vec())
-            .unwrap();
+        Connection::new_quic(server_config, quic::Version::V1, b"server params".to_vec()).unwrap();
 
     let err = server
         .read_hs(&mut SliceInput::new(&mut encoding::handshake_framing(
@@ -765,8 +760,7 @@ fn test_quic_server_no_params_received() {
     let server_config = Arc::new(server_config);
 
     let mut server =
-        quic::ServerConnection::new(server_config, quic::Version::V1, b"server params".to_vec())
-            .unwrap();
+        Connection::new_quic(server_config, quic::Version::V1, b"server params".to_vec()).unwrap();
 
     let mut buf = encoding::basic_client_hello(vec![]);
     let err = server
@@ -791,8 +785,7 @@ fn test_quic_server_no_tls12() {
     let server_config = Arc::new(server_config);
 
     let mut server =
-        quic::ServerConnection::new(server_config, quic::Version::V1, b"server params".to_vec())
-            .unwrap();
+        Connection::new_quic(server_config, quic::Version::V1, b"server params".to_vec()).unwrap();
 
     let mut buf = encoding::client_hello_with_extensions(vec![
         encoding::Extension::new_sig_algs(),
@@ -815,7 +808,7 @@ fn test_quic_server_no_tls12() {
 
 #[test]
 fn test_quic_server_rejects_tls12_hello() {
-    let mut server = quic::ServerConnection::new(
+    let mut server = Connection::new_quic(
         Arc::new(make_server_config(
             KeyType::EcdsaP256,
             &provider::DEFAULT_PROVIDER,
@@ -943,8 +936,7 @@ fn test_quic_resumption_data_basic() {
     let server_config = Arc::new(server_config);
 
     let mut server =
-        quic::ServerConnection::new(server_config, quic::Version::V1, server_params.to_vec())
-            .unwrap();
+        Connection::new_quic(server_config, quic::Version::V1, server_params.to_vec()).unwrap();
 
     // Initially, no resumption data should be received
     assert_eq!(server.side().received_resumption_data(), None);
@@ -999,7 +991,7 @@ fn test_quic_resumption_data_0rtt() {
     let quic_0rtt_params = b"active_connection_id_limit=2,initial_max_data=1048576,initial_max_stream_data_bidi_local=262144,initial_max_stream_data_bidi_remote=262144,initial_max_stream_data_uni=262144,initial_max_streams_bidi=100,initial_max_streams_uni=100,max_datagram_frame_size=1500";
 
     // First connection: establish session with 0-RTT parameters
-    let mut server1 = quic::ServerConnection::new(
+    let mut server1 = Connection::new_quic(
         server_config.clone(),
         quic::Version::V1,
         server_params.to_vec(),
@@ -1035,8 +1027,7 @@ fn test_quic_resumption_data_0rtt() {
 
     // Second connection: attempt 0-RTT resumption
     let mut server2 =
-        quic::ServerConnection::new(server_config, quic::Version::V1, server_params.to_vec())
-            .unwrap();
+        Connection::new_quic(server_config, quic::Version::V1, server_params.to_vec()).unwrap();
 
     let mut client2 = client_config
         .connect(server_name("localhost"))
@@ -1271,7 +1262,7 @@ fn test_quic_exporter() {
         let server_config = make_server_config(kt, &provider);
 
         let mut server =
-            quic::ServerConnection::new(server_config.into(), quic::Version::V2, vec![]).unwrap();
+            Connection::new_quic(server_config.into(), quic::Version::V2, vec![]).unwrap();
         let mut client = Arc::new(client_config)
             .connect(server_name("localhost"))
             .build_quic(quic::Version::V2, vec![])
@@ -1342,7 +1333,7 @@ fn test_fragmented_append() {
 
 #[test]
 fn server_rejects_client_hello_with_trailing_fragment() {
-    let mut server = quic::ServerConnection::new(
+    let mut server = Connection::new_quic(
         Arc::new(make_server_config(
             KeyType::default(),
             &provider::DEFAULT_TLS13_PROVIDER,
@@ -1412,7 +1403,7 @@ fn server_rejects_client_choosing_non_quic_suite() {
         kx_groups: Cow::Owned(vec![provider::kx_group::SECP256R1]),
         ..provider::DEFAULT_PROVIDER
     };
-    let mut server = quic::ServerConnection::new(
+    let mut server = Connection::new_quic(
         Arc::new(make_server_config(KeyType::EcdsaP256, &provider)),
         quic::Version::V2,
         vec![],
@@ -1493,7 +1484,7 @@ fn quic_client_ignores_stored_session_with_non_quic_suite() {
         .connect("localhost".try_into().unwrap())
         .build_quic(quic::Version::V2, vec![])
         .unwrap();
-    let mut server = quic::ServerConnection::new(
+    let mut server = Connection::new_quic(
         Arc::new(make_server_config(KeyType::EcdsaP256, &quic_provider)),
         quic::Version::V2,
         vec![],
