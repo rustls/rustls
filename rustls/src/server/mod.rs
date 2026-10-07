@@ -22,7 +22,7 @@ pub use config::{
 };
 
 mod connection;
-pub use connection::{ServerHandshake, ServerSide};
+pub use connection::{ReceivedEarlyData, ServerHandshake, ServerSide};
 
 pub use crate::conn::Accepted;
 

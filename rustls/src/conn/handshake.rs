@@ -32,7 +32,6 @@ pub(crate) enum Processed<Side: SideData, T: Transport> {
     Progress(Connection<Side, T>),
 
     /// A piece of early data was received.
-    #[expect(dead_code)]
     EarlyData {
         conn: Connection<Side, T>,
         data: Vec<u8>,

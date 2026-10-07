@@ -7,7 +7,7 @@ use kernel::KernelConnection;
 
 use crate::client::ClientSide;
 use crate::common_state::{
-    CommonState, ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent,
+    CommonState, ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent, UnborrowedPayload,
 };
 use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::{OutboundPlain, Payload};
@@ -67,18 +67,25 @@ impl<Side: SideData, T: Transport> Connection<Side, T> {
         tls: &mut Vec<u8>,
     ) -> Result<Processed<Side, T>, Error> {
         let mut iter = MessageIter::new(input, tls, &mut self, MessageIterMode::Handshake);
-        let result = loop {
-            match iter.next(false) {
-                Some(Ok(_)) => {}
-                Some(Err(e)) => break Err(e),
-                None => break Ok(()),
-            };
+        let early_data = match iter.next(true) {
+            Some(Ok(UnborrowedPayload::Unborrowed(range))) => Ok(Some(
+                Delocator::new(input.slice_mut())
+                    .slice_from_range(&range)
+                    .to_vec(),
+            )),
+            Some(Ok(UnborrowedPayload::Owned(_))) => Err(Error::Unreachable(
+                "decrypted early data should be borrowed",
+            )),
+            Some(Err(e)) => Err(e),
+            None => Ok(None),
         };
 
         input.discard(self.common.recv.deframer.take_discard());
 
-        result?;
-        Ok(Processed::Progress(self))
+        Ok(match early_data? {
+            Some(data) => Processed::EarlyData { conn: self, data },
+            None => Processed::Progress(self),
+        })
     }
 
     #[doc = include_str!("../doc/exporter.md")]

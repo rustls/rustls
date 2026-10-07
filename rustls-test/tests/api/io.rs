@@ -2480,7 +2480,7 @@ fn client_handshake_sends_early_data() {
             .start_handshake(&mut client_output)
             .unwrap();
 
-        client
+        let client_early_exporter = client
             .early_exporter()
             .expect("early exporter not available");
         let mut early_data = client
@@ -2488,41 +2488,94 @@ fn client_handshake_sends_early_data() {
             .expect("early data not available");
         assert_eq!(
             early_data
-                .write(b"early hello world".into(), &mut client_output)
+                .write(b"early ".into(), &mut client_output)
                 .unwrap(),
-            17
+            6
+        );
+        assert_eq!(
+            early_data
+                .write(b"hello world".into(), &mut client_output)
+                .unwrap(),
+            11
         );
         assert_eq!(early_data.bytes_left(), 0xffff - 17);
 
-        let mut server = Connection::new(server_config).unwrap();
-        let mut server_output = Vec::new();
-        let mut received = Vec::new();
-        let mut server_input = SliceInput::new(&mut client_output);
-        let mut handler = server.read_tls(&mut server_input, &mut server_output);
-        while let Some(result) = handler.next_early_data() {
-            received.extend_from_slice(result.unwrap().bytes());
-        }
-        handler
-            .handle_all(&mut Vec::new())
+        let mut server_input = VecInput::default();
+        server_input
+            .read(&mut client_output.as_slice())
             .unwrap();
-        assert_eq!(received, b"early hello world");
-
         client_output.clear();
-        let ClientHandshake::Complete(split) = client
+
+        let mut server_output = Vec::new();
+        let ServerHandshake::Accepted(accepted) = ServerHandshake::start()
+            .process(&mut server_input, &mut server_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+        let ServerHandshake::NeedsInput(mut server) = accepted
+            .choose_config(server_config, &mut server_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
+
+        let mut received = Vec::new();
+        let mut server_early_exporter = None;
+        let server = loop {
+            server = match server
+                .process(&mut server_input, &mut server_output)
+                .unwrap()
+            {
+                ServerHandshake::EarlyData(mut early_data) => {
+                    assert_eq!(format!("{early_data:?}"), "ReceivedEarlyData { .. }");
+                    if server_early_exporter.is_none() {
+                        server_early_exporter = Some(
+                            early_data
+                                .early_exporter()
+                                .expect("early exporter not available"),
+                        );
+                    }
+                    let (data, next) = early_data.into_next();
+                    received.push(data);
+                    next
+                }
+                ServerHandshake::NeedsInput(server) => break server,
+                other => panic!("unexpected state {other:?}"),
+            };
+        };
+        assert_eq!(received, [b"early ".to_vec(), b"hello world".to_vec()]);
+        assert_eq!(
+            client_early_exporter
+                .derive(b"label", Some(b"context"), [0u8; 32])
+                .unwrap(),
+            server_early_exporter
+                .expect("no early data received")
+                .derive(b"label", Some(b"context"), [0u8; 32])
+                .unwrap()
+        );
+
+        let ClientHandshake::Complete(client) = client
             .process(&mut SliceInput::new(&mut server_output), &mut client_output)
             .unwrap()
         else {
             panic!("unexpected state");
         };
-        server
-            .read_tls(&mut SliceInput::new(&mut client_output), &mut server_output)
-            .handle_all(&mut Vec::new())
-            .unwrap();
         assert!(
-            split
+            client
                 .side_outputs
                 .is_early_data_accepted()
         );
+
+        server_input
+            .read(&mut client_output.as_slice())
+            .unwrap();
+        let ServerHandshake::Complete(_) = server
+            .process(&mut server_input, &mut server_output)
+            .unwrap()
+        else {
+            panic!("unexpected state");
+        };
     }
 }
 
