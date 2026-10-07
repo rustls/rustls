@@ -269,6 +269,8 @@ mod tests {
 
     use pki_types::{ServerName, UnixTime};
 
+    #[cfg(feature = "std")]
+    use super::ClientSessionMemoryCache;
     use super::NoClientSessionStorage;
     use super::provider::cipher_suite;
     use crate::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -343,6 +345,67 @@ mod tests {
             ),
         );
         assert!(c.take_tls13_ticket(&name).is_none());
+    }
+
+    /// For each `size` from 1 to 8, the cache keeps one server's key
+    /// exchange hint and TLS 1.3 ticket.
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_clientsessionmemorycache_small_sizes_retain_server() {
+        for size in 1..=8 {
+            let c = ClientSessionMemoryCache::new(size);
+            let name = ServerName::try_from("example.com").unwrap();
+
+            c.set_kx_hint(name.clone(), NamedGroup::X25519);
+            assert_eq!(c.kx_hint(&name), Some(NamedGroup::X25519), "size {size}");
+
+            c.insert_tls13_ticket(name.clone(), tls13_session(UnixTime::now()));
+            assert!(c.take_tls13_ticket(&name).is_some(), "size {size}");
+        }
+    }
+
+    /// A cache of size 9 remembers two servers: after three servers are
+    /// added, the first is evicted and the other two remain.
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_clientsessionmemorycache_evicts_oldest_server() {
+        let c = ClientSessionMemoryCache::new(9);
+        let first = ServerName::try_from("first.example.com").unwrap();
+        let second = ServerName::try_from("second.example.com").unwrap();
+        let third = ServerName::try_from("third.example.com").unwrap();
+
+        c.set_kx_hint(first.clone(), NamedGroup::X25519);
+        c.set_kx_hint(second.clone(), NamedGroup::X25519);
+        c.set_kx_hint(third.clone(), NamedGroup::X25519);
+
+        assert_eq!(c.kx_hint(&first), None);
+        assert_eq!(c.kx_hint(&second), Some(NamedGroup::X25519));
+        assert_eq!(c.kx_hint(&third), Some(NamedGroup::X25519));
+    }
+
+    /// Test helper: builds a placeholder TLS 1.3 ticket. Its contents are
+    /// empty or dummy values; the tests only check whether the cache
+    /// keeps it.
+    #[cfg(feature = "std")]
+    fn tls13_session(now: UnixTime) -> Tls13ClientSessionValue {
+        let SupportedCipherSuite::Tls13(tls13_suite) = cipher_suite::TLS13_AES_256_GCM_SHA384
+        else {
+            unreachable!();
+        };
+        let server_cert_verifier: Arc<dyn ServerCertVerifier> = Arc::new(DummyServerCertVerifier);
+        let resolves_client_cert: Arc<dyn ResolvesClientCert> = Arc::new(DummyResolvesClientCert);
+        Tls13ClientSessionValue::new(
+            tls13_suite,
+            Arc::new(PayloadU16::empty()),
+            &[],
+            CertificateChain::default(),
+            &server_cert_verifier,
+            &resolves_client_cert,
+            now,
+            0,
+            0,
+            0,
+        )
     }
 
     #[derive(Debug)]
