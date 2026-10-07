@@ -169,6 +169,19 @@ impl<Side: SideData> NeedsInput<Side> {
     pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         self.0.inner.early_exporter()
     }
+
+    /// Returns data learned during the connection, specific to this side.
+    pub fn side(&self) -> &Side {
+        &self.0.inner.side
+    }
+}
+
+impl<Side: SideData> Deref for NeedsInput<Side> {
+    type Target = ConnectionOutputs;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.inner.deref()
+    }
 }
 
 impl<S: SideData> fmt::Debug for NeedsInput<S> {
