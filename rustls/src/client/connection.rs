@@ -45,11 +45,6 @@ impl Connection<ClientSide, Tcp> {
         let Self { side, common, .. } = self;
         WriteEarlyData::new(&mut side.early_data, common)
     }
-
-    /// Returns the number of TLS1.3 tickets that have been received.
-    pub fn tls13_tickets_received(&self) -> u32 {
-        self.common.recv.tls13_tickets_received
-    }
 }
 
 /// Builder for client [`Connection`] values.
