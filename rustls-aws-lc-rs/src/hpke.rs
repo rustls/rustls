@@ -1086,6 +1086,40 @@ mod tests {
         assert!(sealer.seal(b"aad", b"message").is_err());
         assert_eq!(sealer.key_schedule.seq_num, max_seq_num);
     }
+
+    // Ensure open propagates the sequence-limit error even after successful authentication.
+    #[test]
+    fn open_at_the_sequence_limit_fails_without_advancing() {
+        let max_seq_num = (1u128 << (NONCE_LEN * 8)) - 1;
+        let mut opener = Opener::<AES_128_KEY_LEN, 32> {
+            key_schedule: KeySchedule {
+                aead: &aead::AES_128_GCM,
+                key: AeadKey([0u8; AES_128_KEY_LEN]),
+                base_nonce: [0u8; NONCE_LEN],
+                seq_num: max_seq_num,
+            },
+        };
+
+        // Seal directly: the HPKE sealer refuses to produce a ciphertext at this
+        // sequence. With an all-zero base nonce, the nonce equals the sequence number
+        // encoded as 12 bytes. At the maximum sequence, every byte is 0xff.
+        let key =
+            LessSafeKey::new(UnboundKey::new(&aead::AES_128_GCM, &[0u8; AES_128_KEY_LEN]).unwrap());
+        let mut ciphertext = b"message".to_vec();
+        key.seal_in_place_append_tag(
+            Nonce::assume_unique_for_key([0xff; NONCE_LEN]),
+            Aad::from(b"aad"),
+            &mut ciphertext,
+        )
+        .unwrap();
+
+        assert!(
+            opener
+                .open(b"aad", &ciphertext)
+                .is_err()
+        );
+        assert_eq!(opener.key_schedule.seq_num, max_seq_num);
+    }
 }
 
 #[cfg(test)]
