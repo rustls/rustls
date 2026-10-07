@@ -120,7 +120,7 @@ impl SendPath {
         Ok(())
     }
 
-    pub(super) fn export(&mut self) -> Result<(u64, Option<Box<KeyScheduleTrafficSend>>), Error> {
+    pub(super) fn export(mut self) -> Result<(u64, Option<Box<KeyScheduleTrafficSend>>), Error> {
         Ok((
             match &self.encrypt_state {
                 EncryptionState::Encrypting(encrypting) => encrypting.write_seq,
