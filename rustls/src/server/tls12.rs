@@ -14,7 +14,7 @@ use crate::ConnectionTrafficSecrets;
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
-use crate::conn::{ConnectionRandoms, DataKind, Input, State, VerifySidePeerIdentity};
+use crate::conn::{ConnectionRandoms, DataKind, Encrypter, Input, State, VerifySidePeerIdentity};
 use crate::crypto::cipher::{EncodableVersion, Payload, RecordDecrypter, RecordEncrypter};
 use crate::crypto::kx::{ActiveKeyExchange, SupportedKxGroup};
 use crate::crypto::{Identity, TicketProducer};
@@ -359,13 +359,13 @@ mod client_hello {
         emit_ccs(output)?;
 
         let (dec, encrypter) = secrets.make_cipher_pair(Side::Server);
-        output.send().set_encrypter(
+        output.send().set_encrypter(Encrypter {
             encrypter,
-            secrets
+            limit: secrets
                 .suite()
                 .common
                 .confidentiality_limit,
-        );
+        });
         emit_finished(&secrets, &mut hs.transcript, output, &proof)?;
 
         Ok(Box::new(ExpectCcs {
@@ -1031,13 +1031,14 @@ impl State<ServerSide> for ExpectFinished {
                 }
             }
             emit_ccs(output)?;
-            output.send().set_encrypter(
+            output.send().set_encrypter(Encrypter {
                 encrypter,
-                self.secrets
+                limit: self
+                    .secrets
                     .suite()
                     .common
                     .confidentiality_limit,
-            );
+            });
             emit_finished(&self.secrets, &mut self.hs.transcript, output, &proof)?;
         }
 

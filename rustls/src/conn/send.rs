@@ -107,16 +107,17 @@ impl SendPath {
     }
 
     fn send_key_update_request(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
-        let ks = self.tls13_key_schedule.take();
-
-        let Some(mut ks) = ks else {
+        if self.tls13_key_schedule.is_none() {
             return Err(Error::HandshakeNotComplete);
-        };
+        }
 
         self.send_msg(Message::build_key_update_request(), true, tls)?;
-        ks.update_encrypter(self);
+        if let Some(ks) = &mut self.tls13_key_schedule {
+            self.encrypt_state
+                .set_encrypter(ks.update_encrypter());
+        }
+
         self.key_update_local = KeyUpdateLocal::Outstanding;
-        self.tls13_key_schedule = Some(ks);
         Ok(())
     }
 
@@ -169,9 +170,9 @@ impl SendOutput for SendPath {
         encrypting.encrypt_outgoing(record.borrow_outbound(), &mut queued)?;
         self.key_update_remote = KeyUpdateRemote::Queued(queued);
 
-        if let Some(mut ks) = self.tls13_key_schedule.take() {
-            ks.update_encrypter_for_key_update(self);
-            self.tls13_key_schedule = Some(ks);
+        if let Some(ks) = &mut self.tls13_key_schedule {
+            self.encrypt_state
+                .set_encrypter(ks.update_encrypter_for_key_update());
         }
 
         Ok(())
@@ -183,9 +184,9 @@ impl SendOutput for SendPath {
         }
     }
 
-    fn set_encrypter(&mut self, encrypter: Box<dyn RecordEncrypter>, max_records: u64) {
+    fn set_encrypter(&mut self, encrypter: Encrypter) {
         self.encrypt_state
-            .set_encrypter(encrypter, max_records);
+            .set_encrypter(encrypter);
     }
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>) {
@@ -309,11 +310,16 @@ enum EncryptionState {
 }
 
 impl EncryptionState {
-    fn set_encrypter(&mut self, encrypter: Box<dyn RecordEncrypter>, max_records: u64) {
+    fn set_encrypter(&mut self, encrypter: Encrypter) {
         if matches!(self, Self::Retired) {
             // Retirement is permanent.
             return;
         }
+
+        let Encrypter {
+            encrypter,
+            limit: max_records,
+        } = encrypter;
 
         *self = Self::Encrypting(Encrypting {
             encrypter,
@@ -485,7 +491,7 @@ pub(crate) trait SendOutput {
 
     fn note_key_update_response(&mut self);
 
-    fn set_encrypter(&mut self, cipher: Box<dyn RecordEncrypter>, max_records: u64);
+    fn set_encrypter(&mut self, encrypter: Encrypter);
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>);
 
@@ -504,6 +510,11 @@ pub(crate) trait SendOutput {
         must_encrypt: bool,
         tls: &mut Vec<u8>,
     ) -> Result<(), Error>;
+}
+
+pub(crate) struct Encrypter {
+    pub(crate) encrypter: Box<dyn RecordEncrypter>,
+    pub(crate) limit: u64,
 }
 
 #[cfg(test)]
