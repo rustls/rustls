@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 
 use super::{DataKind, SEQ_HARD_LIMIT, SEQ_SOFT_LIMIT};
 use crate::crypto::cipher::{
-    EncodableVersion, OutboundPlain, Payload, Record, RecordEncrypter, encode_record_header,
+    EncodableVersion, OutboundPlain, Record, RecordEncrypter, encode_record_header,
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, ApiMisuse, Error};
@@ -107,16 +107,23 @@ impl SendPath {
     }
 
     fn send_key_update_request(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
-        if self.tls13_key_schedule.is_none() {
+        let EncryptionState::Encrypting(encrypting) = &mut self.encrypt_state else {
+            return Err(Error::EncryptError);
+        };
+
+        let Some(ks) = &mut self.tls13_key_schedule else {
             return Err(Error::HandshakeNotComplete);
-        }
+        };
 
-        self.send_msg(Message::build_key_update_request(), true, tls)?;
-        if let Some(ks) = &mut self.tls13_key_schedule {
-            self.encrypt_state
-                .set_encrypter(ks.update_encrypter());
-        }
+        send_short(
+            Message::build_key_update_request(),
+            tls,
+            &mut self.key_update_remote,
+            Some(encrypting),
+        )?;
 
+        self.encrypt_state
+            .set_encrypter(ks.update_encrypter());
         self.key_update_local = KeyUpdateLocal::Outstanding;
         Ok(())
     }
@@ -165,9 +172,13 @@ impl SendOutput for SendPath {
             return Err(Error::EncryptError);
         };
 
-        let record = Record::<Payload<'static>>::from(Message::build_key_update_notify());
         let mut queued = Vec::new();
-        encrypting.encrypt_outgoing(record.borrow_outbound(), &mut queued)?;
+        send_short(
+            Message::build_key_update_notify(),
+            &mut queued,
+            &mut self.key_update_remote,
+            Some(encrypting),
+        )?;
         self.key_update_remote = KeyUpdateRemote::Queued(queued);
 
         if let Some(ks) = &mut self.tls13_key_schedule {
