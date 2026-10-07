@@ -12,7 +12,7 @@ use rustls::error::{
     AlertDescription, ApiMisuse, CertificateError, Error, InvalidMessage, PeerIncompatible,
     PeerMisbehaved,
 };
-use rustls::quic::{self, Connection, QuicEvent, ServerHandshake, Side};
+use rustls::quic::{self, ClientHandshake, Connection, QuicEvent, ServerHandshake, Side};
 use rustls::server::Tls13Tickets;
 use rustls::{CipherSuiteCommon, HandshakeKind, SliceInput, Tls13CipherSuite, VecInput};
 use rustls_test::{
@@ -388,6 +388,83 @@ fn test_quic_acceptor() {
         assert!(!server.is_handshaking());
         assert_eq!(client.quic_transport_parameters(), Some(server_params));
     }
+}
+
+#[test]
+fn test_quic_client_handshake() {
+    let kt = KeyType::default();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let client_config = Arc::new(make_client_config(kt, &provider));
+    let client_fips = client_config.fips();
+    let server_config = Arc::new(make_server_config(kt, &provider));
+    let client_params = &b"client params"[..];
+    let server_params = &b"server params"[..];
+
+    let mut client_initial = vec![];
+    let needs_input = client_config
+        .connect(server_name("localhost"))
+        .start_quic_handshake(quic::Version::V1, client_params.into(), &mut client_initial)
+        .unwrap();
+    assert!(
+        needs_input
+            .quic_transport_parameters()
+            .is_none()
+    );
+    assert!(needs_input.zero_rtt_keys().is_none());
+
+    let mut server =
+        quic::ServerConnection::new(server_config, quic::Version::V1, server_params.into())
+            .unwrap();
+    quic_insert(client_initial, &mut server).unwrap();
+
+    let mut client_flight = vec![];
+    let mut state = ClientHandshake::NeedsInput(needs_input);
+    let mut verified = false;
+    for event in server.events() {
+        let QuicEvent::Message(mut message) = event else {
+            continue;
+        };
+        let ClientHandshake::NeedsInput(needs_input) = state else {
+            panic!("unexpected state {state:?}");
+        };
+        let mut input = SliceInput::new(&mut message);
+        state = needs_input
+            .process(&mut input, &mut client_flight)
+            .unwrap();
+
+        if let ClientHandshake::VerifyServerIdentity(verify) = state {
+            verify.presented_identity().unwrap();
+            verified = true;
+            state = match verify
+                .with_config(&mut client_flight)
+                .unwrap()
+            {
+                ClientHandshake::NeedsInput(needs_input) => needs_input
+                    .process(&mut input, &mut client_flight)
+                    .unwrap(),
+                other => other,
+            };
+        }
+    }
+    assert!(verified);
+
+    let ClientHandshake::Complete(mut client) = state else {
+        panic!("unexpected state {state:?}");
+    };
+    assert_eq!(client.fips(), client_fips);
+    assert_eq!(client.quic_transport_parameters(), Some(server_params));
+    assert!(
+        client_flight
+            .iter()
+            .any(|ev| matches!(ev, QuicEvent::KeyChange(quic::KeyChange::OneRtt { .. })))
+    );
+
+    quic_insert(client_flight, &mut server).unwrap();
+    quic_transfer(&mut server, &mut client).unwrap();
+
+    assert!(!client.is_handshaking());
+    assert!(!server.is_handshaking());
+    assert_eq!(server.quic_transport_parameters(), Some(client_params));
 }
 
 #[test]

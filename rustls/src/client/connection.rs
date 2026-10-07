@@ -197,6 +197,41 @@ impl ClientConnectionBuilder {
         version: quic::Version,
         params: Vec<u8>,
     ) -> Result<QuicClientConnection, Error> {
+        let Core { inner, transport } = self.quic_core(version, params)?;
+        Ok(QuicClientConnection::from(QuicCommon::new(
+            inner, transport,
+        )))
+    }
+
+    /// Finalize the builder and create a [`quic::ClientHandshake`].
+    ///
+    /// `params` contains the TLS-encoded transport parameters to send, and `version`
+    /// specifies the QUIC protocol version.
+    ///
+    /// It is a fundamental fact of client TLS connections that the client writes first; the
+    /// resulting events are appended to `output`.  The client then always reads the server's
+    /// response, as represented by the [`quic::NeedsInput`] return value.
+    ///
+    /// You may wrap this in the [`quic::ClientHandshake::NeedsInput`] variant to generalise the
+    /// type to a [`quic::ClientHandshake`].
+    ///
+    /// The returned object should be fed data from a single server.
+    pub fn start_quic_handshake(
+        self,
+        version: quic::Version,
+        params: Vec<u8>,
+        output: &mut Vec<quic::QuicEvent>,
+    ) -> Result<quic::NeedsInput<ClientSide>, Error> {
+        let mut core = self.quic_core(version, params)?;
+        output.extend(core.transport.events());
+        Ok(quic::NeedsInput(core))
+    }
+
+    fn quic_core(
+        self,
+        version: quic::Version,
+        params: Vec<u8>,
+    ) -> Result<Core<ClientSide, Quic>, Error> {
         let suites = &self
             .config
             .provider()
@@ -242,7 +277,7 @@ impl ClientConnectionBuilder {
 
         // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
         debug_assert!(tls.is_empty());
-        Ok(QuicClientConnection::from(QuicCommon::new(inner, quic)))
+        Ok(Core::new(inner, quic))
     }
 
     /// Finalize the builder and create a [`ClientHandshake`].
@@ -448,7 +483,7 @@ impl ClientSide {
 
 impl SideData for ClientSide {
     type Handshake = ClientHandshake;
-    type QuicHandshake = ();
+    type QuicHandshake = quic::ClientHandshake;
 
     type PeerIdentity<'a> = ServerIdentity<'static, 'a>;
 
@@ -459,10 +494,10 @@ impl SideData for ClientSide {
 
     #[expect(private_interfaces)]
     fn quic_handshake_from_core(
-        _core: Core<Self, Quic>,
-        _output: &mut Vec<quic::QuicEvent>,
+        core: Core<Self, Quic>,
+        output: &mut Vec<quic::QuicEvent>,
     ) -> Result<Self::QuicHandshake, Error> {
-        todo!("nyi")
+        quic::ClientHandshake::from_core(core, output)
     }
 }
 

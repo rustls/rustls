@@ -273,7 +273,8 @@ impl<T: Transport> fmt::Debug for Accepted<T> {
 /// - Abandon the handshake by discarding this object.
 ///
 /// The returned object is a further handshake state for this side.  Commonly this will
-/// contain a [`ServerHandshake::NeedsInput`][], [`ClientHandshake::NeedsInput`][] or [`quic::ServerHandshake::NeedsInput`][]
+/// contain a [`ServerHandshake::NeedsInput`][], [`ClientHandshake::NeedsInput`][],
+/// [`quic::ServerHandshake::NeedsInput`][] or [`quic::ClientHandshake::NeedsInput`][]
 /// which will accept and process further data.
 ///
 /// [`ClientVerifier::verify_identity()`]: crate::verify::ClientVerifier::verify_identity
@@ -281,6 +282,7 @@ impl<T: Transport> fmt::Debug for Accepted<T> {
 /// [`ServerHandshake::NeedsInput`]: crate::server::ServerHandshake::NeedsInput
 /// [`ClientHandshake::NeedsInput`]: crate::client::ClientHandshake::NeedsInput
 /// [`quic::ServerHandshake::NeedsInput`]: crate::quic::ServerHandshake::NeedsInput
+/// [`quic::ClientHandshake::NeedsInput`]: crate::quic::ClientHandshake::NeedsInput
 pub struct VerifyPeerIdentity<Side: SideData, T: Transport> {
     // invariant: `core.inner.state` is `Err(_)` and requires restoring
     core: Core<Side, T>,
