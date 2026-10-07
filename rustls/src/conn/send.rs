@@ -205,23 +205,17 @@ impl SendOutput for SendPath {
             EncryptionState::Retired => return Ok(()),
         };
 
-        // Alerts always fit in a single record, and are never quashed by a `PreEncryptAction`.
-        let record = Record::from(Message::build_alert(level, desc));
-        let record = record.borrow_outbound();
-        let result = match encrypting {
-            Some(encrypting) => {
-                self.key_update_remote.write(tls);
-                encrypting.encrypt_outgoing(record, tls)
-            }
-            None => {
-                record.encode_unencrypted(tls);
-                Ok(())
-            }
-        };
+        let result = send_short(
+            Message::build_alert(level, desc),
+            tls,
+            &mut self.key_update_remote,
+            encrypting,
+        );
 
         if level == AlertLevel::Fatal {
             self.encrypt_state = EncryptionState::Retired;
         }
+
         result
     }
 
@@ -446,6 +440,27 @@ impl Encrypting {
     fn encrypted_len(&self, payload_len: usize) -> usize {
         self.encrypter
             .encrypted_payload_len(payload_len)
+    }
+}
+
+fn send_short(
+    message: Message<'_>,
+    tls: &mut Vec<u8>,
+    key_update_remote: &mut KeyUpdateRemote,
+    encrypting: Option<&mut Encrypting>,
+) -> Result<(), Error> {
+    // Alerts always fit in a single record, and are never quashed by a `PreEncryptAction`.
+    let record = Record::from(message);
+    let record = record.borrow_outbound();
+    match encrypting {
+        Some(encrypting) => {
+            key_update_remote.write(tls);
+            encrypting.encrypt_outgoing(record, tls)
+        }
+        None => {
+            record.encode_unencrypted(tls);
+            Ok(())
+        }
     }
 }
 
