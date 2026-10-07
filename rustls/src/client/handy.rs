@@ -75,10 +75,19 @@ mod cache {
     }
 
     impl ClientSessionMemoryCache {
-        /// Make a new ClientSessionMemoryCache.  `size` is the
-        /// maximum number of stored sessions.
+        /// Make a new `ClientSessionMemoryCache`.
+        ///
+        /// `size` determines the maximum number of servers to remember:
+        /// `size` divided by `MAX_TLS13_TICKETS_PER_SERVER` (8), rounded
+        /// up. Each server keeps up to 8 TLS 1.3 tickets. When the maximum
+        /// is reached, the server that was added first is evicted.
+        ///
+        /// For example, `new(100)` remembers up to 13 servers. Any `size`
+        /// from 1 to 8 remembers one server, and a `size` of 0 remembers
+        /// none.
         #[cfg(feature = "std")]
         pub fn new(size: usize) -> Self {
+            // Round up so that any non-zero size holds at least one server.
             let max_servers = size.saturating_add(MAX_TLS13_TICKETS_PER_SERVER - 1)
                 / MAX_TLS13_TICKETS_PER_SERVER;
             Self {
@@ -86,10 +95,19 @@ mod cache {
             }
         }
 
-        /// Make a new ClientSessionMemoryCache.  `size` is the
-        /// maximum number of stored sessions.
+        /// Make a new `ClientSessionMemoryCache`.
+        ///
+        /// `size` determines the maximum number of servers to remember:
+        /// `size` divided by `MAX_TLS13_TICKETS_PER_SERVER` (8), rounded
+        /// up. Each server keeps up to 8 TLS 1.3 tickets. When the maximum
+        /// is reached, the server that was added first is evicted.
+        ///
+        /// For example, `new(100)` remembers up to 13 servers. Any `size`
+        /// from 1 to 8 remembers one server, and a `size` of 0 remembers
+        /// none.
         #[cfg(not(feature = "std"))]
         pub fn new<M: crate::lock::MakeMutex>(size: usize) -> Self {
+            // Round up so that any non-zero size holds at least one server.
             let max_servers = size.saturating_add(MAX_TLS13_TICKETS_PER_SERVER - 1)
                 / MAX_TLS13_TICKETS_PER_SERVER;
             Self {
