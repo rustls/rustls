@@ -96,6 +96,11 @@ impl<'a> Iterator for Chunker<'a> {
         self.payload = after;
         Some(before)
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
 }
 
 impl ExactSizeIterator for Chunker<'_> {
