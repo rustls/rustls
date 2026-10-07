@@ -70,7 +70,8 @@ mod client_hello {
     };
     use crate::tls13::Tls13ProtocolSuite;
     use crate::tls13::key_schedule::{
-        KeyScheduleEarlyServer, KeyScheduleHandshake, KeySchedulePreHandshake,
+        EarlyTrafficDecrypter, KeyScheduleEarlyServer, KeyScheduleHandshake,
+        KeySchedulePreHandshake, ServerHandshakeSecrets, ServerTrafficSecrets,
     };
     use crate::verify::DigitallySignedStruct;
 
@@ -584,13 +585,19 @@ mod client_hello {
         let mut early_exporter = None;
         let key_schedule_pre_handshake = if let Some(PskAcceptance { session, .. }) = resuming {
             let early_key_schedule = KeyScheduleEarlyServer::new(suite, session.secret.bytes())?;
-            early_key_schedule.client_early_traffic_secret(
-                &client_hello_hash,
-                &*config.key_log,
-                &randoms.client,
-                output,
-                proof,
-            );
+            let EarlyTrafficDecrypter { decrypter, secret } = early_key_schedule
+                .client_early_traffic_secret(&client_hello_hash, &*config.key_log, &randoms.client);
+
+            if let Some(quic) = output.quic() {
+                // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
+                // before the application can see.
+                quic.early_secret(Some(secret));
+            }
+
+            output
+                .receive()
+                .decrypt_state
+                .set_record_decrypter(decrypter, proof);
 
             if config.max_early_data_size > 0 {
                 early_exporter = Some(early_key_schedule.early_exporter(
@@ -609,12 +616,21 @@ mod client_hello {
         let key_schedule = key_schedule_pre_handshake.into_handshake(ckx.secret);
 
         let handshake_hash = transcript.current_hash();
-        let key_schedule = key_schedule.derive_server_handshake_secrets(
+        let ServerHandshakeSecrets {
+            key_schedule,
+            encrypter,
+            quic: quic_secrets,
+        } = key_schedule.derive_server_handshake_secrets(
             handshake_hash,
             &*config.key_log,
             &randoms.client,
-            output,
         );
+
+        if let (Some(quic), Some(update)) = (output.quic(), quic_secrets) {
+            quic.handshake_secrets(update);
+        }
+
+        output.send().set_encrypter(encrypter);
 
         Ok((key_schedule, early_exporter))
     }
@@ -888,12 +904,23 @@ mod client_hello {
 
         // Now move to application data keys.  Read key change is deferred until
         // the Finish message is received & validated.
-        Ok(key_schedule.into_traffic_with_client_finished_pending(
+        let ServerTrafficSecrets {
+            key_schedule,
+            encrypter,
+            quic: quic_secrets,
+        } = key_schedule.into_traffic_with_client_finished_pending(
             hash_at_server_fin,
             &*config.key_log,
             &randoms.client,
-            output,
-        ))
+        );
+
+        output.send().set_encrypter(encrypter);
+
+        if let (Some(quic), Some(update)) = (output.quic(), quic_secrets) {
+            quic.traffic_secrets(update);
+        }
+
+        Ok(key_schedule)
     }
 }
 

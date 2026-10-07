@@ -552,33 +552,15 @@ impl QuicOutput for Quic {
         self.early_secret = secret;
     }
 
-    fn handshake_secrets(
-        &mut self,
-        client_secret: OkmBlock,
-        server_secret: OkmBlock,
-        suite: Suite,
-        side: Side,
-    ) {
+    fn handshake_secrets(&mut self, secrets: SecretUpdate) {
         self.events
             .push(QuicEvent::KeyChange(KeyChange::Handshake {
-                keys: Keys::new(&Secrets::new(
-                    client_secret,
-                    server_secret,
-                    suite,
-                    side,
-                    self.version,
-                )),
+                keys: Keys::new(&Secrets::new(secrets, self.version)),
             }));
     }
 
-    fn traffic_secrets(
-        &mut self,
-        client_secret: OkmBlock,
-        server_secret: OkmBlock,
-        suite: Suite,
-        side: Side,
-    ) {
-        let mut secrets = Secrets::new(client_secret, server_secret, suite, side, self.version);
+    fn traffic_secrets(&mut self, secrets: SecretUpdate) {
+        let mut secrets = Secrets::new(secrets, self.version);
         let keys = Keys::new(&secrets);
         secrets.update();
         self.events
@@ -598,21 +580,9 @@ pub(crate) trait QuicOutput {
 
     fn early_secret(&mut self, secret: Option<OkmBlock>);
 
-    fn handshake_secrets(
-        &mut self,
-        client_secret: OkmBlock,
-        server_secret: OkmBlock,
-        suite: Suite,
-        side: Side,
-    );
+    fn handshake_secrets(&mut self, secrets: SecretUpdate);
 
-    fn traffic_secrets(
-        &mut self,
-        client_secret: OkmBlock,
-        server_secret: OkmBlock,
-        suite: Suite,
-        side: Side,
-    );
+    fn traffic_secrets(&mut self, secrets: SecretUpdate);
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool);
 }
@@ -631,18 +601,12 @@ pub struct Secrets {
 }
 
 impl Secrets {
-    pub(crate) fn new(
-        client: OkmBlock,
-        server: OkmBlock,
-        suite: Suite,
-        side: Side,
-        version: Version,
-    ) -> Self {
+    pub(crate) fn new(update: SecretUpdate, version: Version) -> Self {
         Self {
-            client,
-            server,
-            suite,
-            side,
+            client: update.client,
+            server: update.server,
+            suite: update.suite,
+            side: update.side,
             version,
         }
     }
@@ -681,6 +645,13 @@ impl Secrets {
             Side::Server => (&self.server, &self.client),
         }
     }
+}
+
+pub(crate) struct SecretUpdate {
+    pub(crate) client: OkmBlock,
+    pub(crate) server: OkmBlock,
+    pub(crate) suite: Suite,
+    pub(crate) side: Side,
 }
 
 /// Keys used to communicate in a single direction
@@ -1138,7 +1109,7 @@ mod tests {
     use super::*;
     use crate::crypto::TLS13_TEST_SUITE;
     use crate::crypto::tls13::OkmBlock;
-    use crate::quic::{HeaderProtectionKey, Secrets, Side, Version};
+    use crate::quic::{HeaderProtectionKey, Side, Version};
 
     #[test]
     fn key_update_test_vector() {
