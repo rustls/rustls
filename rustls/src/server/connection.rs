@@ -27,22 +27,6 @@ impl Connection<ServerSide, Tcp> {
     pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
         Self::for_server(config, ServerExtensionsInput::default(), Tcp)
     }
-
-    /// Set the resumption data to embed in future resumption tickets supplied to the client.
-    ///
-    /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other
-    /// data. Should be called while `is_handshaking` returns true to ensure all transmitted
-    /// resumption tickets are affected.
-    ///
-    /// Integrity will be assured by rustls, but the data will be visible to the client. If secrecy
-    /// from the client is desired, encrypt the data separately.
-    pub fn set_resumption_data(&mut self, data: &[u8]) -> Result<(), Error> {
-        assert!(data.len() < 2usize.pow(15));
-        match &mut self.state {
-            Ok(st) => st.set_resumption_data(data),
-            Err(e) => Err(e.clone()),
-        }
-    }
 }
 
 impl<T: Transport> Connection<ServerSide, T> {

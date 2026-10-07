@@ -30,16 +30,6 @@ pub struct ClientConnection {
     inner: Connection<ClientSide, Quic>,
 }
 
-impl ClientConnection {
-    /// Returns the number of TLS1.3 tickets that have been received.
-    pub fn tls13_tickets_received(&self) -> u32 {
-        self.inner
-            .common
-            .recv
-            .tls13_tickets_received
-    }
-}
-
 impl Deref for ClientConnection {
     type Target = Connection<ClientSide, Quic>;
 
@@ -99,22 +89,6 @@ impl ServerConnection {
                 },
             )?,
         })
-    }
-
-    /// Set the resumption data to embed in future resumption tickets supplied to the client.
-    ///
-    /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other
-    /// data. Should be called while `is_handshaking` returns true to ensure all transmitted
-    /// resumption tickets are affected (otherwise an error will be returned).
-    ///
-    /// Integrity will be assured by rustls, but the data will be visible to the client. If secrecy
-    /// from the client is desired, encrypt the data separately.
-    pub fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
-        assert!(resumption_data.len() < 2usize.pow(15));
-        match &mut self.inner.state {
-            Ok(st) => st.set_resumption_data(resumption_data),
-            Err(e) => Err(e.clone()),
-        }
     }
 }
 
