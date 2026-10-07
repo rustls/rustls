@@ -132,6 +132,30 @@ impl ClientConnectionBuilder {
         Ok(conn)
     }
 
+    /// Finalize the builder and create a [`quic::ClientHandshake`].
+    ///
+    /// `params` contains the TLS-encoded transport parameters to send, and `version`
+    /// specifies the QUIC protocol version.
+    ///
+    /// It is a fundamental fact of client TLS connections that the client writes first; the
+    /// resulting events are appended to `output`.  The client then always reads the server's
+    /// response, as represented by the [`quic::NeedsInput`] return value.
+    ///
+    /// You may wrap this in the [`quic::ClientHandshake::NeedsInput`] variant to generalise the
+    /// type to a [`quic::ClientHandshake`].
+    ///
+    /// The returned object should be fed data from a single server.
+    pub fn start_quic_handshake(
+        self,
+        version: quic::Version,
+        params: Vec<u8>,
+        output: &mut Vec<quic::QuicEvent>,
+    ) -> Result<quic::NeedsInput<ClientSide>, Error> {
+        let mut conn = self.build_quic(version, params)?;
+        output.extend(conn.events());
+        Ok(quic::NeedsInput(conn))
+    }
+
     /// Finalize the builder and create a [`ClientHandshake`].
     ///
     /// It is a fundamental fact of client TLS connections that the client writes first; this data
@@ -339,7 +363,7 @@ impl ClientSide {
 
 impl SideData for ClientSide {
     type Handshake = ClientHandshake;
-    type QuicHandshake = ();
+    type QuicHandshake = quic::ClientHandshake;
 
     type PeerIdentity<'a> = ServerIdentity<'static, 'a>;
 }

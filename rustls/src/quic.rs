@@ -8,8 +8,8 @@ use pki_types::FipsStatus;
 pub use crate::common_state::Side;
 use crate::common_state::{ConnectionOutputs, Protocol};
 use crate::conn::{
-    Accepted, Connection, MessageIter, MessageIterMode, ServerNext, SideData, Transport,
-    VerifyPeerIdentity, sealed,
+    Accepted, ClientNext, Connection, MessageIter, MessageIterMode, ServerNext, SideData,
+    Transport, VerifyPeerIdentity, sealed,
 };
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
@@ -51,12 +51,49 @@ impl Connection<ServerSide, Quic> {
     }
 }
 
-/// An in-progress TLS server handshake.
+/// An in-progress QUIC client handshake.
+///
+/// Make one of these using [`ClientConnectionBuilder::start_quic_handshake()`].
+///
+/// [`ClientConnectionBuilder::start_quic_handshake()`]: crate::client::ClientConnectionBuilder::start_quic_handshake
+#[non_exhaustive]
+#[derive(Debug)]
+pub enum ClientHandshake {
+    /// More data needs to be received to make progress.
+    NeedsInput(NeedsInput<ClientSide>),
+
+    /// The server's presented identity must be verified.
+    ///
+    /// See [`VerifyPeerIdentity<ClientSide, Quic>`] for how to proceed.
+    VerifyServerIdentity(VerifyPeerIdentity<ClientSide, Quic>),
+
+    /// The handshake is complete.
+    Complete(Connection<ClientSide, Quic>),
+}
+
+impl FromConn<ClientSide> for ClientHandshake {
+    fn from_conn(
+        mut conn: Connection<ClientSide, Quic>,
+        output: &mut Vec<QuicEvent>,
+    ) -> Result<Self, Error> {
+        output.extend(conn.transport.events());
+
+        Ok(match ClientNext::try_from(conn)? {
+            ClientNext::NeedsInput(conn) => Self::NeedsInput(NeedsInput(conn)),
+
+            ClientNext::VerifyServerIdentity(verify) => Self::VerifyServerIdentity(verify),
+
+            ClientNext::Complete(conn) => Self::Complete(conn),
+        })
+    }
+}
+
+/// An in-progress QUIC server handshake.
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum ServerHandshake {
     /// More data needs to be received to make progress.
-    NeedsInput(NeedsInput),
+    NeedsInput(NeedsInput<ServerSide>),
 
     /// A complete `ClientHello` has been received.
     ///
@@ -83,7 +120,7 @@ impl ServerHandshake {
     /// [`ServerHandshake`].
     ///
     /// The returned object should be fed data from a single potential client.
-    pub fn start(version: Version) -> NeedsInput {
+    pub fn start(version: Version) -> NeedsInput<ServerSide> {
         NeedsInput(Connection::for_acceptor(Quic {
             version,
             ..Quic::default()
@@ -143,15 +180,6 @@ impl Accepted<Quic> {
     }
 }
 
-impl FromConn<ClientSide> for () {
-    fn from_conn(
-        _conn: Connection<ClientSide, Quic>,
-        _output: &mut Vec<QuicEvent>,
-    ) -> Result<(), Error> {
-        todo!("nyi")
-    }
-}
-
 pub(crate) trait FromConn<Side: SideData> {
     fn from_conn(
         conn: Connection<Side, Quic>,
@@ -165,9 +193,9 @@ pub(crate) trait FromConn<Side: SideData> {
 ///
 /// This type dereferences to [`ConnectionOutputs`]. Individual outputs are `None`
 /// until they are learned during the handshake.
-pub struct NeedsInput(Connection<ServerSide, Quic>);
+pub struct NeedsInput<Side: SideData>(pub(crate) Connection<Side, Quic>);
 
-impl NeedsInput {
+impl<Side: SideData> NeedsInput<Side> {
     /// Return the TLS-encoded transport parameters received from the peer.
     ///
     /// While the transport parameters are available before the handshake completes,
@@ -177,7 +205,7 @@ impl NeedsInput {
         self.0.transport.transport_parameters()
     }
 
-    /// Compute the keys for decrypting 0-RTT packets, if available.
+    /// Compute the keys for encrypting/decrypting 0-RTT packets, if available.
     pub fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
         self.0.transport.zero_rtt_keys(&self.0)
     }
@@ -194,21 +222,16 @@ impl NeedsInput {
     /// An error from this function is fatal to the connection, as it consumes the [`NeedsInput`]
     /// object.
     ///
-    /// On success, this returns:
-    ///
-    /// - a [`ServerHandshake::NeedsInput`] if more data is required.
-    /// - a [`ServerHandshake::Accepted`] if a whole `ClientHello` has been received,
-    ///   and a choice of [`ServerConfig`] is required to continue.
-    /// - a [`ServerHandshake::VerifyClientIdentity`] if the client's identity requires
-    ///   verification.
-    /// - a [`ServerHandshake::Complete`] if the handshake is complete.
+    /// On success, this returns a [`ClientHandshake`] or [`ServerHandshake`] (depending on
+    /// `Side`) specifying what to do to progress the connection.  If this contains another
+    /// [`NeedsInput`] object then obtaining more input is certainly necessary.
     ///
     /// `output` has any resulting handshake messages or key changes appended to it.
     pub fn process(
         mut self,
         input: &mut dyn TlsInputBuffer,
         output: &mut Vec<QuicEvent>,
-    ) -> Result<ServerHandshake, Error> {
+    ) -> Result<Side::QuicHandshake, Error> {
         self.0
             .common
             .recv
@@ -216,16 +239,16 @@ impl NeedsInput {
             .input_quic(input.slice_mut())?;
 
         self.0.process(input, &mut Vec::new())?;
-        ServerHandshake::from_conn(self.0, output)
+        Side::QuicHandshake::from_conn(self.0, output)
     }
 
-    /// Returns data learned during the connection, specific to being a server.
-    pub fn side(&self) -> &ServerSide {
+    /// Returns data learned during the connection, specific to this side.
+    pub fn side(&self) -> &Side {
         &self.0.side
     }
 }
 
-impl Deref for NeedsInput {
+impl<Side: SideData> Deref for NeedsInput<Side> {
     type Target = ConnectionOutputs;
 
     fn deref(&self) -> &Self::Target {
@@ -233,7 +256,7 @@ impl Deref for NeedsInput {
     }
 }
 
-impl fmt::Debug for NeedsInput {
+impl<Side: SideData> fmt::Debug for NeedsInput<Side> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("quic::NeedsInput")
             .finish_non_exhaustive()
