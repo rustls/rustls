@@ -12,6 +12,7 @@ use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::tracing::{debug, error};
 
 /// The data path from us to the peer.
+#[derive(Default)]
 pub(crate) struct SendPath {
     encrypt_state: EncryptionState,
     pub(crate) may_send_application_data: bool,
@@ -19,10 +20,7 @@ pub(crate) struct SendPath {
     /// If we signaled end of stream.
     has_sent_close_notify: bool,
     fragmenter: Fragmenter,
-    key_update_local: KeyUpdateLocal,
-    key_update_remote: KeyUpdateRemote,
     negotiated_version: Option<ProtocolVersion>,
-    tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
 }
 
 impl SendPath {
@@ -57,8 +55,8 @@ impl SendPath {
         };
 
         let len = payload.len();
-        self.key_update_remote.write(tls);
-        let need_local_key_update = encrypting.encrypt_records(
+        encrypting.key_update_remote.write(tls);
+        let limit_reached = encrypting.encrypt_records(
             self.fragmenter.fragment(
                 ContentType::ApplicationData,
                 EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
@@ -69,11 +67,13 @@ impl SendPath {
             self.negotiated_version,
         )?;
 
-        if need_local_key_update {
-            self.queue_local_key_update(tls)?;
+        if limit_reached {
+            error!("traffic keys exhausted, closing connection to prevent security failure");
+            self.send_close_notify(tls)?;
+            return Err(Error::EncryptError);
         }
 
-        if let KeyUpdateLocal::Requested = self.key_update_local {
+        if let KeyUpdateLocal::Requested = encrypting.key_update_local {
             let _ = self.send_key_update_request(tls);
         }
 
@@ -100,9 +100,18 @@ impl SendPath {
     }
 
     pub(super) fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
-        if let KeyUpdateLocal::Outstanding = self.key_update_local {
+        let encrypting = match &mut self.encrypt_state {
+            EncryptionState::Encrypting(encrypting) => encrypting,
+            EncryptionState::Retired if self.may_send_application_data => {
+                return Err(Error::EncryptError);
+            }
+            _ => return Err(Error::HandshakeNotComplete),
+        };
+
+        if let KeyUpdateLocal::Outstanding = encrypting.key_update_local {
             return Ok(());
         }
+
         self.send_key_update_request(tls)
     }
 
@@ -111,50 +120,40 @@ impl SendPath {
             return Err(Error::EncryptError);
         };
 
-        let Some(ks) = &mut self.tls13_key_schedule else {
+        if encrypting.tls13_key_schedule.is_none() {
+            return Err(Error::HandshakeNotComplete);
+        }
+
+        send_short(Message::build_key_update_request(), tls, Some(encrypting))?;
+
+        let Some(ks) = &mut encrypting.tls13_key_schedule else {
             return Err(Error::HandshakeNotComplete);
         };
 
-        send_short(
-            Message::build_key_update_request(),
-            tls,
-            &mut self.key_update_remote,
-            Some(encrypting),
-        )?;
-
+        let encrypter = ks.update_encrypter();
+        encrypting.key_update_local = KeyUpdateLocal::Outstanding;
         self.encrypt_state
-            .set_encrypter(ks.update_encrypter());
-        self.key_update_local = KeyUpdateLocal::Outstanding;
+            .set_encrypter(encrypter);
+
         Ok(())
     }
 
-    pub(super) fn export(mut self) -> Result<(u64, Option<Box<KeyScheduleTrafficSend>>), Error> {
-        Ok((
-            match &self.encrypt_state {
-                EncryptionState::Encrypting(encrypting) => encrypting.write_seq,
-                _ => return Err(Error::EncryptError),
-            },
-            self.tls13_key_schedule.take(),
-        ))
-    }
-
-    fn queue_local_key_update(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
-        match self.negotiated_version {
-            // driven by caller, as we don't have the `State` here
-            Some(ProtocolVersion::TLSv1_3) => {
-                self.key_update_local = KeyUpdateLocal::Requested;
-                Ok(())
+    pub(super) fn export(self) -> Result<(u64, Option<Box<KeyScheduleTrafficSend>>), Error> {
+        match self.encrypt_state {
+            EncryptionState::Encrypting(mut encrypting) => {
+                Ok((encrypting.write_seq, encrypting.tls13_key_schedule.take()))
             }
-            _ => {
-                error!("traffic keys exhausted, closing connection to prevent security failure");
-                self.send_close_notify(tls)?;
-                Err(Error::EncryptError)
-            }
+            _ => Err(Error::EncryptError),
         }
     }
 
     pub(super) fn has_queued_key_update(&self) -> bool {
-        matches!(self.key_update_remote, KeyUpdateRemote::Queued(_))
+        match &self.encrypt_state {
+            EncryptionState::Encrypting(encrypting) => {
+                matches!(encrypting.key_update_remote, KeyUpdateRemote::Queued(_))
+            }
+            _ => false,
+        }
     }
 }
 
@@ -164,34 +163,46 @@ impl SendOutput for SendPath {
     }
 
     fn queue_requested_key_update(&mut self) -> Result<(), Error> {
-        if let KeyUpdateRemote::Queued(_) = &self.key_update_remote {
-            return Ok(());
-        }
-
         let EncryptionState::Encrypting(encrypting) = &mut self.encrypt_state else {
             return Err(Error::EncryptError);
         };
+
+        if let KeyUpdateRemote::Queued(_) = &encrypting.key_update_remote {
+            return Ok(());
+        }
 
         let mut queued = Vec::new();
         send_short(
             Message::build_key_update_notify(),
             &mut queued,
-            &mut self.key_update_remote,
             Some(encrypting),
         )?;
-        self.key_update_remote = KeyUpdateRemote::Queued(queued);
+        encrypting.key_update_remote = KeyUpdateRemote::Queued(queued);
 
-        if let Some(ks) = &mut self.tls13_key_schedule {
-            self.encrypt_state
-                .set_encrypter(ks.update_encrypter_for_key_update());
-        }
+        let Some(ks) = &mut encrypting.tls13_key_schedule else {
+            return Ok(());
+        };
+
+        let encrypter = ks.update_encrypter_for_key_update();
+        self.encrypt_state
+            .set_encrypter(encrypter);
 
         Ok(())
     }
 
     fn note_key_update_response(&mut self) {
-        if let KeyUpdateLocal::Outstanding = self.key_update_local {
-            self.key_update_local = KeyUpdateLocal::Idle;
+        match &mut self.encrypt_state {
+            EncryptionState::Encrypting(encrypting) => {
+                if let KeyUpdateLocal::Outstanding = encrypting.key_update_local {
+                    encrypting.key_update_local = KeyUpdateLocal::Idle;
+                }
+            }
+            _ => {
+                debug_assert!(
+                    false,
+                    "note_key_update_response() called in non-encrypting state"
+                );
+            }
         }
     }
 
@@ -201,7 +212,17 @@ impl SendOutput for SendPath {
     }
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>) {
-        self.tls13_key_schedule = Some(schedule);
+        match &mut self.encrypt_state {
+            EncryptionState::Encrypting(encrypting) => {
+                encrypting.tls13_key_schedule = Some(schedule)
+            }
+            _ => {
+                debug_assert!(
+                    false,
+                    "update_key_schedule() called in non-encrypting state"
+                );
+            }
+        }
     }
 
     fn send_alert(
@@ -216,13 +237,7 @@ impl SendOutput for SendPath {
             EncryptionState::Retired => return Ok(()),
         };
 
-        let result = send_short(
-            Message::build_alert(level, desc),
-            tls,
-            &mut self.key_update_remote,
-            encrypting,
-        );
-
+        let result = send_short(Message::build_alert(level, desc), tls, encrypting);
         if level == AlertLevel::Fatal {
             self.encrypt_state = EncryptionState::Retired;
         }
@@ -264,9 +279,11 @@ impl SendOutput for SendPath {
                 encrypting.encrypted_len(0),
             );
 
-            self.key_update_remote.write(tls);
+            encrypting.key_update_remote.write(tls);
             if encrypting.encrypt_records(fragments, tls, self.negotiated_version)? {
-                self.queue_local_key_update(tls)?;
+                error!("traffic keys exhausted, closing connection to prevent security failure");
+                self.send_close_notify(tls)?;
+                return Err(Error::EncryptError);
             }
             return Ok(());
         }
@@ -289,22 +306,6 @@ impl SendOutput for SendPath {
     }
 }
 
-impl Default for SendPath {
-    fn default() -> Self {
-        Self {
-            encrypt_state: EncryptionState::default(),
-            may_send_application_data: false,
-            may_send_half_rtt_data: false,
-            has_sent_close_notify: false,
-            fragmenter: Fragmenter::default(),
-            key_update_local: KeyUpdateLocal::Idle,
-            key_update_remote: KeyUpdateRemote::Idle,
-            negotiated_version: None,
-            tls13_key_schedule: None,
-        }
-    }
-}
-
 /// Record layer that tracks encryption keys.
 #[derive(Default)]
 enum EncryptionState {
@@ -316,21 +317,30 @@ enum EncryptionState {
 
 impl EncryptionState {
     fn set_encrypter(&mut self, encrypter: Encrypter) {
-        if matches!(self, Self::Retired) {
-            // Retirement is permanent.
-            return;
-        }
-
         let Encrypter {
             encrypter,
             limit: max_records,
         } = encrypter;
 
-        *self = Self::Encrypting(Encrypting {
-            encrypter,
-            write_seq_max: Ord::min(SEQ_SOFT_LIMIT, max_records),
-            write_seq: 0,
-        });
+        match self {
+            Self::Handshake => {
+                *self = Self::Encrypting(Encrypting {
+                    encrypter,
+                    write_seq_max: Ord::min(SEQ_SOFT_LIMIT, max_records),
+                    write_seq: 0,
+                    key_update_local: KeyUpdateLocal::Idle,
+                    key_update_remote: KeyUpdateRemote::Idle,
+                    tls13_key_schedule: None,
+                });
+            }
+            Self::Encrypting(encrypting) => {
+                encrypting.encrypter = encrypter;
+                encrypting.write_seq_max = Ord::min(SEQ_SOFT_LIMIT, max_records);
+                encrypting.write_seq = 0;
+            }
+            // Retirement is permanent.
+            Self::Retired => {}
+        }
     }
 }
 
@@ -338,12 +348,16 @@ struct Encrypting {
     encrypter: Box<dyn RecordEncrypter>,
     write_seq_max: u64,
     write_seq: u64,
+    key_update_local: KeyUpdateLocal,
+    key_update_remote: KeyUpdateRemote,
+    tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
 }
 
 impl Encrypting {
     /// Encrypt each fragment in `iter`, appending the resulting records to `tls`.
     ///
-    /// The return value indicates whether a local key update is needed.
+    /// The return value indicates whether the confidentiality limit has been reached.
+    /// When `true`, the caller should make sure to send a `CloseNotify` message.
     fn encrypt_records<'a>(
         &mut self,
         iter: impl ExactSizeIterator<Item = Record<OutboundPlain<'a>>>,
@@ -355,7 +369,6 @@ impl Encrypting {
         // more records with the current keys. If we reach the soft limit, we should either
         // request a key update (for 1.3) or send a close notify (for 1.2).
         let count = iter.len();
-        let mut need_local_key_update = false;
         if let Some(last) = (count as u64).checked_sub(1) {
             let last = self.write_seq.saturating_add(last);
             if last >= SEQ_HARD_LIMIT {
@@ -363,7 +376,9 @@ impl Encrypting {
             } else if last >= self.write_seq_max {
                 match version {
                     // Keep going and signal to the caller that we need a key update
-                    Some(ProtocolVersion::TLSv1_3) => need_local_key_update = true,
+                    Some(ProtocolVersion::TLSv1_3) => {
+                        self.key_update_local = KeyUpdateLocal::Requested
+                    }
                     // Key updates aren't available, so we're going to stop immediately
                     _ => return Ok(true),
                 }
@@ -380,7 +395,7 @@ impl Encrypting {
             self.encrypt_outgoing(record, tls)?;
         }
 
-        Ok(need_local_key_update)
+        Ok(false)
     }
 
     /// Encrypt a TLS record, returning the fully-encoded record.
@@ -457,7 +472,6 @@ impl Encrypting {
 fn send_short(
     message: Message<'_>,
     tls: &mut Vec<u8>,
-    key_update_remote: &mut KeyUpdateRemote,
     encrypting: Option<&mut Encrypting>,
 ) -> Result<(), Error> {
     // Alerts always fit in a single record, and are never quashed by a `PreEncryptAction`.
@@ -465,7 +479,7 @@ fn send_short(
     let record = record.borrow_outbound();
     match encrypting {
         Some(encrypting) => {
-            key_update_remote.write(tls);
+            encrypting.key_update_remote.write(tls);
             encrypting.encrypt_outgoing(record, tls)
         }
         None => {
@@ -557,6 +571,9 @@ mod tests {
                 encrypter: Box::new(Tls13Cipher),
                 write_seq_max,
                 write_seq,
+                key_update_local: KeyUpdateLocal::Idle,
+                key_update_remote: KeyUpdateRemote::Idle,
+                tls13_key_schedule: None,
             };
 
             let record = Record::new(
