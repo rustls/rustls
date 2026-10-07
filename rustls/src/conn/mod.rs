@@ -35,7 +35,7 @@ pub(crate) use receive::{
 pub use receive::{SliceInput, TlsInputBuffer, VecInput};
 
 mod send;
-pub(crate) use send::{SendOutput, SendPath};
+pub(crate) use send::{Encrypter, SendOutput, SendPath};
 
 pub(crate) mod split;
 use split::SplitConnection;

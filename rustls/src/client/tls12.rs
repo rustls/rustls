@@ -14,7 +14,7 @@ use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
-use crate::conn::{ConnectionRandoms, DataKind, Input, State, VerifySidePeerIdentity};
+use crate::conn::{ConnectionRandoms, DataKind, Encrypter, Input, State, VerifySidePeerIdentity};
 use crate::crypto::cipher::{EncodableVersion, Payload, RecordDecrypter, RecordEncrypter};
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{Identity, Signer};
@@ -909,13 +909,13 @@ impl VerifySidePeerIdentity<ClientSide> for AwaitServerIdentityVerification {
         );
 
         let (dec, encrypter) = secrets.make_cipher_pair(Side::Client);
-        output.send().set_encrypter(
+        output.send().set_encrypter(Encrypter {
             encrypter,
-            secrets
+            limit: secrets
                 .suite()
                 .common
                 .confidentiality_limit,
-        );
+        });
 
         // 5.
         emit_finished(&secrets, &mut self.hs.transcript, output, &self.proof)?;
@@ -1144,13 +1144,14 @@ impl State<ClientSide> for ExpectFinished {
 
         if let Some((_, encrypter)) = st.resuming.take() {
             emit_ccs(output)?;
-            output.send().set_encrypter(
+            output.send().set_encrypter(Encrypter {
                 encrypter,
-                st.secrets
+                limit: st
+                    .secrets
                     .suite()
                     .common
                     .confidentiality_limit,
-            );
+            });
             emit_finished(&st.secrets, &mut st.hs.transcript, output, &proof)?;
         }
 
