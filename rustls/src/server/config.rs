@@ -136,7 +136,10 @@ pub struct ServerConfig {
     /// default is 0.
     ///
     /// Read the early data via
-    /// [`MessageHandler::next_early_data()`][crate::conn::MessageHandler::next_early_data()].
+    /// [`MessageHandler::next_early_data()`][crate::conn::MessageHandler::next_early_data()]
+    /// when using [`ServerConnection`][super::ServerConnection], or as
+    /// [`ServerHandshake::EarlyData`][super::ServerHandshake::EarlyData] when using
+    /// [`ServerHandshake`][super::ServerHandshake].
     ///
     /// The units for this are _both_ plaintext bytes, _and_ ciphertext
     /// bytes, depending on whether the server accepts a client's early_data

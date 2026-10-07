@@ -88,13 +88,25 @@ fn main() {
                 // Read TLS packets until we've completed the handshake.
                 ServerHandshake::NeedsInput(receive) => {
                     match receive.process(&mut input, &mut output) {
-                        Ok(next @ ServerHandshake::NeedsInput(_)) => {
+                        Ok(ServerHandshake::NeedsInput(next)) => {
                             stream.write_all(&output).unwrap();
                             output.clear();
                             input.read(&mut stream).unwrap();
-                            next
+                            ServerHandshake::NeedsInput(next)
                         }
-                        Ok(next) => next,
+                        Ok(ServerHandshake::EarlyData(early_data)) => {
+                            ServerHandshake::NeedsInput(early_data.into_next())
+                        }
+                        Ok(ServerHandshake::Accepted(accepted)) => {
+                            ServerHandshake::Accepted(accepted)
+                        }
+                        Ok(ServerHandshake::VerifyClientIdentity(verify)) => {
+                            ServerHandshake::VerifyClientIdentity(verify)
+                        }
+                        Ok(ServerHandshake::Complete(connection)) => {
+                            ServerHandshake::Complete(connection)
+                        }
+                        Ok(other) => panic!("unexpected ServerHandshake state {other:?}"),
                         Err(error) => panic!("error completing handshake: {error}"),
                     }
                 }

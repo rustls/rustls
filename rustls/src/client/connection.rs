@@ -424,7 +424,7 @@ pub struct ClientSide;
 
 impl SideData for ClientSide {
     type Data = ClientData;
-    type Handshake = ClientHandshake;
+    type Handshake<'a> = ClientHandshake;
     type QuicHandshake = ();
 
     type PeerIdentity<'a> = ServerIdentity<'static, 'a>;
@@ -432,7 +432,7 @@ impl SideData for ClientSide {
     #[expect(private_interfaces)]
     fn tcp_handshake_from_core<'a>(
         processed: Processed<'a, Self, Tcp>,
-    ) -> Result<Self::Handshake, Error> {
+    ) -> Result<Self::Handshake<'a>, Error> {
         ClientHandshake::try_from(processed.into_progress()?)
     }
 

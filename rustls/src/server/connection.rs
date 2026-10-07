@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
-use core::ops::Deref;
+use core::ops::{Deref, Range};
 
 use pki_types::{DnsName, FipsStatus};
 
@@ -17,7 +17,7 @@ use crate::conn::{
 use crate::crypto;
 use crate::crypto::cipher::OutboundPlain;
 use crate::error::Error;
-use crate::msgs::ServerExtensionsInput;
+use crate::msgs::{Delocator, ServerExtensionsInput};
 use crate::quic::{Quic, QuicEvent, ServerHandshake as QuicServerHandshake};
 use crate::server::hs::{ExpectClientHello, ReadClientHello, ServerState};
 use crate::suites::ExtractedSecrets;
@@ -180,7 +180,7 @@ impl ConnectionCommon<ServerSide> {
 /// An in-progress TLS server handshake.
 #[non_exhaustive]
 #[derive(Debug)]
-pub enum ServerHandshake {
+pub enum ServerHandshake<'a> {
     /// More data needs to be received to make progress.
     NeedsInput(NeedsInput<ServerSide>),
 
@@ -195,13 +195,19 @@ pub enum ServerHandshake {
     /// See [`VerifyPeerIdentity`] for how to proceed.
     VerifyClientIdentity(VerifyPeerIdentity<ServerSide, Tcp>),
 
+    /// A piece of TLS1.3 0RTT/"early" data has been received from the client.
+    ///
+    /// Read it via [`ReceivedEarlyData::data()`], then call [`ReceivedEarlyData::into_next()`]
+    /// to continue the handshake.
+    EarlyData(ReceivedEarlyData<'a>),
+
     /// The handshake is complete.
     ///
     /// Now see [`SplitConnection`] to continue the connection.
     Complete(SplitConnection<ServerSide>),
 }
 
-impl ServerHandshake {
+impl ServerHandshake<'_> {
     /// Creates a new [`ServerHandshake`] via the payload of the [`ServerHandshake::NeedsInput`] variant.
     ///
     /// It is a fundamental fact of server TLS connections that the server reads first; this is reflected
@@ -216,7 +222,26 @@ impl ServerHandshake {
     }
 }
 
-impl TryFrom<Core<ServerSide, Tcp>> for ServerHandshake {
+impl<'a> ServerHandshake<'a> {
+    fn from_processed(processed: Processed<'a, ServerSide, Tcp>) -> Result<Self, Error> {
+        match processed {
+            Processed::Progress(core) => Self::try_from(core),
+            Processed::EarlyData {
+                core,
+                input,
+                range,
+                pending_discard,
+            } => Ok(Self::EarlyData(ReceivedEarlyData {
+                input,
+                range,
+                pending_discard,
+                core,
+            })),
+        }
+    }
+}
+
+impl TryFrom<Core<ServerSide, Tcp>> for ServerHandshake<'_> {
     type Error = Error;
 
     fn try_from(core: Core<ServerSide, Tcp>) -> Result<Self, Error> {
@@ -239,7 +264,7 @@ pub struct ServerSide;
 
 impl SideData for ServerSide {
     type Data = ServerData;
-    type Handshake = ServerHandshake;
+    type Handshake<'a> = ServerHandshake<'a>;
     type QuicHandshake = QuicServerHandshake;
 
     type PeerIdentity<'a> = ClientIdentity<'static, 'a>;
@@ -247,8 +272,8 @@ impl SideData for ServerSide {
     #[expect(private_interfaces)]
     fn tcp_handshake_from_core<'a>(
         processed: Processed<'a, Self, Tcp>,
-    ) -> Result<Self::Handshake, Error> {
-        ServerHandshake::try_from(processed.into_progress()?)
+    ) -> Result<Self::Handshake<'a>, Error> {
+        ServerHandshake::from_processed(processed)
     }
 
     #[expect(private_interfaces)]
@@ -312,6 +337,61 @@ impl fmt::Debug for ServerData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ServerData")
             .field("sni", &self.sni)
+            .finish_non_exhaustive()
+    }
+}
+
+/// A piece of early data received from the client during the handshake.
+///
+/// "Early data" is also known as "0-RTT data".
+///
+/// **Beware** that early data is subject to replay by an attacker; see [RFC 9846
+/// appendix F.5][] for more detail.
+///
+/// The data is received in arbitrary-sized pieces.  Avoid writing your application to be
+/// sensitive to the boundaries.
+///
+/// [RFC 9846 appendix F.5]: https://datatracker.ietf.org/doc/html/rfc9846#appendix-F.5
+pub struct ReceivedEarlyData<'a> {
+    /// The source buffer for the data.
+    input: &'a mut dyn TlsInputBuffer,
+
+    /// The span within `input` holding the received data.
+    range: Range<usize>,
+
+    /// How many bytes on the front of `input` are associated with this data.
+    pending_discard: usize,
+
+    core: Core<ServerSide, Tcp>,
+}
+
+impl ReceivedEarlyData<'_> {
+    /// Return the early data bytes.
+    pub fn data(&mut self) -> &[u8] {
+        Delocator::new(self.input.slice_mut()).slice_from_range(&self.range)
+    }
+
+    #[doc = include_str!("../doc/early_exporter.md")]
+    pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        self.core.inner.early_exporter()
+    }
+
+    /// Finish processing this early data.
+    ///
+    /// This acts upon the source buffer (used with the [`NeedsInput::process()`] call) to
+    /// discard the received data.
+    ///
+    /// The returned [`NeedsInput`] should be given the same input buffer: it may
+    /// already contain further messages from the client.
+    pub fn into_next(self) -> NeedsInput<ServerSide> {
+        self.input.discard(self.pending_discard);
+        NeedsInput(self.core)
+    }
+}
+
+impl fmt::Debug for ReceivedEarlyData<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ReceivedEarlyData")
             .finish_non_exhaustive()
     }
 }

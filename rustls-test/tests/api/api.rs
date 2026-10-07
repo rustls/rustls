@@ -2239,7 +2239,7 @@ fn large_client_hello() {
 
 #[test]
 fn large_client_hello_acceptor() {
-    let mut state = ServerHandshake::NeedsInput(ServerHandshake::start());
+    let mut receive = ServerHandshake::start();
     let mut input = VecInput::default();
     let hello = include_bytes!("../data/bug2227-clienthello.bin");
     let mut cursor = io::Cursor::new(hello);
@@ -2247,10 +2247,11 @@ fn large_client_hello_acceptor() {
     loop {
         input.read(&mut cursor).unwrap();
 
-        state = match state {
-            ServerHandshake::NeedsInput(receive) => receive
-                .process(&mut input, &mut vec![])
-                .unwrap(),
+        receive = match receive
+            .process(&mut input, &mut vec![])
+            .unwrap()
+        {
+            ServerHandshake::NeedsInput(receive) => receive,
             ServerHandshake::Accepted(accepted) => {
                 println!("{accepted:?}");
                 break;

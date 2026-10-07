@@ -18,7 +18,7 @@ use super::{
 };
 use crate::TlsInputBuffer;
 use crate::client::{ClientSide, ClientState};
-use crate::common_state::maybe_send_fatal_alert;
+use crate::common_state::{UnborrowedPayload, maybe_send_fatal_alert};
 use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::Payload;
 use crate::error::Error;
@@ -57,24 +57,41 @@ impl<Side: SideData, T: Transport> Core<Side, T> {
             &mut inner,
             MessageIterMode::Handshake,
         );
-        let result = loop {
-            match iter.next(false) {
-                Some(Ok(_)) => {}
-                Some(Err(e)) => break Err(e),
-                None => break Ok(()),
-            };
+        let result = match iter.next(true) {
+            Some(Ok(early_data)) => Ok(Some(early_data)),
+            Some(Err(e)) => Err(e),
+            None => Ok(None),
         };
 
-        input.discard(
-            inner
-                .common
-                .recv
-                .deframer
-                .take_discard(),
-        );
+        let pending_discard = inner
+            .common
+            .recv
+            .deframer
+            .take_discard();
+        let core = Self { inner, transport };
 
-        result?;
-        Ok(Processed::Progress(Self { inner, transport }))
+        match result {
+            Ok(Some(UnborrowedPayload::Unborrowed(range))) => Ok(Processed::EarlyData {
+                core,
+                input,
+                range,
+                pending_discard,
+            }),
+            Ok(Some(UnborrowedPayload::Owned(_))) => {
+                input.discard(pending_discard);
+                Err(Error::Unreachable(
+                    "decrypted early data should be borrowed",
+                ))
+            }
+            Ok(None) => {
+                input.discard(pending_discard);
+                Ok(Processed::Progress(core))
+            }
+            Err(e) => {
+                input.discard(pending_discard);
+                Err(e)
+            }
+        }
     }
 }
 
@@ -87,7 +104,6 @@ pub(crate) enum Processed<'a, Side: SideData, T: Transport> {
     ///
     /// `range` locates the data within `input`, and `pending_discard` is the number
     /// of bytes of `input` to discard once the caller has finished with it.
-    #[expect(dead_code)]
     EarlyData {
         core: Core<Side, T>,
         input: &'a mut dyn TlsInputBuffer,
@@ -236,7 +252,7 @@ impl Accepted<Tcp> {
         self,
         config: Arc<ServerConfig>,
         tls: &mut Vec<u8>,
-    ) -> Result<ServerHandshake, Error> {
+    ) -> Result<ServerHandshake<'static>, Error> {
         let core = self.partial_choose_config(config, ServerExtensionsInput::default(), tls)?;
         Ok(ServerHandshake::NeedsInput(NeedsInput(core)))
     }
@@ -326,7 +342,7 @@ impl<Side: SideData, T: Transport> VerifyPeerIdentity<Side, T> {
 
 impl<Side: SideData> VerifyPeerIdentity<Side, Tcp> {
     /// Progress the handshake by calling the pre-configured certificate verification trait.
-    pub fn with_config(self, tls: &mut Vec<u8>) -> Result<Side::Handshake, Error> {
+    pub fn with_config(self, tls: &mut Vec<u8>) -> Result<Side::Handshake<'static>, Error> {
         let result = self
             .verify_identity
             .verify_with_config();
@@ -343,7 +359,7 @@ impl<Side: SideData> VerifyPeerIdentity<Side, Tcp> {
         self,
         verification_result: Result<VerifiedIdentity<'static>, Error>,
         tls: &mut Vec<u8>,
-    ) -> Result<Side::Handshake, Error> {
+    ) -> Result<Side::Handshake<'static>, Error> {
         let core = self.partial_continue_with(verification_result, tls)?;
         Side::tcp_handshake_from_core(Processed::Progress(core))
     }

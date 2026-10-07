@@ -39,13 +39,13 @@ fn fuzz_handshake_api(data: &[u8]) {
     loop {
         let rd = input.read(&mut stream).unwrap_or(0);
 
-        let next = match server.process(&mut input, &mut output) {
-            Ok(ServerHandshake::Accepted(accepted)) => choose_config(accepted, &mut output),
-            other => other,
-        };
-
-        server = match next {
+        server = match server.process(&mut input, &mut output) {
             Ok(ServerHandshake::NeedsInput(next)) => next,
+            Ok(ServerHandshake::EarlyData(early_data)) => early_data.into_next(),
+            Ok(ServerHandshake::Accepted(accepted)) => match choose_config(accepted, &mut output) {
+                Ok(ServerHandshake::NeedsInput(next)) => next,
+                Ok(_) | Err(_) => break,
+            },
             // the handshake completed, failed, or reached a state this
             // configuration cannot produce: nothing more to feed it.
             Ok(_) | Err(_) => break,
@@ -57,7 +57,10 @@ fn fuzz_handshake_api(data: &[u8]) {
     }
 }
 
-fn choose_config(accepted: Accepted<Tcp>, output: &mut Vec<u8>) -> Result<ServerHandshake, Error> {
+fn choose_config(
+    accepted: Accepted<Tcp>,
+    output: &mut Vec<u8>,
+) -> Result<ServerHandshake<'static>, Error> {
     accepted.choose_config(
         Arc::new(
             ServerConfig::builder(rustls_fuzzing_provider::PROVIDER.into())

@@ -152,11 +152,11 @@ impl<Side: SideData> NeedsInput<Side> {
     /// On success, this returns a handshake object specifying what to do to progress
     /// the connection.  If this contains another [`NeedsInput`] object then obtaining more
     /// input (eg, from a socket or other source) is certainly necessary.
-    pub fn process(
+    pub fn process<'a>(
         self,
-        input: &mut dyn TlsInputBuffer,
+        input: &'a mut dyn TlsInputBuffer,
         tls: &mut Vec<u8>,
-    ) -> Result<Side::Handshake, Error> {
+    ) -> Result<Side::Handshake<'a>, Error> {
         Side::tcp_handshake_from_core(self.0.process(input, tls)?)
     }
 
@@ -698,7 +698,7 @@ pub trait SideData: private::Side + Sized {
     type Data: SideOutput + fmt::Debug;
 
     /// Type representing an in-progress TCP handshake.
-    type Handshake;
+    type Handshake<'a>;
     /// Type representing an in-progress QUIC handshake.
     type QuicHandshake;
 
@@ -709,7 +709,7 @@ pub trait SideData: private::Side + Sized {
     #[expect(private_interfaces)]
     fn tcp_handshake_from_core<'a>(
         processed: Processed<'a, Self, Tcp>,
-    ) -> Result<Self::Handshake, Error>;
+    ) -> Result<Self::Handshake<'a>, Error>;
 
     #[doc(hidden)]
     #[expect(private_interfaces)]
