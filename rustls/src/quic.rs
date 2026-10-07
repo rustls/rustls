@@ -81,7 +81,7 @@ impl ClientConnection {
     }
 
     /// Returns data learned during the connection, specific to being a client.
-    pub fn data(&self) -> &ClientSide {
+    pub fn side(&self) -> &ClientSide {
         &self.inner.common.side
     }
 }
@@ -191,7 +191,7 @@ impl ServerConnection {
     }
 
     /// Returns data learned during the connection, specific to being a server.
-    pub fn data(&self) -> &ServerSide {
+    pub fn side(&self) -> &ServerSide {
         &self.inner.common.side
     }
 }
@@ -362,7 +362,7 @@ impl NeedsInput {
     }
 
     /// Returns data learned during the connection, specific to being a server.
-    pub fn data(&self) -> &ServerSide {
+    pub fn side(&self) -> &ServerSide {
         &self.0.inner.side
     }
 }
