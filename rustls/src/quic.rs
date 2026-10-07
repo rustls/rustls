@@ -1,12 +1,11 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::ops::{Deref, DerefMut};
+use core::ops::Deref;
 use core::{fmt, mem};
 
 use pki_types::FipsStatus;
 
 use crate::TlsInputBuffer;
-use crate::client::ClientSide;
 pub use crate::common_state::Side;
 use crate::common_state::{ConnectionOutputs, Protocol};
 use crate::conn::{
@@ -24,50 +23,12 @@ use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
 };
-
-/// A QUIC client connection.
-pub struct ClientConnection {
-    inner: Connection<ClientSide, Quic>,
-}
-
-impl Deref for ClientConnection {
-    type Target = Connection<ClientSide, Quic>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for ClientConnection {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-impl fmt::Debug for ClientConnection {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("quic::ClientConnection")
-            .finish_non_exhaustive()
-    }
-}
-
-impl From<Connection<ClientSide, Quic>> for ClientConnection {
-    fn from(inner: Connection<ClientSide, Quic>) -> Self {
-        Self { inner }
-    }
-}
-
-/// A QUIC server connection.
-pub struct ServerConnection {
-    inner: Connection<ServerSide, Quic>,
-}
-
-impl ServerConnection {
-    /// Make a new QUIC ServerConnection.
+impl Connection<ServerSide, Quic> {
+    /// Make a new QUIC server [`Connection`]
     ///
-    /// This differs from `ServerConnection::new()` in that it takes an extra `params` argument,
+    /// This differs from `Connection::new()` in that it takes an extra `params` argument,
     /// which contains the TLS-encoded transport parameters to send.
-    pub fn new(
+    pub fn new_quic(
         config: Arc<ServerConfig>,
         version: Version,
         params: Vec<u8>,
@@ -79,37 +40,14 @@ impl ServerConnection {
             }),
         };
 
-        Ok(Self {
-            inner: Connection::for_server(
-                config,
-                exts,
-                Quic {
-                    version,
-                    ..Quic::default()
-                },
-            )?,
-        })
-    }
-}
-
-impl Deref for ServerConnection {
-    type Target = Connection<ServerSide, Quic>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for ServerConnection {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-impl fmt::Debug for ServerConnection {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("quic::ServerConnection")
-            .finish_non_exhaustive()
+        Self::for_server(
+            config,
+            exts,
+            Quic {
+                version,
+                ..Quic::default()
+            },
+        )
     }
 }
 
@@ -132,7 +70,7 @@ pub enum ServerHandshake {
     VerifyClientIdentity(VerifyPeerIdentity<ServerSide, Quic>),
 
     /// The handshake is complete.
-    Complete(ServerConnection),
+    Complete(Connection<ServerSide, Quic>),
 }
 
 impl ServerHandshake {
@@ -165,7 +103,7 @@ impl ServerHandshake {
 
             ServerNext::VerifyClientIdentity(verify) => Self::VerifyClientIdentity(verify),
 
-            ServerNext::Complete(inner) => Self::Complete(ServerConnection { inner }),
+            ServerNext::Complete(conn) => Self::Complete(conn),
         })
     }
 }

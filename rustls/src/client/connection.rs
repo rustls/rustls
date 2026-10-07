@@ -18,7 +18,7 @@ use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::enums::ApplicationProtocol;
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{ClientExtensionsInput, TransportParameters};
-use crate::quic::{self, ClientConnection as QuicClientConnection, Quic};
+use crate::quic::{self, Quic};
 use crate::sync::Arc;
 use crate::tracing::trace;
 use crate::verify::ServerIdentity;
@@ -81,7 +81,7 @@ impl ClientConnectionBuilder {
         )
     }
 
-    /// Finalize the builder and create a [`QuicClientConnection`].
+    /// Finalize the builder and create a QUIC [`Connection`].
     ///
     /// This differs from `ClientConnectionBuilder::build()` in that it takes an extra `params`
     /// argument, which contains the TLS-encoded transport parameters to send, and an extra
@@ -90,7 +90,7 @@ impl ClientConnectionBuilder {
         self,
         version: quic::Version,
         params: Vec<u8>,
-    ) -> Result<QuicClientConnection, Error> {
+    ) -> Result<Connection<ClientSide, Quic>, Error> {
         let suites = &self
             .config
             .provider()
@@ -125,11 +125,11 @@ impl ClientConnectionBuilder {
         };
 
         let mut tls = Vec::new();
-        let inner = Connection::for_client(self.config, self.name, exts, quic, &mut tls)?;
+        let conn = Connection::for_client(self.config, self.name, exts, quic, &mut tls)?;
 
         // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
         debug_assert!(tls.is_empty());
-        Ok(QuicClientConnection::from(inner))
+        Ok(conn)
     }
 
     /// Finalize the builder and create a [`ClientHandshake`].
