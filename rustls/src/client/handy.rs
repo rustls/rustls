@@ -186,7 +186,7 @@ mod tests {
 
     use pki_types::{CertificateDer, ServerName, UnixTime};
 
-    use super::NoClientSessionStorage;
+    use super::{ClientSessionMemoryCache, NoClientSessionStorage};
     use crate::client::{
         ClientSessionKey, ClientSessionStore, Tls12Session, Tls13ClientSessionInput, Tls13Session,
     };
@@ -204,11 +204,7 @@ mod tests {
     #[test]
     fn test_noclientsessionstorage_does_nothing() {
         let c = NoClientSessionStorage {};
-        let server_name = ServerName::try_from("example.com").unwrap();
-        let key = ClientSessionKey {
-            config_hash: Default::default(),
-            server_name,
-        };
+        let key = session_key("example.com");
         let now = UnixTime::now();
 
         c.set_kx_hint(key.clone(), NamedGroup::X25519);
@@ -235,36 +231,77 @@ mod tests {
             c.remove_tls12_session(&key);
         }
 
-        c.insert_tls13_ticket(
-            key.clone(),
-            Tls13Session::new(
-                &NewSessionTicketPayloadTls13 {
-                    lifetime: Duration::ZERO,
-                    age_add: 0,
-                    nonce: SizedPayload::empty(),
-                    ticket: Arc::new(SizedPayload::empty()),
-                    extensions: NewSessionTicketExtensions {
-                        max_early_data_size: None,
-                    },
-                },
-                Tls13ClientSessionInput {
-                    suite: Tls13ProtocolSuite::Tcp(tls13_suite(
-                        CipherSuite(0xff13),
-                        &TEST_PROVIDER,
-                    )),
-                    peer_identity: VerifiedIdentity::assertion(Identity::X509(
-                        CertificateIdentity {
-                            end_entity: CertificateDer::from(&[][..]),
-                            intermediates: Vec::new(),
-                        },
-                    )),
-                    quic_params: None,
-                },
-                &[],
-                now,
-            ),
-        );
-
+        c.insert_tls13_ticket(key.clone(), tls13_session(now));
         assert!(c.take_tls13_ticket(&key).is_none());
+    }
+
+    /// For each `size` from 1 to 8, the cache keeps one server's key
+    /// exchange hint and TLS 1.3 ticket.
+    #[test]
+    fn test_clientsessionmemorycache_small_sizes_retain_server() {
+        for size in 1..=8 {
+            let c = ClientSessionMemoryCache::new(size);
+            let key = session_key("example.com");
+
+            c.set_kx_hint(key.clone(), NamedGroup::X25519);
+            assert_eq!(c.kx_hint(&key), Some(NamedGroup::X25519), "size {size}");
+
+            c.insert_tls13_ticket(key.clone(), tls13_session(UnixTime::now()));
+            assert!(c.take_tls13_ticket(&key).is_some(), "size {size}");
+        }
+    }
+
+    /// A cache of size 9 remembers two servers: after three servers are
+    /// added, the first is evicted and the other two remain.
+    #[test]
+    fn test_clientsessionmemorycache_evicts_oldest_server() {
+        let c = ClientSessionMemoryCache::new(9);
+        let first = session_key("first.example.com");
+        let second = session_key("second.example.com");
+        let third = session_key("third.example.com");
+
+        c.set_kx_hint(first.clone(), NamedGroup::X25519);
+        c.set_kx_hint(second.clone(), NamedGroup::X25519);
+        c.set_kx_hint(third.clone(), NamedGroup::X25519);
+
+        assert_eq!(c.kx_hint(&first), None);
+        assert_eq!(c.kx_hint(&second), Some(NamedGroup::X25519));
+        assert_eq!(c.kx_hint(&third), Some(NamedGroup::X25519));
+    }
+
+    /// Test helper: builds a cache key for `name` with a fixed (all-zero)
+    /// config hash, so keys differ only by server name.
+    fn session_key(name: &'static str) -> ClientSessionKey<'static> {
+        ClientSessionKey {
+            config_hash: Default::default(),
+            server_name: ServerName::try_from(name).unwrap(),
+        }
+    }
+
+    /// Test helper: builds a placeholder TLS 1.3 ticket. Its contents are
+    /// empty or dummy values; the tests only check whether the cache
+    /// keeps it.
+    fn tls13_session(now: UnixTime) -> Tls13Session {
+        Tls13Session::new(
+            &NewSessionTicketPayloadTls13 {
+                lifetime: Duration::ZERO,
+                age_add: 0,
+                nonce: SizedPayload::empty(),
+                ticket: Arc::new(SizedPayload::empty()),
+                extensions: NewSessionTicketExtensions {
+                    max_early_data_size: None,
+                },
+            },
+            Tls13ClientSessionInput {
+                suite: Tls13ProtocolSuite::Tcp(tls13_suite(CipherSuite(0xff13), &TEST_PROVIDER)),
+                peer_identity: VerifiedIdentity::assertion(Identity::X509(CertificateIdentity {
+                    end_entity: CertificateDer::from(&[][..]),
+                    intermediates: Vec::new(),
+                })),
+                quic_params: None,
+            },
+            &[],
+            now,
+        )
     }
 }
