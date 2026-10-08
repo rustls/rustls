@@ -45,4 +45,4 @@ jobs:
           # known-working main in feb 2025, bump as needed
           rev: c7dee4d
       - run: cross test --package rustls --target ${{ matrix.target }}
-      - run: cross test --package rustls-test --features aws-lc-rs --no-default-features --target ${{ matrix.target }}
+      - run: cross test --package rustls-test --no-default-features --target ${{ matrix.target }}
