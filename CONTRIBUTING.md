@@ -54,7 +54,6 @@ Some ideas and guidelines for contributions:
   This means everyone can see what is in progress prior to a PR.
 - Feel free to submit a PR even if the work is not totally finished,
   for feedback or to hand-over.
-- Prefer not to reference github issue or PR numbers in commits.
 - Try to keep code formatting commits separate from functional commits.
 - See [`.github/workflows/build.yml`](.github/workflows/build.yml) for
   how to run the various test suites, and how to make coverage measurements.
@@ -81,6 +80,20 @@ that do one thing. In particular:
 * Isolate updates to `Cargo.lock` in their own commits
 
 Our default workflow is to rebase clean commit history from a PR to `main`.
+
+## Commit messages
+
+We aim to wrap all commit message text (title/subject and body) so it is no more
+than 72 characters long.
+
+We do not use the "conventional commit" style. Don't prefix commits with
+"chore:", "fix:", and so forth.
+
+Commit messages should be relatively short, and aim to capture context that
+isn't self-evident from the code.
+
+Prefer **not** to reference github issue or PR numbers in commits, as doing so
+creates excessive linkages and notifications.
 
 ## Security bugs
 
