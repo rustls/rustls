@@ -1612,6 +1612,7 @@ fn test_no_warning_logging_during_successful_sessions() {
     }
 }
 
+#[cfg(feature = "ring")]
 #[test]
 fn test_explicit_provider_selection() {
     let client_config =

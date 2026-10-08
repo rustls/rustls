@@ -5,14 +5,17 @@ edition.workspace = true
 publish = false
 
 [features]
-default = ["brotli", "tracing", "zlib"]
+default = ["brotli", "ring", "tracing", "zlib"]
 brotli = ["rustls/brotli"]
 fips = ["rustls-aws-lc-rs/fips"]
+# Optional so the test suite can run on targets unsupported by ring, such as i586.
+ring = ["dep:rustls-ring"]
 tracing = ["rustls/tracing", "rustls-util/tracing"]
 zlib = ["rustls/zlib"]
 
 [dependencies]
 rustls = { path = "../rustls", default-features = false, features = ["webpki"] }
+rustls-ring = { path = "../rustls-ring", optional = true }
 tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
@@ -20,7 +23,6 @@ macro_rules_attribute = { workspace = true }
 num-bigint = { workspace = true }
 pki-types = { workspace = true }
 rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs", features = ["std"] }
-rustls-ring = { path = "../rustls-ring" }
 rustls-util = { path = "../rustls-util", default-features = false }
 x509-parser = { workspace = true }
 webpki = { workspace = true }

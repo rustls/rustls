@@ -3,6 +3,7 @@
 use std::env;
 use std::sync::Mutex;
 
+#[cfg(feature = "ring")]
 #[path = "."]
 mod tests_with_ring {
     use super::serialized;
