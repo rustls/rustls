@@ -101,6 +101,11 @@ impl<Side: SideData, T: Transport> TryFrom<ConnectionCommon<Side, T>> for SplitC
     type Error = Error;
 
     fn try_from(conn: ConnectionCommon<Side, T>) -> Result<Self, Error> {
+        // `SplitConnection` cannot be used to progress a handshake.
+        if conn.is_handshaking() {
+            return Err(ApiMisuse::SplitDuringHandshake.into());
+        }
+
         let send = Arc::new(Mutex::new(SendInner {
             send: conn.common.send,
             aside_buffer: Vec::new(),

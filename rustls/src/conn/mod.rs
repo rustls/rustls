@@ -217,11 +217,6 @@ impl<Side: SideData, T: Transport> ConnectionCommon<Side, T> {
     }
 
     pub(crate) fn split(self) -> Result<SplitConnection<Side>, Error> {
-        // `SplitConnection` cannot be used to progress a handshake.
-        if self.is_handshaking() {
-            return Err(ApiMisuse::SplitDuringHandshake.into());
-        }
-
         SplitConnection::try_from(self)
     }
 
