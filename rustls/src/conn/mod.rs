@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
-use core::ops::{Deref, DerefMut};
+use core::ops::Deref;
 
 use kernel::KernelConnection;
 use pki_types::FipsStatus;
@@ -314,12 +314,6 @@ impl<Side: SideData, T: Transport> Deref for ConnectionCommon<Side, T> {
     }
 }
 
-impl<Side: SideData, T: Transport> DerefMut for ConnectionCommon<Side, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.common
-    }
-}
-
 /// Driver for handling messages from the [`TlsInputBuffer`].
 ///
 /// Must be driven to completion to make progress, by calling either [`Self::handle_all()`] or
@@ -499,7 +493,7 @@ impl<Side: SideData> NeedsInput<Side> {
 
     #[doc = include_str!("../doc/early_exporter.md")]
     pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.0.early_exporter()
+        self.0.common.early_exporter()
     }
 }
 
