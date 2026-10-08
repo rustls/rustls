@@ -48,13 +48,11 @@ pub mod hpke;
 
 #[cfg(any(doc, test))]
 pub(crate) mod test_provider;
-#[cfg(test)]
-pub(crate) use test_provider::TEST_PROVIDER;
 #[cfg(doc)]
 #[doc(hidden)]
 pub use test_provider::TEST_PROVIDER;
-#[cfg(all(test, any(target_arch = "aarch64", target_arch = "x86_64")))]
-pub(crate) use test_provider::TLS13_TEST_SUITE;
+#[cfg(test)]
+pub(crate) use test_provider::{TEST_PROVIDER, TLS13_TEST_SUITE};
 
 // Message signing interfaces.
 mod signer;
