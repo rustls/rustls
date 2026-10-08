@@ -348,6 +348,7 @@ impl NeedsInput {
         output: &mut Vec<QuicEvent>,
     ) -> Result<ServerHandshake, Error> {
         self.0
+            .common
             .recv
             .deframer
             .input_quic(input.slice_mut())?;

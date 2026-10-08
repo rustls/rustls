@@ -77,7 +77,7 @@ impl ClientConnection {
 
     #[doc = include_str!("../doc/early_exporter.md")]
     pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.early_exporter()
+        self.inner.common.early_exporter()
     }
 
     /// Returns the number of TLS1.3 tickets that have been received.
@@ -123,7 +123,7 @@ impl Connection for ClientConnection {
     }
 
     fn send_close_notify(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
-        self.inner.send_close_notify(tls)
+        self.inner.common.send_close_notify(tls)
     }
 
     fn is_handshaking(&self) -> bool {
