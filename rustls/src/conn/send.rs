@@ -378,7 +378,7 @@ impl Encrypting {
         let seq = self.write_seq;
         self.write_seq += 1;
         self.encrypter
-            .encrypt_append(plain, seq, output)
+            .encrypt(plain, seq, output)
     }
 
     fn send_key_update_request(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {

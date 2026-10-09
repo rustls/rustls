@@ -325,7 +325,7 @@ impl RecordDecrypter for GcmRecordDecrypter {
 }
 
 impl RecordEncrypter for GcmRecordEncrypter {
-    fn encrypt_append(
+    fn encrypt(
         &mut self,
         msg: Record<OutboundPlain<'_>>,
         seq: u64,
@@ -435,7 +435,7 @@ impl RecordDecrypter for ChaCha20Poly1305RecordDecrypter {
 }
 
 impl RecordEncrypter for ChaCha20Poly1305RecordEncrypter {
-    fn encrypt_append(
+    fn encrypt(
         &mut self,
         msg: Record<OutboundPlain<'_>>,
         seq: u64,
@@ -637,7 +637,7 @@ mod tests {
         let payload_len = encrypter.encrypted_payload_len(record.payload.len());
         let mut out = vec![fill; PREFIX_LEN];
         encrypter
-            .encrypt_append(record, TEST_SEQ, &mut out)
+            .encrypt(record, TEST_SEQ, &mut out)
             .unwrap();
         assert_eq!(out[..PREFIX_LEN], [fill; PREFIX_LEN]);
         assert_eq!(out.len(), PREFIX_LEN + HEADER_LEN + payload_len);
