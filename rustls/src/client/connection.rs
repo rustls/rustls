@@ -342,17 +342,6 @@ impl SideData for ClientSide {
     type QuicHandshake = ();
 
     type PeerIdentity<'a> = ServerIdentity<'static, 'a>;
-
-    fn tcp_handshake_from_conn(conn: Connection<Self, Tcp>) -> Result<Self::Handshake, Error> {
-        ClientHandshake::try_from(conn)
-    }
-
-    fn quic_handshake_from_conn(
-        _core: Connection<Self, Quic>,
-        _output: &mut Vec<quic::QuicEvent>,
-    ) -> Result<Self::QuicHandshake, Error> {
-        todo!("nyi")
-    }
 }
 
 impl SideOutput for ClientSide {
