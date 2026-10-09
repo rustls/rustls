@@ -110,6 +110,39 @@ impl FromConn<ServerSide> for ServerHandshake {
     }
 }
 
+impl Accepted<Quic> {
+    /// Choose a [`ServerConfig`] to progress the handshake.
+    ///
+    /// Resolves an [`Accepted`], providing the [`ServerConfig`] that should be used for
+    /// the session, and the TLS-encoded QUIC transport parameters to send.
+    ///
+    /// Returns an error if configuration-dependent validation of the received
+    /// `ClientHello` message fails.
+    ///
+    /// Events are appended to `output`.
+    pub fn choose_config(
+        self,
+        config: Arc<ServerConfig>,
+        params: Vec<u8>,
+        output: &mut Vec<QuicEvent>,
+    ) -> Result<ServerHandshake, Error> {
+        check_server_config(&config)?;
+
+        let exts = ServerExtensionsInput {
+            transport_parameters: Some(match self.conn.transport.version {
+                Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
+            }),
+        };
+
+        let mut tls = Vec::new();
+        let conn = self.partial_choose_config(config, exts, &mut tls)?;
+
+        // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
+        debug_assert!(tls.is_empty());
+        ServerHandshake::from_conn(conn, output)
+    }
+}
+
 impl FromConn<ClientSide> for () {
     fn from_conn(
         _conn: Connection<ClientSide, Quic>,
@@ -207,7 +240,7 @@ impl fmt::Debug for NeedsInput {
     }
 }
 
-pub(crate) fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
+fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
     let suites = &config.provider.tls13_cipher_suites;
     if suites.is_empty() {
         return Err(ApiMisuse::QuicRequiresTls13Support.into());
