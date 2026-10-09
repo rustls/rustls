@@ -5,7 +5,6 @@ use core::{fmt, mem};
 
 use pki_types::FipsStatus;
 
-use crate::TlsInputBuffer;
 pub use crate::common_state::Side;
 use crate::common_state::{ConnectionOutputs, Protocol};
 use crate::conn::{
@@ -23,6 +22,7 @@ use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
 };
+use crate::{ClientSide, TlsInputBuffer};
 impl Connection<ServerSide, Quic> {
     /// Make a new QUIC server [`Connection`]
     ///
@@ -89,8 +89,10 @@ impl ServerHandshake {
             ..Quic::default()
         }))
     }
+}
 
-    pub(crate) fn from_conn(
+impl FromConn<ServerSide> for ServerHandshake {
+    fn from_conn(
         mut conn: Connection<ServerSide, Quic>,
         output: &mut Vec<QuicEvent>,
     ) -> Result<Self, Error> {
@@ -106,6 +108,22 @@ impl ServerHandshake {
             ServerNext::Complete(conn) => Self::Complete(conn),
         })
     }
+}
+
+impl FromConn<ClientSide> for () {
+    fn from_conn(
+        _conn: Connection<ClientSide, Quic>,
+        _output: &mut Vec<QuicEvent>,
+    ) -> Result<(), Error> {
+        todo!("nyi")
+    }
+}
+
+pub(crate) trait FromConn<Side: SideData> {
+    fn from_conn(
+        conn: Connection<Side, Quic>,
+        output: &mut Vec<QuicEvent>,
+    ) -> Result<Side::QuicHandshake, Error>;
 }
 
 /// More data needs to be processed to make progress.

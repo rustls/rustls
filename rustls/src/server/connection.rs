@@ -15,7 +15,7 @@ use crate::conn::{
 use crate::crypto;
 use crate::error::Error;
 use crate::msgs::ServerExtensionsInput;
-use crate::quic::{Quic, QuicEvent, ServerHandshake as QuicServerHandshake};
+use crate::quic::ServerHandshake as QuicServerHandshake;
 use crate::server::hs::{ExpectClientHello, ReadClientHello, ServerState};
 use crate::sync::Arc;
 use crate::verify::ClientIdentity;
@@ -158,17 +158,6 @@ impl SideData for ServerSide {
     type QuicHandshake = QuicServerHandshake;
 
     type PeerIdentity<'a> = ClientIdentity<'static, 'a>;
-
-    fn tcp_handshake_from_conn(conn: Connection<Self, Tcp>) -> Result<Self::Handshake, Error> {
-        ServerHandshake::try_from(conn)
-    }
-
-    fn quic_handshake_from_conn(
-        conn: Connection<Self, Quic>,
-        outputs: &mut Vec<QuicEvent>,
-    ) -> Result<Self::QuicHandshake, Error> {
-        QuicServerHandshake::from_conn(conn, outputs)
-    }
 }
 
 impl SideOutput for ServerSide {

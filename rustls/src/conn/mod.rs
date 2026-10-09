@@ -15,7 +15,7 @@ use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
 use crate::msgs::{Delocator, Message, Random, ServerExtensionsInput};
-use crate::quic::{Quic, QuicEvent, QuicOutput};
+use crate::quic::{self, QuicOutput};
 use crate::server::{ChooseConfig, ServerConfig, ServerSide};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::sync::Arc;
@@ -324,6 +324,12 @@ impl<T: Transport> Connection<ServerSide, T> {
     }
 }
 
+impl<Side: SideData> Connection<Side, Tcp> {
+    fn into_handshake(self) -> Result<Side::Handshake, Error> {
+        Side::Handshake::try_from(self)
+    }
+}
+
 impl<S: SideData, T: Transport> fmt::Debug for Connection<S, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self {
@@ -522,7 +528,7 @@ impl<Side: SideData> NeedsInput<Side> {
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
         self.0.process(input, tls)?;
-        Side::tcp_handshake_from_conn(self.0)
+        self.0.into_handshake()
     }
 
     #[doc = include_str!("../doc/early_exporter.md")]
@@ -739,21 +745,12 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
 #[expect(private_bounds)]
 pub trait SideData: SideOutput + fmt::Debug + private::Side + Sized + 'static {
     /// Type representing an in-progress TCP handshake.
-    type Handshake;
+    type Handshake: TryFrom<Connection<Self, Tcp>, Error = Error>;
     /// Type representing an in-progress QUIC handshake.
-    type QuicHandshake;
+    type QuicHandshake: quic::FromConn<Self>;
 
     /// Type representing the peer's identity.
     type PeerIdentity<'a>;
-
-    #[doc(hidden)]
-    fn tcp_handshake_from_conn(conn: Connection<Self, Tcp>) -> Result<Self::Handshake, Error>;
-
-    #[doc(hidden)]
-    fn quic_handshake_from_conn(
-        core: Connection<Self, Quic>,
-        output: &mut Vec<QuicEvent>,
-    ) -> Result<Self::QuicHandshake, Error>;
 }
 
 pub(crate) mod private {

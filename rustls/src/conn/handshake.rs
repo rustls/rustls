@@ -20,7 +20,7 @@ use crate::crypto::VerifiedIdentity;
 use crate::crypto::cipher::Payload;
 use crate::error::Error;
 use crate::msgs::{ServerExtensionsInput, TransportParameters};
-use crate::quic::{self, Quic, QuicEvent, QuicOutput};
+use crate::quic::{self, FromConn, Quic, QuicEvent, QuicOutput};
 use crate::server::{
     ChooseConfig, ClientHello, ServerConfig, ServerHandshake, ServerSide, ServerState,
 };
@@ -263,7 +263,8 @@ impl<Side: SideData> VerifyPeerIdentity<Side, Tcp> {
         verification_result: Result<VerifiedIdentity<'static>, Error>,
         tls: &mut Vec<u8>,
     ) -> Result<Side::Handshake, Error> {
-        Side::tcp_handshake_from_conn(self.partial_continue_with(verification_result, tls)?)
+        self.partial_continue_with(verification_result, tls)?
+            .into_handshake()
     }
 }
 
@@ -286,7 +287,7 @@ impl<Side: SideData> VerifyPeerIdentity<Side, Quic> {
         verification_result: Result<VerifiedIdentity<'static>, Error>,
         output: &mut Vec<QuicEvent>,
     ) -> Result<Side::QuicHandshake, Error> {
-        Side::quic_handshake_from_conn(
+        Side::QuicHandshake::from_conn(
             self.partial_continue_with(verification_result, &mut Vec::new())?,
             output,
         )
