@@ -1701,14 +1701,6 @@ pub enum ApiMisuse {
     /// [`Connection::split()`][crate::Connection::split()] called during handshake.
     SplitDuringHandshake,
 
-    /// An output buffer provided for encryption was too small.
-    EncryptBufferTooSmall {
-        /// The minimum required buffer length
-        required: usize,
-        /// The buffer length actually provided
-        provided: usize,
-    },
-
     /// Plaintext cannot be encrypted before the handshake is complete.
     WriteBeforeHandshakeComplete,
 
