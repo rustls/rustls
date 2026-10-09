@@ -723,7 +723,7 @@ fn client_requiring_rpk_receives_server_ee(
     let ee = ee.borrow_outbound();
     let mut enc_ee = Vec::new();
     encrypter
-        .encrypt_append(ee, 0, &mut enc_ee)
+        .encrypt(ee, 0, &mut enc_ee)
         .unwrap();
 
     input
@@ -867,7 +867,7 @@ fn test_client_rejects_protected_change_cipher_spec() {
     let ccs = ccs.borrow_outbound();
     let mut enc_ccs = Vec::new();
     encrypter
-        .encrypt_append(ccs, 0, &mut enc_ccs)
+        .encrypt(ccs, 0, &mut enc_ccs)
         .unwrap();
 
     input

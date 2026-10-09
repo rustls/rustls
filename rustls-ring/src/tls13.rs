@@ -209,7 +209,7 @@ struct Tls13RecordDecrypter {
 }
 
 impl RecordEncrypter for Tls13RecordEncrypter {
-    fn encrypt_append(
+    fn encrypt(
         &mut self,
         record: Record<OutboundPlain<'_>>,
         seq: u64,

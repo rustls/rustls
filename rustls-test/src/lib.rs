@@ -1576,7 +1576,7 @@ impl RawTls {
         let msg = msg.borrow_outbound();
         let mut record = vec![];
         self.encrypter
-            .encrypt_append(msg, self.enc_seq, &mut record)
+            .encrypt(msg, self.enc_seq, &mut record)
             .unwrap();
 
         self.enc_seq += 1;
@@ -2027,7 +2027,7 @@ mod plaintext {
     struct Encrypter;
 
     impl RecordEncrypter for Encrypter {
-        fn encrypt_append(
+        fn encrypt(
             &mut self,
             record: Record<OutboundPlain<'_>>,
             _seq: u64,

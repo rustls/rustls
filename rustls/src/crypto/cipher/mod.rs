@@ -163,7 +163,7 @@ pub trait RecordEncrypter: Send + Sync {
     /// A full wire-format TLS record, including all framing the ciphersuite requires,
     /// such as any explicit nonce, padding and/or authentication tag, must be appended to `out`.
     /// Any existing data on the front of `out` must be left alone.
-    fn encrypt_append(
+    fn encrypt(
         &mut self,
         record: Record<OutboundPlain<'_>>,
         seq: u64,
@@ -175,7 +175,7 @@ pub trait RecordEncrypter: Send + Sync {
     /// For a zero `payload_len` this should return the _minimum_ overhead for any
     /// payload.  Then, to fragment a long payload into chunks of length `F`,
     /// Rustls will first set `A := encrypted_payload_len(0)` and then supply the
-    /// payload to [`Self::encrypt_append()`] in chunks of length `F - A`.  Each `encrypt_append()`
+    /// payload to [`Self::encrypt()`] in chunks of length `F - A`.  Each `encrypt()`
     /// is then free to pad or otherwise transform the length at its option.
     fn encrypted_payload_len(&self, payload_len: usize) -> usize;
 }

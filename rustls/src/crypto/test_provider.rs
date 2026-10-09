@@ -380,7 +380,7 @@ impl Tls12AeadAlgorithm for Aead {
 pub(crate) struct Tls13Cipher;
 
 impl RecordEncrypter for Tls13Cipher {
-    fn encrypt_append(
+    fn encrypt(
         &mut self,
         record: Record<OutboundPlain<'_>>,
         seq: u64,
@@ -452,7 +452,7 @@ impl RecordDecrypter for Tls13Cipher {
 struct Tls12Cipher;
 
 impl RecordEncrypter for Tls12Cipher {
-    fn encrypt_append(
+    fn encrypt(
         &mut self,
         record: Record<OutboundPlain<'_>>,
         seq: u64,

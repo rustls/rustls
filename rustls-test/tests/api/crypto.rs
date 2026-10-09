@@ -1151,7 +1151,7 @@ fn move_encrypted_extensions_into_server_hello(
         payload: Payload::Borrowed(remainder),
     };
     encrypter
-        .encrypt_append(remainder.borrow_outbound(), 0, &mut output)
+        .encrypt(remainder.borrow_outbound(), 0, &mut output)
         .unwrap();
     output
 }

@@ -377,7 +377,7 @@ impl Encrypting {
         let seq = self.write_seq;
         self.write_seq += 1;
         self.encrypter
-            .encrypt_append(plain, seq, output)
+            .encrypt(plain, seq, output)
     }
 
     fn encrypted_len(&self, payload_len: usize) -> usize {
