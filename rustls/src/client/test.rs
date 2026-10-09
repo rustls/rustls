@@ -11,8 +11,8 @@ use pki_types::{CertificateDer, FipsStatus, ServerName, UnixTime};
 
 use super::{Tls12Session, Tls13ClientSessionInput, Tls13Session};
 use crate::client::{
-    ClientConfig, ClientConnection, ClientSessionKey, ClientSessionMemoryCache, ClientSessionStore,
-    Resumption, Tls12Resumption,
+    ClientConfig, ClientSessionKey, ClientSessionMemoryCache, ClientSessionStore, Resumption,
+    Tls12Resumption,
 };
 use crate::crypto::cipher::{
     EncodableVersion, Payload, Record, RecordEncrypter, encode_record_header,
@@ -46,7 +46,8 @@ use crate::verify::{
     VerifiedIdentity,
 };
 use crate::{
-    Connection, DigitallySignedStruct, DistinguishedName, KeyLog, RootCertStore, VecInput,
+    ClientSide, Connection, DigitallySignedStruct, DistinguishedName, KeyLog, RootCertStore, Tcp,
+    VecInput,
 };
 
 #[test]
@@ -1193,7 +1194,7 @@ fn roots() -> RootCertStore {
     r
 }
 
-fn process(input: &mut VecInput, conn: &mut ClientConnection) -> Result<(), Error> {
+fn process(input: &mut VecInput, conn: &mut Connection<ClientSide, Tcp>) -> Result<(), Error> {
     conn.read_tls(input, &mut Vec::new())
         .handle_all(&mut Vec::new())?;
     Ok(())

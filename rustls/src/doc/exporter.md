@@ -7,7 +7,7 @@ This function can be called at most once per connection.
 This function will error:
 
 - if called prior to the handshake completing; (check with
-  [`CommonState::is_handshaking`] first).
+  [`CommonState::is_handshaking`][crate::CommonState::is_handshaking] first).
 - if called more than once per connection.
 
 [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705

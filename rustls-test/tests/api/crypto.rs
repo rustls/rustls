@@ -12,8 +12,8 @@ use rustls::crypto::{Credentials, CryptoProvider};
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{ApiMisuse, PeerMisbehaved};
 use rustls::{
-    ClientConfig, ClientConnection, Connection, ConnectionTrafficSecrets, Error, KeyLog,
-    ServerConfig, ServerConnection, SupportedCipherSuite, Tls13CipherSuite, VecInput,
+    ClientConfig, ClientSide, Connection, ConnectionTrafficSecrets, Error, KeyLog, ServerConfig,
+    ServerSide, SideData, SupportedCipherSuite, Tcp, Tls13CipherSuite, VecInput,
 };
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, MultiTest, RawTls, ServerConfigExt,
@@ -455,7 +455,7 @@ fn test_secret_extraction_disabled_or_too_early() {
 
 #[test]
 fn test_secret_extraction_fails_with_pending_send_data() {
-    fn server_with_queued_key_update() -> ServerConnection {
+    fn server_with_queued_key_update() -> Connection<ServerSide, Tcp> {
         let mut server_config = make_server_config(KeyType::default(), &provider::DEFAULT_PROVIDER);
         server_config.enable_secret_extraction = true;
 
@@ -556,10 +556,10 @@ fn test_refresh_traffic_keys() {
     fn check_both_directions(
         client_input: &mut VecInput,
         client_output: &mut Vec<u8>,
-        client: &mut ClientConnection,
+        client: &mut Connection<ClientSide, Tcp>,
         server_input: &mut VecInput,
         server_output: &mut Vec<u8>,
-        server: &mut ServerConnection,
+        server: &mut Connection<ServerSide, Tcp>,
     ) {
         client
             .write(b"to-server-1".into(), client_output)
@@ -675,10 +675,10 @@ fn test_refresh_traffic_keys_is_idempotent() {
     fn test(
         left_input: &mut VecInput,
         left_output: &mut Vec<u8>,
-        left: &mut impl Connection,
+        left: &mut Connection<impl SideData, Tcp>,
         right_input: &mut VecInput,
         right_output: &mut Vec<u8>,
-        right: &mut impl Connection,
+        right: &mut Connection<impl SideData, Tcp>,
     ) {
         // left sends a request
         left.refresh_traffic_keys(left_output)
@@ -890,7 +890,8 @@ fn tls12_write_is_not_split_across_confidentiality_limit() {
 ///
 /// Returns the client, its pending output, and the server. The client's `Finished` message
 /// used sequence number 0. The server has secret extraction enabled.
-fn tls12_pair_with_limited_confidentiality() -> (ClientConnection, Vec<u8>, LimitedServer) {
+fn tls12_pair_with_limited_confidentiality() -> (Connection<ClientSide, Tcp>, Vec<u8>, LimitedServer)
+{
     let provider = Arc::new(CryptoProvider {
         tls13_cipher_suites: Default::default(),
         ..Arc::unwrap_or_clone(aes_128_gcm_with_1024_confidentiality_limit(
@@ -930,7 +931,7 @@ fn tls12_pair_with_limited_confidentiality() -> (ClientConnection, Vec<u8>, Limi
 const MAX_FRAGMENT_LEN: usize = 16_384;
 
 struct LimitedServer {
-    conn: ServerConnection,
+    conn: Connection<ServerSide, Tcp>,
     input: VecInput,
     output: Vec<u8>,
 }

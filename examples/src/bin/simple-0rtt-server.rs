@@ -21,7 +21,7 @@ use std::{env, io};
 use rustls::crypto::Identity;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::{Connection, ServerConfig, ServerConnection, VecInput};
+use rustls::{Connection, ServerConfig, VecInput};
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 use rustls_util::complete_io;
 
@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
 
         println!("Accepting connection");
 
-        let mut conn = ServerConnection::new(Arc::new(config.clone()))?;
+        let mut conn = Connection::new(Arc::new(config.clone()))?;
 
         let mut input = VecInput::default();
         let mut output = Vec::new();

@@ -5,15 +5,13 @@ use core::ops::Range;
 use core::{fmt, mem};
 use std::io::{self, Read};
 
-use super::SEQ_SOFT_LIMIT;
+use super::private::SideOutput;
 use super::send::{SendOutput, SendPath};
 use super::split::SendAdapter;
-use crate::SideData;
+use super::{Connection, SEQ_SOFT_LIMIT, SideData, StateMachine, Transport};
 use crate::common_state::{
     ConnectionOutput, Event, Output, OutputEvent, Side, UnborrowedPayload, maybe_send_fatal_alert,
 };
-use crate::conn::private::SideOutput;
-use crate::conn::{ConnectionCommon, StateMachine};
 use crate::crypto::cipher::{EncodableVersion, InboundOpaque, Payload, Record, RecordDecrypter};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
@@ -34,11 +32,10 @@ pub(crate) struct MessageIter<'a, 'm, Side: SideData, Send: SendOutput + 'a> {
 }
 
 impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
-    pub(crate) fn new(
+    pub(crate) fn new<T: Transport>(
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
-        quic: Option<&'a mut dyn QuicOutput>,
-        conn: &'a mut ConnectionCommon<Side>,
+        conn: &'a mut Connection<Side, T>,
         mode: MessageIterMode,
     ) -> Self {
         Self {
@@ -48,7 +45,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
             state: &mut conn.state,
             output: JoinOutput {
                 outputs: &mut conn.common.outputs,
-                quic,
+                quic: conn.transport.quic(),
                 send: &mut conn.common.send,
                 side: &mut conn.side,
             },

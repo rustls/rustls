@@ -13,8 +13,7 @@ use rustls::enums::ProtocolVersion;
 use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
 use rustls::server::{ServerSessionKey, Tls13Tickets};
 use rustls::{
-    ClientConfig, ClientConnection, Connection, HandshakeKind, ServerConfig, ServerConnection,
-    VecInput,
+    ClientConfig, ClientSide, Connection, HandshakeKind, ServerConfig, ServerSide, Tcp, VecInput,
 };
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, MultiTest,
@@ -272,7 +271,7 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
         .connect("localhost".try_into().unwrap())
         .build(&mut client_output)
         .unwrap();
-    let mut server_1 = ServerConnection::new(server_config_1).unwrap();
+    let mut server_1 = Connection::new(server_config_1).unwrap();
     do_handshake(
         &mut client_input,
         &mut client_output,
@@ -302,7 +301,7 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
         .connect("localhost".try_into().unwrap())
         .build(&mut client_output)
         .unwrap();
-    let mut server_2 = ServerConnection::new(Arc::new(server_config_2)).unwrap();
+    let mut server_2 = Connection::new(Arc::new(server_config_2)).unwrap();
     do_handshake(
         &mut client_input,
         &mut client_output,
@@ -646,7 +645,7 @@ fn resumable_pair(
     client_config: &Arc<ClientConfig>,
     server_config: &Arc<ServerConfig>,
     client_output: &mut Vec<u8>,
-) -> (ClientConnection, ServerConnection) {
+) -> (Connection<ClientSide, Tcp>, Connection<ServerSide, Tcp>) {
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     let mut warmup_output = Vec::new();
@@ -667,7 +666,7 @@ fn resumable_pair(
 
 /// Processes all input on `server`, returning the received early data and traffic data separately.
 fn server_read(
-    server: &mut ServerConnection,
+    server: &mut Connection<ServerSide, Tcp>,
     input: &mut VecInput,
     output: &mut Vec<u8>,
 ) -> (Vec<u8>, Vec<u8>) {
@@ -771,7 +770,7 @@ fn early_data_is_available_on_resumption() {
 
 #[test]
 fn early_data_not_available_on_server_before_client_hello() {
-    let mut server = ServerConnection::new(Arc::new(make_server_config(
+    let mut server = Connection::new(Arc::new(make_server_config(
         KeyType::default(),
         &provider::DEFAULT_PROVIDER,
     )))
@@ -1228,7 +1227,7 @@ fn rejected_early_data_is_skipped() {
     let mut rejecting_config = (*server_config).clone();
     rejecting_config.max_early_data_size = 0;
     let (mut client, _) = resumable_pair(&client_config, &server_config, &mut client_output);
-    let mut server = ServerConnection::new(Arc::new(rejecting_config)).unwrap();
+    let mut server = Connection::new(Arc::new(rejecting_config)).unwrap();
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     let mut server_output = Vec::new();

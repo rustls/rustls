@@ -7,7 +7,7 @@ use openssl::ssl::{SslConnector, SslMethod, SslSession, SslStream};
 use rustls::crypto::Identity;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::{Connection, ServerConfig, VecInput};
+use rustls::{ServerConfig, VecInput};
 use rustls_aws_lc_rs as provider;
 use rustls_util::complete_io;
 
@@ -36,7 +36,7 @@ fn test_early_exporter() {
 
         let mut received_plaintext = Vec::new();
         for _ in 0..ITERS {
-            let mut server = rustls::ServerConnection::new(config.clone()).unwrap();
+            let mut server = rustls::Connection::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
             let mut input = VecInput::default();
             let mut output = Vec::new();

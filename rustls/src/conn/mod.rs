@@ -1,11 +1,12 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
-use core::ops::{Deref, DerefMut};
+use core::ops::Deref;
 
 use kernel::KernelConnection;
 use pki_types::FipsStatus;
 
+use crate::client::ClientSide;
 use crate::common_state::{
     CommonState, ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent,
 };
@@ -14,7 +15,7 @@ use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
 use crate::msgs::{Delocator, Message, Random, ServerExtensionsInput};
-use crate::quic::{Quic, QuicEvent, QuicOutput};
+use crate::quic::{self, QuicOutput};
 use crate::server::{ChooseConfig, ServerConfig, ServerSide};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::sync::Arc;
@@ -25,7 +26,7 @@ pub mod kernel;
 
 mod handshake;
 pub use handshake::{Accepted, Tcp, Transport, VerifyPeerIdentity};
-pub(crate) use handshake::{ClientNext, Core, ServerNext, sealed};
+pub(crate) use handshake::{ClientNext, ServerNext, sealed};
 
 mod receive;
 pub(crate) use receive::{
@@ -39,10 +40,91 @@ pub(crate) use send::{SendOutput, SendPath};
 pub(crate) mod split;
 use split::SplitConnection;
 
-/// A trait generalizing over buffered client or server connections.
-pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
-    /// The side (client or server) that this type implements.
-    type Side: SideData;
+/// A TLS connection, parametrized by the side ([`ClientSide`] or [`ServerSide`]).
+///
+/// This is one of the core abstractions of the rustls API. It represents a single connection
+/// to a peer, and holds all the state associated with that connection. Note that it does
+/// not hold any IO objects: the application is responsible for reading and writing TLS records.
+///
+/// This object is generic over the `Side` type parameter, which must be either [`ClientSide`]
+/// or [`ServerSide`]. While most of the API for a connection is shared between both types, some
+/// API is asymmetric, which is reflected by the type parameter. As such, some methods
+/// (including constructors) are specific on the `Side` type. See the implementations
+/// for [`ClientSide`](#impl-Connection<ClientSide>) and [`ServerSide`](#impl-Connection<ServerSide>) below.
+///
+/// [`ClientSide`]: crate::client::ClientSide
+/// [`ServerSide`]: crate::server::ServerSide
+pub struct Connection<Side: SideData, T: Transport> {
+    pub(crate) state: Result<Side::State, Error>,
+    pub(crate) side: Side,
+    pub(crate) common: CommonState,
+    pub(crate) transport: T,
+}
+
+impl<Side: SideData, T: Transport> Connection<Side, T> {
+    pub(crate) fn process(
+        &mut self,
+        input: &mut dyn TlsInputBuffer,
+        tls: &mut Vec<u8>,
+    ) -> Result<(), Error> {
+        let mut iter = MessageIter::new(input, tls, self, MessageIterMode::Handshake);
+        let result = loop {
+            match iter.next(false) {
+                Some(Ok(_)) => {}
+                Some(Err(e)) => break Err(e),
+                None => break Ok(()),
+            };
+        };
+
+        input.discard(self.common.recv.deframer.take_discard());
+
+        result?;
+        Ok(())
+    }
+
+    #[doc = include_str!("../doc/exporter.md")]
+    pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        match self.common.is_handshaking() {
+            true => Err(Error::HandshakeNotComplete),
+            false => self.common.outputs.exporter(),
+        }
+    }
+
+    /// Returns data learned during the connection.
+    pub fn side(&self) -> &Side {
+        &self.side
+    }
+
+    /// Return the FIPS validation status of the connection.
+    ///
+    /// This is different from [`CryptoProvider::fips()`][]:
+    /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
+    /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
+    ///
+    /// [`CryptoProvider::fips()`]: crate::crypto::CryptoProvider::fips()
+    pub fn fips(&self) -> FipsStatus {
+        self.common.fips
+    }
+
+    /// Returns true if the connection is currently performing the TLS handshake.
+    ///
+    /// During this time, [`Self::write()`] will return an error.
+    pub fn is_handshaking(&self) -> bool {
+        self.common.is_handshaking()
+    }
+}
+
+impl<Side: SideData> Connection<Side, Tcp> {
+    /// Build a [`MessageHandler`] to process messages from the `input` buffer.
+    ///
+    /// Any data appended to `tls` should be sent to the peer.
+    pub fn read_tls<'a, 'm>(
+        &'a mut self,
+        input: &'m mut dyn TlsInputBuffer,
+        tls: &'a mut Vec<u8>,
+    ) -> MessageHandler<'a, 'm, Side> {
+        MessageHandler::new(input, tls, self)
+    }
 
     /// Writes the application data from `plaintext` into TLS records and appends them to `tls`.
     ///
@@ -60,31 +142,19 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
     /// If the connection previously encountered a fatal error (for example, while processing
     /// received data in [`Self::read_tls()`]), this returns that error, even if `plaintext`
     /// is empty.
-    fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error>;
+    pub fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error> {
+        if let Err(err) = &self.state {
+            return Err(err.clone());
+        } else if plaintext.is_empty() {
+            return Ok(());
+        }
 
-    /// Build a [`MessageHandler`] to process messages from the `input` buffer.
-    ///
-    /// Any data appended to `tls` should be sent to the peer.
-    fn read_tls<'a, 'm>(
-        &'a mut self,
-        input: &'m mut dyn TlsInputBuffer,
-        tls: &'a mut Vec<u8>,
-    ) -> MessageHandler<'a, 'm, Self::Side>;
+        self.common
+            .send
+            .send_appdata_encrypt(DataKind::Traffic(plaintext), tls)?;
 
-    #[doc = include_str!("../doc/exporter.md")]
-    fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error>;
-
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    ///
-    /// Should be used with care as it exposes secret key material.
-    ///
-    /// All TLS data previously written into caller-provided buffers must be sent to the peer before
-    /// calling this function.
-    ///
-    /// This fails with [`ApiMisuse::KernelConnectionWithPendingSendData`] if the
-    /// connection has pending data to send, which would otherwise be lost.
-    /// Write out that pending data before calling this function.
-    fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error>;
+        Ok(())
+    }
 
     /// Sends a TLS1.3 `key_update` message into `tls` to refresh a connection's keys.
     ///
@@ -111,177 +181,46 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
     ///
     /// rustls only allows one outstanding request at a time; this function succeeds
     /// but sends nothing if a request is already in-flight.
-    fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error>;
-
-    /// Writes a `close_notify` warning alert into `tls`.
-    ///
-    /// This informs the peer that the connection is being closed.
-    ///
-    /// Does nothing if any `close_notify` or fatal alert was already sent.
-    fn send_close_notify(&mut self, tls: &mut Vec<u8>) -> Result<(), Error>;
-
-    /// Returns true if the connection is currently performing the TLS handshake.
-    ///
-    /// During this time, [`Self::write()`] will return an error.
-    fn is_handshaking(&self) -> bool;
-
-    /// Return the FIPS validation status of the connection.
-    ///
-    /// This is different from [`CryptoProvider::fips()`][]:
-    /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
-    /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
-    ///
-    /// [`CryptoProvider::fips()`]: crate::crypto::CryptoProvider::fips()
-    fn fips(&self) -> FipsStatus;
-}
-
-/// More data needs to be supplied to make progress.
-///
-/// Provide the data to [`Self::process()`].
-pub struct NeedsInput<Side: SideData>(pub(crate) Core<Side, Tcp>);
-
-impl<Side: SideData> NeedsInput<Side> {
-    pub(crate) fn new(inner: ConnectionCommon<Side>) -> Self {
-        Self(Core::new(inner, Tcp))
-    }
-
-    /// Progress the handshake by receiving further data.
-    ///
-    /// The data is obtained via `input`.  Any output produced is appended to `tls` and
-    /// should be sent to the peer (including if this function returns an error, because
-    /// `tls` may contain an alert.)
-    ///
-    /// An error from this function is otherwise fatal to the connection, as it consumes
-    /// the [`NeedsInput`] object.
-    ///
-    /// On success, this returns a handshake object specifying what to do to progress
-    /// the connection.  If this contains another [`NeedsInput`] object then obtaining more
-    /// input (eg, from a socket or other source) is certainly necessary.
-    pub fn process(
-        self,
-        input: &mut dyn TlsInputBuffer,
-        tls: &mut Vec<u8>,
-    ) -> Result<Side::Handshake, Error> {
-        Side::tcp_handshake_from_core(self.0.process(input, tls)?)
-    }
-
-    #[doc = include_str!("../doc/early_exporter.md")]
-    pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.0.inner.early_exporter()
-    }
-}
-
-impl<S: SideData> fmt::Debug for NeedsInput<S> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NeedsInput")
-            .finish_non_exhaustive()
-    }
-}
-
-/// Dynamically-dispatched state machine, to maintain static unreachability of
-/// per-protocol-version code.
-pub(crate) trait State<Side: SideData>: Send + Sync {
-    /// Advance the state machine using `input` and emitting data to `output`.
-    fn handle<'m>(
-        self: Box<Self>,
-        input: Input<'m>,
-        output: &mut dyn Output<'m>,
-    ) -> Result<Side::State, Error>;
-
-    fn is_traffic(&self) -> bool {
-        false
-    }
-
-    fn handle_decrypt_error(&mut self) {}
-
-    fn into_external_state(
-        self: Box<Self>,
-        _send_keys: &Option<Box<KeyScheduleTrafficSend>>,
-    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
-        Err(Error::HandshakeNotComplete)
-    }
-}
-
-/// Trait to maintain static unreachablity of per-protocol-version code.
-pub(crate) trait VerifySidePeerIdentity<Side: SideData>: Send + Sync {
-    fn presented_identity(&self) -> Result<Side::PeerIdentity<'_>, Error>;
-    fn verify_with_config(&self) -> Result<VerifiedIdentity<'static>, Error>;
-    fn continue_with(
-        self: Box<Self>,
-        verified: VerifiedIdentity<'static>,
-        output: &mut dyn Output<'_>,
-    ) -> Result<Side::State, Error>;
-}
-
-/// TLS connection state with side-specific data (`Side`).
-///
-/// This is one of the core abstractions of the rustls API. It represents a single connection
-/// to a peer, and holds all the state associated with that connection. Note that it does
-/// not hold any IO objects: the application is responsible for reading and writing TLS records.
-/// If you want an object that does hold IO objects, see `rustls_util::Stream` and
-/// `rustls_util::StreamOwned`.
-///
-/// This object is generic over the `Side` type parameter, which must implement the marker trait
-/// [`SideData`]. This is used to store side-specific data.
-pub(crate) struct ConnectionCommon<Side: SideData> {
-    pub(crate) state: Result<Side::State, Error>,
-    pub(crate) side: Side,
-    pub(crate) common: CommonState,
-}
-
-impl<Side: SideData> ConnectionCommon<Side> {
-    pub(crate) fn new(state: Side::State, side: Side, common: CommonState) -> Self {
-        Self {
-            state: Ok(state),
-            side,
-            common,
-        }
-    }
-
-    pub(crate) fn read_tls<'a, 'm>(
-        &'a mut self,
-        input: &'m mut dyn TlsInputBuffer,
-        tls: &'a mut Vec<u8>,
-    ) -> MessageHandler<'a, 'm, Side> {
-        MessageHandler::new(input, tls, self)
-    }
-
-    pub(crate) fn write(
-        &mut self,
-        plaintext: OutboundPlain<'_>,
-        tls: &mut Vec<u8>,
-    ) -> Result<(), Error> {
-        if let Err(err) = &self.state {
-            return Err(err.clone());
-        } else if plaintext.is_empty() {
-            return Ok(());
-        }
-
-        self.common
-            .send
-            .send_appdata_encrypt(DataKind::Traffic(plaintext), tls)?;
-
-        Ok(())
-    }
-
-    pub(crate) fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
+    pub fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
         self.common
             .send
             .refresh_traffic_keys(tls)
     }
 
-    pub(crate) fn split(self) -> Result<SplitConnection<Side>, Error> {
-        // `SplitConnection` cannot be used to progress a handshake.
-        if self.is_handshaking() {
-            return Err(ApiMisuse::SplitDuringHandshake.into());
-        }
-
+    /// Split a post-handshake connection into a [`SplitConnection`].
+    ///
+    /// This allows the two directions (transmit and receive) of the connection to be progressed
+    /// separately (including by different threads, which would allow dedicating a CPU core for each
+    /// direction rather than one per connection; this can dramatically improve performance for
+    /// full-duplex protocols).
+    ///
+    /// It also separates out the [`ConnectionOutputs`] which gives the application direct control
+    /// of how long this is kept.
+    ///
+    /// This fails if:
+    ///
+    /// - the handshake is not complete. Check with [`Connection::is_handshaking()`].
+    /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write()`].
+    pub fn split(self) -> Result<SplitConnection<Side>, Error> {
         SplitConnection::try_from(self)
     }
 
+    #[doc = include_str!("../doc/early_exporter.md")]
+    pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        self.common.early_exporter()
+    }
+
     /// Extract secrets, so they can be used when configuring kTLS, for example.
+    ///
     /// Should be used with care as it exposes secret key material.
-    pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+    ///
+    /// All TLS data previously written into caller-provided buffers must be sent to the peer before
+    /// calling this function.
+    ///
+    /// This fails with [`ApiMisuse::KernelConnectionWithPendingSendData`] if the
+    /// connection has pending data to send, which would otherwise be lost.
+    /// Write out that pending data before calling this function.
+    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
         Ok(self
             .dangerous_into_kernel_connection()?
             .0)
@@ -327,20 +266,28 @@ impl<Side: SideData> ConnectionCommon<Side> {
         Ok((secrets, external))
     }
 
-    pub(crate) fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        match self.common.is_handshaking() {
-            true => Err(Error::HandshakeNotComplete),
-            false => self.common.outputs.exporter(),
-        }
+    /// Writes a `close_notify` warning alert into `tls`.
+    ///
+    /// This informs the peer that the connection is being closed.
+    ///
+    /// Does nothing if any `close_notify` or fatal alert was already sent.
+    pub fn send_close_notify(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
+        self.common.send_close_notify(tls)
     }
 }
 
-impl ConnectionCommon<ServerSide> {
+impl<T: Transport> Connection<ClientSide, T> {
+    /// Returns the number of TLS1.3 tickets that have been received.
+    pub fn tls13_tickets_received(&self) -> u32 {
+        self.common.recv.tls13_tickets_received
+    }
+}
+
+impl<T: Transport> Connection<ServerSide, T> {
     pub(crate) fn accepted(
         &mut self,
         choose: Box<ChooseConfig>,
         exts: ServerExtensionsInput,
-        quic: Option<&mut dyn QuicOutput>,
         config: Arc<ServerConfig>,
         tls: &mut Vec<u8>,
     ) -> Result<(), Error> {
@@ -351,7 +298,7 @@ impl ConnectionCommon<ServerSide> {
 
         let mut output = SideCommonOutput {
             side: &mut self.side,
-            quic,
+            quic: self.transport.quic(),
             common: &mut self.common,
             tls,
         };
@@ -359,19 +306,51 @@ impl ConnectionCommon<ServerSide> {
         self.state = Ok(choose.use_config(config, exts, &mut output)?);
         Ok(())
     }
+
+    /// Set the resumption data to embed in future resumption tickets supplied to the client.
+    ///
+    /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other
+    /// data. Should be called while `is_handshaking` returns true to ensure all transmitted
+    /// resumption tickets are affected.
+    ///
+    /// Integrity will be assured by rustls, but the data will be visible to the client. If secrecy
+    /// from the client is desired, encrypt the data separately.
+    pub fn set_resumption_data(&mut self, data: &[u8]) -> Result<(), Error> {
+        assert!(data.len() < 2usize.pow(15));
+        match &mut self.state {
+            Ok(st) => st.set_resumption_data(data),
+            Err(e) => Err(e.clone()),
+        }
+    }
 }
 
-impl<Side: SideData> Deref for ConnectionCommon<Side> {
+impl<Side: SideData> Connection<Side, Tcp> {
+    fn into_handshake(self) -> Result<Side::Handshake, Error> {
+        Side::Handshake::try_from(self)
+    }
+}
+
+impl<S: SideData, T: Transport> fmt::Debug for Connection<S, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            state: _,
+            side,
+            common,
+            transport: _,
+        } = self;
+
+        f.debug_struct("Connection")
+            .field("side", side)
+            .field("common", common)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<Side: SideData, T: Transport> Deref for Connection<Side, T> {
     type Target = CommonState;
 
     fn deref(&self) -> &Self::Target {
         &self.common
-    }
-}
-
-impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.common
     }
 }
 
@@ -392,10 +371,10 @@ impl<'a, 'm, Side: SideData> MessageHandler<'a, 'm, Side> {
     pub(crate) fn new(
         input: &'m mut dyn TlsInputBuffer,
         tls: &'a mut Vec<u8>,
-        core: &'a mut ConnectionCommon<Side>,
+        conn: &'a mut Connection<Side, impl Transport>,
     ) -> Self {
         Self {
-            iter: MessageIter::new(input, tls, None, core, MessageIterMode::All),
+            iter: MessageIter::new(input, tls, conn, MessageIterMode::All),
             done: false,
         }
     }
@@ -519,6 +498,85 @@ impl<S: SideData> fmt::Debug for MessageHandler<'_, '_, S> {
             .field("done", &self.done)
             .finish_non_exhaustive()
     }
+}
+
+/// More data needs to be supplied to make progress.
+///
+/// Provide the data to [`Self::process()`].
+pub struct NeedsInput<Side: SideData>(pub(crate) Connection<Side, Tcp>);
+
+impl<Side: SideData> NeedsInput<Side> {
+    pub(crate) fn new(inner: Connection<Side, Tcp>) -> Self {
+        Self(inner)
+    }
+
+    /// Progress the handshake by receiving further data.
+    ///
+    /// The data is obtained via `input`.  Any output produced is appended to `tls` and
+    /// should be sent to the peer (including if this function returns an error, because
+    /// `tls` may contain an alert.)
+    ///
+    /// An error from this function is otherwise fatal to the connection, as it consumes
+    /// the [`NeedsInput`] object.
+    ///
+    /// On success, this returns a handshake object specifying what to do to progress
+    /// the connection.  If this contains another [`NeedsInput`] object then obtaining more
+    /// input (eg, from a socket or other source) is certainly necessary.
+    pub fn process(
+        mut self,
+        input: &mut dyn TlsInputBuffer,
+        tls: &mut Vec<u8>,
+    ) -> Result<Side::Handshake, Error> {
+        self.0.process(input, tls)?;
+        self.0.into_handshake()
+    }
+
+    #[doc = include_str!("../doc/early_exporter.md")]
+    pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        self.0.common.early_exporter()
+    }
+}
+
+impl<S: SideData> fmt::Debug for NeedsInput<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NeedsInput")
+            .finish_non_exhaustive()
+    }
+}
+
+/// Dynamically-dispatched state machine, to maintain static unreachability of
+/// per-protocol-version code.
+pub(crate) trait State<Side: SideData>: Send + Sync {
+    /// Advance the state machine using `input` and emitting data to `output`.
+    fn handle<'m>(
+        self: Box<Self>,
+        input: Input<'m>,
+        output: &mut dyn Output<'m>,
+    ) -> Result<Side::State, Error>;
+
+    fn is_traffic(&self) -> bool {
+        false
+    }
+
+    fn handle_decrypt_error(&mut self) {}
+
+    fn into_external_state(
+        self: Box<Self>,
+        _send_keys: &Option<Box<KeyScheduleTrafficSend>>,
+    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
+        Err(Error::HandshakeNotComplete)
+    }
+}
+
+/// Trait to maintain static unreachablity of per-protocol-version code.
+pub(crate) trait VerifySidePeerIdentity<Side: SideData>: Send + Sync {
+    fn presented_identity(&self) -> Result<Side::PeerIdentity<'_>, Error>;
+    fn verify_with_config(&self) -> Result<VerifiedIdentity<'static>, Error>;
+    fn continue_with(
+        self: Box<Self>,
+        verified: VerifiedIdentity<'static>,
+        output: &mut dyn Output<'_>,
+    ) -> Result<Side::State, Error>;
 }
 
 /// An object of this type can export keying material.
@@ -685,25 +743,14 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
 
 /// Data specific to the peer's side (client or server).
 #[expect(private_bounds)]
-pub trait SideData: SideOutput + fmt::Debug + private::Side + Sized {
+pub trait SideData: SideOutput + fmt::Debug + private::Side + Sized + 'static {
     /// Type representing an in-progress TCP handshake.
-    type Handshake;
+    type Handshake: TryFrom<Connection<Self, Tcp>, Error = Error>;
     /// Type representing an in-progress QUIC handshake.
-    type QuicHandshake;
+    type QuicHandshake: quic::FromConn<Self>;
 
     /// Type representing the peer's identity.
     type PeerIdentity<'a>;
-
-    #[doc(hidden)]
-    #[expect(private_interfaces)]
-    fn tcp_handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error>;
-
-    #[doc(hidden)]
-    #[expect(private_interfaces)]
-    fn quic_handshake_from_core(
-        core: Core<Self, Quic>,
-        output: &mut Vec<QuicEvent>,
-    ) -> Result<Self::QuicHandshake, Error>;
 }
 
 pub(crate) mod private {

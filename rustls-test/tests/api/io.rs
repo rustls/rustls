@@ -17,9 +17,7 @@ use rustls::error::{
 };
 use rustls::server::ServerHandshake;
 use rustls::split::ReceiveTrafficState;
-use rustls::{
-    ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection, SliceInput, VecInput,
-};
+use rustls::{ClientConfig, Connection, HandshakeKind, ServerConfig, SliceInput, VecInput};
 use rustls_test::{
     ClientConfigExt, KeyType, MultiTest, OtherSession, RawTls, ServerConfigExt, TestNonBlockIo,
     check_fill_buf, check_fill_buf_err, check_iter, check_read, check_read_err, do_handshake,
@@ -2302,7 +2300,7 @@ fn test_client_handshake() {
             .start_handshake(&mut client_output)
             .unwrap();
 
-        let mut server = ServerConnection::new(server_config).unwrap();
+        let mut server = Connection::new(server_config).unwrap();
         let mut server_output = Vec::new();
 
         let client = 'finished: loop {
@@ -2362,7 +2360,7 @@ fn client_handshake_receives_half_rtt_data() {
 
     // The server consumes the `ClientHello`, emits its entire flight, and then -- without
     // waiting for the client's `Finished` -- appends two 0.5-RTT application data records.
-    let mut server = ServerConnection::new(server_config).unwrap();
+    let mut server = Connection::new(server_config).unwrap();
     let mut server_output = Vec::new();
     server
         .read_tls(&mut SliceInput::new(&mut client_output), &mut server_output)
@@ -2496,7 +2494,7 @@ fn client_handshake_sends_early_data() {
         );
         assert_eq!(early_data.bytes_left(), 0xffff - 17);
 
-        let mut server = ServerConnection::new(server_config).unwrap();
+        let mut server = Connection::new(server_config).unwrap();
         let mut server_output = Vec::new();
         let mut received = Vec::new();
         let mut server_input = SliceInput::new(&mut client_output);
@@ -3019,7 +3017,7 @@ fn client_closes_uncleanly() {
 
 #[test]
 fn test_complete_io_errors_if_close_notify_received_too_early() {
-    let mut server = ServerConnection::new(Arc::new(make_server_config(
+    let mut server = Connection::new(Arc::new(make_server_config(
         KeyType::Rsa2048,
         &provider::DEFAULT_PROVIDER,
     )))
@@ -3222,7 +3220,7 @@ fn test_data_after_close_notify_is_ignored() {
 
 #[test]
 fn test_close_notify_sent_prior_to_handshake_complete() {
-    let mut server = ServerConnection::new(Arc::new(make_server_config(
+    let mut server = Connection::new(Arc::new(make_server_config(
         KeyType::default(),
         &provider::DEFAULT_PROVIDER,
     )))

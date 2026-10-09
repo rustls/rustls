@@ -26,7 +26,7 @@
 use std::env;
 use std::sync::Arc;
 
-use rustls::{Connection, VecInput};
+use rustls::VecInput;
 use rustls_test::{MultiTest, do_handshake, make_pair_for_arc_configs, transfer};
 use rustls_util::KeyLogFile;
 

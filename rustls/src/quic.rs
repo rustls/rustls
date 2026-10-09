@@ -1,16 +1,15 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::ops::{Deref, DerefMut};
+use core::ops::Deref;
 use core::{fmt, mem};
 
 use pki_types::FipsStatus;
 
-use crate::client::ClientSide;
 pub use crate::common_state::Side;
-use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
+use crate::common_state::{ConnectionOutputs, Protocol};
 use crate::conn::{
-    Accepted, ConnectionCommon, Core, KeyingMaterialExporter, MessageIter, MessageIterMode,
-    ServerNext, SideData, TlsInputBuffer, Transport, VerifyPeerIdentity,
+    Accepted, Connection, MessageIter, MessageIterMode, ServerNext, SideData, Transport,
+    VerifyPeerIdentity, sealed,
 };
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
@@ -23,125 +22,13 @@ use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
 };
-
-/// A QUIC client or server connection.
-pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
-    /// Return the TLS-encoded transport parameters for the session's peer.
+use crate::{ClientSide, TlsInputBuffer};
+impl Connection<ServerSide, Quic> {
+    /// Make a new QUIC server [`Connection`]
     ///
-    /// While the transport parameters are technically available prior to the
-    /// completion of the handshake, they cannot be fully trusted until the
-    /// handshake completes, and reliance on them should be minimized.
-    /// However, any tampering with the parameters will cause the handshake
-    /// to fail.
-    fn quic_transport_parameters(&self) -> Option<&[u8]>;
-
-    /// Compute the keys for encrypting/decrypting 0-RTT packets, if available
-    fn zero_rtt_keys(&self) -> Option<DirectionalKeys>;
-
-    /// Consume unencrypted TLS handshake data.
-    ///
-    /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
-    ///
-    /// How much of the `input` buffer is consumed is recorded by a call to
-    /// [`TlsInputBuffer::discard()`].  Unconsumed data should be presented again on the next call.
-    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error>;
-
-    /// Obtain pending events that the caller should process.
-    ///
-    /// All pending events are returned as an iterator.
-    fn events(&mut self) -> impl Iterator<Item = QuicEvent>;
-
-    /// Returns true if the connection is currently performing the TLS handshake.
-    fn is_handshaking(&self) -> bool;
-}
-
-/// A QUIC client connection.
-pub struct ClientConnection {
-    inner: QuicCommon<ClientSide>,
-}
-
-impl ClientConnection {
-    /// Return the FIPS validation status of the connection.
-    pub fn fips(&self) -> FipsStatus {
-        self.inner.fips
-    }
-
-    /// Returns the number of TLS1.3 tickets that have been received.
-    pub fn tls13_tickets_received(&self) -> u32 {
-        self.inner
-            .common
-            .common
-            .recv
-            .tls13_tickets_received
-    }
-
-    #[doc = include_str!("doc/exporter.md")]
-    pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.common.exporter()
-    }
-
-    /// Returns data learned during the connection, specific to being a client.
-    pub fn data(&self) -> &ClientSide {
-        &self.inner.common.side
-    }
-}
-
-impl Connection for ClientConnection {
-    fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.inner.quic.transport_parameters()
-    }
-
-    fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
-        self.inner
-            .quic
-            .zero_rtt_keys(&self.inner)
-    }
-
-    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
-        self.inner.read_hs(input)
-    }
-
-    fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
-        self.inner.events()
-    }
-
-    fn is_handshaking(&self) -> bool {
-        self.inner.is_handshaking()
-    }
-}
-
-impl Deref for ClientConnection {
-    type Target = ConnectionOutputs;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl fmt::Debug for ClientConnection {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("quic::ClientConnection")
-            .finish_non_exhaustive()
-    }
-}
-
-impl From<QuicCommon<ClientSide>> for ClientConnection {
-    fn from(inner: QuicCommon<ClientSide>) -> Self {
-        Self { inner }
-    }
-}
-
-/// A QUIC server connection.
-pub struct ServerConnection {
-    inner: QuicCommon<ServerSide>,
-}
-
-impl ServerConnection {
-    /// Make a new QUIC ServerConnection.
-    ///
-    /// This differs from `ServerConnection::new()` in that it takes an extra `params` argument,
+    /// This differs from `Connection::new()` in that it takes an extra `params` argument,
     /// which contains the TLS-encoded transport parameters to send.
-    pub fn new(
+    pub fn new_quic(
         config: Arc<ServerConfig>,
         version: Version,
         params: Vec<u8>,
@@ -153,85 +40,14 @@ impl ServerConnection {
             }),
         };
 
-        let core = ConnectionCommon::for_server(config, exts, Protocol::Quic(version))?;
-        let inner = QuicCommon::new(
-            core,
+        Self::for_server(
+            config,
+            exts,
             Quic {
                 version,
                 ..Quic::default()
             },
-        );
-        Ok(Self { inner })
-    }
-
-    /// Return the FIPS validation status of the connection.
-    pub fn fips(&self) -> FipsStatus {
-        self.inner.fips
-    }
-
-    /// Set the resumption data to embed in future resumption tickets supplied to the client.
-    ///
-    /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other
-    /// data. Should be called while `is_handshaking` returns true to ensure all transmitted
-    /// resumption tickets are affected (otherwise an error will be returned).
-    ///
-    /// Integrity will be assured by rustls, but the data will be visible to the client. If secrecy
-    /// from the client is desired, encrypt the data separately.
-    pub fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
-        assert!(resumption_data.len() < 2usize.pow(15));
-        match &mut self.inner.common.state {
-            Ok(st) => st.set_resumption_data(resumption_data),
-            Err(e) => Err(e.clone()),
-        }
-    }
-
-    #[doc = include_str!("doc/exporter.md")]
-    pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.common.exporter()
-    }
-
-    /// Returns data learned during the connection, specific to being a server.
-    pub fn data(&self) -> &ServerSide {
-        &self.inner.common.side
-    }
-}
-
-impl Connection for ServerConnection {
-    fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.inner.quic.transport_parameters()
-    }
-
-    fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
-        self.inner
-            .quic
-            .zero_rtt_keys(&self.inner)
-    }
-
-    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
-        self.inner.read_hs(input)
-    }
-
-    fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
-        self.inner.events()
-    }
-
-    fn is_handshaking(&self) -> bool {
-        self.inner.is_handshaking()
-    }
-}
-
-impl Deref for ServerConnection {
-    type Target = ConnectionOutputs;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl fmt::Debug for ServerConnection {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("quic::ServerConnection")
-            .finish_non_exhaustive()
+        )
     }
 }
 
@@ -254,7 +70,7 @@ pub enum ServerHandshake {
     VerifyClientIdentity(VerifyPeerIdentity<ServerSide, Quic>),
 
     /// The handshake is complete.
-    Complete(ServerConnection),
+    Complete(Connection<ServerSide, Quic>),
 }
 
 impl ServerHandshake {
@@ -268,36 +84,79 @@ impl ServerHandshake {
     ///
     /// The returned object should be fed data from a single potential client.
     pub fn start(version: Version) -> NeedsInput {
-        NeedsInput(Core::new(
-            ConnectionCommon::for_acceptor(Protocol::Quic(version)),
-            Quic {
-                version,
-                ..Quic::default()
-            },
-        ))
+        NeedsInput(Connection::for_acceptor(Quic {
+            version,
+            ..Quic::default()
+        }))
     }
+}
 
-    pub(crate) fn from_core(
-        mut core: Core<ServerSide, Quic>,
+impl FromConn<ServerSide> for ServerHandshake {
+    fn from_conn(
+        mut conn: Connection<ServerSide, Quic>,
         output: &mut Vec<QuicEvent>,
     ) -> Result<Self, Error> {
-        output.extend(core.transport.events());
+        output.extend(conn.transport.events());
 
-        Ok(match ServerNext::try_from(core)? {
-            ServerNext::NeedsInput(core) => Self::NeedsInput(NeedsInput(core)),
+        Ok(match ServerNext::try_from(conn)? {
+            ServerNext::NeedsInput(conn) => Self::NeedsInput(NeedsInput(conn)),
 
             ServerNext::ChooseConfig(accepted) => Self::Accepted(accepted),
 
             ServerNext::VerifyClientIdentity(verify) => Self::VerifyClientIdentity(verify),
 
-            ServerNext::Complete(core) => {
-                let Core { inner, transport } = core;
-                Self::Complete(ServerConnection {
-                    inner: QuicCommon::new(inner, transport),
-                })
-            }
+            ServerNext::Complete(conn) => Self::Complete(conn),
         })
     }
+}
+
+impl Accepted<Quic> {
+    /// Choose a [`ServerConfig`] to progress the handshake.
+    ///
+    /// Resolves an [`Accepted`], providing the [`ServerConfig`] that should be used for
+    /// the session, and the TLS-encoded QUIC transport parameters to send.
+    ///
+    /// Returns an error if configuration-dependent validation of the received
+    /// `ClientHello` message fails.
+    ///
+    /// Events are appended to `output`.
+    pub fn choose_config(
+        self,
+        config: Arc<ServerConfig>,
+        params: Vec<u8>,
+        output: &mut Vec<QuicEvent>,
+    ) -> Result<ServerHandshake, Error> {
+        check_server_config(&config)?;
+
+        let exts = ServerExtensionsInput {
+            transport_parameters: Some(match self.conn.transport.version {
+                Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
+            }),
+        };
+
+        let mut tls = Vec::new();
+        let conn = self.partial_choose_config(config, exts, &mut tls)?;
+
+        // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
+        debug_assert!(tls.is_empty());
+        ServerHandshake::from_conn(conn, output)
+    }
+}
+
+impl FromConn<ClientSide> for () {
+    fn from_conn(
+        _conn: Connection<ClientSide, Quic>,
+        _output: &mut Vec<QuicEvent>,
+    ) -> Result<(), Error> {
+        todo!("nyi")
+    }
+}
+
+pub(crate) trait FromConn<Side: SideData> {
+    fn from_conn(
+        conn: Connection<Side, Quic>,
+        output: &mut Vec<QuicEvent>,
+    ) -> Result<Side::QuicHandshake, Error>;
 }
 
 /// More data needs to be processed to make progress.
@@ -306,7 +165,7 @@ impl ServerHandshake {
 ///
 /// This type dereferences to [`ConnectionOutputs`]. Individual outputs are `None`
 /// until they are learned during the handshake.
-pub struct NeedsInput(Core<ServerSide, Quic>);
+pub struct NeedsInput(Connection<ServerSide, Quic>);
 
 impl NeedsInput {
     /// Return the TLS-encoded transport parameters received from the peer.
@@ -320,9 +179,7 @@ impl NeedsInput {
 
     /// Compute the keys for decrypting 0-RTT packets, if available.
     pub fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
-        self.0
-            .transport
-            .zero_rtt_keys(&self.0.inner)
+        self.0.transport.zero_rtt_keys(&self.0)
     }
 
     /// Progress the handshake by receiving further unencrypted TLS handshake data.
@@ -353,17 +210,18 @@ impl NeedsInput {
         output: &mut Vec<QuicEvent>,
     ) -> Result<ServerHandshake, Error> {
         self.0
-            .inner
+            .common
             .recv
             .deframer
             .input_quic(input.slice_mut())?;
 
-        ServerHandshake::from_core(self.0.process(input, &mut Vec::new())?, output)
+        self.0.process(input, &mut Vec::new())?;
+        ServerHandshake::from_conn(self.0, output)
     }
 
     /// Returns data learned during the connection, specific to being a server.
-    pub fn data(&self) -> &ServerSide {
-        &self.0.inner.side
+    pub fn side(&self) -> &ServerSide {
+        &self.0.side
     }
 }
 
@@ -371,7 +229,7 @@ impl Deref for NeedsInput {
     type Target = ConnectionOutputs;
 
     fn deref(&self) -> &Self::Target {
-        self.0.inner.deref()
+        self.0.deref()
     }
 }
 
@@ -382,7 +240,7 @@ impl fmt::Debug for NeedsInput {
     }
 }
 
-pub(crate) fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
+fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
     let suites = &config.provider.tls13_cipher_suites;
     if suites.is_empty() {
         return Err(ApiMisuse::QuicRequiresTls13Support.into());
@@ -414,65 +272,52 @@ pub enum QuicEvent {
     KeyChange(KeyChange),
 }
 
-/// A shared interface for QUIC connections.
-pub(crate) struct QuicCommon<Side: SideData> {
-    common: ConnectionCommon<Side>,
-    quic: Quic,
-}
-
-impl<Side: SideData> QuicCommon<Side> {
-    pub(crate) fn new(common: ConnectionCommon<Side>, quic: Quic) -> Self {
-        Self { common, quic }
-    }
-
-    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
+impl<Side: SideData> Connection<Side, Quic> {
+    /// Consume unencrypted TLS handshake data.
+    ///
+    /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
+    ///
+    /// How much of the `input` buffer is consumed is recorded by a call to
+    /// [`TlsInputBuffer::discard()`].  Unconsumed data should be presented again on the next call.
+    pub fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
         self.common
-            .common
             .recv
             .deframer
             .input_quic(input.slice_mut())?;
 
         let mut tls = Vec::new();
-        let mut iter = MessageIter::new(
-            input,
-            &mut tls,
-            Some(&mut self.quic),
-            &mut self.common,
-            MessageIterMode::All,
-        );
+        let mut iter = MessageIter::new(input, &mut tls, self, MessageIterMode::All);
 
         let result = match iter.next(false) {
             Some(Ok(_)) | None => Ok(()),
             Some(Err(e)) => Err(e),
         };
 
-        input.discard(
-            self.common
-                .common
-                .recv
-                .deframer
-                .take_discard(),
-        );
-
+        input.discard(self.common.recv.deframer.take_discard());
         result
     }
 
-    fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
-        self.quic.events()
+    /// Obtain pending events that the caller should process.
+    ///
+    /// All pending events are returned as an iterator.
+    pub fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
+        self.transport.events()
     }
-}
 
-impl<Side: SideData> Deref for QuicCommon<Side> {
-    type Target = CommonState;
-
-    fn deref(&self) -> &Self::Target {
-        &self.common.common
+    /// Compute the keys for encrypting/decrypting 0-RTT packets, if available
+    pub fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
+        self.transport.zero_rtt_keys(self)
     }
-}
 
-impl<Side: SideData> DerefMut for QuicCommon<Side> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.common.common
+    /// Return the TLS-encoded transport parameters for the session's peer.
+    ///
+    /// While the transport parameters are technically available prior to the
+    /// completion of the handshake, they cannot be fully trusted until the
+    /// handshake completes, and reliance on them should be minimized.
+    /// However, any tampering with the parameters will cause the handshake
+    /// to fail.
+    pub fn quic_transport_parameters(&self) -> Option<&[u8]> {
+        self.transport.transport_parameters()
     }
 }
 
@@ -537,7 +382,11 @@ impl Quic {
 
 impl Transport for Quic {}
 
-impl crate::conn::sealed::Transport for Quic {
+impl sealed::Transport for Quic {
+    fn protocol(&self) -> Protocol {
+        Protocol::Quic(self.version)
+    }
+
     fn quic(&mut self) -> Option<&mut dyn QuicOutput> {
         Some(self)
     }

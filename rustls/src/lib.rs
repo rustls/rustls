@@ -113,7 +113,7 @@
 //! [`tokio-rustls`]: https://github.com/rustls/tokio-rustls
 //!
 //! ### Rustls provides encrypted pipes
-//! These are the [`ServerConnection`] and [`ClientConnection`] types.  A connection can be viewed as two directions.
+//! These are the [`Connection<ServerSide, Tcp>`] and [`Connection<ClientSide, Tcp>`] types.  A connection can be viewed as two directions.
 //! In the _receive_ direction [`read_tls()`] takes received TLS data and yields application data.
 //! In the _send_ direction [`write()`] takes application data and yields TLS data to send.
 //!
@@ -123,13 +123,13 @@
 //! ```text
 //!          TLS                                   Plaintext
 //!          ===                                   =========
-//!             read_tls()  +-----------------------+      MessageHandler
-//!                         |                       |
-//!               +--------->   ClientConnection    +--------->
-//!                         |          or           |
-//!               <---------+   ServerConnection    <---------+
-//!                         |                       |
-//!          &mut Vec<u8>   +-----------------------+      write()
+//!             read_tls()  +----------------------------------+      MessageHandler
+//!                         |                                  |
+//!               +--------->   Connection<ClientSide, Tcp>    +--------->
+//!                         |          or                      |
+//!               <---------+   Connection<ServerSide, Tcp>    <---------+
+//!                         |                                  |
+//!          &mut Vec<u8>   +----------------------------------+      write()
 //! ```
 //!
 //! ### Rustls takes care of server certificate verification
@@ -213,7 +213,7 @@
 //! errors.
 //!
 //! ```rust,no_run
-//! # let mut client: rustls::ClientConnection = panic!();
+//! # let mut client: rustls::Connection<rustls::ClientSide, rustls::Tcp> = panic!();
 //! # let mut output: Vec<u8> = Vec::new();
 //! # struct Socket { }
 //! # impl Socket {
@@ -235,7 +235,7 @@
 //! #   panic!();
 //! # }
 //! use std::io;
-//! use rustls::{Connection, VecInput};
+//! use rustls::VecInput;
 //!
 //! let mut socket = connect("example.com", 443);
 //! let mut input = VecInput::default();
@@ -419,11 +419,11 @@ pub use crate::webpki::RootCertStore;
 
 /// Items for use in a client.
 pub mod client;
-pub use client::{ClientConfig, ClientConnection, ClientSide};
+pub use client::{ClientConfig, ClientSide};
 
 /// Items for use in a server.
 pub mod server;
-pub use server::{ServerConfig, ServerConnection, ServerSide};
+pub use server::{ServerConfig, ServerSide};
 
 /// All defined protocol versions appear in this module.
 ///

@@ -1,18 +1,16 @@
 use alloc::vec::Vec;
-use core::fmt;
-use core::ops::Deref;
 
-use pki_types::{FipsStatus, ServerName};
+use pki_types::ServerName;
 
 use super::config::ClientConfig;
 use super::hs::{ClientHelloInput, ClientState};
 use crate::client::EchStatus;
-use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
+use crate::common_state::{CommonState, EarlyDataEvent, Event, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    ClientNext, Connection, ConnectionCommon, Core, DataKind, KeyingMaterialExporter,
-    MessageHandler, SideCommonOutput, SideData, Tcp, VerifyPeerIdentity,
+    ClientNext, Connection, DataKind, NeedsInput, SideCommonOutput, SideData, Tcp, Transport,
+    VerifyPeerIdentity,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -20,47 +18,12 @@ use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::enums::ApplicationProtocol;
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{ClientExtensionsInput, TransportParameters};
-use crate::quic::{self, ClientConnection as QuicClientConnection, Quic, QuicCommon, QuicOutput};
-use crate::suites::ExtractedSecrets;
+use crate::quic::{self, Quic};
 use crate::sync::Arc;
 use crate::tracing::trace;
 use crate::verify::ServerIdentity;
-use crate::{NeedsInput, TlsInputBuffer};
 
-/// This represents a single TLS client connection.
-///
-/// Encrypt data destined for the peer using [`Connection::write()`].
-/// Process received data from the peer using [`Connection::read_tls()`].
-pub struct ClientConnection {
-    inner: ConnectionCommon<ClientSide>,
-}
-
-impl fmt::Debug for ClientConnection {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ClientConnection")
-            .finish_non_exhaustive()
-    }
-}
-
-impl ClientConnection {
-    /// Split a post-handshake connection into a [`SplitConnection`].
-    ///
-    /// This allows the two directions (transmit and receive) of the connection to be progressed
-    /// separately (including by different threads, which would allow dedicating a CPU core for each
-    /// direction rather than one per connection; this can dramatically improve performance for
-    /// full-duplex protocols).
-    ///
-    /// It also separates out the [`ConnectionOutputs`] which gives the application direct control
-    /// of how long this is kept.
-    ///
-    /// This fails if:
-    ///
-    /// - the handshake is not complete. Check with [`Connection::is_handshaking()`].
-    /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write()`].
-    pub fn split(self) -> Result<SplitConnection<ClientSide>, Error> {
-        self.inner.split()
-    }
-
+impl Connection<ClientSide, Tcp> {
     /// Allows writing TLS1.3 0RTT/"early" data.
     ///
     /// This returns None in many circumstances when the capability to
@@ -79,78 +42,12 @@ impl ClientConnection {
     /// in this case the data is lost but the connection continues.  You
     /// can tell this happened using [`ClientSide::is_early_data_accepted()`].
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
-        let ConnectionCommon { side, common, .. } = &mut self.inner;
+        let Self { side, common, .. } = self;
         WriteEarlyData::new(&mut side.early_data, common)
     }
-
-    #[doc = include_str!("../doc/early_exporter.md")]
-    pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.early_exporter()
-    }
-
-    /// Returns the number of TLS1.3 tickets that have been received.
-    pub fn tls13_tickets_received(&self) -> u32 {
-        self.inner
-            .common
-            .recv
-            .tls13_tickets_received
-    }
-
-    /// Returns data learned during the connection, specific to being a client.
-    pub fn side(&self) -> &ClientSide {
-        &self.inner.side
-    }
 }
 
-impl Connection for ClientConnection {
-    type Side = ClientSide;
-
-    fn write(&mut self, plaintext: OutboundPlain<'_>, tls: &mut Vec<u8>) -> Result<(), Error> {
-        self.inner.write(plaintext, tls)
-    }
-
-    fn read_tls<'a, 'm>(
-        &'a mut self,
-        input: &'m mut dyn TlsInputBuffer,
-        tls: &'a mut Vec<u8>,
-    ) -> MessageHandler<'a, 'm, ClientSide> {
-        self.inner.read_tls(input, tls)
-    }
-
-    fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.exporter()
-    }
-
-    fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.inner.dangerous_extract_secrets()
-    }
-
-    fn refresh_traffic_keys(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
-        self.inner.refresh_traffic_keys(tls)
-    }
-
-    fn send_close_notify(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {
-        self.inner.send_close_notify(tls)
-    }
-
-    fn is_handshaking(&self) -> bool {
-        self.inner.is_handshaking()
-    }
-
-    fn fips(&self) -> FipsStatus {
-        self.inner.fips
-    }
-}
-
-impl Deref for ClientConnection {
-    type Target = ConnectionOutputs;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-/// Builder for [`ClientConnection`] values.
+/// Builder for client [`Connection`] values.
 ///
 /// Create one with [`ClientConfig::connect()`].
 pub struct ClientConnectionBuilder {
@@ -166,8 +63,8 @@ impl ClientConnectionBuilder {
         self
     }
 
-    /// Finalize the builder and create the `ClientConnection`.
-    pub fn build(self, tls: &mut Vec<u8>) -> Result<ClientConnection, Error> {
+    /// Finalize the builder and create the [`Connection`].
+    pub fn build(self, tls: &mut Vec<u8>) -> Result<Connection<ClientSide, Tcp>, Error> {
         let Self {
             config,
             name,
@@ -175,19 +72,16 @@ impl ClientConnectionBuilder {
         } = self;
 
         let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
-        Ok(ClientConnection {
-            inner: ConnectionCommon::for_client(
-                config,
-                name,
-                ClientExtensionsInput::from_alpn(alpn_protocols),
-                None,
-                Protocol::Tcp,
-                tls,
-            )?,
-        })
+        Connection::for_client(
+            config,
+            name,
+            ClientExtensionsInput::from_alpn(alpn_protocols),
+            Tcp,
+            tls,
+        )
     }
 
-    /// Finalize the builder and create a QUIC `ClientConnection`.
+    /// Finalize the builder and create a QUIC [`Connection`].
     ///
     /// This differs from `ClientConnectionBuilder::build()` in that it takes an extra `params`
     /// argument, which contains the TLS-encoded transport parameters to send, and an extra
@@ -196,7 +90,7 @@ impl ClientConnectionBuilder {
         self,
         version: quic::Version,
         params: Vec<u8>,
-    ) -> Result<QuicClientConnection, Error> {
+    ) -> Result<Connection<ClientSide, Quic>, Error> {
         let suites = &self
             .config
             .provider()
@@ -225,24 +119,17 @@ impl ClientConnectionBuilder {
             )
         };
 
-        let mut quic = Quic {
+        let quic = Quic {
             version,
             ..Quic::default()
         };
 
         let mut tls = Vec::new();
-        let inner = ConnectionCommon::for_client(
-            self.config,
-            self.name,
-            exts,
-            Some(&mut quic),
-            Protocol::Quic(version),
-            &mut tls,
-        )?;
+        let conn = Connection::for_client(self.config, self.name, exts, quic, &mut tls)?;
 
         // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
         debug_assert!(tls.is_empty());
-        Ok(QuicClientConnection::from(QuicCommon::new(inner, quic)))
+        Ok(conn)
     }
 
     /// Finalize the builder and create a [`ClientHandshake`].
@@ -263,12 +150,11 @@ impl ClientConnectionBuilder {
         } = self;
 
         let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
-        Ok(NeedsInput::new(ConnectionCommon::for_client(
+        Ok(NeedsInput::new(Connection::for_client(
             config,
             name,
             ClientExtensionsInput::from_alpn(alpn_protocols),
-            None,
-            Protocol::Tcp,
+            Tcp,
             tls,
         )?))
     }
@@ -294,16 +180,16 @@ pub enum ClientHandshake {
     Complete(SplitConnection<ClientSide>),
 }
 
-impl TryFrom<Core<ClientSide, Tcp>> for ClientHandshake {
+impl TryFrom<Connection<ClientSide, Tcp>> for ClientHandshake {
     type Error = Error;
 
-    fn try_from(core: Core<ClientSide, Tcp>) -> Result<Self, Error> {
-        Ok(match ClientNext::try_from(core)? {
-            ClientNext::NeedsInput(core) => Self::NeedsInput(NeedsInput(core)),
+    fn try_from(conn: Connection<ClientSide, Tcp>) -> Result<Self, Error> {
+        Ok(match ClientNext::try_from(conn)? {
+            ClientNext::NeedsInput(conn) => Self::NeedsInput(NeedsInput(conn)),
 
             ClientNext::VerifyServerIdentity(verify) => Self::VerifyServerIdentity(verify),
 
-            ClientNext::Complete(core) => Self::Complete(SplitConnection::try_from(core.inner)?),
+            ClientNext::Complete(conn) => Self::Complete(SplitConnection::try_from(conn)?),
         })
     }
 }
@@ -328,7 +214,7 @@ impl NeedsInput<ClientSide> {
     /// in this case the data is lost but the connection continues.  You
     /// can tell this happened using [`ClientSide::is_early_data_accepted()`].
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
-        let ConnectionCommon { side, common, .. } = &mut self.0.inner;
+        let Connection { side, common, .. } = &mut self.0;
         WriteEarlyData::new(&mut side.early_data, common)
     }
 }
@@ -388,32 +274,37 @@ impl<'a> WriteEarlyData<'a> {
     }
 }
 
-impl ConnectionCommon<ClientSide> {
+impl<T: Transport> Connection<ClientSide, T> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
         extra_exts: ClientExtensionsInput,
-        quic: Option<&mut dyn QuicOutput>,
-        protocol: Protocol,
+        mut transport: T,
         tls: &mut Vec<u8>,
     ) -> Result<Self, Error> {
-        let mut common_state = CommonState::new(Side::Client, config.fips());
-        common_state
+        let mut common = CommonState::new(Side::Client, config.fips());
+        common
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
-        let mut data = ClientSide::default();
+        let mut side = ClientSide::default();
 
+        let protocol = transport.protocol();
         let mut output = SideCommonOutput {
-            side: &mut data,
-            quic,
-            common: &mut common_state,
+            side: &mut side,
+            quic: transport.quic(),
+            common: &mut common,
             tls,
         };
 
         let input = ClientHelloInput::new(name, &extra_exts, protocol, &mut output, config)?;
         let state = input.start_handshake(extra_exts, &mut output)?;
 
-        Ok(Self::new(state, data, common_state))
+        Ok(Self {
+            state: Ok(state),
+            side,
+            common,
+            transport,
+        })
     }
 }
 
@@ -451,19 +342,6 @@ impl SideData for ClientSide {
     type QuicHandshake = ();
 
     type PeerIdentity<'a> = ServerIdentity<'static, 'a>;
-
-    #[expect(private_interfaces)]
-    fn tcp_handshake_from_core(core: Core<Self, Tcp>) -> Result<Self::Handshake, Error> {
-        ClientHandshake::try_from(core)
-    }
-
-    #[expect(private_interfaces)]
-    fn quic_handshake_from_core(
-        _core: Core<Self, Quic>,
-        _output: &mut Vec<quic::QuicEvent>,
-    ) -> Result<Self::QuicHandshake, Error> {
-        todo!("nyi")
-    }
 }
 
 impl SideOutput for ClientSide {

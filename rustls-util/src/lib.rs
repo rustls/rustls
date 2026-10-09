@@ -1,6 +1,6 @@
 use std::io;
 
-use rustls::{Connection, VecInput};
+use rustls::{Connection, SideData, Tcp, VecInput};
 
 mod key_log_file;
 pub use key_log_file::KeyLogFile;
@@ -45,7 +45,7 @@ pub fn complete_io(
     input: &mut VecInput,
     received_plaintext: &mut Vec<u8>,
     output: &mut Vec<u8>,
-    conn: &mut impl Connection,
+    conn: &mut Connection<impl SideData, Tcp>,
 ) -> Result<(usize, usize), io::Error> {
     let mut eof = false;
     let mut wrlen = 0;
@@ -179,7 +179,7 @@ pub fn complete_io(
 ///
 /// After the handshake, we stop reading while there is unconsumed plaintext, so that a
 /// peer cannot make us buffer an unbounded amount of it.
-fn wants_read(conn: &impl Connection, received_plaintext: &[u8]) -> bool {
+fn wants_read(conn: &Connection<impl SideData, Tcp>, received_plaintext: &[u8]) -> bool {
     conn.is_handshaking() || received_plaintext.is_empty()
 }
 

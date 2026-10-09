@@ -29,9 +29,9 @@ use rustls::server::{
     ClientHello, ClientVerifierBuilder, ServerCredentialResolver, WebPkiClientVerifier,
 };
 use rustls::{
-    ClientConfig, ClientConnection, ConfigBuilder, Connection, ConnectionTrafficSecrets,
-    DistinguishedName, MessageHandler, RootCertStore, ServerConfig, ServerConnection, SideData,
-    SupportedCipherSuite, VecInput, WantsVerifier,
+    ClientConfig, ClientSide, ConfigBuilder, Connection, ConnectionTrafficSecrets,
+    DistinguishedName, MessageHandler, RootCertStore, ServerConfig, ServerSide, SideData,
+    SupportedCipherSuite, Tcp, VecInput, WantsVerifier,
 };
 use tracing::{Event, Level, Metadata, field, span, subscriber};
 
@@ -825,7 +825,7 @@ pub fn make_pair(
     kt: KeyType,
     provider: &CryptoProvider,
     client_output: &mut Vec<u8>,
-) -> (ClientConnection, ServerConnection) {
+) -> (Connection<ClientSide, Tcp>, Connection<ServerSide, Tcp>) {
     make_pair_for_configs(
         make_client_config(kt, provider),
         make_server_config(kt, provider),
@@ -837,7 +837,7 @@ pub fn make_pair_for_configs(
     client_config: ClientConfig,
     server_config: ServerConfig,
     client_output: &mut Vec<u8>,
-) -> (ClientConnection, ServerConnection) {
+) -> (Connection<ClientSide, Tcp>, Connection<ServerSide, Tcp>) {
     make_pair_for_arc_configs(
         &Arc::new(client_config),
         &Arc::new(server_config),
@@ -849,13 +849,13 @@ pub fn make_pair_for_arc_configs(
     client_config: &Arc<ClientConfig>,
     server_config: &Arc<ServerConfig>,
     client_output: &mut Vec<u8>,
-) -> (ClientConnection, ServerConnection) {
+) -> (Connection<ClientSide, Tcp>, Connection<ServerSide, Tcp>) {
     (
         client_config
             .connect(server_name("localhost"))
             .build(client_output)
             .unwrap(),
-        ServerConnection::new(server_config.clone()).unwrap(),
+        Connection::new(server_config.clone()).unwrap(),
     )
 }
 
@@ -890,10 +890,10 @@ pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, S
 pub fn do_handshake(
     client_input: &mut VecInput,
     client_output: &mut Vec<u8>,
-    client: &mut impl Connection,
+    client: &mut Connection<ClientSide, Tcp>,
     server_input: &mut VecInput,
     server_output: &mut Vec<u8>,
-    server: &mut impl Connection,
+    server: &mut Connection<ServerSide, Tcp>,
 ) -> (usize, usize) {
     do_handshake_collecting(
         client_input,
@@ -911,11 +911,11 @@ pub fn do_handshake(
 pub fn do_handshake_collecting(
     client_input: &mut VecInput,
     client_output: &mut Vec<u8>,
-    client: &mut impl Connection,
+    client: &mut Connection<ClientSide, Tcp>,
     client_received: &mut Vec<u8>,
     server_input: &mut VecInput,
     server_output: &mut Vec<u8>,
-    server: &mut impl Connection,
+    server: &mut Connection<ServerSide, Tcp>,
     server_received: &mut Vec<u8>,
 ) -> (usize, usize) {
     let (mut to_client, mut to_server) = (0, 0);
@@ -938,10 +938,10 @@ pub fn do_handshake_collecting(
 pub fn do_handshake_collecting_early_data(
     client_input: &mut VecInput,
     client_output: &mut Vec<u8>,
-    client: &mut impl Connection,
+    client: &mut Connection<ClientSide, Tcp>,
     server_input: &mut VecInput,
     server_output: &mut Vec<u8>,
-    server: &mut ServerConnection,
+    server: &mut Connection<ServerSide, Tcp>,
     server_early_data: &mut Vec<u8>,
 ) {
     while server.is_handshaking() || client.is_handshaking() {
@@ -970,10 +970,10 @@ pub enum ErrorFromPeer {
 pub fn do_handshake_until_error(
     client_input: &mut VecInput,
     client_output: &mut Vec<u8>,
-    client: &mut ClientConnection,
+    client: &mut Connection<ClientSide, Tcp>,
     server_input: &mut VecInput,
     server_output: &mut Vec<u8>,
-    server: &mut ServerConnection,
+    server: &mut Connection<ServerSide, Tcp>,
 ) -> Result<(), ErrorFromPeer> {
     while server.is_handshaking() || client.is_handshaking() {
         transfer(client_output, server_input);
@@ -994,10 +994,10 @@ pub fn do_handshake_until_error(
 pub fn do_handshake_until_both_error(
     client_input: &mut VecInput,
     client_output: &mut Vec<u8>,
-    client: &mut ClientConnection,
+    client: &mut Connection<ClientSide, Tcp>,
     server_input: &mut VecInput,
     server_output: &mut Vec<u8>,
-    server: &mut ServerConnection,
+    server: &mut Connection<ServerSide, Tcp>,
 ) -> Result<(), Vec<ErrorFromPeer>> {
     match do_handshake_until_error(
         client_input,
@@ -1491,7 +1491,7 @@ pub struct RawTls {
 
 impl RawTls {
     /// conn must be post-handshake, and must have been created with `enable_secret_extraction`
-    pub fn new_client(conn: ClientConnection) -> Self {
+    pub fn new_client(conn: Connection<ClientSide, Tcp>) -> Self {
         let suite = conn.negotiated_cipher_suite().unwrap();
         Self::new(
             suite,
@@ -1501,7 +1501,7 @@ impl RawTls {
     }
 
     /// conn must be post-handshake, and must have been created with `enable_secret_extraction`
-    pub fn new_server(conn: ServerConnection) -> Self {
+    pub fn new_server(conn: Connection<ServerSide, Tcp>) -> Self {
         let suite = conn.negotiated_cipher_suite().unwrap();
         Self::new(
             suite,
@@ -1798,8 +1798,8 @@ impl ServerCredentialResolver for ServerCheckCertResolve {
     }
 }
 
-pub struct OtherSession<'a, C: Connection> {
-    sess: &'a mut C,
+pub struct OtherSession<'a, S: SideData> {
+    sess: &'a mut Connection<S, Tcp>,
     input: &'a mut VecInput,
     output: &'a mut Vec<u8>,
     pub reads: usize,
@@ -1813,8 +1813,12 @@ pub struct OtherSession<'a, C: Connection> {
     pub received: Vec<u8>,
 }
 
-impl<'a, C: Connection> OtherSession<'a, C> {
-    pub fn new(input: &'a mut VecInput, output: &'a mut Vec<u8>, sess: &'a mut C) -> Self {
+impl<'a, S: SideData> OtherSession<'a, S> {
+    pub fn new(
+        input: &'a mut VecInput,
+        output: &'a mut Vec<u8>,
+        sess: &'a mut Connection<S, Tcp>,
+    ) -> Self {
         OtherSession {
             sess,
             input,
@@ -1830,13 +1834,21 @@ impl<'a, C: Connection> OtherSession<'a, C> {
         }
     }
 
-    pub fn new_buffered(input: &'a mut VecInput, output: &'a mut Vec<u8>, sess: &'a mut C) -> Self {
+    pub fn new_buffered(
+        input: &'a mut VecInput,
+        output: &'a mut Vec<u8>,
+        sess: &'a mut Connection<S, Tcp>,
+    ) -> Self {
         let mut os = OtherSession::new(input, output, sess);
         os.buffered = true;
         os
     }
 
-    pub fn new_fails(input: &'a mut VecInput, output: &'a mut Vec<u8>, sess: &'a mut C) -> Self {
+    pub fn new_fails(
+        input: &'a mut VecInput,
+        output: &'a mut Vec<u8>,
+        sess: &'a mut Connection<S, Tcp>,
+    ) -> Self {
         let mut os = OtherSession::new(input, output, sess);
         os.fail_ok = true;
         os
@@ -1919,7 +1931,7 @@ impl<'a, C: Connection> OtherSession<'a, C> {
     }
 }
 
-impl<C: Connection> io::Read for OtherSession<'_, C> {
+impl<S: SideData> io::Read for OtherSession<'_, S> {
     fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
         self.reads += 1;
         let n = Ord::min(b.len(), self.output.len());
@@ -1929,7 +1941,7 @@ impl<C: Connection> io::Read for OtherSession<'_, C> {
     }
 }
 
-impl<C: Connection> io::Write for OtherSession<'_, C> {
+impl<S: SideData> io::Write for OtherSession<'_, S> {
     fn write(&mut self, b: &[u8]) -> io::Result<usize> {
         self.write_vectored(&[io::IoSlice::new(b)])
     }

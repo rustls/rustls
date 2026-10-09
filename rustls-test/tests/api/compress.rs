@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 #[cfg(feature = "zlib")]
 use rustls::ClientConfig;
+use rustls::VecInput;
 #[cfg(feature = "zlib")]
 use rustls::client::Resumption;
 #[cfg(feature = "zlib")]
@@ -15,7 +16,6 @@ use rustls::enums::CertificateCompressionAlgorithm;
 use rustls::error::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 #[cfg(feature = "zlib")]
 use rustls::pki_types::CertificateDer;
-use rustls::{Connection, VecInput};
 #[cfg(feature = "zlib")]
 use rustls_test::{ClientConfigExt, make_pair_for_arc_configs};
 use rustls_test::{

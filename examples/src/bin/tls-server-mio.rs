@@ -33,7 +33,7 @@ use rustls::enums::{ApplicationProtocol, ProtocolVersion};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use rustls::server::{NoServerSessionStorage, WebPkiClientVerifier};
-use rustls::{Connection, RootCertStore, ServerConfig, ServerConnection, VecInput};
+use rustls::{Connection, RootCertStore, ServerConfig, ServerSide, Tcp, VecInput};
 use rustls_aws_lc_rs as provider;
 use tracing::{Level, debug, error};
 
@@ -81,7 +81,7 @@ impl TlsServer {
                 Ok((socket, addr)) => {
                     debug!("Accepting new connection from {addr:?}");
 
-                    let tls_conn = ServerConnection::new(self.tls_config.clone()).unwrap();
+                    let tls_conn = Connection::new(self.tls_config.clone()).unwrap();
                     let mode = self.mode.clone();
 
                     let token = mio::Token(self.next_id);
@@ -128,7 +128,7 @@ struct OpenConnection {
     closing: bool,
     closed: bool,
     mode: ServerMode,
-    tls_conn: ServerConnection,
+    tls_conn: Connection<ServerSide, Tcp>,
     back: Option<TcpStream>,
     input: VecInput,
     output: Vec<u8>,
@@ -168,7 +168,7 @@ impl OpenConnection {
         socket: TcpStream,
         token: mio::Token,
         mode: ServerMode,
-        tls_conn: ServerConnection,
+        tls_conn: Connection<ServerSide, Tcp>,
     ) -> Self {
         let back = open_back(&mode);
         Self {
