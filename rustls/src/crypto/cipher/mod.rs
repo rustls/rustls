@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::string::ToString;
+use alloc::vec::Vec;
 use core::{array, fmt};
 
 use pki_types::FipsStatus;
@@ -7,7 +8,7 @@ use zeroize::Zeroize;
 
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error};
-use crate::msgs::{put_u16, put_u64};
+use crate::msgs::{HEADER_SIZE, put_u16, put_u64};
 use crate::suites::ConnectionTrafficSecrets;
 
 mod messages;
@@ -174,6 +175,53 @@ pub trait RecordEncrypter: Send + Sync {
         seq: u64,
         out: &'a mut [u8],
     ) -> Result<Record<&'a [u8]>, Error>;
+
+    /// Encrypt the given TLS record, appending it to `out`.
+    ///
+    /// `seq` is the sequence number of this record, which can be used to derive a unique [`Nonce`].
+    ///
+    /// A full wire-format TLS record, including all framing the ciphersuite requires,
+    /// such as any explicit nonce, padding and/or authentication tag, must be appended to `out`.
+    /// Any existing data on the front of `out` must be left alone.
+    fn encrypt_append(
+        &mut self,
+        record: Record<OutboundPlain<'_>>,
+        seq: u64,
+        out: &mut Vec<u8>,
+    ) -> Result<(), Error> {
+        // Contents are fully overwritten below, so zeroing is pure cost.
+        // A fresh buffer gets pre-zeroed memory straight from the allocator
+        // while a reused one zeroes only what `resize` grows.
+        let needed = HEADER_SIZE + self.encrypted_payload_len(record.payload.len());
+        let start = out.len();
+        out.resize(start + needed, 0);
+        let buf = &mut out[start..];
+        #[cfg(debug_assertions)]
+        let (buf_ptr, buf_len) = (buf.as_ptr(), buf.len());
+        let encrypted = self.encrypt(record, seq, &mut buf[HEADER_SIZE..])?;
+        #[cfg(debug_assertions)]
+        {
+            // `RecordEncrypter::encrypt()` requires the returned payload to be
+            // the written prefix of the passed-in buffer. Try to catch misbehaving
+            // implementations in debug mode. In release builds a violation would corrupt
+            // the sent stream.
+            debug_assert_eq!(
+                encrypted.payload.as_ptr(),
+                buf_ptr.wrapping_add(HEADER_SIZE)
+            );
+            debug_assert!(encrypted.payload.len() <= buf_len - HEADER_SIZE);
+        }
+        let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
+        debug_assert!(len <= usize::from(u16::MAX));
+        buf[..HEADER_SIZE].copy_from_slice(&encode_record_header(typ, version, len as u16));
+        debug_assert_eq!(
+            HEADER_SIZE + len,
+            needed,
+            "RecordEncrypter::encrypt() returned wrong length"
+        );
+        out.truncate(start + HEADER_SIZE + len);
+        Ok(())
+    }
 
     /// Return the length of the ciphertext that results from encrypting plaintext of length `payload_len`.
     ///
