@@ -8,12 +8,12 @@ use zeroize::Zeroize;
 
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error};
-use crate::msgs::{HEADER_SIZE, put_u16, put_u64};
+use crate::msgs::{put_u16, put_u64};
 use crate::suites::ConnectionTrafficSecrets;
 
 mod messages;
 pub use messages::{
-    EncodableVersion, EncryptBuffer, InboundOpaque, OutboundPlain, Payload, Record, RecordError,
+    EncodableVersion, InboundOpaque, OutboundPlain, Payload, Record, RecordError,
     encode_record_header,
 };
 
@@ -156,31 +156,6 @@ pub trait RecordDecrypter: Send + Sync {
 
 /// Objects with this trait can encrypt TLS records.
 pub trait RecordEncrypter: Send + Sync {
-    /// Encrypt the given TLS record into `out`, using the sequence number
-    /// `seq` which can be used to derive a unique [`Nonce`].
-    ///
-    /// The encrypted payload including all framing the ciphersuite requires, such
-    /// as any explicit nonce, padding and/or authentication tag, is written to the
-    /// front of `out`. `out` must be at least [`Self::encrypted_payload_len()`] bytes
-    /// long. See [`EncryptBuffer`] for a convenient wrapper.
-    ///
-    /// The return value describes the resulting record: its payload borrows the
-    /// written prefix of `out`, and its `typ` and `version` are what the record
-    /// header should carry on the wire. Encoding the record header is the caller's
-    /// responsibility and implementations of the `RecordEncrypter` trait must not
-    /// write it to `out` themselves.
-    ///
-    /// Implementations should implement [`Self::encrypt_append()`] instead; this
-    /// method is no longer called by rustls.
-    fn encrypt<'a>(
-        &mut self,
-        _record: Record<OutboundPlain<'_>>,
-        _seq: u64,
-        _out: &'a mut [u8],
-    ) -> Result<Record<&'a [u8]>, Error> {
-        Err(Error::EncryptError)
-    }
-
     /// Encrypt the given TLS record, appending it to `out`.
     ///
     /// `seq` is the sequence number of this record, which can be used to derive a unique [`Nonce`].
@@ -193,47 +168,14 @@ pub trait RecordEncrypter: Send + Sync {
         record: Record<OutboundPlain<'_>>,
         seq: u64,
         out: &mut Vec<u8>,
-    ) -> Result<(), Error> {
-        // Contents are fully overwritten below, so zeroing is pure cost.
-        // A fresh buffer gets pre-zeroed memory straight from the allocator
-        // while a reused one zeroes only what `resize` grows.
-        let needed = HEADER_SIZE + self.encrypted_payload_len(record.payload.len());
-        let start = out.len();
-        out.resize(start + needed, 0);
-        let buf = &mut out[start..];
-        #[cfg(debug_assertions)]
-        let (buf_ptr, buf_len) = (buf.as_ptr(), buf.len());
-        let encrypted = self.encrypt(record, seq, &mut buf[HEADER_SIZE..])?;
-        #[cfg(debug_assertions)]
-        {
-            // `RecordEncrypter::encrypt()` requires the returned payload to be
-            // the written prefix of the passed-in buffer. Try to catch misbehaving
-            // implementations in debug mode. In release builds a violation would corrupt
-            // the sent stream.
-            debug_assert_eq!(
-                encrypted.payload.as_ptr(),
-                buf_ptr.wrapping_add(HEADER_SIZE)
-            );
-            debug_assert!(encrypted.payload.len() <= buf_len - HEADER_SIZE);
-        }
-        let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
-        debug_assert!(len <= usize::from(u16::MAX));
-        buf[..HEADER_SIZE].copy_from_slice(&encode_record_header(typ, version, len as u16));
-        debug_assert_eq!(
-            HEADER_SIZE + len,
-            needed,
-            "RecordEncrypter::encrypt() returned wrong length"
-        );
-        out.truncate(start + HEADER_SIZE + len);
-        Ok(())
-    }
+    ) -> Result<(), Error>;
 
     /// Return the length of the ciphertext that results from encrypting plaintext of length `payload_len`.
     ///
     /// For a zero `payload_len` this should return the _minimum_ overhead for any
     /// payload.  Then, to fragment a long payload into chunks of length `F`,
     /// Rustls will first set `A := encrypted_payload_len(0)` and then supply the
-    /// payload to [`Self::encrypt()`] in chunks of length `F - A`.  Each `encrypt()`
+    /// payload to [`Self::encrypt_append()`] in chunks of length `F - A`.  Each `encrypt_append()`
     /// is then free to pad or otherwise transform the length at its option.
     fn encrypted_payload_len(&self, payload_len: usize) -> usize;
 }
