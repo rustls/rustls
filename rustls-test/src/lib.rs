@@ -1573,32 +1573,11 @@ impl RawTls {
 
     /// Encrypt `msg` into a complete TLS record, including its header
     pub fn encrypt(&mut self, msg: &Record<Payload<'_>>) -> Vec<u8> {
-        /// The length of a TLS record header: 1 byte type, 2 bytes version, 2 bytes length.
-        const HEADER_SIZE: usize = 5;
-
         let msg = msg.borrow_outbound();
-        let mut record = vec![
-            0u8;
-            HEADER_SIZE
-                + self
-                    .encrypter
-                    .encrypted_payload_len(msg.payload.len())
-        ];
-        let encrypted = self
-            .encrypter
-            .encrypt(msg, self.enc_seq, &mut record[HEADER_SIZE..])
+        let mut record = vec![];
+        self.encrypter
+            .encrypt_append(msg, self.enc_seq, &mut record)
             .unwrap();
-
-        // Encode the TLS record header: 1 byte type, 2 bytes version, 2 bytes length
-        let (typ, version, len) = (
-            encrypted.typ,
-            encrypted.version.encode(),
-            encrypted.payload.len(),
-        );
-        record.truncate(HEADER_SIZE + len);
-        record[0] = typ.into();
-        record[1..3].copy_from_slice(&version.to_array());
-        record[3..5].copy_from_slice(&(len as u16).to_be_bytes());
 
         self.enc_seq += 1;
         record

@@ -14,9 +14,7 @@ use crate::client::{
     ClientConfig, ClientConnection, ClientSessionKey, ClientSessionMemoryCache, ClientSessionStore,
     Resumption, Tls12Resumption,
 };
-use crate::crypto::cipher::{
-    EncodableVersion, Payload, Record, RecordEncrypter, encode_record_header,
-};
+use crate::crypto::cipher::{EncodableVersion, Payload, Record, RecordEncrypter};
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::test_provider::{FakeKeyExchangeGroup, KEY_EXCHANGE_GROUP, TLS_TEST_SUITE};
 use crate::crypto::tls13::OkmBlock;
@@ -28,12 +26,12 @@ use crate::enums::{CertificateType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::{
     CertificateChain, ChangeCipherSpecPayload, ClientHelloPayload, Codec, Compression, ECCurveType,
-    EcParameters, EncryptedExtensions, ExtensionType, HEADER_SIZE, HandshakeMessagePayload,
-    HandshakePayload, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry,
-    LengthPrefixedBuffer, ListLength, MaybeEmpty, Message, MessagePayload,
-    NewSessionTicketExtensions, NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams,
-    ServerExtensions, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams,
-    ServerKeyExchangePayload, SessionId, SizedPayload,
+    EcParameters, EncryptedExtensions, ExtensionType, HandshakeMessagePayload, HandshakePayload,
+    HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, LengthPrefixedBuffer,
+    ListLength, MaybeEmpty, Message, MessagePayload, NewSessionTicketExtensions,
+    NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams, ServerExtensions,
+    ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
+    SessionId, SizedPayload,
 };
 use crate::pki_types::PrivateKeyDer;
 use crate::pki_types::pem::PemObject;
@@ -723,18 +721,10 @@ fn client_requiring_rpk_receives_server_ee(
     let mut encrypter = fake_server_crypto.server_handshake_encrypter();
     let ee = Record::<Payload<'_>>::from(ee);
     let ee = ee.borrow_outbound();
-    let mut enc_ee = vec![0u8; HEADER_SIZE + encrypter.encrypted_payload_len(ee.payload.len())];
-    let encrypted = encrypter
-        .encrypt(ee, 0, &mut enc_ee[HEADER_SIZE..])
+    let mut enc_ee = Vec::new();
+    encrypter
+        .encrypt_append(ee, 0, &mut enc_ee)
         .unwrap();
-
-    let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
-    enc_ee.truncate(HEADER_SIZE + len);
-    enc_ee[..HEADER_SIZE].copy_from_slice(&encode_record_header(
-        typ,
-        version,
-        u16::try_from(len).unwrap(),
-    ));
 
     input
         .read(&mut enc_ee.as_slice())
@@ -875,18 +865,10 @@ fn test_client_rejects_protected_change_cipher_spec() {
     let mut encrypter = fake_server_crypto.server_handshake_encrypter();
     let ccs = Record::<Payload<'_>>::from(ccs);
     let ccs = ccs.borrow_outbound();
-    let mut enc_ccs = vec![0u8; HEADER_SIZE + encrypter.encrypted_payload_len(ccs.payload.len())];
-    let encrypted = encrypter
-        .encrypt(ccs, 0, &mut enc_ccs[HEADER_SIZE..])
+    let mut enc_ccs = Vec::new();
+    encrypter
+        .encrypt_append(ccs, 0, &mut enc_ccs)
         .unwrap();
-
-    let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
-    enc_ccs.truncate(HEADER_SIZE + len);
-    enc_ccs[..HEADER_SIZE].copy_from_slice(&encode_record_header(
-        typ,
-        version,
-        u16::try_from(len).unwrap(),
-    ));
 
     input
         .read(&mut enc_ccs.as_slice())
