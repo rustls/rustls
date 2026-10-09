@@ -169,12 +169,17 @@ pub trait RecordEncrypter: Send + Sync {
     /// header should carry on the wire. Encoding the record header is the caller's
     /// responsibility and implementations of the `RecordEncrypter` trait must not
     /// write it to `out` themselves.
+    ///
+    /// Implementations should implement [`Self::encrypt_append()`] instead; this
+    /// method is no longer called by rustls.
     fn encrypt<'a>(
         &mut self,
-        record: Record<OutboundPlain<'_>>,
-        seq: u64,
-        out: &'a mut [u8],
-    ) -> Result<Record<&'a [u8]>, Error>;
+        _record: Record<OutboundPlain<'_>>,
+        _seq: u64,
+        _out: &'a mut [u8],
+    ) -> Result<Record<&'a [u8]>, Error> {
+        Err(Error::EncryptError)
+    }
 
     /// Encrypt the given TLS record, appending it to `out`.
     ///
