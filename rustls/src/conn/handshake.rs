@@ -17,10 +17,9 @@ use super::{
 use crate::client::{ClientSide, ClientState};
 use crate::common_state::{Protocol, maybe_send_fatal_alert};
 use crate::crypto::VerifiedIdentity;
-use crate::crypto::cipher::Payload;
 use crate::error::Error;
-use crate::msgs::{ServerExtensionsInput, TransportParameters};
-use crate::quic::{self, FromConn, Quic, QuicEvent, QuicOutput};
+use crate::msgs::ServerExtensionsInput;
+use crate::quic::{FromConn, Quic, QuicEvent, QuicOutput};
 use crate::server::{
     ChooseConfig, ClientHello, ServerConfig, ServerHandshake, ServerSide, ServerState,
 };
@@ -107,7 +106,7 @@ impl<T: Transport> TryFrom<Connection<ClientSide, T>> for ClientNext<T> {
 /// [`Self::client_hello()`] and providing it to [`Self::choose_config()`].
 pub struct Accepted<T: Transport> {
     // invariant: `core.inner.state` is `Err(_)` and requires restoring
-    conn: Connection<ServerSide, T>,
+    pub(crate) conn: Connection<ServerSide, T>,
     choose_config: Box<ChooseConfig>,
 }
 
@@ -119,7 +118,7 @@ impl<T: Transport> Accepted<T> {
         ch
     }
 
-    fn partial_choose_config(
+    pub(crate) fn partial_choose_config(
         self,
         config: Arc<ServerConfig>,
         exts: ServerExtensionsInput,
@@ -158,41 +157,6 @@ impl Accepted<Tcp> {
         Ok(ServerHandshake::NeedsInput(NeedsInput(
             self.partial_choose_config(config, ServerExtensionsInput::default(), tls)?,
         )))
-    }
-}
-
-impl Accepted<Quic> {
-    /// Choose a [`ServerConfig`] to progress the handshake.
-    ///
-    /// Resolves an [`Accepted`], providing the [`ServerConfig`] that should be used for
-    /// the session, and the TLS-encoded QUIC transport parameters to send.
-    ///
-    /// Returns an error if configuration-dependent validation of the received
-    /// `ClientHello` message fails.
-    ///
-    /// Events are appended to `output`.
-    pub fn choose_config(
-        self,
-        config: Arc<ServerConfig>,
-        params: Vec<u8>,
-        output: &mut Vec<QuicEvent>,
-    ) -> Result<quic::ServerHandshake, Error> {
-        quic::check_server_config(&config)?;
-
-        let exts = ServerExtensionsInput {
-            transport_parameters: Some(match self.conn.transport.version {
-                quic::Version::V1 | quic::Version::V2 => {
-                    TransportParameters::Quic(Payload::new(params))
-                }
-            }),
-        };
-
-        let mut tls = Vec::new();
-        let conn = self.partial_choose_config(config, exts, &mut tls)?;
-
-        // In QUIC mode, handshake output is emitted via `QuicEvent`s, not `tls`.
-        debug_assert!(tls.is_empty());
-        quic::ServerHandshake::from_conn(conn, output)
     }
 }
 
