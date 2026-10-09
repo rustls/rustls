@@ -1994,8 +1994,8 @@ pub fn certificate_error_expecting_name(expected: &str) -> CertificateError {
 mod plaintext {
     use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
-        AeadKey, EncryptBuffer, InboundOpaque, Iv, OutboundPlain, RecordDecrypter, RecordEncrypter,
-        Tls13AeadAlgorithm, UnsupportedOperationError,
+        AeadKey, InboundOpaque, Iv, OutboundPlain, RecordDecrypter, RecordEncrypter,
+        Tls13AeadAlgorithm, UnsupportedOperationError, encode_record_header,
     };
 
     use super::*;
@@ -2027,20 +2027,22 @@ mod plaintext {
     struct Encrypter;
 
     impl RecordEncrypter for Encrypter {
-        fn encrypt<'a>(
+        fn encrypt_append(
             &mut self,
             record: Record<OutboundPlain<'_>>,
             _seq: u64,
-            out: &'a mut [u8],
-        ) -> Result<Record<&'a [u8]>, Error> {
-            let mut payload = EncryptBuffer::new(out, record.payload.len())?;
-            payload.extend_from_chunks(&record.payload);
+            out: &mut Vec<u8>,
+        ) -> Result<(), Error> {
+            out.extend_from_slice(&encode_record_header(
+                ContentType::ApplicationData,
+                record.version,
+                record.payload.len() as u16,
+            ));
+            for ch in record.payload.chunks() {
+                out.extend_from_slice(ch);
+            }
 
-            Ok(Record {
-                typ: ContentType::ApplicationData,
-                version: record.version,
-                payload: payload.into_written(),
-            })
+            Ok(())
         }
 
         fn encrypted_payload_len(&self, payload_len: usize) -> usize {
