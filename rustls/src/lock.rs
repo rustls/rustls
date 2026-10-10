@@ -1,8 +1,8 @@
 pub use std_lock::*;
 
 mod std_lock {
-    use std::sync::Mutex as StdMutex;
     pub use std::sync::MutexGuard;
+    use std::sync::{LockResult, Mutex as StdMutex};
 
     /// A wrapper around [`std::sync::Mutex`].
     #[derive(Debug)]
@@ -24,6 +24,11 @@ mod std_lock {
         #[inline]
         pub fn lock(&self) -> Option<MutexGuard<'_, T>> {
             self.inner.lock().ok()
+        }
+
+        /// Consumes the mutex, returning the underlying data.
+        pub fn into_inner(self) -> LockResult<T> {
+            self.inner.into_inner()
         }
     }
 }

@@ -34,7 +34,7 @@ pub(crate) use receive::{
 pub use receive::{SliceInput, TlsInputBuffer, VecInput};
 
 mod send;
-pub(crate) use send::{SendOutput, SendPath};
+pub(crate) use send::{Encrypter, SendOutput, SendPath};
 
 pub(crate) mod split;
 use split::SplitConnection;
@@ -288,13 +288,13 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 
     pub(crate) fn dangerous_into_kernel_connection(
-        mut self,
+        self,
     ) -> Result<(ExtractedSecrets, KernelConnection<Side>), Error> {
         if self.common.is_handshaking() {
             return Err(Error::HandshakeNotComplete);
         }
         Self::from_parts_into_kernel_connection(
-            &mut self.common.send,
+            self.common.send,
             self.common.recv,
             self.common.outputs,
             self.state?,
@@ -302,7 +302,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 
     pub(crate) fn from_parts_into_kernel_connection(
-        send: &mut SendPath,
+        send: SendPath,
         recv: ReceivePath,
         outputs: ConnectionOutputs,
         state: Side::State,
