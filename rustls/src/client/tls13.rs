@@ -25,7 +25,9 @@ use crate::conn::{
 };
 use crate::crypto::cipher::{EncodableVersion, Payload};
 use crate::crypto::hash::Hash;
-use crate::crypto::kx::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
+use crate::crypto::kx::{
+    ActiveKeyExchange, HybridKeyExchange, NamedGroup, SharedSecret, StartedKeyExchange,
+};
 use crate::crypto::{Identity, SelectedCredential, SignatureScheme, Signer, VerifiedIdentity};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{
@@ -221,12 +223,6 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             output.emit(Event::EchStatus(st.ech_status));
         }
 
-        // Remember what KX group the server liked for next time.
-        config
-            .resumption
-            .store
-            .set_kx_hint(session_key.clone(), their_key_share.group);
-
         // If we change keying when a subsequent handshake message is being joined,
         // the two halves will have different record layer protections.  Disallow this.
         let proof = input.check_aligned_handshake()?;
@@ -260,6 +256,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 randoms,
                 transcript,
                 key_schedule,
+                kx_group: their_key_share.group,
             },
             resuming_session,
             suite,
@@ -1419,6 +1416,13 @@ impl State<ClientSide> for ExpectFinished {
         emit_finished_tls13(&mut flight, &verify_data);
         flight.finish(output)?;
 
+        // Remember what KX group the server liked for next time.
+        st.hs
+            .config
+            .resumption
+            .store
+            .set_kx_hint(st.hs.session_key.clone(), st.hs.kx_group);
+
         /* We're now sure this server supports TLS1.3.  But if we run out of TLS1.3 tickets
          * when connecting to it again, we definitely don't want to attempt a TLS1.2 resumption. */
         st.hs
@@ -1491,6 +1495,7 @@ struct HandshakeState {
     randoms: ConnectionRandoms,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
+    kx_group: NamedGroup,
 }
 
 // -- Traffic transit state (TLS1.3) --
