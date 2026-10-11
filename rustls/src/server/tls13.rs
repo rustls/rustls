@@ -196,6 +196,7 @@ mod client_hello {
                             .preshared_key_offer
                             .is_some(),
                         suite: suite.common.suite,
+                        group: kx_group.name(),
                     }),
                     ..st
                 });
