@@ -12,7 +12,7 @@ use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::common_state::Protocol;
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::kx::NamedGroup;
+use crate::crypto::kx::{NamedGroup, SupportedKxGroup};
 use crate::crypto::{
     CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme, TicketProducer,
 };
@@ -72,6 +72,11 @@ pub struct ServerConfig {
     ///
     /// The default is [`PreferClientOrder`].
     pub cipher_suite_selector: &'static dyn CipherSuiteSelector,
+
+    /// How to select a key exchange group to use for a TLS connection.
+    ///
+    /// The default is [`PreferClientOrder`].
+    pub kx_selector: &'static dyn KeyExchangeSelector,
 
     /// The maximum size of plaintext input to be emitted in a single TLS record.
     /// A value of None is equivalent to the [TLS maximum] of 16 kB, and this is
@@ -724,6 +729,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         Ok(ServerConfig {
             provider: self.provider,
             cipher_suite_selector: &PreferClientOrder,
+            kx_selector: &PreferClientOrder,
             max_fragment_size: None,
             session_storage: handy::ServerSessionMemoryCache::new(256),
             ticketer: None,
@@ -745,10 +751,20 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     }
 }
 
-/// A [`CipherSuiteSelector`] implementation that prioritizes client order.
+/// A [`KeyExchangeSelector`]/[`CipherSuiteSelector`] implementation that prioritizes client order.
 #[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct PreferClientOrder;
+
+impl KeyExchangeSelector for PreferClientOrder {
+    fn select_key_exchange(
+        &self,
+        client: &mut dyn Iterator<Item = OfferedKxGroup>,
+        _server: &[&'static dyn SupportedKxGroup],
+    ) -> Option<&'static dyn SupportedKxGroup> {
+        client.next().map(|c| c.group)
+    }
+}
 
 impl CipherSuiteSelector for PreferClientOrder {
     fn select_tls12_cipher_suite(
@@ -778,10 +794,30 @@ impl PreferClientOrder {
     }
 }
 
-/// A [`CipherSuiteSelector`] implementation that prioritizes server order.
+/// A [`KeyExchangeSelector`]/[`CipherSuiteSelector`] implementation that prioritizes server order.
 #[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct PreferServerOrder;
+
+impl KeyExchangeSelector for PreferServerOrder {
+    fn select_key_exchange(
+        &self,
+        client: &mut dyn Iterator<Item = OfferedKxGroup>,
+        server: &[&'static dyn SupportedKxGroup],
+    ) -> Option<&'static dyn SupportedKxGroup> {
+        let client = client.collect::<Vec<_>>();
+
+        for s in server {
+            if let Some(selected) = client
+                .iter()
+                .find(|c| c.group.name() == s.name())
+            {
+                return Some(selected.group);
+            }
+        }
+        None
+    }
+}
 
 impl CipherSuiteSelector for PreferServerOrder {
     fn select_tls12_cipher_suite(
@@ -874,4 +910,38 @@ pub trait CipherSuiteSelector: Debug + Send + Sync {
         client: &mut dyn Iterator<Item = &'static Tls13CipherSuite>,
         server: &[&'static Tls13CipherSuite],
     ) -> Option<&'static Tls13CipherSuite>;
+}
+
+/// Chooses the key exchange group for a TLS connection.
+pub trait KeyExchangeSelector: Debug + Send + Sync {
+    /// Choose a key exchange group, given the client's and server's options.
+    ///
+    /// `client` holds the groups from the client's `supported_groups` extension, in the
+    /// client's order, filtered to those the server supports and that suit the protocol
+    /// version and the selected cipher suite. `server` is the [`CryptoProvider`]'s
+    /// `kx_groups`, in preference order.
+    ///
+    /// If the chosen group has no key share (see [`OfferedKxGroup::has_key_share`]),
+    /// a TLS 1.3 server sends a HelloRetryRequest for it.
+    ///
+    /// Returns `None` if no acceptable group is offered. The result must come from
+    /// `client`.
+    fn select_key_exchange(
+        &self,
+        client: &mut dyn Iterator<Item = OfferedKxGroup>,
+        server: &[&'static dyn SupportedKxGroup],
+    ) -> Option<&'static dyn SupportedKxGroup>;
+}
+
+/// A key exchange group offered by the client.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug)]
+pub struct OfferedKxGroup {
+    /// The group, as implemented by the server's provider.
+    pub group: &'static dyn SupportedKxGroup,
+
+    /// Whether the client sent a key share for this group.
+    ///
+    /// Always `false` for TLS 1.2.
+    pub has_key_share: bool,
 }
