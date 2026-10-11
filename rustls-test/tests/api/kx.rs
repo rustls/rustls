@@ -2,9 +2,10 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use core::sync::atomic::{AtomicUsize, Ordering};
 use std::borrow::Cow;
 use std::io::{IoSlice, Write};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use rustls::client::Resumption;
 use rustls::crypto::CryptoProvider;
@@ -14,6 +15,7 @@ use rustls::crypto::kx::{
 };
 use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
+use rustls::server::{KeyExchangeSelector, OfferedKxGroup, PreferClientOrder, PreferServerOrder};
 use rustls::{ClientConfig, HandshakeKind, ServerConfig, VecInput};
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, MultiTest,
@@ -377,11 +379,30 @@ fn test_client_sends_share_for_less_preferred_group() {
     );
     client_config_2.resumption = Resumption::store(shared_storage.clone());
 
-    let server_config = make_server_config_with_kx_groups(
+    let mut server_config = make_server_config_with_kx_groups(
         KeyType::default(),
         provider::ALL_KX_GROUPS.to_vec(),
         &provider,
     );
+    static KX_SELECTOR: OnceLock<MockKxSelector> = OnceLock::new();
+    server_config.kx_selector = KX_SELECTOR.get_or_init(|| MockKxSelector {
+        calls: vec![
+            MockKxSelectCall {
+                client: vec![OfferedKxGroup::new(provider::kx_group::SECP384R1, true)],
+                server: provider::ALL_KX_GROUPS.to_vec(),
+                return_value: Some(provider::kx_group::SECP384R1),
+            },
+            MockKxSelectCall {
+                client: vec![
+                    OfferedKxGroup::new(provider::kx_group::X25519, false),
+                    OfferedKxGroup::new(provider::kx_group::SECP384R1, true),
+                ],
+                server: provider::ALL_KX_GROUPS.to_vec(),
+                return_value: Some(provider::kx_group::X25519),
+            },
+        ],
+        ..Default::default()
+    });
 
     // first handshake
     let mut client_output = Vec::new();
@@ -435,6 +456,200 @@ fn test_client_sends_share_for_less_preferred_group() {
         client_2.handshake_kind(),
         Some(HandshakeKind::ResumedWithHelloRetryRequest)
     );
+
+    KX_SELECTOR
+        .get()
+        .unwrap()
+        .assert_exhausted();
+}
+
+#[test]
+fn test_kx_selector_can_force_hrr() {
+    let provider = provider::DEFAULT_PROVIDER;
+
+    let kx_groups = &[
+        provider::kx_group::X25519,
+        provider::kx_group::SECP256R1,
+        provider::kx_group::SECP384R1,
+    ];
+    let client_config =
+        make_client_config_with_kx_groups(KeyType::default(), kx_groups.to_vec(), &provider);
+    let mut server_config =
+        make_server_config_with_kx_groups(KeyType::default(), kx_groups.to_vec(), &provider);
+
+    static KX_SELECTOR: OnceLock<MockKxSelector> = OnceLock::new();
+    server_config.kx_selector = KX_SELECTOR.get_or_init(|| MockKxSelector {
+        calls: vec![MockKxSelectCall {
+            client: vec![
+                OfferedKxGroup::new(provider::kx_group::X25519, true),
+                OfferedKxGroup::new(provider::kx_group::SECP256R1, false),
+                OfferedKxGroup::new(provider::kx_group::SECP384R1, false),
+            ],
+            server: kx_groups.to_vec(),
+            return_value: Some(provider::kx_group::SECP384R1),
+        }],
+        ..Default::default()
+    });
+
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_configs(client_config, server_config, &mut client_output);
+    do_handshake_until_error(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    )
+    .unwrap();
+    assert_eq!(
+        client
+            .negotiated_key_exchange_group()
+            .map(|kxg| kxg.name()),
+        Some(NamedGroup::secp384r1)
+    );
+    assert_eq!(
+        client.handshake_kind(),
+        Some(HandshakeKind::FullWithHelloRetryRequest)
+    );
+    assert_eq!(
+        server.handshake_kind(),
+        Some(HandshakeKind::FullWithHelloRetryRequest)
+    );
+
+    KX_SELECTOR
+        .get()
+        .unwrap()
+        .assert_exhausted();
+}
+
+#[test]
+fn test_server_selector() {
+    // base case.
+    check(
+        &PreferClientOrder,
+        &[NamedGroup::X25519, NamedGroup::secp384r1],
+        &[NamedGroup::secp384r1, NamedGroup::X25519],
+        NamedGroup::X25519,
+        HandshakeKind::Full,
+    );
+
+    // `PreferServerOrder` can be used to aggressively HRR.
+    check(
+        &PreferServerOrder,
+        &[NamedGroup::X25519, NamedGroup::secp384r1],
+        &[NamedGroup::secp384r1, NamedGroup::X25519],
+        NamedGroup::secp384r1,
+        HandshakeKind::FullWithHelloRetryRequest,
+    );
+    check(
+        &PreferServerOrder,
+        &[NamedGroup::secp384r1, NamedGroup::X25519],
+        &[NamedGroup::secp384r1, NamedGroup::X25519],
+        NamedGroup::secp384r1,
+        HandshakeKind::Full,
+    );
+    check(
+        &PreferServerOrder,
+        &[NamedGroup::X25519, NamedGroup::secp384r1],
+        &[
+            NamedGroup::secp256r1,
+            NamedGroup::secp384r1,
+            NamedGroup::X25519,
+        ],
+        NamedGroup::secp384r1,
+        HandshakeKind::FullWithHelloRetryRequest,
+    );
+
+    // this usage is also possible, outside the core crate.
+    check(
+        &FollowShare,
+        &[NamedGroup::X25519, NamedGroup::secp384r1],
+        &[NamedGroup::secp384r1, NamedGroup::X25519],
+        NamedGroup::X25519,
+        HandshakeKind::Full,
+    );
+
+    /// This is not provided in the public API as it has uncontrolled downgrade risk.
+    #[derive(Debug)]
+    struct FollowShare;
+
+    impl KeyExchangeSelector for FollowShare {
+        fn select_key_exchange(
+            &self,
+            client: &mut dyn Iterator<Item = OfferedKxGroup>,
+            _server: &[&'static dyn SupportedKxGroup],
+        ) -> Option<&'static dyn SupportedKxGroup> {
+            let client = client.collect::<Vec<_>>();
+            match client.iter().find(|c| c.has_key_share) {
+                Some(key_share) => Some(key_share.group),
+                None => client.first().map(|c| c.group),
+            }
+        }
+    }
+}
+
+fn check(
+    selector: &'static dyn KeyExchangeSelector,
+    client_groups: &[NamedGroup],
+    server_groups: &[NamedGroup],
+    expected_group: NamedGroup,
+    expected_hs_kind: HandshakeKind,
+) {
+    let provider = provider::DEFAULT_PROVIDER;
+
+    let client_kx_groups = actual_groups(client_groups, provider::ALL_KX_GROUPS);
+    let server_kx_groups = actual_groups(server_groups, provider::ALL_KX_GROUPS);
+
+    let client_config =
+        make_client_config_with_kx_groups(KeyType::default(), client_kx_groups, &provider);
+    let mut server_config =
+        make_server_config_with_kx_groups(KeyType::default(), server_kx_groups, &provider);
+    server_config.kx_selector = selector;
+
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_configs(client_config, server_config, &mut client_output);
+    do_handshake_until_error(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    )
+    .unwrap();
+    assert_eq!(
+        client
+            .negotiated_key_exchange_group()
+            .map(|kxg| kxg.name()),
+        Some(expected_group)
+    );
+    assert_eq!(client.handshake_kind(), Some(expected_hs_kind));
+    assert_eq!(server.handshake_kind(), Some(expected_hs_kind));
+}
+
+fn actual_groups(
+    request: &[NamedGroup],
+    available: &[&'static dyn SupportedKxGroup],
+) -> Vec<&'static dyn SupportedKxGroup> {
+    request
+        .iter()
+        .map(|selected| {
+            available
+                .iter()
+                .find(|skxg| skxg.name() == *selected)
+                .unwrap()
+        })
+        .copied()
+        .collect::<Vec<_>>()
 }
 
 #[test]
@@ -607,5 +822,74 @@ impl HybridKeyExchange for FakeHybridActive {
 
     fn into_key_exchange(self: Box<Self>) -> Box<dyn ActiveKeyExchange> {
         self
+    }
+}
+
+#[derive(Debug, Default)]
+struct MockKxSelector {
+    calls: Vec<MockKxSelectCall>,
+    count: AtomicUsize,
+}
+
+impl MockKxSelector {
+    fn assert_exhausted(&self) {
+        assert_eq!(self.calls.len(), self.count.load(Ordering::SeqCst));
+    }
+}
+
+impl KeyExchangeSelector for MockKxSelector {
+    fn select_key_exchange(
+        &self,
+        client: &mut dyn Iterator<Item = OfferedKxGroup>,
+        server: &[&'static dyn SupportedKxGroup],
+    ) -> Option<&'static dyn SupportedKxGroup> {
+        let current = self
+            .count
+            .fetch_add(1, Ordering::SeqCst);
+        self.calls
+            .get(current)
+            .expect("too many select_key_exchange() calls for mock")
+            .dispatch(client, server)
+    }
+}
+
+#[derive(Debug)]
+struct MockKxSelectCall {
+    client: Vec<OfferedKxGroup>,
+    server: Vec<&'static dyn SupportedKxGroup>,
+    return_value: Option<&'static dyn SupportedKxGroup>,
+}
+
+impl MockKxSelectCall {
+    fn dispatch(
+        &self,
+        client: &mut dyn Iterator<Item = OfferedKxGroup>,
+        server: &[&'static dyn SupportedKxGroup],
+    ) -> Option<&'static dyn SupportedKxGroup> {
+        fn flatten(offered: OfferedKxGroup) -> (NamedGroup, bool) {
+            (offered.group.name(), offered.has_key_share)
+        }
+
+        assert_eq!(
+            self.client
+                .iter()
+                .copied()
+                .map(flatten)
+                .collect::<Vec<_>>(),
+            client.map(flatten).collect::<Vec<_>>(),
+            "unexpected client parameter to select_key_exchange()"
+        );
+        assert_eq!(
+            self.server
+                .iter()
+                .map(|kx| kx.name())
+                .collect::<Vec<_>>(),
+            server
+                .iter()
+                .map(|kx| kx.name())
+                .collect::<Vec<_>>(),
+            "unexpected server parameter to select_key_exchange()"
+        );
+        self.return_value
     }
 }
