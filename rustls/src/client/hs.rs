@@ -215,6 +215,11 @@ impl ExpectServerHello {
         )?;
         trace!("We got ServerHello {server_hello:#?}");
 
+        // HelloRetryRequest selected TLS 1.3, so ServerHello must retain it.
+        if self.done_retry && server_hello.selected_version != Some(ProtocolVersion::TLSv1_3) {
+            return Err(PeerMisbehaved::SelectedDifferentProtocolVersionAfterRetry.into());
+        }
+
         let config = &self.input.config;
 
         let server_version = if server_hello.legacy_version == ProtocolVersion::TLSv1_2 {

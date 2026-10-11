@@ -1008,6 +1008,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::SelectedDifferentCipherSuiteAfterRetry) => {
             quit(":SELECTED_DIFFERENT_CIPHERSUITE_AFTER_RETRY:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::SelectedDifferentProtocolVersionAfterRetry) => {
+            quit(":SECOND_SERVERHELLO_VERSION_MISMATCH:")
+        }
         Error::PeerMisbehaved(
             PeerMisbehaved::ResumptionAttemptedWithVariedEms
             | PeerMisbehaved::ResumptionOfferedWithVariedEms,

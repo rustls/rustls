@@ -264,8 +264,6 @@
     "RenegotiationInfo-Forbidden-TLS13": ":UNEXPECTED_EXTENSION:",
     "RequestContextInHandshake-TLS13": ":BAD_HANDSHAKE_MSG:",
     "Resume-Client-Mismatch-TLS13-TLS12-TLS": ":WRONG_CIPHER_RETURNED:",
-    "SecondServerHelloNoVersion-TLS13": ":WRONG_CIPHER_RETURNED:",
-    "SecondServerHelloWrongVersion-TLS13": ":INCOMPATIBLE:",
     "SendBogusAlertType": ":BAD_ALERT:",
     "SendInvalidRecordType": ":GARBAGE:",
     "SendPostHandshakeChangeCipherSpec-TLS13": ":ILLEGAL_MIDDLEBOX_CHANGE_CIPHER_SPEC:",
