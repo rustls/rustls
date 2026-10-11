@@ -36,19 +36,6 @@ use crate::{KeyLog, NoKeyLog, Tls12CipherSuite, Tls13CipherSuite, compress};
 /// These must be created via the [`ServerConfig::builder()`] or [`ServerConfig::builder_with_details()`]
 /// function.
 ///
-/// # Defaults
-///
-/// * [`ServerConfig::max_fragment_size`]: the default is `None` (meaning 16kB).
-/// * [`ServerConfig::session_storage`]: if the `std` feature is enabled, the default stores 256
-///   sessions in memory. If the `std` feature is not enabled, the default is to not store any
-///   sessions.
-/// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
-/// * [`ServerConfig::key_log`]: key material is not logged.
-/// * [`ServerConfig::send_tls13_tickets`]: 2 tickets are sent, with a maximum of 2.
-/// * [`ServerConfig::cert_compressors`]: depends on the crate features, see [`compress::default_cert_compressors()`].
-/// * [`ServerConfig::cert_compression_cache`]: caches the most recently used 4 compressions
-/// * [`ServerConfig::cert_decompressors`]: depends on the crate features, see [`compress::default_cert_decompressors()`].
-///
 /// # Sharing resumption storage between `ServerConfig`s
 ///
 /// In a program using many `ServerConfig`s it may improve resumption rates
@@ -82,10 +69,13 @@ pub struct ServerConfig {
     pub(crate) provider: Arc<CryptoProvider>,
 
     /// How to select a cipher suite to use for a TLS session.
+    ///
+    /// The default is [`PreferClientOrder`].
     pub cipher_suite_selector: &'static dyn CipherSuiteSelector,
 
     /// The maximum size of plaintext input to be emitted in a single TLS record.
-    /// A value of None is equivalent to the [TLS maximum] of 16 kB.
+    /// A value of None is equivalent to the [TLS maximum] of 16 kB, and this is
+    /// the default.
     ///
     /// rustls enforces an arbitrary minimum of 32 bytes for this field.
     /// Out of range values are reported as errors from [Connection::new].
@@ -99,11 +89,16 @@ pub struct ServerConfig {
 
     /// How to store client sessions.
     ///
+    /// The default stores 256 sessions in memory.
+    ///
     /// See [ServerConfig#sharing-resumption-storage-between-serverconfigs]
     /// for a warning related to this field.
     pub session_storage: Arc<dyn StoresServerSessions>,
 
     /// How to produce tickets.
+    ///
+    /// The default is `None` which means ticket-based resumption in TLS1.2 and stateless resumption
+    /// in TLS1.3 are not available.
     ///
     /// See [ServerConfig#sharing-resumption-storage-between-serverconfigs]
     /// for a warning related to this field.
@@ -114,7 +109,8 @@ pub struct ServerConfig {
     pub cert_resolver: Arc<dyn ServerCredentialResolver>,
 
     /// Protocol names we support, most preferred first.
-    /// If empty we don't do ALPN at all.
+    ///
+    /// If empty we don't do ALPN at all.  This is the default.
     pub alpn_protocols: Vec<ApplicationProtocol<'static>>,
 
     /// How to verify client certificates.
@@ -122,7 +118,7 @@ pub struct ServerConfig {
 
     /// How to output key material for debugging.
     ///
-    /// The default does nothing.
+    /// The default does nothing and so key material is not logged.
     ///
     /// See [RFC 9850](https://datatracker.ietf.org/doc/html/rfc9850) for background.
     pub key_log: Arc<dyn KeyLog>,
@@ -172,6 +168,8 @@ pub struct ServerConfig {
     /// Because TLS1.3 tickets are single-use, this allows
     /// a client to perform multiple resumptions.
     ///
+    /// The default means 2 tickets are sent, with a maximum of 2.
+    ///
     /// See [`Tls13Tickets`] for the meaning of the default and maximum
     /// counts.
     pub send_tls13_tickets: Tls13Tickets,
@@ -202,6 +200,8 @@ pub struct ServerConfig {
     /// This only applies to TLS1.3 connections.  It is ignored for
     /// TLS1.2 connections.
     ///
+    /// The default depends on the crate features, see [`compress::default_cert_compressors()`].
+    ///
     /// [RFC 8879]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_compressors: Vec<&'static dyn compress::CertCompressor>,
 
@@ -209,6 +209,8 @@ pub struct ServerConfig {
     ///
     /// This is optional: [`compress::CompressionCache::Disabled`] gives
     /// a cache that does no caching.
+    ///
+    /// The default caches the most recently used 4 compressions.
     pub cert_compression_cache: Arc<compress::CompressionCache>,
 
     /// How to decompress the clients's certificate chain.
@@ -221,10 +223,14 @@ pub struct ServerConfig {
     /// This only applies to TLS1.3 connections.  It is ignored for
     /// TLS1.2 connections.
     ///
+    /// The default depends on the crate features, see [`compress::default_cert_decompressors()`].
+    ///
     /// [RFC 8879]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_decompressors: Vec<&'static dyn compress::CertDecompressor>,
 
     /// Policy for how an invalid Server Name Indication (SNI) value from a client is handled.
+    ///
+    /// The default rejects IP addresses in SNI extensions, which is mandated behaviour.
     pub invalid_sni_policy: InvalidSniPolicy,
 }
 
