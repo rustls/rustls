@@ -945,3 +945,13 @@ pub struct OfferedKxGroup {
     /// Always `false` for TLS 1.2.
     pub has_key_share: bool,
 }
+
+impl OfferedKxGroup {
+    /// Creates a new [`OfferedKxGroup`]
+    pub const fn new(group: &'static dyn SupportedKxGroup, has_key_share: bool) -> Self {
+        Self {
+            group,
+            has_key_share,
+        }
+    }
+}
