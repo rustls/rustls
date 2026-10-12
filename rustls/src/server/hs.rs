@@ -692,27 +692,22 @@ impl ExpectClientHello {
         let mut ecdhe_possible = false;
         let mut ffdhe_possible = false;
         let mut ffdhe_offered = false;
-        let mut supported_groups: Vec<&'static dyn SupportedKxGroup> =
-            Vec::with_capacity(client_groups.len());
 
         for offered_group in client_groups {
             let supported = self
                 .config
                 .provider
-                .find_kx_group(*offered_group, T::VERSION);
+                .find_kx_group(*offered_group, T::VERSION)
+                .is_some();
 
             match offered_group.key_exchange_algorithm() {
                 KeyExchangeAlgorithm::DHE => {
-                    ffdhe_possible |= supported.is_some();
+                    ffdhe_possible |= supported;
                     ffdhe_offered = true;
                 }
                 KeyExchangeAlgorithm::ECDHE => {
-                    ecdhe_possible |= supported.is_some();
+                    ecdhe_possible |= supported;
                 }
-            }
-
-            if let Some(supported) = supported {
-                supported_groups.push(supported);
             }
         }
 
@@ -766,24 +761,29 @@ impl ExpectClientHello {
 
         // Finally, choose a key exchange group that is compatible with the selected cipher
         // suite.
-        let offered = supported_groups
-            .iter()
-            .filter(|kx_group| {
-                suite.usable_for_kx_algorithm(kx_group.name().key_exchange_algorithm())
-            })
-            .map(|&group| OfferedKxGroup {
-                group,
-                has_key_share: T::VERSION == ProtocolVersion::TLSv1_3
-                    && client_shares
-                        .iter()
-                        .any(|share| share.group == group.name()),
-            })
-            .collect::<Vec<_>>();
+        let offered = || {
+            client_groups
+                .iter()
+                .filter_map(|&name| {
+                    self.config
+                        .provider
+                        .find_kx_group(name, T::VERSION)
+                })
+                .filter(|kx_group| {
+                    suite.usable_for_kx_algorithm(kx_group.name().key_exchange_algorithm())
+                })
+                .map(|group| OfferedKxGroup {
+                    group,
+                    has_key_share: T::VERSION == ProtocolVersion::TLSv1_3
+                        && client_shares
+                            .iter()
+                            .any(|share| share.group == group.name()),
+                })
+        };
 
         let selected = match &self.previous_hello {
             Some(PreviousClientHello { group, .. }) => Some(
-                offered
-                    .iter()
+                offered()
                     .find(|offer| offer.group.name() == *group)
                     .ok_or(PeerMisbehaved::RefusedToFollowHelloRetryRequest)?
                     .group,
@@ -791,15 +791,8 @@ impl ExpectClientHello {
             None => self
                 .config
                 .kx_selector
-                .select_key_exchange(
-                    &mut offered.iter().copied(),
-                    &self.config.provider.kx_groups,
-                )
-                .filter(|chosen| {
-                    offered
-                        .iter()
-                        .any(|offer| offer.group.name() == chosen.name())
-                }),
+                .select_key_exchange(&mut offered(), &self.config.provider.kx_groups)
+                .filter(|chosen| offered().any(|offer| offer.group.name() == chosen.name())),
         };
 
         match selected {
@@ -807,7 +800,7 @@ impl ExpectClientHello {
             // For TLS1.2, the server can unilaterally choose a DHE group if it has one and
             // there was no better option.
             None if T::VERSION == ProtocolVersion::TLSv1_2
-                && offered.is_empty()
+                && offered().next().is_none()
                 && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE) =>
             {
                 first_supported_dhe_kxg
