@@ -805,17 +805,15 @@ impl KeyExchangeSelector for PreferServerOrder {
         client: &mut dyn Iterator<Item = OfferedKxGroup>,
         server: &[&'static dyn SupportedKxGroup],
     ) -> Option<&'static dyn SupportedKxGroup> {
-        let client = client.collect::<Vec<_>>();
-
-        for s in server {
-            if let Some(selected) = client
-                .iter()
-                .find(|c| c.group.name() == s.name())
-            {
-                return Some(selected.group);
-            }
-        }
-        None
+        client
+            .filter_map(|offered| {
+                server
+                    .iter()
+                    .position(|ss| ss.name() == offered.group.name())
+                    .map(|pos| (pos, offered.group))
+            })
+            .min_by_key(|&(pos, _)| pos)
+            .map(|(_, group)| group)
     }
 }
 
