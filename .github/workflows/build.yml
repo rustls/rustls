@@ -409,8 +409,8 @@ jobs:
         with:
           persist-credentials: false
 
+      # admin/clippy builds rustls-ci-bench, which needs valgrind headers
       - name: Install valgrind
-        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y valgrind
 
       - name: Install rust toolchain
@@ -428,8 +428,8 @@ jobs:
         with:
           persist-credentials: false
 
+      # admin/clippy builds rustls-ci-bench, which needs valgrind headers
       - name: Install valgrind
-        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y valgrind
 
       - name: Install rust toolchain
