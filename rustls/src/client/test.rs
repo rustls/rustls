@@ -39,6 +39,7 @@ use crate::pki_types::PrivateKeyDer;
 use crate::pki_types::pem::PemObject;
 use crate::suites::Suite;
 use crate::sync::Arc;
+use crate::time_provider::{DefaultTimeProvider, TimeProvider};
 use crate::tls13::Tls13ProtocolSuite;
 use crate::tls13::key_schedule::{derive_traffic_iv, derive_traffic_key};
 use crate::verify::{
@@ -132,6 +133,181 @@ fn tls13_client_session_value_roundtrip() {
     assert_eq!(decoded.common.ticket(), session.common.ticket());
     assert_eq!(decoded.common.epoch, session.common.epoch);
     assert_eq!(*decoded.common.peer_identity(), peer_identity.into());
+}
+
+#[derive(Debug)]
+struct DomainVerifierA;
+
+impl ServerVerifier for DomainVerifierA {
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn verify_identity<'a>(
+        &self,
+        _identity: &ServerIdentity<'a, '_>,
+    ) -> Result<VerifiedIdentity<'a>, Error> {
+        unreachable!()
+    }
+
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn verify_tls12_signature(
+        &self,
+        _input: &SignatureVerificationInput<'_>,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        unreachable!()
+    }
+
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn verify_tls13_signature(
+        &self,
+        _input: &SignatureVerificationInput<'_>,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        unreachable!()
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        vec![SignatureScheme::RSA_PKCS1_SHA1]
+    }
+
+    fn request_ocsp_response(&self) -> bool {
+        false
+    }
+
+    fn hash_config(&self, _: &mut dyn Hasher) {}
+}
+
+#[derive(Debug)]
+struct DomainVerifierB;
+
+impl ServerVerifier for DomainVerifierB {
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn verify_identity<'a>(
+        &self,
+        _identity: &ServerIdentity<'a, '_>,
+    ) -> Result<VerifiedIdentity<'a>, Error> {
+        unreachable!()
+    }
+
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn verify_tls12_signature(
+        &self,
+        _input: &SignatureVerificationInput<'_>,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        unreachable!()
+    }
+
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn verify_tls13_signature(
+        &self,
+        _input: &SignatureVerificationInput<'_>,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        unreachable!()
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        vec![SignatureScheme::RSA_PKCS1_SHA1]
+    }
+
+    fn request_ocsp_response(&self) -> bool {
+        false
+    }
+
+    // Deliberately identical to `DomainVerifierA`'s: the concrete `TypeId`
+    // is the only input that can tell these two apart (GH rustls/rustls#3303).
+    fn hash_config(&self, _: &mut dyn Hasher) {}
+}
+
+#[derive(Debug)]
+struct DomainTimeProviderA;
+
+impl TimeProvider for DomainTimeProviderA {
+    fn current_time(&self) -> Option<UnixTime> {
+        Some(UnixTime::now())
+    }
+}
+
+#[derive(Debug)]
+struct DomainTimeProviderB;
+
+impl TimeProvider for DomainTimeProviderB {
+    fn current_time(&self) -> Option<UnixTime> {
+        Some(UnixTime::now())
+    }
+}
+
+/// Two configs whose verifiers are DIFFERENT types but hash IDENTICALLY
+/// (`hash_config()` empty on both) must not share a security domain
+/// (rustls/rustls#3303): a session created under one policy must not be
+/// resumable under the other.
+#[test]
+fn test_config_hash_separates_verifier_types_with_equal_hash_config() {
+    let provider = Arc::new(TEST_PROVIDER.clone());
+
+    let config_a =
+        ClientConfig::builder_with_details(provider.clone(), Arc::new(DefaultTimeProvider))
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(DomainVerifierA))
+            .with_no_client_auth()
+            .unwrap();
+
+    let config_b = ClientConfig::builder_with_details(provider, Arc::new(DefaultTimeProvider))
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(DomainVerifierB))
+        .with_no_client_auth()
+        .unwrap();
+
+    assert_ne!(
+        config_a.config_hash(),
+        config_b.config_hash(),
+        "verifiers of different concrete types with equal hash_config must not collide"
+    );
+}
+
+/// The same verifier type with the same configuration must keep hashing
+/// equally, so resumption rates do not regress for ordinary users.
+#[test]
+fn test_config_hash_stable_for_same_verifier_type() {
+    let provider = Arc::new(TEST_PROVIDER.clone());
+
+    let config_a =
+        ClientConfig::builder_with_details(provider.clone(), Arc::new(DefaultTimeProvider))
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(DomainVerifierA))
+            .with_no_client_auth()
+            .unwrap();
+
+    let config_b = ClientConfig::builder_with_details(provider, Arc::new(DefaultTimeProvider))
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(DomainVerifierA))
+        .with_no_client_auth()
+        .unwrap();
+
+    assert_eq!(config_a.config_hash(), config_b.config_hash());
+}
+
+/// Two configs whose time providers are DIFFERENT types must not share a
+/// security domain either: the time provider gates ticket-expiry decisions
+/// at retrieval, so a stricter clock is a different policy (rustls/rustls#3303).
+#[test]
+fn test_config_hash_separates_time_provider_types() {
+    let provider = Arc::new(TEST_PROVIDER.clone());
+
+    let config_a =
+        ClientConfig::builder_with_details(provider.clone(), Arc::new(DomainTimeProviderA))
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(DomainVerifierA))
+            .with_no_client_auth()
+            .unwrap();
+
+    let config_b = ClientConfig::builder_with_details(provider, Arc::new(DomainTimeProviderB))
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(DomainVerifierA))
+        .with_no_client_auth()
+        .unwrap();
+
+    assert_ne!(
+        config_a.config_hash(),
+        config_b.config_hash(),
+        "time providers of different concrete types must not collide"
+    );
 }
 
 /// Tests that session_ticket(35) extension

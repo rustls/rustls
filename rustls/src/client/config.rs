@@ -387,7 +387,7 @@ impl ClientSessionKey<'_> {
 
 /// A trait for the ability to choose a certificate chain and
 /// private key for the purposes of client authentication.
-pub trait ClientCredentialResolver: fmt::Debug + Send + Sync {
+pub trait ClientCredentialResolver: fmt::Debug + Send + Sync + Any {
     /// Resolve a client certificate chain/private key to use as the client's identity.
     ///
     /// The [`SelectedCredential`] returned from this method contains an identity and a
@@ -494,21 +494,20 @@ impl SecurityDomain {
         let mut h = hash.start();
         let mut adapter = HashAdapter(h.as_mut());
 
-        // Include TypeId of impl, so two different types with different non-configured
-        // behavior do not collide even if their `hash_config()`s are the same.
-        client_auth_cert_resolver
-            .type_id()
-            .hash(&mut DynHasher(&mut adapter));
+        // Include the TypeId of the concrete implementation, so two different
+        // types with different non-configured behavior do not collide even
+        // if their `hash_config()`s are the same.  Note this must go through
+        // the trait object's vtable (`Any::type_id(..)`), as a method call
+        // directly on the `Arc` would yield the wrapper type's TypeId --
+        // a per-trait constant identical for every implementation.
+        Any::type_id(client_auth_cert_resolver.as_ref()).hash(&mut DynHasher(&mut adapter));
         client_auth_cert_resolver.hash_config(&mut adapter);
 
-        verifier
-            .type_id()
-            .hash(&mut DynHasher(&mut adapter));
+        Any::type_id(verifier.as_ref()).hash(&mut DynHasher(&mut adapter));
         verifier.hash_config(&mut adapter);
 
-        time_provider
-            .type_id()
-            .hash(&mut DynHasher(&mut adapter));
+        Any::type_id(time_provider.as_ref()).hash(&mut DynHasher(&mut adapter));
+        time_provider.hash_config(&mut adapter);
 
         let config_hash = h.finish().as_ref()[..32]
             .try_into()
