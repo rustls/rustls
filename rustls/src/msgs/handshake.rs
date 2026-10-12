@@ -1424,11 +1424,15 @@ pub(super) fn has_duplicates<I: IntoIterator<Item = E>, E: Into<T>, T: Eq + Ord>
     false
 }
 
-pub(super) struct DuplicateExtensionChecker(pub(super) BTreeSet<u16>);
+pub(super) struct DuplicateExtensionChecker(InlineSet);
 
 impl DuplicateExtensionChecker {
     pub(super) fn new() -> Self {
-        Self(BTreeSet::new())
+        Self(InlineSet::default())
+    }
+
+    pub(super) fn into_btreeset(self) -> BTreeSet<u16> {
+        self.0.into()
     }
 
     /// Check an unmodelled extension of type `typ` is appropriate for the message.
@@ -1456,5 +1460,71 @@ impl DuplicateExtensionChecker {
             true => Ok(()),
             false => Err(InvalidMessage::DuplicateExtension(u)),
         }
+    }
+}
+
+enum InlineSet {
+    Small { slots: [u16; 8], used: usize },
+    Large(BTreeSet<u16>),
+}
+
+impl InlineSet {
+    fn insert(&mut self, value: u16) -> bool {
+        let (slots, used) = match self {
+            Self::Small { slots, used } => (slots, used),
+            Self::Large(btree) => return btree.insert(value),
+        };
+
+        if slots[..*used].contains(&value) {
+            return false;
+        }
+
+        if *used == slots.len() {
+            let mut upgraded = BTreeSet::from_iter(slots[..*used].iter().copied());
+            upgraded.insert(value);
+            *self = Self::Large(upgraded);
+        } else {
+            slots[*used] = value;
+            *used += 1;
+        }
+        true
+    }
+}
+
+impl From<InlineSet> for BTreeSet<u16> {
+    fn from(value: InlineSet) -> Self {
+        match value {
+            InlineSet::Small { slots, used } => Self::from_iter(slots[..used].iter().copied()),
+            InlineSet::Large(btree) => btree,
+        }
+    }
+}
+
+impl Default for InlineSet {
+    fn default() -> Self {
+        Self::Small {
+            slots: [0; 8],
+            used: 0,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_checker() {
+        let mut c = InlineSet::default();
+
+        for n in 0..16 {
+            assert!(c.insert(n));
+
+            for e in 0..n {
+                assert!(!c.insert(e));
+            }
+        }
+
+        assert_eq!(BTreeSet::from(c), BTreeSet::from_iter(0..16));
     }
 }
