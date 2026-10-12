@@ -449,6 +449,10 @@ impl<Data> WriteTraffic<'_, Data> {
     ) -> Result<usize, EncryptError> {
         self.conn
             .core
+            .common_state
+            .request_key_update_for(application_data.into());
+        self.conn
+            .core
             .maybe_refresh_traffic_keys();
         self.conn
             .core
