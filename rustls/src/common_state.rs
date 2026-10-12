@@ -233,6 +233,33 @@ impl CommonState {
         }
     }
 
+    /// Ask for a TLS 1.3 key update before encrypting `payload`, if one of its records would
+    /// take the last sequence number allowed by the current keys.
+    ///
+    /// The key update then takes that sequence number instead.
+    pub(crate) fn request_key_update_for(&mut self, payload: OutboundChunks<'_>) {
+        let records = self
+            .message_fragmenter
+            .fragment_payload(
+                ContentType::ApplicationData,
+                ProtocolVersion::TLSv1_2,
+                payload,
+            )
+            .len();
+
+        if records > 0
+            && self.negotiated_version == Some(ProtocolVersion::TLSv1_3)
+            && self.record_layer.write_seq() > 0
+            && self
+                .record_layer
+                .pre_encrypt_action(records as u64)
+                != PreEncryptAction::Nothing
+        {
+            // driven by caller, as we don't have the `State` here
+            self.refresh_traffic_keys_pending = true;
+        }
+    }
+
     pub(crate) fn write_plaintext(
         &mut self,
         payload: OutboundChunks<'_>,

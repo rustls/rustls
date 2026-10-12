@@ -746,7 +746,7 @@ fn refresh_traffic_keys_automatically() {
 
     const KEY_UPDATE_SIZE: usize = encrypted_size(5);
     const CONFIDENTIALITY_LIMIT: usize = 1024;
-    const CONFIDENTIALITY_LIMIT_PLUS_ONE: usize = CONFIDENTIALITY_LIMIT + 1;
+    const CONFIDENTIALITY_LIMIT_MINUS_ONE: usize = CONFIDENTIALITY_LIMIT - 1;
 
     let client_config = finish_client_config(
         KeyType::Rsa2048,
@@ -786,8 +786,10 @@ fn refresh_traffic_keys_automatically() {
                 assert_eq!(
                     used,
                     match i {
-                        // The key_update message triggered by write N appears in write N+1
-                        CONFIDENTIALITY_LIMIT_PLUS_ONE =>
+                        // the key_update message takes the last record allowed under
+                        // the initial key, so it is sent before the message that would
+                        // otherwise take that record
+                        CONFIDENTIALITY_LIMIT_MINUS_ONE =>
                             KEY_UPDATE_SIZE + encrypted_size(message.len()),
                         _ => encrypted_size(message.len()),
                     }
