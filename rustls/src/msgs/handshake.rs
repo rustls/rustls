@@ -1412,8 +1412,8 @@ pub(crate) enum Encoding {
     EchInnerHello { to_compress: Vec<ExtensionType> },
 }
 
-pub(super) fn has_duplicates<I: IntoIterator<Item = E>, E: Into<T>, T: Eq + Ord>(iter: I) -> bool {
-    let mut seen = BTreeSet::new();
+pub(super) fn has_duplicates<I: IntoIterator<Item = E>, E: Into<u16>>(iter: I) -> bool {
+    let mut seen = InlineSet::default();
 
     for x in iter {
         if !seen.insert(x.into()) {
