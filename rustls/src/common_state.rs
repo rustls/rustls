@@ -317,7 +317,17 @@ impl CommonState {
     }
 
     /// Like send_msg_encrypt, but operate on an appdata directly.
-    fn send_appdata_encrypt(&mut self, payload: OutboundChunks<'_>, limit: Limit) -> usize {
+    ///
+    /// If `stop_for_key_update` is true, this stops before a TLS 1.3 record that would take
+    /// the last sequence number allowed by the current keys, so that the caller can first send
+    /// a `key_update` request with that sequence number. In that case, the return value is the
+    /// number of bytes sent so far.
+    fn send_appdata_encrypt(
+        &mut self,
+        payload: OutboundChunks<'_>,
+        limit: Limit,
+        stop_for_key_update: bool,
+    ) -> usize {
         // Here, the limit on sendable_tls applies to encrypted data,
         // but we're respecting it for plaintext data -- so we'll
         // be out by whatever the cipher+record overhead is.  That's a
@@ -346,7 +356,21 @@ impl CommonState {
             }
         }
 
+        let mut sent = 0;
         for m in iter {
+            // The key update takes the last sequence number allowed by the current keys,
+            // unless they have not been used yet (as updating them would not help then).
+            if stop_for_key_update
+                && self.negotiated_version == Some(ProtocolVersion::TLSv1_3)
+                && self.record_layer.write_seq() > 0
+                && self.record_layer.pre_encrypt_action(1) != PreEncryptAction::Nothing
+            {
+                // driven by caller, as we don't have the `State` here
+                self.refresh_traffic_keys_pending = true;
+                return sent;
+            }
+
+            sent += m.payload.len();
             self.send_single_fragment(m);
         }
 
@@ -402,7 +426,12 @@ impl CommonState {
         }
     }
 
-    fn send_plain_non_buffering(&mut self, payload: OutboundChunks<'_>, limit: Limit) -> usize {
+    fn send_plain_non_buffering(
+        &mut self,
+        payload: OutboundChunks<'_>,
+        limit: Limit,
+        stop_for_key_update: bool,
+    ) -> usize {
         debug_assert!(self.may_send_application_data);
         debug_assert!(self.record_layer.is_encrypting());
 
@@ -411,7 +440,7 @@ impl CommonState {
             return 0;
         }
 
-        self.send_appdata_encrypt(payload, limit)
+        self.send_appdata_encrypt(payload, limit, stop_for_key_update)
     }
 
     /// Mark the connection as ready to send application data.
@@ -443,7 +472,7 @@ impl CommonState {
         }
 
         while let Some(buf) = sendable_plaintext.pop() {
-            self.send_plain_non_buffering(buf.as_slice().into(), Limit::No);
+            self.send_plain_non_buffering(buf.as_slice().into(), Limit::No, false);
         }
     }
 
@@ -747,8 +776,8 @@ impl CommonState {
     /// Send plaintext application data, fragmenting and
     /// encrypting it as it goes out.
     ///
-    /// If internal buffers are too small, this function will not accept
-    /// all the data.
+    /// If internal buffers are too small, or if the traffic keys must be
+    /// updated first, this function will not accept all the data.
     pub(crate) fn buffer_plaintext(
         &mut self,
         payload: OutboundChunks<'_>,
@@ -767,7 +796,7 @@ impl CommonState {
             return 0;
         }
 
-        self.send_appdata_encrypt(data.into(), Limit::Yes)
+        self.send_appdata_encrypt(data.into(), Limit::Yes, false)
     }
 
     /// Encrypt and send some plaintext `data`.  `limit` controls
@@ -791,7 +820,7 @@ impl CommonState {
             return len;
         }
 
-        self.send_plain_non_buffering(payload, limit)
+        self.send_plain_non_buffering(payload, limit, true)
     }
 }
 
