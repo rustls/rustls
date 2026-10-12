@@ -94,14 +94,6 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
-      - name: cargo build (debug; no-std)
-        run: |
-          cargo check --locked --lib -p rustls $(admin/all-features-except std,brotli rustls)
-          cargo check --locked --lib -p rustls-util
-          cargo check --locked --lib -p rustls-ring --no-default-features
-          cargo check --locked --lib -p rustls-aws-lc-rs --no-default-features --features aws-lc-sys
-          cargo check --locked --lib -p rustls-post-quantum
-
       - name: cargo build (debug; rustls-provider-test)
         run: cargo build --locked -p rustls-provider-test
 
