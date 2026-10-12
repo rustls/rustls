@@ -8816,11 +8816,14 @@ fn test_automatic_refresh_traffic_keys() {
             server.process_new_packets().unwrap()
         );
 
-        // at CONFIDENTIALITY_LIMIT messages, we also have a key_update message sent
+        // the key_update message takes the last record allowed under the initial key,
+        // so it is sent before the message that would otherwise take that record
         assert_eq!(
             transferred,
             match i {
-                CONFIDENTIALITY_LIMIT => KEY_UPDATE_SIZE + encrypted_size(message.len()),
+                i if i == CONFIDENTIALITY_LIMIT - 1 => {
+                    KEY_UPDATE_SIZE + encrypted_size(message.len())
+                }
                 _ => encrypted_size(message.len()),
             }
         );
@@ -8844,6 +8847,86 @@ fn test_automatic_refresh_traffic_keys() {
         client.process_new_packets().unwrap()
     );
     assert_eq!(transferred, KEY_UPDATE_SIZE + encrypted_size(message.len()));
+}
+
+#[test]
+fn tls13_keys_are_updated_within_fragmented_write() {
+    // With this maximum fragment size, each record carries 27 bytes of plaintext
+    // and encrypts to 44 bytes, while an encrypted key_update message is 22 bytes.
+    const RECORD_PLAINTEXT_LEN: usize = 27;
+    const KEY_UPDATE_LEN: usize = 22;
+
+    let provider = aes_128_gcm_with_1024_confidentiality_limit(provider::default_provider());
+    let mut client_config = finish_client_config(
+        KeyType::Ed25519,
+        ClientConfig::builder_with_provider(provider.clone())
+            .with_protocol_versions(&[&rustls::version::TLS13])
+            .unwrap(),
+    );
+    client_config.max_fragment_size = Some(32);
+    client_config.enable_secret_extraction = true;
+    let server_config = finish_server_config(
+        KeyType::Ed25519,
+        ServerConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .unwrap(),
+    );
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    do_handshake(&mut client, &mut server);
+
+    // A single write of enough records to exhaust the traffic keys twice over.
+    let records = 2 * CONFIDENTIALITY_LIMIT as usize + 1;
+    let payload = vec![0x42; records * RECORD_PLAINTEXT_LEN];
+    client.set_buffer_limit(None);
+    assert_eq!(client.writer().write(&payload).unwrap(), payload.len());
+
+    let mut client_output = Vec::new();
+    while client.wants_write() {
+        client
+            .write_tls(&mut client_output)
+            .unwrap();
+    }
+
+    let mut key_updates = Vec::new();
+    let mut index = 0;
+    let mut wire = client_output.as_slice();
+    while !wire.is_empty() {
+        let len = usize::from(u16::from_be_bytes([wire[3], wire[4]]));
+        if len == KEY_UPDATE_LEN {
+            key_updates.push(index);
+        }
+        wire = &wire[5 + len..];
+        index += 1;
+    }
+
+    // Each key_update message takes the last record allowed under the previous keys.
+    let limit = CONFIDENTIALITY_LIMIT as usize;
+    assert_eq!(key_updates, [limit - 1, 2 * limit - 1]);
+    assert_eq!(index, records + 2);
+
+    let mut received = Vec::new();
+    let mut wire = client_output.as_slice();
+    while !wire.is_empty() {
+        server.read_tls(&mut wire).unwrap();
+        let state = server.process_new_packets().unwrap();
+        let mut buf = vec![0u8; state.plaintext_bytes_to_read()];
+        server
+            .reader()
+            .read_exact(&mut buf)
+            .unwrap();
+        received.extend(buf);
+    }
+    assert_eq!(received, payload);
+
+    // The remaining records were encrypted under the newest keys.
+    let secrets = client
+        .dangerous_extract_secrets()
+        .unwrap();
+    assert_eq!(
+        secrets.tx.0,
+        records as u64 - 2 * (CONFIDENTIALITY_LIMIT - 1)
+    );
 }
 
 #[cfg(feature = "tls12")]
