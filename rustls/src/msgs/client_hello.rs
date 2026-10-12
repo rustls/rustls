@@ -84,7 +84,7 @@ impl ClientHelloPayload {
         self.key_shares
             .as_ref()
             .map(|entries| {
-                has_duplicates::<_, _, u16>(
+                has_duplicates(
                     entries
                         .iter()
                         .map(|kse| u16::from(kse.group)),
@@ -95,7 +95,7 @@ impl ClientHelloPayload {
 
     pub(crate) fn has_certificate_compression_extension_with_duplicates(&self) -> bool {
         if let Some(algs) = &self.certificate_compression_algorithms {
-            has_duplicates::<_, _, u16>(algs.iter().copied())
+            has_duplicates(algs.iter().copied())
         } else {
             false
         }

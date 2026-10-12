@@ -447,7 +447,7 @@ impl EchConfigContents {
     /// Returns true if there is more than one extension of a given
     /// type.
     pub(crate) fn has_duplicate_extension(&self) -> bool {
-        has_duplicates::<_, _, u16>(
+        has_duplicates(
             self.extensions
                 .iter()
                 .map(|ext| ext.ext_type()),
