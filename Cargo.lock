@@ -292,7 +292,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "nix",
- "rustls 0.24.0-dev.1",
+ "rustls 0.24.0-dev.2",
  "rustls-aws-lc-rs",
  "rustls-ring",
  "rustls-webpki 0.104.0-alpha.7",
@@ -1772,7 +1772,7 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.24.0-dev.1"
+version = "0.24.0-dev.2"
 dependencies = [
  "bencher",
  "brotli",
@@ -1799,7 +1799,7 @@ dependencies = [
  "criterion",
  "hex",
  "rcgen",
- "rustls 0.24.0-dev.1",
+ "rustls 0.24.0-dev.2",
  "rustls-pki-types",
  "rustls-test",
  "rustls-util",
@@ -1816,7 +1816,7 @@ name = "rustls-bench"
 version = "0.1.0"
 dependencies = [
  "clap",
- "rustls 0.24.0-dev.1",
+ "rustls 0.24.0-dev.2",
  "rustls-aws-lc-rs",
  "rustls-graviola",
  "rustls-ring",
@@ -1836,7 +1836,7 @@ dependencies = [
  "itertools 0.15.0",
  "rayon",
  "rustc-hash",
- "rustls 0.24.0-dev.1",
+ "rustls 0.24.0-dev.2",
  "rustls-aws-lc-rs",
  "rustls-fuzzing-provider",
  "rustls-ring",
@@ -1849,7 +1849,7 @@ version = "0.0.1"
 dependencies = [
  "regex",
  "ring",
- "rustls 0.24.0-dev.1",
+ "rustls 0.24.0-dev.2",
  "tokio",
 ]
 
@@ -1861,7 +1861,7 @@ dependencies = [
  "hickory-resolver",
  "mio",
  "rcgen",
- "rustls 0.24.0-dev.1",
+ "rustls 0.24.0-dev.2",
  "rustls-aws-lc-rs",
  "rustls-util",
  "serde",
@@ -1875,7 +1875,7 @@ dependencies = [
 name = "rustls-fuzzing-provider"
 version = "0.1.0"
 dependencies = [
- "rustls 0.24.0-dev.1",
+ "rustls 0.24.0-dev.2",
  "tracing-subscriber",
 ]
 
@@ -1897,7 +1897,7 @@ dependencies = [
  "base64",
  "num-bigint 0.5.1",
  "openssl",
- "rustls 0.24.0-dev.1",
+ "rustls 0.24.0-dev.2",
  "rustls-aws-lc-rs",
  "rustls-util",
 ]
@@ -1915,7 +1915,7 @@ dependencies = [
 name = "rustls-post-quantum"
 version = "0.3.0-dev.2"
 dependencies = [
- "rustls 0.24.0-dev.1",
+ "rustls 0.24.0-dev.2",
  "rustls-aws-lc-rs",
 ]
 
@@ -1924,7 +1924,7 @@ name = "rustls-provider-test"
 version = "0.1.0"
 dependencies = [
  "hex",
- "rustls 0.24.0-dev.1",
+ "rustls 0.24.0-dev.2",
  "rustls-aws-lc-rs",
  "serde",
  "serde_json",
@@ -1936,7 +1936,7 @@ version = "0.1.0-dev.1"
 dependencies = [
  "bencher",
  "ring",
- "rustls 0.24.0-dev.1",
+ "rustls 0.24.0-dev.2",
  "rustls-pki-types",
  "rustls-test",
  "subtle",
@@ -1949,7 +1949,7 @@ version = "0.1.0"
 dependencies = [
  "macro_rules_attribute",
  "num-bigint 0.5.1",
- "rustls 0.24.0-dev.1",
+ "rustls 0.24.0-dev.2",
  "rustls-aws-lc-rs",
  "rustls-pki-types",
  "rustls-ring",
@@ -1964,7 +1964,7 @@ dependencies = [
 name = "rustls-util"
 version = "0.1.0-dev.1"
 dependencies = [
- "rustls 0.24.0-dev.1",
+ "rustls 0.24.0-dev.2",
  "tracing",
 ]
 
