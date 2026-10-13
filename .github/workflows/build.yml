@@ -136,7 +136,7 @@ jobs:
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: cargo build (debug; default features)
+      - name: cargo check (debug; default features)
         run: |
           cargo check --locked -p rustls
           cargo check --locked -p rustls-util
