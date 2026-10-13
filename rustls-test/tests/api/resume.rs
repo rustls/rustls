@@ -2,143 +2,162 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use core::hash::Hasher;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use std::fmt;
 use std::sync::Arc;
 
-use rustls::client::{Resumption, TicketRequest};
+use pki_types::UnixTime;
+use rustls::client::danger::{
+    HandshakeSignatureValid, ServerIdentity, ServerVerifier, SignatureVerificationInput,
+};
+use rustls::client::{ClientCredentialResolver, CredentialRequest, Resumption, TicketRequest};
 use rustls::crypto::kx::NamedGroup;
-use rustls::crypto::{CertificateIdentity, Identity};
-use rustls::enums::ProtocolVersion;
+use rustls::crypto::{
+    CertificateIdentity, Identity, SelectedCredential, SignatureScheme, VerifiedIdentity,
+};
+use rustls::enums::{CertificateType, ProtocolVersion};
 use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
 use rustls::server::{ServerSessionKey, Tls13Tickets};
+use rustls::time_provider::{DefaultTimeProvider, TimeProvider};
 use rustls::{
-    ClientConfig, ClientSide, Connection, HandshakeKind, ServerConfig, ServerSide, Tcp, VecInput,
+    ClientConfig, ClientSide, Connection, DistinguishedName, HandshakeKind, ServerConfig,
+    ServerSide, Tcp, VecInput,
 };
 use rustls_test::{
-    ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, MultiTest,
-    ServerConfigExt, do_handshake, do_handshake_collecting_early_data, do_handshake_until_error,
-    make_client_config, make_client_config_with_auth, make_client_config_with_kx_groups, make_pair,
-    make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
-    make_server_config_with_kx_groups, transfer, webpki_server_verifier_builder,
+    ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, MultiTest, ServerConfigExt,
+    do_handshake, do_handshake_collecting_early_data, do_handshake_until_error, make_client_config,
+    make_client_config_with_auth, make_client_config_with_kx_groups, make_pair,
+    make_pair_for_arc_configs, make_server_config, make_server_config_with_kx_groups, transfer,
+    webpki_server_verifier_builder,
 };
 
 use super::provider;
 
 #[test]
-fn client_only_attempts_resumption_with_compatible_security() {
+fn client_resumption_allowed_with_same_config() {
+    for (base_client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        assert_eq!(
+            handshake_kind_after_seeding(&base_client_config, &base_client_config, &server_config),
+            Some(HandshakeKind::Resumed)
+        );
+    }
+}
+
+#[test]
+fn client_resumption_allowed_with_cloned_config() {
+    for (base_client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let client_config = Arc::new(ClientConfig::clone(&base_client_config));
+        assert_eq!(
+            handshake_kind_after_seeding(&base_client_config, &client_config, &server_config),
+            Some(HandshakeKind::Resumed)
+        );
+    }
+}
+
+#[test]
+fn client_resumption_allowed_with_rebuilt_config() {
+    for (base_client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let client_config = SharedResumptionConfig::new(&base_client_config).build();
+        assert_eq!(
+            handshake_kind_after_seeding(&base_client_config, &client_config, &server_config),
+            Some(HandshakeKind::Resumed)
+        );
+    }
+}
+
+#[test]
+fn client_resumption_disallowed_with_other_resolver() {
     for (base_client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
-        let mut client_input = VecInput::default();
-        let mut server_input = VecInput::default();
-        let mut client_output = Vec::new();
-        let mut server_output = Vec::new();
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&base_client_config, &server_config, &mut client_output);
-        do_handshake(
-            &mut client_input,
-            &mut client_output,
-            &mut client,
-            &mut server_input,
-            &mut server_output,
-            &mut server,
-        );
-        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
-
-        // base case
-        let mut client_output = Vec::new();
-        let mut server_output = Vec::new();
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&base_client_config, &server_config, &mut client_output);
-        do_handshake(
-            &mut client_input,
-            &mut client_output,
-            &mut client,
-            &mut server_input,
-            &mut server_output,
-            &mut server,
-        );
-        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
-
-        // allowed case, using `clone`
-        let client_config = ClientConfig::clone(&base_client_config);
-        let mut client_output = Vec::new();
-        let mut server_output = Vec::new();
-        let (mut client, mut server) = make_pair_for_configs(
-            client_config,
-            ServerConfig::clone(&server_config),
-            &mut client_output,
-        );
-        do_handshake(
-            &mut client_input,
-            &mut client_output,
-            &mut client,
-            &mut server_input,
-            &mut server_output,
-            &mut server,
-        );
-        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
-
-        // disallowed case: unmatching `client_auth_cert_resolver`
-        let client_config = ClientConfig::builder(base_client_config.provider().clone())
-            .add_root_certs(expect.key_type)
-            .with_client_credential_resolver(
-                make_client_config_with_auth(expect.key_type, base_client_config.provider())
-                    .resolver()
-                    .clone(),
-            )
-            .unwrap();
-
-        let mut client_output = Vec::new();
-        let mut server_output = Vec::new();
-        let (mut client, mut server) = make_pair_for_configs(
-            client_config.clone(),
-            ServerConfig::clone(&server_config),
-            &mut client_output,
-        );
-        do_handshake(
-            &mut client_input,
-            &mut client_output,
-            &mut client,
-            &mut server_input,
-            &mut server_output,
-            &mut server,
-        );
-        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
-
-        // disallowed case: unmatching `verifier`
-        if !expect.client_auth {
-            let mut client_config = ClientConfig::builder(base_client_config.provider().clone())
-                .dangerous()
-                .with_custom_certificate_verifier(Arc::new(
-                    webpki_server_verifier_builder(
-                        expect.key_type.client_root_store(),
-                        base_client_config.provider(),
-                    )
-                    .allow_unknown_revocation_status()
-                    .build()
-                    .unwrap(),
-                ))
-                .with_client_credential_resolver(client_config.resolver().clone())
-                .unwrap();
-            client_config.resumption = base_client_config.resumption.clone();
-
-            let mut client_output = Vec::new();
-            let mut server_output = Vec::new();
-            let (mut client, mut server) = make_pair_for_configs(
-                client_config,
-                ServerConfig::clone(&server_config),
-                &mut client_output,
-            );
-            do_handshake(
-                &mut client_input,
-                &mut client_output,
-                &mut client,
-                &mut server_input,
-                &mut server_output,
-                &mut server,
-            );
-            assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+        if expect.client_auth {
+            continue;
         }
+
+        let client_config = SharedResumptionConfig {
+            resolver: make_client_config_with_auth(expect.key_type, base_client_config.provider())
+                .resolver()
+                .clone(),
+            ..SharedResumptionConfig::new(&base_client_config)
+        }
+        .build();
+        assert_eq!(
+            handshake_kind_after_seeding(&base_client_config, &client_config, &server_config),
+            Some(HandshakeKind::Full)
+        );
+    }
+}
+
+/// https://github.com/rustls/rustls/issues/3303
+#[ignore]
+#[test]
+fn client_resumption_disallowed_with_other_resolver_type() {
+    for (base_client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let client_config = SharedResumptionConfig {
+            resolver: Arc::new(WrappedResolver(base_client_config.resolver().clone())),
+            ..SharedResumptionConfig::new(&base_client_config)
+        }
+        .build();
+        assert_eq!(
+            handshake_kind_after_seeding(&base_client_config, &client_config, &server_config),
+            Some(HandshakeKind::Full)
+        );
+    }
+}
+
+#[test]
+fn client_resumption_disallowed_with_other_verifier() {
+    for (base_client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let client_config = SharedResumptionConfig {
+            verifier: Arc::new(
+                webpki_server_verifier_builder(
+                    expect.key_type.client_root_store(),
+                    base_client_config.provider(),
+                )
+                .allow_unknown_revocation_status()
+                .build()
+                .unwrap(),
+            ),
+            ..SharedResumptionConfig::new(&base_client_config)
+        }
+        .build();
+        assert_eq!(
+            handshake_kind_after_seeding(&base_client_config, &client_config, &server_config),
+            Some(HandshakeKind::Full)
+        );
+    }
+}
+
+/// https://github.com/rustls/rustls/issues/3303
+#[ignore]
+#[test]
+fn client_resumption_disallowed_with_other_verifier_type() {
+    for (base_client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let client_config = SharedResumptionConfig {
+            verifier: Arc::new(WrappedVerifier(base_client_config.verifier().clone())),
+            ..SharedResumptionConfig::new(&base_client_config)
+        }
+        .build();
+        assert_eq!(
+            handshake_kind_after_seeding(&base_client_config, &client_config, &server_config),
+            Some(HandshakeKind::Full)
+        );
+    }
+}
+
+/// https://github.com/rustls/rustls/issues/3303
+#[ignore]
+#[test]
+fn client_resumption_disallowed_with_other_time_provider_type() {
+    for (base_client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let client_config = SharedResumptionConfig {
+            time_provider: Arc::new(WrappedTimeProvider(DefaultTimeProvider)),
+            ..SharedResumptionConfig::new(&base_client_config)
+        }
+        .build();
+        assert_eq!(
+            handshake_kind_after_seeding(&base_client_config, &client_config, &server_config),
+            Some(HandshakeKind::Full)
+        );
     }
 }
 
@@ -1621,4 +1640,152 @@ fn tls13_ticket_request_survives_hello_retry_request() {
         .filter(|op| matches!(op, ClientStorageOp::InsertTls13Ticket(_)))
         .count();
     assert_eq!(ticket_inserts, 2);
+}
+
+/// Seed `base_client_config`'s resumption store with a full handshake, then
+/// return the kind of handshake that `client_config` performs.
+fn handshake_kind_after_seeding(
+    base_client_config: &Arc<ClientConfig>,
+    client_config: &Arc<ClientConfig>,
+    server_config: &Arc<ServerConfig>,
+) -> Option<HandshakeKind> {
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let mut handshake_kind = |client_config: &Arc<ClientConfig>| {
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(client_config, server_config, &mut client_output);
+        do_handshake(
+            &mut client_input,
+            &mut client_output,
+            &mut client,
+            &mut server_input,
+            &mut server_output,
+            &mut server,
+        );
+        client.handshake_kind()
+    };
+
+    assert_eq!(
+        handshake_kind(base_client_config),
+        Some(HandshakeKind::Full)
+    );
+    handshake_kind(client_config)
+}
+
+/// Rebuilds a `ClientConfig` sharing `base`'s resumption store, from the parts
+/// that determine which of the stored sessions it may resume.
+struct SharedResumptionConfig<'a> {
+    base: &'a ClientConfig,
+    time_provider: Arc<dyn TimeProvider>,
+    verifier: Arc<dyn ServerVerifier>,
+    resolver: Arc<dyn ClientCredentialResolver>,
+}
+
+impl<'a> SharedResumptionConfig<'a> {
+    /// Start from `base`'s parts, assuming it was built with the default time provider.
+    fn new(base: &'a ClientConfig) -> Self {
+        Self {
+            base,
+            time_provider: Arc::new(DefaultTimeProvider),
+            verifier: base.verifier().clone(),
+            resolver: base.resolver().clone(),
+        }
+    }
+
+    fn build(self) -> Arc<ClientConfig> {
+        let Self {
+            base,
+            time_provider,
+            verifier,
+            resolver,
+        } = self;
+
+        let mut client_config =
+            ClientConfig::builder_with_details(base.provider().clone(), time_provider)
+                .dangerous()
+                .with_custom_certificate_verifier(verifier)
+                .with_client_credential_resolver(resolver)
+                .unwrap();
+        client_config.resumption = base.resumption.clone();
+        Arc::new(client_config)
+    }
+}
+
+/// Behaves identically to (and hashes the same config as) the wrapped verifier,
+/// but is a different type.
+#[derive(Debug)]
+struct WrappedVerifier(Arc<dyn ServerVerifier>);
+
+impl ServerVerifier for WrappedVerifier {
+    fn verify_identity<'a>(
+        &self,
+        identity: &ServerIdentity<'a, '_>,
+    ) -> Result<VerifiedIdentity<'a>, Error> {
+        self.0.verify_identity(identity)
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        input: &SignatureVerificationInput<'_>,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        self.0.verify_tls12_signature(input)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        input: &SignatureVerificationInput<'_>,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        self.0.verify_tls13_signature(input)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.0.supported_verify_schemes()
+    }
+
+    fn request_ocsp_response(&self) -> bool {
+        self.0.request_ocsp_response()
+    }
+
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        self.0.supported_certificate_types()
+    }
+
+    fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
+        self.0.root_hint_subjects()
+    }
+
+    fn hash_config(&self, h: &mut dyn Hasher) {
+        self.0.hash_config(h)
+    }
+}
+
+/// Behaves identically to (and hashes the same config as) the wrapped resolver,
+/// but is a different type.
+#[derive(Debug)]
+struct WrappedResolver(Arc<dyn ClientCredentialResolver>);
+
+impl ClientCredentialResolver for WrappedResolver {
+    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<SelectedCredential> {
+        self.0.resolve(request)
+    }
+
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        self.0.supported_certificate_types()
+    }
+
+    fn hash_config(&self, h: &mut dyn Hasher) {
+        self.0.hash_config(h)
+    }
+}
+
+/// Behaves identically to the wrapped time provider, but is a different type.
+#[derive(Debug)]
+struct WrappedTimeProvider(DefaultTimeProvider);
+
+impl TimeProvider for WrappedTimeProvider {
+    fn current_time(&self) -> Option<UnixTime> {
+        self.0.current_time()
+    }
 }
