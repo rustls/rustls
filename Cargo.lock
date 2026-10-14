@@ -1792,7 +1792,7 @@ dependencies = [
 
 [[package]]
 name = "rustls-aws-lc-rs"
-version = "0.1.0-dev.1"
+version = "0.24.0-dev.2"
 dependencies = [
  "aws-lc-rs",
  "bencher",
@@ -1932,7 +1932,7 @@ dependencies = [
 
 [[package]]
 name = "rustls-ring"
-version = "0.1.0-dev.1"
+version = "0.24.0-dev.2"
 dependencies = [
  "bencher",
  "ring",
