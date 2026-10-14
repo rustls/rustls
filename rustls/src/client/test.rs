@@ -283,8 +283,58 @@ fn test_client_rejects_server_hello_with_varied_session_id() {
                 random: Random([0; 32]),
                 compression_method: Compression::Null,
                 cipher_suite: TLS13_TEST_SUITE.suite(),
-                legacy_version: ProtocolVersion::TLSv1_3,
+                legacy_version: ProtocolVersion::TLSv1_2,
                 session_id: SessionId::empty(),
+                extensions: Box::new(ServerExtensions {
+                    key_share: Some(KeyShareEntry {
+                        group: KEY_EXCHANGE_GROUP.name(),
+                        payload: KEY_EXCHANGE_GROUP
+                            .start()
+                            .unwrap()
+                            .pub_key()
+                            .to_vec()
+                            .into(),
+                    }),
+                    selected_version: Some(ProtocolVersion::TLSv1_3),
+                    ..ServerExtensions::default()
+                }),
+            },
+        ))),
+    };
+
+    let mut input = VecInput::default();
+    input
+        .read(&mut sh.into_wire_bytes().as_slice())
+        .unwrap();
+    assert_eq!(
+        process(&mut input, &mut conn).unwrap_err(),
+        PeerMisbehaved::UnmatchedSessionId.into()
+    );
+}
+
+#[test]
+fn test_client_rejects_server_hello_with_tls13_legacy_version() {
+    let config = ClientConfig::builder(Arc::new(tls13_only(TEST_PROVIDER.clone())))
+        .with_root_certificates(roots())
+        .with_no_client_auth()
+        .unwrap();
+    let mut tls = Vec::new();
+    let mut conn = Arc::new(config)
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build(&mut tls)
+        .unwrap();
+
+    // server tries to select TLS1.3 with `legacy_version` instead of
+    // the `supported_versions` extension.
+    let sh = Message {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
+            ServerHelloPayload {
+                random: Random([0; 32]),
+                compression_method: Compression::Null,
+                cipher_suite: TLS13_TEST_SUITE.suite(),
+                legacy_version: ProtocolVersion::TLSv1_3,
+                session_id: client_hello_in(&tls).session_id,
                 extensions: Box::new(ServerExtensions {
                     key_share: Some(KeyShareEntry {
                         group: KEY_EXCHANGE_GROUP.name(),
@@ -307,7 +357,46 @@ fn test_client_rejects_server_hello_with_varied_session_id() {
         .unwrap();
     assert_eq!(
         process(&mut input, &mut conn).unwrap_err(),
-        PeerMisbehaved::UnmatchedSessionId.into()
+        PeerMisbehaved::SelectedTls13UsingLegacyVersionField.into()
+    );
+}
+
+#[test]
+fn test_client_rejects_hrr_with_wrong_legacy_version() {
+    let config = ClientConfig::builder(Arc::new(TEST_PROVIDER.clone()))
+        .with_root_certificates(roots())
+        .with_no_client_auth()
+        .unwrap();
+    let mut tls = Vec::new();
+    let mut conn = Arc::new(config)
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build(&mut tls)
+        .unwrap();
+
+    // server replies with an otherwise-acceptable HRR whose `legacy_version`
+    // is not TLS1.2.
+    let hrr = Message {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(
+            HandshakePayload::HelloRetryRequest(HelloRetryRequest {
+                cipher_suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
+                legacy_version: ProtocolVersion::TLSv1_3,
+                session_id: client_hello_in(&tls).session_id,
+                extensions: HelloRetryRequestExtensions {
+                    cookie: Some(SizedPayload::from(vec![1, 2, 3, 4])),
+                    ..HelloRetryRequestExtensions::default()
+                },
+            }),
+        )),
+    };
+
+    let mut input = VecInput::default();
+    input
+        .read(&mut hrr.into_wire_bytes().as_slice())
+        .unwrap();
+    assert_eq!(
+        process(&mut input, &mut conn).unwrap_err(),
+        PeerMisbehaved::IllegalHelloRetryRequestWithWrongLegacyVersion.into()
     );
 }
 
@@ -804,7 +893,7 @@ fn client_requiring_rpk_receives_server_ee(
                 random: Random([0; 32]),
                 compression_method: Compression::Null,
                 cipher_suite: TLS13_TEST_SUITE.suite(),
-                legacy_version: ProtocolVersion::TLSv1_3,
+                legacy_version: ProtocolVersion::TLSv1_2,
                 session_id: client_hello_in(&tls).session_id,
                 extensions: Box::new(ServerExtensions {
                     key_share: Some(KeyShareEntry {
@@ -816,6 +905,7 @@ fn client_requiring_rpk_receives_server_ee(
                             .to_vec()
                             .into(),
                     }),
+                    selected_version: Some(ProtocolVersion::TLSv1_3),
                     ..ServerExtensions::default()
                 }),
             },
@@ -890,7 +980,7 @@ fn client_receives_tls13_server_hello_with_raw_extension(
     // `HandshakePayload::Unknown` carry it: the handshake and record headers
     // are then computed by the usual encoding path.
     let mut body = Vec::new();
-    ProtocolVersion::TLSv1_3.encode(&mut body);
+    ProtocolVersion::TLSv1_2.encode(&mut body);
     Random([0; 32]).encode(&mut body);
     SessionId::empty().encode(&mut body);
     TEST_PROVIDER.tls13_cipher_suites[0]
@@ -900,6 +990,9 @@ fn client_receives_tls13_server_hello_with_raw_extension(
     Compression::Null.encode(&mut body);
 
     let extensions = LengthPrefixedBuffer::new(ListLength::U16, &mut body);
+    ExtensionType::SupportedVersions.encode(extensions.buf);
+    2u16.encode(extensions.buf);
+    ProtocolVersion::TLSv1_3.encode(extensions.buf);
     ExtensionType::KeyShare.encode(extensions.buf);
     let key_share = LengthPrefixedBuffer::new(ListLength::U16, extensions.buf);
     KeyShareEntry::new(TEST_PROVIDER.kx_groups[0].name(), vec![0xaa; 32]).encode(key_share.buf);
@@ -948,7 +1041,7 @@ fn test_client_rejects_protected_change_cipher_spec() {
                 random: Random([0; 32]),
                 compression_method: Compression::Null,
                 cipher_suite: TLS13_TEST_SUITE.suite(),
-                legacy_version: ProtocolVersion::TLSv1_3,
+                legacy_version: ProtocolVersion::TLSv1_2,
                 session_id: client_hello_in(&tls).session_id,
                 extensions: Box::new(ServerExtensions {
                     key_share: Some(KeyShareEntry {
@@ -960,6 +1053,7 @@ fn test_client_rejects_protected_change_cipher_spec() {
                             .to_vec()
                             .into(),
                     }),
+                    selected_version: Some(ProtocolVersion::TLSv1_3),
                     ..ServerExtensions::default()
                 }),
             },

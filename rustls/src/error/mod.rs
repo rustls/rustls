@@ -1201,6 +1201,7 @@ pub enum PeerMisbehaved {
     IllegalHelloRetryRequestWithUnofferedCipherSuite,
     IllegalHelloRetryRequestWithUnofferedNamedGroup,
     IllegalHelloRetryRequestWithUnsupportedVersion,
+    IllegalHelloRetryRequestWithWrongLegacyVersion,
     IllegalHelloRetryRequestWithWrongSessionId,
     IllegalHelloRetryRequestWithInvalidEch,
     IllegalMiddleboxChangeCipherSpec,
@@ -1239,6 +1240,7 @@ pub enum PeerMisbehaved {
     SelectedDifferentProtocolVersionAfterRetry,
     SelectedInvalidPsk,
     SelectedTls12UsingTls13VersionExtension,
+    SelectedTls13UsingLegacyVersionField,
     SelectedUnofferedApplicationProtocol,
     SelectedUnofferedCertCompression,
     SelectedUnofferedCipherSuite,
@@ -1299,6 +1301,9 @@ impl From<PeerMisbehaved> for AlertDescription {
             PeerMisbehaved::NoCertificatesPresented => Self::CertificateRequired,
 
             PeerMisbehaved::NonEmptyRenegotiationInfo => Self::HandshakeFailure,
+
+            PeerMisbehaved::IllegalHelloRetryRequestWithWrongLegacyVersion
+            | PeerMisbehaved::SelectedTls13UsingLegacyVersionField => Self::ProtocolVersion,
 
             _ => Self::IllegalParameter,
         }
