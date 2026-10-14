@@ -10,7 +10,7 @@ categories = ["network-programming", "cryptography"]
 autobenches = false
 
 [dependencies]
-rustls-aws-lc-rs = { version = "0.1.0-dev.1", path = "../rustls-aws-lc-rs" }
+rustls-aws-lc-rs = { version = "0.24.0-dev.2", path = "../rustls-aws-lc-rs" }
 rustls = { version = "0.24.0-dev.2", path = "../rustls", default-features = false }
 
 [lints]
