@@ -1245,6 +1245,7 @@ pub struct MockServerVerifier {
     tls13_signature_error: Option<Error>,
     signature_schemes: Vec<SignatureScheme>,
     expected_ocsp_response: Option<Vec<u8>>,
+    requests_ocsp_response: bool,
     requires_raw_public_keys: bool,
     raw_public_key_algorithms: Option<WebPkiSupportedAlgorithms>,
 }
@@ -1297,7 +1298,7 @@ impl ServerVerifier for MockServerVerifier {
     }
 
     fn request_ocsp_response(&self) -> bool {
-        self.expected_ocsp_response.is_some()
+        self.requests_ocsp_response || self.expected_ocsp_response.is_some()
     }
 
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
@@ -1329,6 +1330,14 @@ impl MockServerVerifier {
         Self {
             cert_rejection_error: Some(err),
             ..Default::default()
+        }
+    }
+
+    /// Request a stapled OCSP response, without checking its contents.
+    pub fn requesting_ocsp_response(self) -> Self {
+        Self {
+            requests_ocsp_response: true,
+            ..self
         }
     }
 
@@ -1377,6 +1386,7 @@ impl Default for MockServerVerifier {
                 SignatureScheme::ECDSA_NISTP521_SHA512,
             ],
             expected_ocsp_response: None,
+            requests_ocsp_response: false,
             requires_raw_public_keys: false,
             raw_public_key_algorithms: None,
         }
