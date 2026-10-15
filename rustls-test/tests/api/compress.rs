@@ -371,6 +371,35 @@ fn test_cert_decompression_by_server_rejects_trailing_data() {
 }
 
 #[test]
+fn test_cert_decompression_by_client_rejects_unsolicited_ocsp() {
+    let provider = provider::DEFAULT_PROVIDER;
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    server_config.cert_compressors = vec![&IdentityCompressor];
+    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    client_config.cert_decompressors = vec![&UnsolicitedOcspDecompressor];
+
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    assert_eq!(
+        do_handshake_until_error(
+            &mut client_input,
+            &mut client_output,
+            &mut client,
+            &mut server_input,
+            &mut server_output,
+            &mut server
+        ),
+        Err(ErrorFromPeer::Client(Error::PeerMisbehaved(
+            PeerMisbehaved::UnsolicitedCertExtension
+        )))
+    );
+}
+
+#[test]
 fn test_cert_decompression_by_server_rejects_nonempty_context() {
     let provider = provider::DEFAULT_PROVIDER;
     let mut server_config =
@@ -527,6 +556,39 @@ impl rustls::compress::CertDecompressor for TrailingDataDecompressor {
         // (empty context, empty entry list) in its first four bytes; the rest is
         // trailing data that a strict decoder must reject.
         output.fill(0);
+        Ok(())
+    }
+
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::Zlib
+    }
+}
+
+#[derive(Debug)]
+struct UnsolicitedOcspDecompressor;
+
+impl rustls::compress::CertDecompressor for UnsolicitedOcspDecompressor {
+    fn decompress(
+        &self,
+        _input: &[u8],
+        output: &mut [u8],
+    ) -> Result<(), rustls::compress::DecompressionFailed> {
+        // Emit a syntactically valid `CertificatePayloadTls13` with a single
+        // certificate entry carrying a status_request extension.  The client
+        // config's verifier does not request OCSP, so the client never sent
+        // status_request and must reject it.
+        let Some(cert_len) = output.len().checked_sub(18) else {
+            return Err(rustls::compress::DecompressionFailed);
+        };
+        let mut buf = Vec::with_capacity(output.len());
+        buf.push(0); // certificate_request_context: empty
+        buf.extend_from_slice(&((cert_len + 14) as u32).to_be_bytes()[1..]); // certificate_list length (u24)
+        buf.extend_from_slice(&(cert_len as u32).to_be_bytes()[1..]); // cert_data length (u24)
+        buf.resize(buf.len() + cert_len, 0); // cert_data
+        buf.extend_from_slice(&[0, 9]); // per-entry extensions length
+        buf.extend_from_slice(&[0, 5, 0, 5]); // status_request, length 5
+        buf.extend_from_slice(&[1, 0, 0, 1, 0]); // ocsp, OCSPResponse length 1
+        output.copy_from_slice(&buf);
         Ok(())
     }
 

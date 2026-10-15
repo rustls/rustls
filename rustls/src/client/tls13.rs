@@ -286,6 +286,9 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 transcript,
                 key_schedule,
                 kx_group: their_key_share.group,
+                sent_status_request: hello
+                    .sent_extensions
+                    .contains(&ExtensionType::StatusRequest),
             },
             resuming_session,
             suite,
@@ -1091,6 +1094,20 @@ impl ExpectCertificate {
             return Err(InvalidMessage::InvalidCertRequest.into());
         }
 
+        // status_request is the only CertificateEntry extension we ever
+        // solicit, and only if the verifier asked for an OCSP response.
+        let allowed: &[ExtensionType] = match self.hs.sent_status_request {
+            true => &[ExtensionType::StatusRequest],
+            false => &[],
+        };
+        if cert_chain
+            .entries
+            .iter()
+            .any(|e| !e.extensions.only_contains(allowed))
+        {
+            return Err(PeerMisbehaved::UnsolicitedCertExtension.into());
+        }
+
         let end_entity_ocsp = cert_chain.end_entity_ocsp().to_vec();
         let server_cert = ServerCertDetails::new(
             cert_chain
@@ -1545,6 +1562,7 @@ struct HandshakeState {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     kx_group: NamedGroup,
+    sent_status_request: bool,
 }
 
 // -- Traffic transit state (TLS1.3) --
