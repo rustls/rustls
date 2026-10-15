@@ -1081,6 +1081,25 @@ impl ExpectCertificate {
             return Err(InvalidMessage::InvalidCertRequest.into());
         }
 
+        // status_request is the only CertificateEntry extension we ever
+        // solicit, and only if the verifier asked for an OCSP response.
+        let allowed: &[ExtensionType] = match self
+            .hs
+            .config
+            .verifier()
+            .request_ocsp_response()
+        {
+            true => &[ExtensionType::StatusRequest],
+            false => &[],
+        };
+        if cert_chain
+            .entries
+            .iter()
+            .any(|e| !e.extensions.only_contains(allowed))
+        {
+            return Err(PeerMisbehaved::UnsolicitedCertExtension.into());
+        }
+
         let end_entity_ocsp = cert_chain.end_entity_ocsp().to_vec();
         let server_cert = ServerCertDetails::new(
             cert_chain
