@@ -1961,7 +1961,7 @@ dependencies = [
 
 [[package]]
 name = "rustls-util"
-version = "0.1.0-dev.1"
+version = "0.24.0-dev.2"
 dependencies = [
  "rustls 0.24.0-dev.2",
  "tracing",
