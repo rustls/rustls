@@ -7,13 +7,12 @@
 //! Note that `unwrap()` is used to deal with networking errors; this is not something
 //! that is sensible outside of example code.
 
-use std::io::{Read, Write, stdout};
+use std::io::{Write, stdout};
 use std::net::TcpStream;
 use std::sync::Arc;
 
 use rustls::VecInput;
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
-use rustls_util::Stream;
 
 fn main() -> Result<(), Box<dyn core::error::Error>> {
     tracing_subscriber::fmt::init();
@@ -34,15 +33,27 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
         .build(&mut output)?;
     let mut sock = TcpStream::connect("pq.cloudflareresearch.com:443").unwrap();
     let mut input = VecInput::default();
-    let mut received_plaintext = Vec::new();
-    let mut tls = Stream::new(
-        &mut input,
-        &mut received_plaintext,
-        &mut output,
-        &mut conn,
-        &mut sock,
-    );
-    tls.write_all(
+    let mut plaintext = Vec::new();
+
+    while conn.is_handshaking() {
+        sock.write_all(&output)?;
+        output.clear();
+        if input.read(&mut sock)? == 0 {
+            return Err("server closed connection during handshake".into());
+        }
+        conn.read_tls(&mut input, &mut output)
+            .handle_all(&mut plaintext)?;
+    }
+
+    let ciphersuite = conn.negotiated_cipher_suite().unwrap();
+    eprintln!("Current ciphersuite: {:?}", ciphersuite.suite());
+
+    let kx_group = conn
+        .negotiated_key_exchange_group()
+        .unwrap();
+    eprintln!("Current key exchange group: {kx_group:?}",);
+
+    conn.write(
         concat!(
             "GET /cdn-cgi/trace HTTP/1.0\r\n",
             "Host: pq.cloudflareresearch.com\r\n",
@@ -50,23 +61,27 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
             "Accept-Encoding: identity\r\n",
             "\r\n"
         )
-        .as_bytes(),
+        .as_bytes()
+        .into(),
+        &mut output,
     )?;
+    sock.write_all(&output)?;
+    output.clear();
 
-    let ciphersuite = tls
-        .conn
-        .negotiated_cipher_suite()
-        .unwrap();
-    eprintln!("Current ciphersuite: {:?}", ciphersuite.suite());
+    loop {
+        let read = input.read(&mut sock)?;
+        let state = conn
+            .read_tls(&mut input, &mut output)
+            .handle_all(&mut plaintext)?;
+        stdout().write_all(&plaintext)?;
+        plaintext.clear();
+        sock.write_all(&output)?;
+        output.clear();
 
-    let kx_group = tls
-        .conn
-        .negotiated_key_exchange_group()
-        .unwrap();
-    eprintln!("Current key exchange group: {kx_group:?}",);
-
-    let mut plaintext = Vec::new();
-    tls.read_to_end(&mut plaintext)?;
-    stdout().write_all(&plaintext)?;
-    Ok(())
+        if state.peer_has_closed() {
+            return Ok(());
+        } else if read == 0 {
+            return Err("server closed connection without sending TLS close_notify".into());
+        }
+    }
 }
