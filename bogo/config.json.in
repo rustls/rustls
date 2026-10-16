@@ -97,7 +97,6 @@
     "SendClientVersion-RSA": "no rsa kem",
     "SendFallbackSCSV": "fallback scsv not implemented",
     "SendSCTListOnResume-TLS-TLS12": "no sct stapling",
-    "SendUnsolicitedOCSPOnCertificate-TLS13": "we unconditionally request a stapled OCSP response",
     "SendUnsolicitedSCTOnCertificate-TLS13": "SCT stapling not supported",
     "SendV2ClientHello-*": "we only support >=TLS1.2",
     "Server-JDK11*": "workarounds for oracle engineering quality",
