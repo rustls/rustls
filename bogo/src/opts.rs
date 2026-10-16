@@ -47,6 +47,7 @@ pub(crate) struct Options {
     pub(crate) max_version: Option<ProtocolVersion>,
     pub(crate) min_version: Option<ProtocolVersion>,
     pub(crate) ocsp: OcspValidation,
+    pub(crate) enable_ocsp_stapling: bool,
     pub(crate) offer_no_client_cas: bool,
     pub(crate) on_initial_expect_curve_id: Option<NamedGroup>,
     pub(crate) on_initial_expect_ech_accept: bool,
@@ -136,6 +137,7 @@ impl Options {
             max_version: None,
             min_version: None,
             ocsp: OcspValidation::default(),
+            enable_ocsp_stapling: false,
             offer_no_client_cas: false,
             on_initial_expect_curve_id: None,
             on_initial_expect_ech_accept: false,
@@ -646,6 +648,9 @@ impl Options {
             "-server-preference" => {
                 self.server_preference = true;
             }
+            "-enable-ocsp-stapling" => {
+                self.enable_ocsp_stapling = true;
+            }
             "-fail-ocsp-callback" => {
                 self.ocsp = OcspValidation::Reject;
             }
@@ -663,7 +668,6 @@ impl Options {
             // defaults:
             "-decline-alpn"
             | "-enable-all-curves"
-            | "-enable-ocsp-stapling"
             | "-expect-no-session"
             | "-expect-ticket-renewal"
             | "-forbid-renegotiation-after-handshake"
