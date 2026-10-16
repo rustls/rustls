@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::any::Any;
 use core::fmt::Debug;
 use core::hash::Hasher;
 use core::ops::Deref;
@@ -25,7 +26,7 @@ use crate::x509::wrap_in_sequence;
 
 /// Something that can verify a server certificate chain, and verify
 /// signatures made by certificates.
-pub trait ServerVerifier: Debug + Send + Sync {
+pub trait ServerVerifier: Debug + Send + Sync + Any {
     /// Verify the server's identity.
     ///
     /// Note that none of the certificates have been parsed yet, so it is the responsibility of
