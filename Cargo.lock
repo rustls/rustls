@@ -1802,7 +1802,6 @@ dependencies = [
  "rustls 0.24.0-dev.2",
  "rustls-pki-types",
  "rustls-test",
- "rustls-util",
  "serde",
  "serde_json",
  "subtle",
