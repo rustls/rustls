@@ -57,25 +57,19 @@ fn main() {
         .as_bytes(),
     )
     .unwrap();
+
     let ciphersuite = tls
         .conn
         .negotiated_cipher_suite()
         .unwrap();
-    writeln!(
-        &mut std::io::stderr(),
-        "Current ciphersuite: {:?}",
-        ciphersuite.suite()
-    )
-    .unwrap();
+    eprintln!("Current ciphersuite: {:?}", ciphersuite.suite());
+
     let kx_group = tls
         .conn
         .negotiated_key_exchange_group()
         .unwrap();
-    writeln!(
-        &mut std::io::stderr(),
-        "Current key exchange group: {kx_group:?}",
-    )
-    .unwrap();
+    eprintln!("Current key exchange group: {kx_group:?}",);
+
     let mut plaintext = Vec::new();
     tls.read_to_end(&mut plaintext).unwrap();
     stdout().write_all(&plaintext).unwrap();
