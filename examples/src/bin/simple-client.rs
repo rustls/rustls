@@ -60,16 +60,14 @@ fn main() {
         .as_bytes(),
     )
     .unwrap();
+
     let ciphersuite = tls
         .conn
         .negotiated_cipher_suite()
         .unwrap();
-    writeln!(
-        &mut std::io::stderr(),
-        "Current ciphersuite: {:?}",
-        ciphersuite.suite()
-    )
-    .unwrap();
+
+    eprintln!("Current ciphersuite: {:?}", ciphersuite.suite());
+
     let mut plaintext = Vec::new();
     tls.read_to_end(&mut plaintext).unwrap();
     stdout().write_all(&plaintext).unwrap();
