@@ -15,7 +15,7 @@ use rustls::VecInput;
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 use rustls_util::Stream;
 
-fn main() {
+fn main() -> Result<(), Box<dyn core::error::Error>> {
     tracing_subscriber::fmt::init();
 
     let root_store = rustls::RootCertStore {
@@ -24,18 +24,14 @@ fn main() {
 
     let config = rustls::ClientConfig::builder(Arc::new(DEFAULT_PROVIDER))
         .with_root_certificates(root_store)
-        .with_no_client_auth()
-        .unwrap();
+        .with_no_client_auth()?;
 
-    let server_name = "pq.cloudflareresearch.com"
-        .try_into()
-        .unwrap();
+    let server_name = "pq.cloudflareresearch.com".try_into()?;
 
     let mut output = Vec::new();
     let mut conn = Arc::new(config)
         .connect(server_name)
-        .build(&mut output)
-        .unwrap();
+        .build(&mut output)?;
     let mut sock = TcpStream::connect("pq.cloudflareresearch.com:443").unwrap();
     let mut input = VecInput::default();
     let mut received_plaintext = Vec::new();
@@ -55,8 +51,7 @@ fn main() {
             "\r\n"
         )
         .as_bytes(),
-    )
-    .unwrap();
+    )?;
 
     let ciphersuite = tls
         .conn
@@ -71,6 +66,7 @@ fn main() {
     eprintln!("Current key exchange group: {kx_group:?}",);
 
     let mut plaintext = Vec::new();
-    tls.read_to_end(&mut plaintext).unwrap();
-    stdout().write_all(&plaintext).unwrap();
+    tls.read_to_end(&mut plaintext)?;
+    stdout().write_all(&plaintext)?;
+    Ok(())
 }
