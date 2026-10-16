@@ -72,6 +72,7 @@ pub(crate) fn config(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientCon
         .with_custom_certificate_verifier(Arc::new(DummyServerAuth::new(
             &opts.trusted_cert_file,
             opts.ocsp,
+            opts.enable_ocsp_stapling,
             opts.expected_server_names(),
             &provider,
         )));
@@ -154,6 +155,7 @@ pub(crate) fn config(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientCon
 struct DummyServerAuth {
     parent: Arc<dyn ServerVerifier>,
     ocsp: OcspValidation,
+    enable_ocsp_stapling: bool,
     expect_server_names: Vec<ServerName<'static>>,
     server_name_index: AtomicUsize,
 }
@@ -162,6 +164,7 @@ impl DummyServerAuth {
     fn new(
         trusted_cert_file: &str,
         ocsp: OcspValidation,
+        enable_ocsp_stapling: bool,
         expect_server_names: Vec<ServerName<'static>>,
         provider: &CryptoProvider,
     ) -> Self {
@@ -172,6 +175,7 @@ impl DummyServerAuth {
                     .unwrap(),
             ),
             ocsp,
+            enable_ocsp_stapling,
             expect_server_names,
             server_name_index: AtomicUsize::new(0),
         }
@@ -216,7 +220,7 @@ impl ServerVerifier for DummyServerAuth {
     }
 
     fn request_ocsp_response(&self) -> bool {
-        true
+        self.enable_ocsp_stapling
     }
 
     fn hash_config(&self, h: &mut dyn Hasher) {
