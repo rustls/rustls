@@ -1191,6 +1191,15 @@ fn do_exporter_test(
         .unwrap();
     assert_eq!(client_secret.to_vec(), server_secret.to_vec());
 
+    // RFC 5705 does not forbid an empty label, and neither does rustls.
+    client_exporter
+        .derive(b"", Some(b"context"), &mut client_secret)
+        .unwrap();
+    server_exporter
+        .derive(b"", Some(b"context"), &mut server_secret)
+        .unwrap();
+    assert_eq!(client_secret.to_vec(), server_secret.to_vec());
+
     (client_exporter, server_exporter)
 }
 
