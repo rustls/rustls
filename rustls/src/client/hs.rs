@@ -222,10 +222,20 @@ impl ExpectServerHello {
 
         let config = &self.input.config;
 
+        // TLS1.3 is selected with the `supported_versions` extension alone;
+        // a server doing so sets `legacy_version` to TLS1.2, and without the
+        // extension a ServerHello negotiates "TLS 1.2 or prior":
+        //
+        // > A client which receives a TLS 1.3 Server Hello with a
+        // > legacy_version value not equal to 0x0303 MUST abort the handshake
+        // > with a "protocol_version" alert.
+        // <https://www.rfc-editor.org/rfc/rfc9846#section-4.2.3>
         let server_version = if server_hello.legacy_version == ProtocolVersion::TLSv1_2 {
             server_hello
                 .selected_version
                 .unwrap_or(server_hello.legacy_version)
+        } else if server_hello.legacy_version == ProtocolVersion::TLSv1_3 {
+            return Err(PeerMisbehaved::SelectedTls13UsingLegacyVersionField.into());
         } else {
             server_hello.legacy_version
         };
@@ -333,6 +343,14 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // <https://www.rfc-editor.org/rfc/rfc9846#section-4.2.3>
         if hrr.session_id != self.next.input.session_id {
             return Err(PeerMisbehaved::IllegalHelloRetryRequestWithWrongSessionId.into());
+        }
+
+        // Or carries a `legacy_version` other than TLS1.2, which (given the
+        // shared meaning above) requires the same "protocol_version" abort as
+        // for a ServerHello.
+        // <https://www.rfc-editor.org/rfc/rfc9846#section-4.2.3>
+        if hrr.legacy_version != ProtocolVersion::TLSv1_2 {
+            return Err(PeerMisbehaved::IllegalHelloRetryRequestWithWrongLegacyVersion.into());
         }
 
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
