@@ -341,8 +341,19 @@ impl ExpectServerHelloOrHelloRetryRequest {
         };
         output.output(OutputEvent::ProtocolVersion(ProtocolVersion::TLSv1_3));
 
-        // Or asks us to use a ciphersuite we didn't offer.
-        let Some(cs) = config.find_cipher_suite(hrr.cipher_suite) else {
+        // Or asks us to use a ciphersuite we didn't offer, or one that isn't for TLS 1.3.
+        let Some(cs) = config
+            .find_cipher_suite(hrr.cipher_suite)
+            .filter(|cs| {
+                matches!(cs, SupportedCipherSuite::Tls13(_))
+                    && self
+                        .next
+                        .input
+                        .hello
+                        .offered_cipher_suites
+                        .contains(&hrr.cipher_suite)
+            })
+        else {
             return Err(PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedCipherSuite.into());
         };
 
