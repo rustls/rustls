@@ -69,12 +69,16 @@
 //!   * [`rustls-openssl`] - a provider that uses [OpenSSL] for cryptography.
 //!   * [`rustls-rustcrypto`] - an experimental provider that uses the crypto primitives
 //!     from [`RustCrypto`] for cryptography.
+//!   * [`rustls-scytale`] - a provider that uses [`scytale`] for cryptography:
+//!     pure Rust, post-quantum key exchange by default.
 //!   * [`rustls-symcrypt`] - a provider that uses Microsoft's [SymCrypt] library.
 //!   * [`rustls-wolfcrypt-provider`] - a work-in-progress provider that uses [`wolfCrypt`] for cryptography.
 //!
 //! [`rustls-ccm`]: https://github.com/jsulmont/rustls-ccm
 //! [`rustls-graviola`]: https://crates.io/crates/rustls-graviola
 //! [`graviola`]: https://github.com/ctz/graviola
+//! [`rustls-scytale`]: https://crates.io/crates/rustls-scytale
+//! [`scytale`]: https://github.com/user-serviceable-parts/scytale
 //! [`rustls-mbedtls-provider`]: https://github.com/fortanix/rustls-mbedtls-provider
 //! [`mbedtls`]: https://github.com/Mbed-TLS/mbedtls
 //! [`rustls-openssl`]: https://github.com/tofay/rustls-openssl
