@@ -90,7 +90,9 @@ pub trait PrfSecret: Send + Sync {
     ///
     /// `secret` is implicit in this object; see [`Prf::new_secret`].
     ///
-    /// The caller guarantees that `label` and `seed` are non-empty.
+    /// The caller guarantees that `seed` is non-empty. `label` may be
+    /// empty: the TLS 1.2 keying material exporter (RFC 5705) passes the
+    /// application's label through unchanged.
     fn prf(&self, output: &mut [u8], label: &[u8], seed: &[u8]);
 }
 
