@@ -1555,12 +1555,6 @@ pub(super) struct ExpectTraffic {
 
 impl ExpectTraffic {
     fn handle_new_ticket_impl(&self, nst: &NewSessionTicketPayloadTls13) -> Result<(), Error> {
-        let secret = self
-            .resumption
-            .derive_ticket_psk(nst.nonce.bytes());
-
-        let now = self.config.current_time()?;
-        let value = Tls13Session::new(nst, self.session_input.clone(), secret.as_ref(), now);
         if self.key_schedule_recv.is_quic() {
             if let Some(sz) = nst.extensions.max_early_data_size {
                 if sz != 0 && sz != 0xffff_ffff {
@@ -1569,6 +1563,18 @@ impl ExpectTraffic {
             }
         }
 
+        // RFC 9846 section 4.6.1: a zero `ticket_lifetime` means the ticket
+        // should be discarded immediately.
+        if nst.lifetime.is_zero() {
+            return Ok(());
+        }
+
+        let secret = self
+            .resumption
+            .derive_ticket_psk(nst.nonce.bytes());
+
+        let now = self.config.current_time()?;
+        let value = Tls13Session::new(nst, self.session_input.clone(), secret.as_ref(), now);
         self.session_storage
             .insert_tls13_ticket(self.session_key.clone(), value);
         Ok(())
