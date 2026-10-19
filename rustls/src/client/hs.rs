@@ -856,6 +856,13 @@ fn emit_client_hello_for_retry(
     // Note what extensions we sent.
     input.hello.sent_extensions = chp_payload.collect_used();
     input.hello.offered_cipher_suites = chp_payload.cipher_suites.clone();
+    input.hello.offered_key_shares = chp_payload
+        .key_shares
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .map(|share| share.group)
+        .collect();
 
     let mut chp = HandshakeMessagePayload(HandshakePayload::ClientHello(chp_payload));
 
