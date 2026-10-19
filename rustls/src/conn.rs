@@ -369,15 +369,15 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         /// Send or buffer as much of `payload` as possible.
         ///
         /// This updates the TLS 1.3 traffic keys as needed between records.
-        fn send_plaintext(&mut self, payload: OutboundChunks<'_>) -> usize {
+        fn send_plaintext(&mut self, payload: OutboundChunks<'_>) -> Result<usize, Error> {
             let mut len = 0;
             loop {
                 len += self
                     .core
                     .common_state
-                    .buffer_plaintext(payload.split_at(len).1, &mut self.sendable_plaintext);
+                    .buffer_plaintext(payload.split_at(len).1, &mut self.sendable_plaintext)?;
                 if !self.core.maybe_refresh_traffic_keys() || len == payload.len() {
-                    return len;
+                    return Ok(len);
                 }
             }
         }
@@ -386,7 +386,8 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
     impl<T> PlaintextSink for ConnectionCommon<T> {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             self.check_error()?;
-            Ok(self.send_plaintext(buf.into()))
+            self.send_plaintext(buf.into())
+                .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
         }
 
         fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
@@ -404,7 +405,8 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
                     OutboundChunks::new(&payload_owner)
                 }
             };
-            Ok(self.send_plaintext(payload))
+            self.send_plaintext(payload)
+                .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
         }
 
         fn flush(&mut self) -> io::Result<()> {
