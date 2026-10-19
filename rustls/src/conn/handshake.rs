@@ -179,6 +179,10 @@ impl<T: Transport> fmt::Debug for Accepted<T> {
 ///   verify that outside the library (perhaps asynchronously), and then continue the handshake with
 ///   [`Self::continue_with()`].
 ///
+///   Sessions established this way are stored for resumption exactly as if the configured verifier
+///   had been used.  The external verification must therefore be equivalent to the configured verifier.
+///   If it applies a different policy, use a separate config with separate resumption storage.
+///
 ///   If the verification fails, the error can be passed into [`Self::continue_with()`] to follow
 ///   a uniform error handling path.
 ///
@@ -222,6 +226,8 @@ impl<Side: SideData> VerifyPeerIdentity<Side, Tcp> {
     ///
     /// Further data to send to the peer may be appended to `tls`.
     ///
+    /// See [`VerifyPeerIdentity`] for important requirements related to resumption safety.
+    ///
     /// If `verification_result` is an error, this error is returned and the handshake terminates.
     /// An alert may be appended to `tls` for sending to the peer.
     pub fn continue_with(
@@ -244,6 +250,8 @@ impl<Side: SideData> VerifyPeerIdentity<Side, Quic> {
     }
 
     /// Progress the handshake by incorporating the result of an external verification.
+    ///
+    /// See [`VerifyPeerIdentity`] for important requirements related to resumption safety.
     ///
     /// If `verification_result` is an error, this error is returned and the handshake terminates.
     ///
