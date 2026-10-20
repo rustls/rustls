@@ -11,7 +11,7 @@ use crate::conn::{ConnectionRandoms, Exporter};
 use crate::crypto::cipher::{AeadKey, RecordDecrypter, RecordEncrypter, Tls12AeadAlgorithm};
 use crate::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::crypto::tls12::PrfSecret;
-use crate::crypto::{self, SignatureScheme, hash};
+use crate::crypto::{self, CipherSuite, SignatureAlgorithm, SignatureScheme, hash};
 use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error, InvalidMessage};
 use crate::msgs::{Codec, HandshakeAlignedProof, KxDecode, Reader};
@@ -102,6 +102,37 @@ impl Suite for Tls12CipherSuite {
         matches!(proto, Protocol::Tcp)
     }
 
+    fn filter_signature_schemes(
+        schemes: &[SignatureScheme],
+        client: &[CipherSuite],
+        server: &[&'static Self],
+    ) -> Vec<SignatureScheme> {
+        let mut client_sig_algs = SignatureAlgorithmSet::default();
+
+        for suite in server {
+            if !client.contains(&suite.suite()) {
+                continue;
+            }
+
+            for scheme in suite.sign {
+                let Some(algorithm) = scheme.algorithm() else {
+                    continue;
+                };
+                client_sig_algs.insert(algorithm);
+            }
+        }
+
+        schemes
+            .iter()
+            .copied()
+            .filter(|scheme| {
+                scheme
+                    .algorithm()
+                    .is_some_and(|alg| client_sig_algs.contains(alg))
+            })
+            .collect()
+    }
+
     /// Say if the given `KeyExchangeAlgorithm` is supported by this cipher suite.
     fn usable_for_kx_algorithm(&self, kxa: KeyExchangeAlgorithm) -> bool {
         self.kx == kxa
@@ -142,6 +173,28 @@ impl fmt::Debug for Tls12CipherSuite {
         f.debug_struct("Tls12CipherSuite")
             .field("suite", &self.common.suite)
             .finish_non_exhaustive()
+    }
+}
+
+/// A compact set of [`SignatureAlgorithm`]s.
+///
+/// `SignatureScheme::algorithm()` only ever yields the handful of algorithms
+/// defined in [`SignatureAlgorithm`] (all with discriminants below 16), so a
+/// single word bitset suffices.
+#[derive(Clone, Copy, Default)]
+struct SignatureAlgorithmSet(u16);
+
+impl SignatureAlgorithmSet {
+    fn insert(&mut self, alg: SignatureAlgorithm) {
+        self.0 |= Self::bit(alg);
+    }
+
+    fn contains(&self, alg: SignatureAlgorithm) -> bool {
+        self.0 & Self::bit(alg) != 0
+    }
+
+    fn bit(alg: SignatureAlgorithm) -> u16 {
+        1 << (u8::from(alg) & 0xf)
     }
 }
 
