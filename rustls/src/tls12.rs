@@ -15,7 +15,10 @@ use crate::crypto::{self, SignatureScheme, hash};
 use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error, InvalidMessage};
 use crate::msgs::{Codec, HandshakeAlignedProof, KxDecode, Reader};
-use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, Suite, SupportedCipherSuite};
+use crate::suites::{
+    CipherSuiteCommon, PartiallyExtractedSecrets, SignatureAlgorithmSet, Suite,
+    SupportedCipherSuite,
+};
 use crate::version::Tls12Version;
 
 /// A TLS 1.2 cipher suite supported by rustls.
@@ -116,6 +119,13 @@ impl Suite for Tls12CipherSuite {
         self.sign
             .iter()
             .any(|s| s.algorithm() == Some(alg))
+    }
+
+    fn signature_algorithms(&self) -> SignatureAlgorithmSet {
+        self.sign
+            .iter()
+            .filter_map(|scheme| scheme.algorithm())
+            .collect()
     }
 
     fn common(&self) -> &CipherSuiteCommon {
