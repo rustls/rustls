@@ -58,6 +58,7 @@ fn certificate_error_equality() {
     assert_eq!(Revoked, Revoked);
     assert_eq!(UnhandledCriticalExtension, UnhandledCriticalExtension);
     assert_eq!(UnknownIssuer, UnknownIssuer);
+    assert_eq!(IssuerKeyUsageMissingCertSign, IssuerKeyUsageMissingCertSign);
     assert_eq!(ExpiredRevocationList, ExpiredRevocationList);
     assert_eq!(UnknownRevocationStatus, UnknownRevocationStatus);
     let context = ExpiredRevocationListContext {
@@ -80,6 +81,10 @@ fn certificate_error_equality() {
         }
     );
     assert_eq!(BadSignature, BadSignature);
+    assert_eq!(
+        KeyUsageMissingDigitalSignature,
+        KeyUsageMissingDigitalSignature
+    );
     assert_eq!(
         UnsupportedSignatureAlgorithm {
             signature_algorithm_id: vec![1, 2, 3],
