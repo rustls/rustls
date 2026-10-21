@@ -5,7 +5,7 @@ use pki_types::FipsStatus;
 use crate::common_state::Protocol;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::kx::KeyExchangeAlgorithm;
-use crate::crypto::{CipherSuite, SignatureScheme, hash};
+use crate::crypto::{CipherSuite, SignatureAlgorithm, SignatureScheme, hash};
 use crate::enums::ProtocolVersion;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
@@ -113,6 +113,11 @@ pub(crate) trait Suite: fmt::Debug {
 
     fn usable_for_signature_scheme(&self, _scheme: SignatureScheme) -> bool;
 
+    /// The set of signature algorithms this suite can authenticate with.
+    fn signature_algorithms(&self) -> SignatureAlgorithmSet {
+        SignatureAlgorithmSet::default()
+    }
+
     fn usable_for_kx_algorithm(&self, _kxa: KeyExchangeAlgorithm) -> bool {
         true
     }
@@ -124,6 +129,42 @@ pub(crate) trait Suite: fmt::Debug {
     fn common(&self) -> &CipherSuiteCommon;
 
     const VERSION: ProtocolVersion;
+}
+
+/// A compact set of [`SignatureAlgorithm`]s.
+///
+/// `SignatureScheme::algorithm()` only ever yields the handful of algorithms
+/// defined in [`SignatureAlgorithm`] (all with discriminants below 16), so a
+/// single word bitset suffices.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct SignatureAlgorithmSet(u16);
+
+impl SignatureAlgorithmSet {
+    pub(crate) fn insert(&mut self, alg: SignatureAlgorithm) {
+        self.0 |= Self::bit(alg);
+    }
+
+    pub(crate) fn contains(&self, alg: SignatureAlgorithm) -> bool {
+        self.0 & Self::bit(alg) != 0
+    }
+
+    pub(crate) fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    fn bit(alg: SignatureAlgorithm) -> u16 {
+        1 << (u8::from(alg) & 0xf)
+    }
+}
+
+impl FromIterator<SignatureAlgorithm> for SignatureAlgorithmSet {
+    fn from_iter<I: IntoIterator<Item = SignatureAlgorithm>>(iter: I) -> Self {
+        let mut set = Self::default();
+        for alg in iter {
+            set.insert(alg);
+        }
+        set
+    }
 }
 
 /// Secrets for transmitting/receiving data over a TLS session.

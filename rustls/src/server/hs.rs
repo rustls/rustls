@@ -27,7 +27,7 @@ use crate::msgs::{
 };
 use crate::sealed::Sealed;
 use crate::server::ServerSide;
-use crate::suites::{PartiallyExtractedSecrets, Suite};
+use crate::suites::{PartiallyExtractedSecrets, SignatureAlgorithmSet, Suite};
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
@@ -609,16 +609,21 @@ impl ExpectClientHello {
 
         let mut sig_schemes = input.sig_schemes.to_owned();
         if T::VERSION == ProtocolVersion::TLSv1_2 {
-            let client_suites = suites.iter().filter(|&&scs| {
-                input
-                    .client_hello
-                    .cipher_suites
-                    .contains(&scs.suite())
-            });
+            let client_sig_algs = suites
+                .iter()
+                .filter(|&&scs| {
+                    input
+                        .client_hello
+                        .cipher_suites
+                        .contains(&scs.suite())
+                })
+                .fold(SignatureAlgorithmSet::default(), |acc, scs| {
+                    acc.union(scs.signature_algorithms())
+                });
             sig_schemes.retain(|scheme| {
-                client_suites
-                    .clone()
-                    .any(|&suite| suite.usable_for_signature_scheme(*scheme))
+                scheme
+                    .algorithm()
+                    .is_some_and(|alg| client_sig_algs.contains(alg))
             });
         } else if T::VERSION == ProtocolVersion::TLSv1_3 {
             sig_schemes.retain(SignatureScheme::supported_in_tls13);
