@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use pki_types::CertificateRevocationListDer;
 use webpki::{
-    CertRevocationList, ExpirationPolicy, ExtendedKeyUsage, RevocationCheckDepth,
+    CertRevocationList, ExpirationPolicy, ExtendedKeyUsage, PathBuilder, RevocationCheckDepth,
     UnknownStatusPolicy,
 };
 
@@ -313,7 +313,7 @@ impl WebPkiClientVerifier {
         Self {
             roots,
             root_hint_subjects,
-            eku_validator: ExtendedKeyUsage::client_auth(),
+            eku_validator: ExtendedKeyUsage::CLIENT_AUTH,
             crls,
             revocation_check_depth,
             unknown_revocation_policy,
@@ -353,18 +353,16 @@ impl ClientVerifier for WebPkiClientVerifier {
             )
         };
 
-        cert.0
-            .verify_for_usage(
-                self.supported_algs.all,
-                &self.roots.roots,
-                &certificates.intermediates,
-                identity.now,
-                &self.eku_validator,
-                revocation,
-                None,
-            )
-            .map_err(pki_error)
-            .map(|_| VerifiedIdentity::assertion(identity.identity.clone()))
+        PathBuilder::new(
+            &certificates.intermediates,
+            revocation,
+            &self.eku_validator,
+            self.supported_algs.all,
+            &self.roots.roots,
+        )
+        .build(&cert.0, identity.now)
+        .map_err(pki_error)
+        .map(|_| VerifiedIdentity::assertion(identity.identity.clone()))
     }
 
     fn verify_tls12_signature(

@@ -1,7 +1,7 @@
 use pki_types::{
     CertificateDer, ServerName, SignatureVerificationAlgorithm, SubjectPublicKeyInfoDer, UnixTime,
 };
-use webpki::ExtendedKeyUsage;
+use webpki::{ExtendedKeyUsage, PathBuilder};
 
 use super::anchors::RootCertStore;
 use super::pki_error;
@@ -186,15 +186,14 @@ pub(crate) fn verify_identity_signed_by_trust_anchor_impl(
     now: UnixTime,
     supported_algs: &[&dyn SignatureVerificationAlgorithm],
 ) -> Result<(), Error> {
-    let result = cert.0.verify_for_usage(
+    let result = PathBuilder::new(
+        intermediates,
+        revocation,
+        &ExtendedKeyUsage::SERVER_AUTH,
         supported_algs,
         &roots.roots,
-        intermediates,
-        now,
-        &ExtendedKeyUsage::server_auth(),
-        revocation,
-        None,
-    );
+    )
+    .build(&cert.0, now);
     match result {
         Ok(_) => Ok(()),
         Err(e) => Err(pki_error(e)),
