@@ -297,6 +297,14 @@ fn alert_display() {
 }
 
 #[test]
+fn unsolicited_cert_extension_alert() {
+    assert_eq!(
+        AlertDescription::from(super::PeerMisbehaved::UnsolicitedCertExtension),
+        AlertDescription::UnsupportedExtension
+    );
+}
+
+#[test]
 fn rand_error_mapping() {
     let err: Error = GetRandomFailed.into();
     assert_eq!(err, Error::FailedToGetRandomBytes);

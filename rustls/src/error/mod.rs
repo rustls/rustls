@@ -1261,6 +1261,7 @@ impl From<PeerMisbehaved> for AlertDescription {
             PeerMisbehaved::DisallowedEncryptedExtension
             | PeerMisbehaved::IllegalHelloRetryRequestWithInvalidEch
             | PeerMisbehaved::UnexpectedCleartextExtension
+            | PeerMisbehaved::UnsolicitedCertExtension
             | PeerMisbehaved::UnsolicitedEchExtension
             | PeerMisbehaved::UnsolicitedEncryptedExtension
             | PeerMisbehaved::UnsolicitedServerHelloExtension => Self::UnsupportedExtension,
