@@ -276,6 +276,9 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 transcript,
                 key_schedule,
                 kx_group: their_key_share.group,
+                sent_trust_anchors: hello
+                    .sent_extensions
+                    .contains(&ExtensionType::TrustAnchors),
             },
             resuming_session,
             suite,
@@ -531,6 +534,10 @@ impl State<ClientSide> for ExpectEncryptedExtensions {
         self.hs.transcript.add_message(&message);
 
         validate_encrypted_extensions(&self.hello, exts)?;
+
+        if let Some(trust_anchors) = &exts.trust_anchors {
+            output.emit(Event::ServerTrustAnchors(trust_anchors.clone()));
+        }
 
         let selected_alpn = exts
             .selected_protocol
@@ -1081,6 +1088,17 @@ impl ExpectCertificate {
             return Err(InvalidMessage::InvalidCertRequest.into());
         }
 
+        // draft-ietf-tls-trust-anchor-ids-06 section 5.1: an empty `trust_anchors` extension
+        // in the first entry acknowledges a match. It is not allowed anywhere else.
+        let mut acks = cert_chain
+            .entries
+            .iter()
+            .map(|entry| entry.extensions.trust_anchors.is_some());
+        let trust_anchor_matched = acks.next().unwrap_or_default();
+        if acks.any(|ack| ack) || (trust_anchor_matched && !self.hs.sent_trust_anchors) {
+            return Err(PeerMisbehaved::UnsolicitedCertExtension.into());
+        }
+
         let end_entity_ocsp = cert_chain.end_entity_ocsp().to_vec();
         let server_cert = ServerCertDetails::new(
             cert_chain
@@ -1094,6 +1112,7 @@ impl ExpectCertificate {
             suite: self.suite,
             quic_params: self.quic_params,
             server_cert,
+            trust_anchor_matched,
             client_auth: self.client_auth,
             ech: self.ech,
             expected_certificate_type: self.expected_certificate_type,
@@ -1124,6 +1143,7 @@ struct ExpectCertificateVerify {
     suite: Tls13ProtocolSuite,
     quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     server_cert: ServerCertDetails,
+    trust_anchor_matched: bool,
     client_auth: Option<ClientAuthDetails>,
     ech: Ech,
     expected_certificate_type: CertificateType,
@@ -1133,7 +1153,7 @@ impl State<ClientSide> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
-        _output: &mut dyn Output<'_>,
+        output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error> {
         let cert_verify = require_handshake_msg!(
             message,
@@ -1143,6 +1163,10 @@ impl State<ClientSide> for ExpectCertificateVerify {
         .clone();
 
         trace!("Server cert is {:?}", self.server_cert.cert_chain);
+
+        if self.trust_anchor_matched {
+            output.emit(Event::TrustAnchorMatched);
+        }
 
         // 1. Verify the certificate chain.
         let presented_identity = Identity::from_peer(
@@ -1535,6 +1559,7 @@ struct HandshakeState {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     kx_group: NamedGroup,
+    sent_trust_anchors: bool,
 }
 
 // -- Traffic transit state (TLS1.3) --

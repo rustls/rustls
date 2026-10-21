@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::cmp::Ordering;
 use core::fmt::Debug;
 use core::hash::Hasher;
 use core::ops::Deref;
@@ -99,6 +100,16 @@ pub trait ServerVerifier: Debug + Send + Sync {
     ///
     /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.4
     fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
+        None
+    }
+
+    /// Return the [`TrustAnchorId`]s this verifier wants the server to match.
+    ///
+    /// If specified (even if empty), will be sent as the [`trust_anchors`] extension in
+    /// ClientHello. Note that this is only applicable to TLS 1.3.
+    ///
+    /// [`trust_anchors`]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-trust-anchor-ids-06#section-5
+    fn requested_trust_anchors(&self) -> Option<Arc<[TrustAnchorId]>> {
         None
     }
 
@@ -400,6 +411,119 @@ impl TlsListElement for DistinguishedName {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
+/// A trust anchor ID, as defined in [draft-ietf-tls-trust-anchor-ids-06].
+///
+/// This is the binary representation: the contents octets of the DER encoding of
+/// a relative object identifier under `1.3.6.1.4.1`, between 1 and 32 bytes long.
+/// For example, `32473.1` is `[0x81, 0xfd, 0x59, 0x01]`.
+///
+/// [draft-ietf-tls-trust-anchor-ids-06]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-trust-anchor-ids-06#section-4
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TrustAnchorId(SizedPayload<'static, u8, NonEmpty>);
+
+impl TryFrom<Vec<u8>> for TrustAnchorId {
+    type Error = InvalidMessage;
+
+    /// Fails if `id` is empty or longer than 32 bytes.
+    fn try_from(id: Vec<u8>) -> Result<Self, Self::Error> {
+        match id.len() {
+            0 => Err(InvalidMessage::IllegalEmptyList("TrustAnchorId")),
+            1..=32 => Ok(Self(SizedPayload::from(id))),
+            _ => Err(InvalidMessage::MessageTooLarge),
+        }
+    }
+}
+
+impl AsRef<[u8]> for TrustAnchorId {
+    fn as_ref(&self) -> &[u8] {
+        self.0.bytes()
+    }
+}
+
+impl Codec<'_> for TrustAnchorId {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.0.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        Self::try_from(SizedPayload::<u8>::read(r)?.into_vec())
+    }
+}
+
+/// draft-ietf-tls-trust-anchor-ids-06: `TrustAnchorID RequestedTrustAnchorList<0..2^16-1>;`
+impl TlsListElement for TrustAnchorId {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
+
+/// A trust anchor ID pattern, as defined in [draft-ietf-tls-trust-anchor-ids-06].
+///
+/// It matches the IDs of a family of trust anchor groups.  This is the byte string
+/// representation: the `min` and `max` of each component, base-128 encoded, with an
+/// unbounded `max` encoded as `0x80`.  For example, `32473.{123-456}.{789-}` is
+/// `[0x81, 0xfd, 0x59, 0x81, 0xfd, 0x59, 0x7b, 0x83, 0x48, 0x86, 0x15, 0x80]`.
+///
+/// [draft-ietf-tls-trust-anchor-ids-06]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-trust-anchor-ids-06#section-5.3.1
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TrustAnchorPattern(Vec<u8>);
+
+impl TrustAnchorPattern {
+    /// Returns true if this pattern contains `id`.
+    ///
+    /// A malformed pattern contains no IDs.
+    pub fn contains(&self, id: &TrustAnchorId) -> bool {
+        let (mut id, mut pattern) = (id.as_ref(), &self.0[..]);
+        while !id.is_empty() {
+            let (Some(value), Some(min)) = (take_base128(&mut id), take_base128(&mut pattern))
+            else {
+                return false;
+            };
+            if compare_base128(value, min).is_lt() {
+                return false;
+            }
+
+            if let [0x80, rest @ ..] = pattern {
+                pattern = rest;
+                continue;
+            }
+
+            match take_base128(&mut pattern) {
+                Some(max) if compare_base128(max, value).is_ge() => {}
+                _ => return false,
+            }
+        }
+
+        pattern.is_empty()
+    }
+}
+
+impl From<Vec<u8>> for TrustAnchorPattern {
+    fn from(pattern: Vec<u8>) -> Self {
+        Self(pattern)
+    }
+}
+
+/// Removes one minimally-encoded base-128 integer from the front of `input`.
+fn take_base128<'a>(input: &mut &'a [u8]) -> Option<&'a [u8]> {
+    if input.first() == Some(&0x80) {
+        return None;
+    }
+
+    let len = input
+        .iter()
+        .position(|byte| byte & 0x80 == 0)?
+        + 1;
+    let (value, rest) = input.split_at(len);
+    *input = rest;
+    Some(value)
+}
+
+/// Compares minimally-encoded base-128 integers: by length, then bytewise.
+fn compare_base128(a: &[u8], b: &[u8]) -> Ordering {
+    a.len()
+        .cmp(&b.len())
+        .then_with(|| a.cmp(b))
+}
+
 /// Zero-sized marker type representing verification of a signature.
 #[derive(Debug)]
 pub struct HandshakeSignatureValid(());
@@ -482,4 +606,62 @@ fn assertions_are_debug() {
         format!("{:?}", FinishedMessageVerified::assertion()),
         "FinishedMessageVerified(())"
     );
+}
+
+#[test]
+fn trust_anchor_pattern_test_vectors() {
+    // draft-ietf-tls-trust-anchor-ids-06 appendix A
+    fn contains(pattern: &str, id: &str) -> bool {
+        let hex = |s: &str| {
+            (0..s.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+                .collect::<Vec<_>>()
+        };
+        TrustAnchorPattern::from(hex(pattern)).contains(&TrustAnchorId::try_from(hex(id)).unwrap())
+    }
+
+    let pattern = "81fd5981fd597b8348861580";
+    for id in [
+        "81fd597b8615",
+        "81fd59822c8704",
+        "81fd598348868d1f",
+        "81fd59834881ffffffffffffffff7f",
+        "81fd59834882808080808080808000",
+    ] {
+        assert!(contains(pattern, id), "{id}");
+    }
+    for id in [
+        "81fd597b",
+        "81fd597b861500",
+        "81fd5a7b8615",
+        "81fd5983748615",
+        "81fd597b853c",
+        "8081fd597b8615",
+        "81fd597b8695",
+    ] {
+        assert!(!contains(pattern, id), "{id}");
+    }
+
+    let pattern = "81fd5981fd598280808080808080800182808080808080808003";
+    for id in [
+        "81fd5982808080808080808001",
+        "81fd5982808080808080808002",
+        "81fd5982808080808080808003",
+    ] {
+        assert!(contains(pattern, id), "{id}");
+    }
+    for id in [
+        "81fd5902",
+        "81fd5982808080808080808000",
+        "81fd5982808080808080808004",
+    ] {
+        assert!(!contains(pattern, id), "{id}");
+    }
+
+    // appendix A.1: invalid patterns
+    for pattern in ["81fd59", "81fd", "81fd5981ffff"] {
+        assert!(!contains(pattern, "81fd59"), "{pattern}");
+    }
+    assert!(!contains("8042", "00"));
 }

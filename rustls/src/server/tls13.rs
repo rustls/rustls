@@ -73,7 +73,7 @@ mod client_hello {
         EarlyTrafficDecrypter, KeyScheduleEarlyServer, KeyScheduleHandshake,
         KeySchedulePreHandshake, ServerHandshakeSecrets, ServerTrafficSecrets,
     };
-    use crate::verify::DigitallySignedStruct;
+    use crate::verify::{DigitallySignedStruct, TrustAnchorId};
 
     pub(crate) static TLS13_HANDLER: &'static dyn ServerHandler<Tls13CipherSuite> = &Handler;
 
@@ -282,6 +282,11 @@ mod client_hello {
             ));
 
             let mut ocsp_response = signer.ocsp.as_deref();
+            let trust_anchor_matched = input
+                .client_hello
+                .trust_anchors
+                .as_deref()
+                .is_some_and(|requested| signer.matches_trust_anchors(requested));
             let mut flight = HandshakeFlightTls13::new(&mut transcript);
             let (
                 Tls13Extensions {
@@ -300,27 +305,23 @@ mod client_hello {
                 st.extra_exts,
                 &st.config,
                 st.send_tickets,
+                st.available_trust_anchors,
             )?;
 
             let doing_client_auth = if full_handshake {
                 let client_auth = emit_certificate_req_tls13(&mut flight, &st.config)?;
 
+                let mut payload =
+                    CertificatePayloadTls13::new(signer.identity.as_certificates(), ocsp_response);
+                // draft-ietf-tls-trust-anchor-ids-06 section 5.5
+                if let (true, Some(first)) = (trust_anchor_matched, payload.entries.first_mut()) {
+                    first.extensions.trust_anchors = Some(());
+                }
+
                 if let Some(compressor) = cert_compressor {
-                    emit_compressed_certificate_tls13(
-                        &mut flight,
-                        &st.config,
-                        &signer,
-                        ocsp_response,
-                        compressor,
-                    );
+                    emit_compressed_certificate_tls13(&mut flight, &st.config, payload, compressor);
                 } else {
-                    emit_certificate_tls13(
-                        &mut flight,
-                        CertificatePayloadTls13::new(
-                            signer.identity.as_certificates(),
-                            ocsp_response,
-                        ),
-                    );
+                    emit_certificate_tls13(&mut flight, payload);
                 }
                 emit_certificate_verify_tls13(&mut flight, signer.signer)?;
                 client_auth
@@ -755,6 +756,7 @@ mod client_hello {
         extra_exts: ServerExtensionsInput,
         config: &ServerConfig,
         send_tickets: usize,
+        available_trust_anchors: Vec<TrustAnchorId>,
     ) -> Result<(Tls13Extensions, EarlyDataDecision), Error> {
         let (out, mut extensions) = Tls13Extensions::new(
             extra_exts,
@@ -782,6 +784,10 @@ mod client_hello {
         );
         if let EarlyDataDecision::Accepted { .. } = early_data {
             extensions.early_data_ack = Some(());
+        }
+
+        if !available_trust_anchors.is_empty() {
+            extensions.trust_anchors = Some(available_trust_anchors);
         }
 
         let ee = HandshakeMessagePayload(HandshakePayload::EncryptedExtensions(extensions));
@@ -846,12 +852,9 @@ mod client_hello {
     fn emit_compressed_certificate_tls13(
         flight: &mut HandshakeFlightTls13<'_>,
         config: &ServerConfig,
-        signer: &SelectedCredential,
-        ocsp_response: Option<&[u8]>,
+        payload: CertificatePayloadTls13<'_>,
         cert_compressor: &'static dyn CertCompressor,
     ) {
-        let payload =
-            CertificatePayloadTls13::new(signer.identity.as_certificates(), ocsp_response);
         let Ok(entry) = config
             .cert_compression_cache
             .compression_for(cert_compressor, &payload)

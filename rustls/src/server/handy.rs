@@ -1,7 +1,12 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use crate::server::{ServerSessionKey, StoresServerSessions};
+use crate::crypto::{Credentials, SelectedCredential};
+use crate::error::Error;
+use crate::server::{
+    ClientHello, ServerCredentialResolver, ServerSessionKey, StoresServerSessions,
+};
+use crate::verify::TrustAnchorId;
 
 /// Something which never stores sessions.
 #[expect(clippy::exhaustive_structs)]
@@ -149,6 +154,64 @@ mod cache {
 }
 
 pub use cache::ServerSessionMemoryCache;
+
+/// Resolves to the first of an ordered list of credentials that matches the client's
+/// [`ClientHello::trust_anchors()`].
+///
+/// If none matches, it resolves to the first credential without
+/// [`Credentials::trust_anchor_negotiation`]. Credentials that cannot sign with any of the
+/// client's signature schemes are skipped. This implements certificate selection for
+/// [draft-ietf-tls-trust-anchor-ids-06 section 5.4], with the IDs of all usable credentials
+/// reported by [`ServerCredentialResolver::available_trust_anchors()`].
+///
+/// [draft-ietf-tls-trust-anchor-ids-06 section 5.4]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-trust-anchor-ids-06#section-5.4
+#[derive(Debug)]
+pub struct TrustAnchorResolver {
+    credentials: Vec<Credentials>,
+}
+
+impl TrustAnchorResolver {
+    /// Create a resolver for `credentials`, most preferred first.
+    pub fn new(credentials: Vec<Credentials>) -> Self {
+        Self { credentials }
+    }
+}
+
+impl ServerCredentialResolver for TrustAnchorResolver {
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error> {
+        let mut fallback = None;
+        for credentials in &self.credentials {
+            let Some(signer) = credentials.signer(client_hello.signature_schemes()) else {
+                continue;
+            };
+
+            if client_hello
+                .trust_anchors()
+                .is_some_and(|requested| signer.matches_trust_anchors(requested))
+            {
+                return Ok(signer);
+            }
+
+            if fallback.is_none() && !credentials.trust_anchor_negotiation {
+                fallback = Some(signer);
+            }
+        }
+
+        fallback.ok_or(Error::NoSuitableCertificate)
+    }
+
+    fn available_trust_anchors(&self, client_hello: &ClientHello<'_>) -> Vec<TrustAnchorId> {
+        self.credentials
+            .iter()
+            .filter(|credentials| {
+                credentials
+                    .signer(client_hello.signature_schemes())
+                    .is_some()
+            })
+            .filter_map(|credentials| credentials.trust_anchor_id.clone())
+            .collect()
+    }
+}
 
 #[cfg(feature = "webpki")]
 mod sni_resolver {

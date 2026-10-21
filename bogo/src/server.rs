@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use rustls::client::danger::HandshakeSignatureValid;
 use rustls::crypto::{
-    Credentials, CryptoProvider, SelectedCredential, SignatureScheme, SingleCredential,
+    Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme, SingleCredential,
     VerifiedIdentity,
 };
 use rustls::enums::ApplicationProtocol;
@@ -10,12 +10,12 @@ use rustls::error::PeerIncompatible;
 use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
 use rustls::server::{
     self, ClientHello, PreferClientOrder, PreferServerOrder, ServerSessionKey, Tls13Tickets,
-    WebPkiClientVerifier,
+    TrustAnchorResolver, WebPkiClientVerifier,
 };
-use rustls::{DistinguishedName, Error, ServerConfig};
+use rustls::{DistinguishedName, Error, ServerConfig, TrustAnchorId};
 
 use super::opts::Options;
-use super::{KeyLogMemo, load_root_certs};
+use super::{KeyLogMemo, load_root_certs, quit};
 use crate::compress::{CompressionAlgs, ExpandingAlgorithm, RandomAlgorithm, ShrinkingAlgorithm};
 use crate::lookup_scheme;
 
@@ -33,21 +33,22 @@ pub(crate) fn config(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerCon
             WebPkiClientVerifier::no_client_auth()
         };
 
-    assert!(
-        opts.credentials.additional.is_empty(),
-        "TODO: server certificate switching not implemented yet"
-    );
     let cred = &opts.credentials.default;
-    let mut credentials = cred.load_from_file(&provider);
-    credentials.ocsp = Some(opts.server_ocsp_response.clone());
+    let cert_resolver =
+        if !opts.credentials.additional.is_empty() || opts.available_trust_anchors.is_some() {
+            Arc::new(MultipleServerCredentialResolver::new(opts, &provider))
+        } else {
+            let mut credentials = cred.load_from_file(&provider);
+            credentials.ocsp = Some(opts.server_ocsp_response.clone());
 
-    let cert_resolver = match cred.use_signing_scheme {
-        Some(scheme) => Arc::new(FixedSignatureSchemeServerCertResolver {
-            credentials,
-            scheme: lookup_scheme(scheme),
-        }) as Arc<dyn server::ServerCredentialResolver>,
-        None => Arc::new(SingleCredential::from(credentials)),
-    };
+            match cred.use_signing_scheme {
+                Some(scheme) => Arc::new(FixedSignatureSchemeServerCertResolver {
+                    credentials,
+                    scheme: lookup_scheme(scheme),
+                }) as Arc<dyn server::ServerCredentialResolver>,
+                None => Arc::new(SingleCredential::from(credentials)),
+            }
+        };
 
     let mut cfg = ServerConfig::builder(Arc::new(provider))
         .with_client_cert_verifier(client_auth)
@@ -202,6 +203,87 @@ impl server::ServerCredentialResolver for FixedSignatureSchemeServerCertResolver
             .ok_or(Error::PeerIncompatible(
                 PeerIncompatible::NoSignatureSchemesInCommon,
             ))
+    }
+}
+
+/// Selects among several server credentials, in the order configured.
+#[derive(Debug)]
+struct MultipleServerCredentialResolver {
+    inner: TrustAnchorResolver,
+    /// Identities in `inner`'s order, with the default credential (if any) last.
+    identities: Vec<Arc<Identity<'static>>>,
+    has_default: bool,
+    all_must_match_issuer: bool,
+    expect_selected: Option<isize>,
+    available_trust_anchors: Option<Vec<TrustAnchorId>>,
+}
+
+impl MultipleServerCredentialResolver {
+    fn new(opts: &Options, provider: &CryptoProvider) -> Self {
+        let mut creds = opts.credentials.additional.clone();
+        let has_default = opts.credentials.default.configured();
+        if has_default {
+            creds.push(opts.credentials.default.clone());
+        }
+
+        let credentials = creds
+            .iter()
+            .map(|cred| {
+                assert!(
+                    cred.use_signing_scheme.is_none(),
+                    "TODO: -signing-prefs with multiple server credentials"
+                );
+                cred.load_from_file(provider)
+            })
+            .collect::<Vec<_>>();
+
+        Self {
+            identities: credentials
+                .iter()
+                .map(|c| c.identity.clone())
+                .collect(),
+            has_default,
+            all_must_match_issuer: creds
+                .iter()
+                .all(|cred| cred.must_match_issuer),
+            expect_selected: opts.credentials.expect_selected,
+            available_trust_anchors: opts.available_trust_anchors.clone(),
+            inner: TrustAnchorResolver::new(credentials),
+        }
+    }
+}
+
+impl server::ServerCredentialResolver for MultipleServerCredentialResolver {
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error> {
+        let selected = match self.inner.resolve(client_hello) {
+            Ok(selected) => selected,
+            Err(_) if self.all_must_match_issuer => quit(":NO_MATCHING_ISSUER:"),
+            Err(err) => return Err(err),
+        };
+
+        if let Some(expected) = self.expect_selected {
+            let index = self
+                .identities
+                .iter()
+                .position(|id| Arc::ptr_eq(id, &selected.identity))
+                .unwrap();
+            let index = match self.has_default && index == self.identities.len() - 1 {
+                true => -1,
+                false => index as isize,
+            };
+            assert_eq!(index, expected);
+        }
+
+        Ok(selected)
+    }
+
+    fn available_trust_anchors(&self, client_hello: &ClientHello<'_>) -> Vec<TrustAnchorId> {
+        match &self.available_trust_anchors {
+            Some(ids) => ids.clone(),
+            None => self
+                .inner
+                .available_trust_anchors(client_hello),
+        }
     }
 }
 

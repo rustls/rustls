@@ -29,7 +29,7 @@ pub use crate::conn::Accepted;
 pub(crate) mod handy;
 #[cfg(feature = "webpki")]
 pub use handy::ServerNameResolver;
-pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
+pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache, TrustAnchorResolver};
 
 mod hs;
 pub(crate) use hs::{ChooseConfig, ServerHandler, ServerState};

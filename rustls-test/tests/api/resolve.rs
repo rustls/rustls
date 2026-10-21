@@ -11,12 +11,15 @@ use rustls::client::{ClientCredentialResolver, CredentialRequest};
 use rustls::crypto::{CipherSuite, Credentials, Identity, SelectedCredential, SignatureScheme};
 use rustls::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use rustls::error::{CertificateError, Error, PeerMisbehaved};
-use rustls::server::{ClientHello, ServerCredentialResolver, ServerNameResolver};
+use rustls::server::{
+    ClientHello, ServerCredentialResolver, ServerNameResolver, TrustAnchorResolver,
+};
 use rustls::{
-    ClientConfig, Connection, DistinguishedName, ServerConfig, SupportedCipherSuite, VecInput,
+    ClientConfig, ClientSide, Connection, DistinguishedName, ServerConfig, SupportedCipherSuite,
+    Tcp, TrustAnchorId, TrustAnchorPattern, VecInput,
 };
 use rustls_test::{
-    ClientConfigExt, ErrorFromPeer, KeyType, MultiTest, ServerCheckCertResolve,
+    ClientConfigExt, ErrorFromPeer, KeyType, MockServerVerifier, MultiTest, ServerCheckCertResolve,
     certificate_error_expecting_name, do_handshake_until_error, make_client_config,
     make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
     make_server_config_with_client_verifier, make_server_config_with_mandatory_client_auth,
@@ -720,4 +723,187 @@ fn sni_resolver_rejects_bad_certs() {
             Credentials::new_unchecked(bad_chain, kt.load_key(&provider::DEFAULT_PROVIDER))
         )
     );
+}
+
+#[test]
+fn server_cert_resolve_with_trust_anchors() {
+    let provider = provider::DEFAULT_PROVIDER;
+    let client_config = ClientConfig::builder(provider.clone().into())
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(
+            MockServerVerifier::accepts_anything()
+                .with_requested_trust_anchors(vec![trust_anchor_id(&[1])]),
+        ))
+        .with_no_client_auth()
+        .unwrap();
+
+    let mut server_config = make_server_config(KeyType::default(), &provider);
+    server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+        expected_trust_anchors: Some(vec![trust_anchor_id(&[1])]),
+        ..Default::default()
+    });
+
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let err = do_handshake_until_error(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+    assert_eq!(
+        err.err(),
+        Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
+    );
+}
+
+#[test]
+fn trust_anchor_resolver_prefers_matching_credentials() {
+    // a negotiation-only path (like a landmark-relative certificate), then a fallback
+    let candidates = || {
+        vec![
+            credentials_with_trust_anchor(KeyType::EcdsaP384, Some(&[1]), true),
+            credentials_with_trust_anchor(KeyType::EcdsaP256, Some(&[2]), false),
+        ]
+    };
+    let available = [trust_anchor_id(&[1]), trust_anchor_id(&[2])];
+
+    for (requested, selected, matched) in [
+        (Some(vec![trust_anchor_id(&[1])]), KeyType::EcdsaP384, true),
+        (Some(vec![trust_anchor_id(&[2])]), KeyType::EcdsaP256, true),
+        (Some(vec![trust_anchor_id(&[3])]), KeyType::EcdsaP256, false),
+        (Some(vec![]), KeyType::EcdsaP256, false),
+        (None, KeyType::EcdsaP256, false),
+    ] {
+        let mut verifier = MockServerVerifier::accepts_anything();
+        if let Some(requested) = requested.clone() {
+            verifier = verifier.with_requested_trust_anchors(requested);
+        }
+
+        let (client, result) = trust_anchor_handshake(verifier, candidates());
+        assert_eq!(result, Ok(()), "{requested:?}");
+        assert_eq!(client.peer_identity().unwrap(), &*selected.identity());
+        assert_eq!(client.side().trust_anchor_matched(), matched);
+        assert_eq!(
+            client.side().server_trust_anchors(),
+            requested.map(|_| &available[..])
+        );
+    }
+}
+
+#[test]
+fn trust_anchor_resolver_matches_patterns() {
+    let mut landmark = credentials_with_trust_anchor(KeyType::EcdsaP384, None, true);
+    // 1.{5-10}
+    landmark.trust_anchor_patterns = vec![TrustAnchorPattern::from(vec![1, 1, 5, 10])];
+
+    let (client, result) = trust_anchor_handshake(
+        MockServerVerifier::accepts_anything()
+            .with_requested_trust_anchors(vec![trust_anchor_id(&[1, 7])]),
+        vec![
+            landmark,
+            credentials_with_trust_anchor(KeyType::EcdsaP256, None, false),
+        ],
+    );
+    assert_eq!(result, Ok(()));
+    assert_eq!(
+        client.peer_identity().unwrap(),
+        &*KeyType::EcdsaP384.identity()
+    );
+    assert!(client.side().trust_anchor_matched());
+    // neither candidate has an ID, so there is nothing to send
+    assert_eq!(client.side().server_trust_anchors(), None);
+}
+
+#[test]
+fn trust_anchor_resolver_requires_match_for_negotiation_only_credentials() {
+    let (_, result) = trust_anchor_handshake(
+        MockServerVerifier::accepts_anything()
+            .with_requested_trust_anchors(vec![trust_anchor_id(&[2])]),
+        vec![credentials_with_trust_anchor(
+            KeyType::EcdsaP256,
+            Some(&[1]),
+            true,
+        )],
+    );
+    assert_eq!(
+        result,
+        Err(ErrorFromPeer::Server(Error::NoSuitableCertificate))
+    );
+}
+
+#[test]
+fn client_keeps_server_trust_anchors_after_verification_failure() {
+    let (client, result) = trust_anchor_handshake(
+        MockServerVerifier::rejects_certificate(CertificateError::UnknownIssuer.into())
+            .with_requested_trust_anchors(vec![trust_anchor_id(&[2])]),
+        vec![
+            credentials_with_trust_anchor(KeyType::EcdsaP384, Some(&[1]), false),
+            credentials_with_trust_anchor(KeyType::EcdsaP256, Some(&[3]), false),
+        ],
+    );
+    assert_eq!(
+        result,
+        Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+            CertificateError::UnknownIssuer
+        )))
+    );
+    assert_eq!(
+        client.side().server_trust_anchors(),
+        Some(&[trust_anchor_id(&[1]), trust_anchor_id(&[3])][..])
+    );
+    assert!(!client.side().trust_anchor_matched());
+}
+
+fn trust_anchor_handshake(
+    verifier: MockServerVerifier,
+    credentials: Vec<Credentials>,
+) -> (Connection<ClientSide, Tcp>, Result<(), ErrorFromPeer>) {
+    let provider = provider::DEFAULT_PROVIDER;
+    let client_config = ClientConfig::builder(provider.clone().into())
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(verifier))
+        .with_no_client_auth()
+        .unwrap();
+
+    let mut server_config = make_server_config(KeyType::default(), &provider);
+    server_config.cert_resolver = Arc::new(TrustAnchorResolver::new(credentials));
+
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let result = do_handshake_until_error(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+    (client, result)
+}
+
+fn credentials_with_trust_anchor(
+    kt: KeyType,
+    trust_anchor: Option<&[u8]>,
+    negotiation_only: bool,
+) -> Credentials {
+    let mut credentials =
+        Credentials::new(kt.identity(), kt.load_key(&provider::DEFAULT_PROVIDER)).unwrap();
+    credentials.trust_anchor_id = trust_anchor.map(trust_anchor_id);
+    credentials.trust_anchor_negotiation = negotiation_only;
+    credentials
+}
+
+fn trust_anchor_id(id: &[u8]) -> TrustAnchorId {
+    TrustAnchorId::try_from(id.to_vec()).unwrap()
 }

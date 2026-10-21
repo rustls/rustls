@@ -17,7 +17,7 @@ use crate::msgs::{
 };
 use crate::quic::{self, QuicOutput};
 use crate::suites::SupportedCipherSuite;
-use crate::verify::VerifiedIdentity;
+use crate::verify::{TrustAnchorId, VerifiedIdentity};
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
@@ -318,6 +318,8 @@ pub(crate) enum Event {
     EchStatus(EchStatus),
     ReceivedServerName(Option<DnsName<'static>>),
     ResumptionData(Vec<u8>),
+    ServerTrustAnchors(Vec<TrustAnchorId>),
+    TrustAnchorMatched,
 }
 
 pub(crate) enum OutputEvent<'a> {

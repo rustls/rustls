@@ -6,7 +6,7 @@ use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{CryptoProvider, SignatureScheme};
 use rustls::enums::ProtocolVersion;
 use rustls::pki_types::{EchConfigListBytes, ServerName};
-use rustls::{DistinguishedName, HandshakeKind};
+use rustls::{DistinguishedName, HandshakeKind, TrustAnchorId, TrustAnchorPattern};
 
 use super::client::OcspValidation;
 use super::{
@@ -23,6 +23,7 @@ pub(crate) struct Options {
     pub(crate) enable_ech_grease: bool,
     pub(crate) expect_accept_early_data: bool,
     pub(crate) expect_curve_id: Option<NamedGroup>,
+    pub(crate) available_trust_anchors: Option<Vec<TrustAnchorId>>,
     pub(crate) expect_ech_accept: bool,
     pub(crate) expect_ech_name_override: Option<String>,
     pub(crate) expect_ech_retry_configs: Option<EchConfigListBytes<'static>>,
@@ -30,6 +31,8 @@ pub(crate) struct Options {
     pub(crate) expect_handshake_kind_resumed: Option<Vec<HandshakeKind>>,
     pub(crate) expect_no_ech_name_override: bool,
     pub(crate) expect_no_ech_retry_configs: bool,
+    pub(crate) expect_peer_available_trust_anchors: Option<Vec<TrustAnchorId>>,
+    pub(crate) expect_peer_match_trust_anchor: Option<bool>,
     pub(crate) expect_quic_transport_params: Vec<u8>,
     pub(crate) expect_reject_early_data: bool,
     pub(crate) expect_ticket_supports_early_data: bool,
@@ -66,6 +69,7 @@ pub(crate) struct Options {
     pub(crate) read_size: usize,
     pub(crate) reject_alpn: bool,
     pub(crate) reject_unusable_ech_config: bool,
+    pub(crate) requested_trust_anchors: Option<Vec<TrustAnchorId>>,
     pub(crate) repeat_initial_write_on_resume: usize,
     pub(crate) require_any_client_cert: bool,
     pub(crate) require_ems: bool,
@@ -112,6 +116,7 @@ impl Options {
             enable_ech_grease: false,
             expect_accept_early_data: false,
             expect_curve_id: None,
+            available_trust_anchors: None,
             expect_ech_accept: false,
             expect_ech_name_override: None,
             expect_ech_retry_configs: None,
@@ -119,6 +124,8 @@ impl Options {
             expect_handshake_kind_resumed: Some(vec![HandshakeKind::Resumed]),
             expect_no_ech_name_override: false,
             expect_no_ech_retry_configs: false,
+            expect_peer_available_trust_anchors: None,
+            expect_peer_match_trust_anchor: None,
             expect_quic_transport_params: vec![],
             expect_reject_early_data: false,
             expect_ticket_supports_early_data: false,
@@ -155,6 +162,7 @@ impl Options {
             read_size: 512,
             reject_alpn: false,
             reject_unusable_ech_config: false,
+            requested_trust_anchors: None,
             repeat_initial_write_on_resume: 1,
             require_any_client_cert: false,
             require_ems: false,
@@ -345,6 +353,24 @@ impl Options {
                 self.credentials
                     .last_mut()
                     .must_match_issuer = true;
+            }
+            "-cert-properties" => {
+                cert_properties(self.credentials.last_mut(), &args.remove(0));
+            }
+            "-requested-trust-anchors" => {
+                self.requested_trust_anchors = Some(trust_anchor_list(&args.remove(0)));
+            }
+            "-available-trust-anchors" => {
+                self.available_trust_anchors = Some(trust_anchor_list(&args.remove(0)));
+            }
+            "-expect-peer-available-trust-anchors" => {
+                self.expect_peer_available_trust_anchors = Some(trust_anchor_list(&args.remove(0)));
+            }
+            "-expect-peer-match-trust-anchor" => {
+                self.expect_peer_match_trust_anchor = Some(true);
+            }
+            "-expect-no-peer-match-trust-anchor" => {
+                self.expect_peer_match_trust_anchor = Some(false);
             }
             "-use-client-ca-list" => match args.remove(0).as_ref() {
                 "<EMPTY>" | "<NULL>" => {
@@ -776,6 +802,72 @@ fn split_protocols(protos: &str) -> Vec<String> {
     }
 
     ret
+}
+
+/// Parses a base64 `TrustAnchorID` list, without its length prefix.
+fn trust_anchor_list(b64: &str) -> Vec<TrustAnchorId> {
+    let bytes = BASE64_STANDARD
+        .decode(b64.as_bytes())
+        .expect("invalid base64");
+    let mut ids = Vec::new();
+    let mut rest = &bytes[..];
+    while let [len, tail @ ..] = rest {
+        let (id, tail) = tail.split_at(*len as usize);
+        ids.push(TrustAnchorId::try_from(id.to_vec()).unwrap());
+        rest = tail;
+    }
+    ids
+}
+
+/// Parses BoringSSL's `CertificatePropertyList`, which follows
+/// draft-ietf-tls-trust-anchor-ids-04 section 7: trust anchor groups are given as
+/// `base.{min-max}` ranges, rather than the later patterns.
+fn cert_properties(cred: &mut Credential, b64: &str) {
+    let bytes = BASE64_STANDARD
+        .decode(b64.as_bytes())
+        .expect("invalid base64");
+    let mut props = &bytes[2..];
+    while !props.is_empty() {
+        let typ = u16::from_be_bytes([props[0], props[1]]);
+        let len = u16::from_be_bytes([props[2], props[3]]) as usize;
+        let data = &props[4..4 + len];
+        props = &props[4 + len..];
+
+        match typ {
+            0 => cred.trust_anchor_id = Some(TrustAnchorId::try_from(data.to_vec()).unwrap()),
+            1 => {
+                let mut ranges = &data[2..];
+                while let [base_len, tail @ ..] = ranges {
+                    let (base, tail) = tail.split_at(*base_len as usize);
+                    let min = u64::from_be_bytes(tail[..8].try_into().unwrap());
+                    let max = u64::from_be_bytes(tail[8..16].try_into().unwrap());
+                    ranges = &tail[16..];
+
+                    // each component of `base` matches only itself
+                    let mut pattern = Vec::new();
+                    for component in base.split_inclusive(|byte| byte & 0x80 == 0) {
+                        pattern.extend_from_slice(component);
+                        pattern.extend_from_slice(component);
+                    }
+                    pattern.extend(base128(min));
+                    pattern.extend(base128(max));
+                    cred.trust_anchor_patterns
+                        .push(TrustAnchorPattern::from(pattern));
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn base128(mut value: u64) -> Vec<u8> {
+    let mut out = vec![value as u8 & 0x7f];
+    value >>= 7;
+    while value != 0 {
+        out.insert(0, value as u8 | 0x80);
+        value >>= 7;
+    }
+    out
 }
 
 fn decode_hex(hex: &str) -> Vec<u8> {

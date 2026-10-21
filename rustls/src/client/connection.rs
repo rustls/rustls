@@ -21,7 +21,7 @@ use crate::msgs::{ClientExtensionsInput, TransportParameters};
 use crate::quic::{self, Quic};
 use crate::sync::Arc;
 use crate::tracing::trace;
-use crate::verify::ServerIdentity;
+use crate::verify::{ServerIdentity, TrustAnchorId};
 
 impl Connection<ClientSide, Tcp> {
     /// Allows writing TLS1.3 0RTT/"early" data.
@@ -337,6 +337,8 @@ impl<T: Transport> Connection<ClientSide, T> {
 pub struct ClientSide {
     early_data: Option<EarlyData>,
     ech_status: EchStatus,
+    server_trust_anchors: Option<Vec<TrustAnchorId>>,
+    trust_anchor_matched: bool,
 }
 
 impl ClientSide {
@@ -359,6 +361,28 @@ impl ClientSide {
     pub fn ech_status(&self) -> EchStatus {
         self.ech_status
     }
+
+    /// Returns the trust anchor IDs the server has certification paths for, if it sent any.
+    ///
+    /// This is the server's `trust_anchors` extension in EncryptedExtensions, in the
+    /// server's preference order. It stays available if the handshake later fails, for
+    /// example because the server's certificate was not trusted. The application can then
+    /// retry on a new connection, requesting only one of these IDs that it trusts
+    /// ([draft-ietf-tls-trust-anchor-ids-06 section 5.6]).
+    ///
+    /// [draft-ietf-tls-trust-anchor-ids-06 section 5.6]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-trust-anchor-ids-06#section-5.6
+    pub fn server_trust_anchors(&self) -> Option<&[TrustAnchorId]> {
+        self.server_trust_anchors.as_deref()
+    }
+
+    /// Returns true if the server said its certificate matched a requested trust anchor ID.
+    ///
+    /// See [`ServerVerifier::requested_trust_anchors()`].
+    ///
+    /// [`ServerVerifier::requested_trust_anchors()`]: crate::client::danger::ServerVerifier::requested_trust_anchors
+    pub fn trust_anchor_matched(&self) -> bool {
+        self.trust_anchor_matched
+    }
 }
 
 impl SideData for ClientSide {
@@ -372,6 +396,8 @@ impl SideOutput for ClientSide {
     fn emit(&mut self, ev: Event) {
         match ev {
             Event::EchStatus(ech) => self.ech_status = ech,
+            Event::ServerTrustAnchors(ids) => self.server_trust_anchors = Some(ids),
+            Event::TrustAnchorMatched => self.trust_anchor_matched = true,
             Event::EarlyData(event) => match (event, &mut self.early_data) {
                 (EarlyDataEvent::Enable(sz), None) => self.early_data = Some(EarlyData::new(sz)),
                 (EarlyDataEvent::Start, Some(early_data)) => {
