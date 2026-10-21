@@ -18,7 +18,7 @@ use rustls::enums::{ApplicationProtocol, CertificateType};
 use rustls::error::{ApiMisuse, CertificateError, EncryptedClientHelloError};
 use rustls::pki_types::{ServerName, SubjectPublicKeyInfoDer};
 use rustls::server::danger::SignatureVerificationInput;
-use rustls::{ClientConfig, DistinguishedName, Error};
+use rustls::{ClientConfig, DistinguishedName, Error, TrustAnchorId};
 
 use super::compress::{CompressionAlgs, ExpandingAlgorithm, RandomAlgorithm, ShrinkingAlgorithm};
 use super::opts::Options;
@@ -73,6 +73,7 @@ pub(crate) fn config(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientCon
             &opts.trusted_cert_file,
             opts.ocsp,
             opts.expected_server_names(),
+            opts.requested_trust_anchors.clone(),
             &provider,
         )));
 
@@ -156,6 +157,7 @@ struct DummyServerAuth {
     ocsp: OcspValidation,
     expect_server_names: Vec<ServerName<'static>>,
     server_name_index: AtomicUsize,
+    requested_trust_anchors: Option<Arc<[TrustAnchorId]>>,
 }
 
 impl DummyServerAuth {
@@ -163,6 +165,7 @@ impl DummyServerAuth {
         trusted_cert_file: &str,
         ocsp: OcspValidation,
         expect_server_names: Vec<ServerName<'static>>,
+        requested_trust_anchors: Option<Vec<TrustAnchorId>>,
         provider: &CryptoProvider,
     ) -> Self {
         Self {
@@ -174,6 +177,7 @@ impl DummyServerAuth {
             ocsp,
             expect_server_names,
             server_name_index: AtomicUsize::new(0),
+            requested_trust_anchors: requested_trust_anchors.map(Arc::from),
         }
     }
 }
@@ -217,6 +221,10 @@ impl ServerVerifier for DummyServerAuth {
 
     fn request_ocsp_response(&self) -> bool {
         true
+    }
+
+    fn requested_trust_anchors(&self) -> Option<Arc<[TrustAnchorId]>> {
+        self.requested_trust_anchors.clone()
     }
 
     fn hash_config(&self, h: &mut dyn Hasher) {

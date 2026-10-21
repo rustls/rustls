@@ -31,7 +31,7 @@ use rustls::server::{
 use rustls::{
     ClientConfig, ClientSide, ConfigBuilder, Connection, ConnectionTrafficSecrets,
     DistinguishedName, MessageHandler, RootCertStore, ServerConfig, ServerSide, SideData,
-    SupportedCipherSuite, Tcp, VecInput, WantsVerifier,
+    SupportedCipherSuite, Tcp, TrustAnchorId, VecInput, WantsVerifier,
 };
 use tracing::{Event, Level, Metadata, field, span, subscriber};
 
@@ -1247,6 +1247,7 @@ pub struct MockServerVerifier {
     expected_ocsp_response: Option<Vec<u8>>,
     requires_raw_public_keys: bool,
     raw_public_key_algorithms: Option<WebPkiSupportedAlgorithms>,
+    requested_trust_anchors: Option<Arc<[TrustAnchorId]>>,
 }
 
 impl ServerVerifier for MockServerVerifier {
@@ -1307,6 +1308,10 @@ impl ServerVerifier for MockServerVerifier {
         }
     }
 
+    fn requested_trust_anchors(&self) -> Option<Arc<[TrustAnchorId]>> {
+        self.requested_trust_anchors.clone()
+    }
+
     fn hash_config(&self, _: &mut dyn Hasher) {}
 }
 
@@ -1360,6 +1365,11 @@ impl MockServerVerifier {
             ..Default::default()
         }
     }
+
+    pub fn with_requested_trust_anchors(mut self, ids: Vec<TrustAnchorId>) -> Self {
+        self.requested_trust_anchors = Some(Arc::from(ids));
+        self
+    }
 }
 
 impl Default for MockServerVerifier {
@@ -1379,6 +1389,7 @@ impl Default for MockServerVerifier {
             expected_ocsp_response: None,
             requires_raw_public_keys: false,
             raw_public_key_algorithms: None,
+            requested_trust_anchors: None,
         }
     }
 }
@@ -1694,6 +1705,7 @@ pub struct ServerCheckCertResolve {
     pub expected_server_cert_types: Option<Vec<CertificateType>>,
     pub expected_client_cert_types: Option<Vec<CertificateType>>,
     pub expected_named_groups: Option<Vec<NamedGroup>>,
+    pub expected_trust_anchors: Option<Vec<TrustAnchorId>>,
 }
 
 impl ServerCredentialResolver for ServerCheckCertResolve {
@@ -1770,6 +1782,15 @@ impl ServerCredentialResolver for ServerCheckCertResolve {
                 client_hello
                     .named_groups()
                     .expect("Named groups not present"),
+            )
+        }
+
+        if let Some(expected_trust_anchors) = &self.expected_trust_anchors {
+            assert_eq!(
+                expected_trust_anchors,
+                client_hello
+                    .trust_anchors()
+                    .expect("Trust anchors not present"),
             )
         }
 

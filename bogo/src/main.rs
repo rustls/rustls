@@ -30,7 +30,7 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use rustls::server::ServerConfig;
 use rustls::{
     ClientSide, Connection, HandshakeKind, IoState, RootCertStore, ServerSide, SideData, Tcp,
-    TlsInputBuffer, VecInput,
+    TlsInputBuffer, TrustAnchorId, TrustAnchorPattern, VecInput,
 };
 use rustls_aws_lc_rs::{
     ECDSA_P256_SHA256, ECDSA_P256_SHA384, ECDSA_P256_SHA512, ECDSA_P384_SHA256, ECDSA_P384_SHA384,
@@ -400,6 +400,24 @@ fn exec(
             }
         }
 
+        if opts.side == Side::Client && !sess.is_handshaking() {
+            let side = client(&mut sess).side();
+            if opts
+                .expect_peer_match_trust_anchor
+                .is_some_and(|expected| side.trust_anchor_matched() != expected)
+            {
+                quit_err("peer trust anchor match was not as expected");
+            }
+            if let Some(expected) = &opts.expect_peer_available_trust_anchors
+                && side
+                    .server_trust_anchors()
+                    .unwrap_or_default()
+                    != expected.as_slice()
+            {
+                quit_err("peer's available trust anchors were not as expected");
+            }
+        }
+
         if opts.shut_down_after_handshake && !sent_shutdown && !sess.is_handshaking() {
             sess.send_close_notify(&mut output)
                 .unwrap();
@@ -607,6 +625,8 @@ struct Credential {
     cert_file: String,
     use_signing_scheme: Option<u16>,
     must_match_issuer: bool,
+    trust_anchor_id: Option<TrustAnchorId>,
+    trust_anchor_patterns: Vec<TrustAnchorPattern>,
 }
 
 impl Credential {
@@ -616,12 +636,16 @@ impl Credential {
             .map(|cert| cert.unwrap())
             .collect::<Vec<_>>();
         let key = PrivateKeyDer::from_pem_file(&self.key_file).unwrap();
-        Credentials::from_der(
+        let mut credentials = Credentials::from_der(
             Arc::from(Identity::from_cert_chain(certs).unwrap()),
             key,
             provider,
         )
-        .unwrap()
+        .unwrap();
+        credentials.trust_anchor_id = self.trust_anchor_id.clone();
+        credentials.trust_anchor_patterns = self.trust_anchor_patterns.clone();
+        credentials.trust_anchor_negotiation = self.must_match_issuer;
+        credentials
     }
 
     fn configured(&self) -> bool {

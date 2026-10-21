@@ -18,6 +18,7 @@ use crate::msgs::{Codec, Reader};
 use crate::server::{ClientHello, ServerCredentialResolver};
 use crate::sync::Arc;
 pub use crate::verify::VerifiedIdentity;
+use crate::verify::{TrustAnchorId, TrustAnchorPattern};
 #[cfg(feature = "webpki")]
 use crate::webpki::ParsedCertificate;
 use crate::{DynHasher, SignerPublicKey, x509};
@@ -102,6 +103,24 @@ pub struct Credentials {
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
     pub ocsp: Option<Arc<[u8]>>,
+    /// The trust anchor ID of the trust anchor that issued `identity`, if known.
+    ///
+    /// Servers acknowledge a client's [`ClientHello::trust_anchors()`] that this, or one of
+    /// `trust_anchor_patterns`, matches ([draft-ietf-tls-trust-anchor-ids-06 section 5.3]).
+    ///
+    /// [draft-ietf-tls-trust-anchor-ids-06 section 5.3]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-trust-anchor-ids-06#section-5.3
+    pub trust_anchor_id: Option<TrustAnchorId>,
+    /// The IDs of trust anchor groups known to contain the trust anchor of `identity`.
+    pub trust_anchor_patterns: Vec<TrustAnchorPattern>,
+    /// Only use `identity` when it matches the client's [`ClientHello::trust_anchors()`].
+    ///
+    /// This is the `trust_anchor_negotiation` certificate property of
+    /// [draft-ietf-tls-trust-anchor-ids-06 section 7.3], honoured by
+    /// [`TrustAnchorResolver`].
+    ///
+    /// [draft-ietf-tls-trust-anchor-ids-06 section 7.3]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-trust-anchor-ids-06#section-7.3
+    /// [`TrustAnchorResolver`]: crate::server::TrustAnchorResolver
+    pub trust_anchor_negotiation: bool,
 }
 
 impl Credentials {
@@ -153,11 +172,7 @@ impl Credentials {
             _ => {}
         }
 
-        Ok(Self {
-            identity,
-            key,
-            ocsp: None,
-        })
+        Ok(Self::new_unchecked(identity, key))
     }
 
     /// Make a new `Credentials` without a consistency check.
@@ -172,17 +187,23 @@ impl Credentials {
             identity,
             key,
             ocsp: None,
+            trust_anchor_id: None,
+            trust_anchor_patterns: Vec::new(),
+            trust_anchor_negotiation: false,
         }
     }
 
     /// Attempt to produce a `SelectedCredential` using one of the given signature schemes.
     ///
-    /// Calls [`SigningKey::choose_scheme()`] and propagates `identity` and `ocsp`.
+    /// Calls [`SigningKey::choose_scheme()`] and propagates `identity`, `ocsp`,
+    /// `trust_anchor_id` and `trust_anchor_patterns`.
     pub fn signer(&self, sig_schemes: &[SignatureScheme]) -> Option<SelectedCredential> {
         Some(SelectedCredential {
             identity: self.identity.clone(),
             signer: self.key.choose_scheme(sig_schemes)?,
             ocsp: self.ocsp.clone(),
+            trust_anchor_id: self.trust_anchor_id.clone(),
+            trust_anchor_patterns: self.trust_anchor_patterns.clone(),
         })
     }
 }
@@ -208,6 +229,24 @@ pub struct SelectedCredential {
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
     pub ocsp: Option<Arc<[u8]>>,
+    /// See [`Credentials::trust_anchor_id`].
+    pub trust_anchor_id: Option<TrustAnchorId>,
+    /// See [`Credentials::trust_anchor_patterns`].
+    pub trust_anchor_patterns: Vec<TrustAnchorPattern>,
+}
+
+impl SelectedCredential {
+    /// Whether `identity` matches any of the `requested` trust anchor IDs
+    /// (draft-ietf-tls-trust-anchor-ids-06 section 5.3).
+    pub(crate) fn matches_trust_anchors(&self, requested: &[TrustAnchorId]) -> bool {
+        requested.iter().any(|id| {
+            self.trust_anchor_id.as_ref() == Some(id)
+                || self
+                    .trust_anchor_patterns
+                    .iter()
+                    .any(|pattern| pattern.contains(id))
+        })
+    }
 }
 
 /// A peer's identity, depending on the negotiated certificate type.

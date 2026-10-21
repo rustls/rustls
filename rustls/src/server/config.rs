@@ -24,7 +24,7 @@ use crate::msgs::{ClientHelloPayload, ClientTicketRequest, ServerNamePayload};
 use crate::suites::Suite;
 use crate::sync::Arc;
 use crate::time_provider::{DefaultTimeProvider, TimeProvider};
-use crate::verify::{ClientVerifier, DistinguishedName, NoClientAuth};
+use crate::verify::{ClientVerifier, DistinguishedName, NoClientAuth, TrustAnchorId};
 use crate::{KeyLog, NoKeyLog, Tls12CipherSuite, Tls13CipherSuite, compress};
 
 /// Common configuration for a set of server sessions.
@@ -421,6 +421,23 @@ pub trait ServerCredentialResolver: Debug + Send + Sync {
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         &[CertificateType::X509]
     }
+
+    /// Return the trust anchor IDs of every credential usable for `client_hello`, most
+    /// preferred first.
+    ///
+    /// This is called only for TLS 1.3 handshakes where the client sent
+    /// [`ClientHello::trust_anchors()`]. A non-empty result is sent to the client, which
+    /// can use it to retry on a new connection if it does not trust the selected
+    /// certificate ([draft-ietf-tls-trust-anchor-ids-06 section 5.6]). Candidates should
+    /// satisfy the client's requirements apart from `certificate_authorities` and
+    /// `trust_anchors`.
+    ///
+    /// The default implementation returns no IDs.
+    ///
+    /// [draft-ietf-tls-trust-anchor-ids-06 section 5.6]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-trust-anchor-ids-06#section-5.6
+    fn available_trust_anchors(&self, _client_hello: &ClientHello<'_>) -> Vec<TrustAnchorId> {
+        Vec::new()
+    }
 }
 
 /// A struct representing the received Client Hello
@@ -436,6 +453,7 @@ pub struct ClientHello<'a> {
     ///
     /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.4
     pub(super) certificate_authorities: Option<&'a [DistinguishedName]>,
+    pub(super) trust_anchors: Option<&'a [TrustAnchorId]>,
     pub(super) named_groups: Option<&'a [NamedGroup]>,
 }
 
@@ -450,6 +468,7 @@ impl<'a> ClientHello<'a> {
             client_cert_types: None,
             cipher_suites: &[],
             certificate_authorities: None,
+            trust_anchors: None,
             named_groups: None,
         }
     }
@@ -482,6 +501,11 @@ impl<'a> ClientHello<'a> {
                 _ => payload
                     .certificate_authority_names
                     .as_deref(),
+            },
+            // Likewise: draft-ietf-tls-trust-anchor-ids-06 is TLS 1.3 only
+            trust_anchors: match version {
+                Some(ProtocolVersion::TLSv1_2) => None,
+                _ => payload.trust_anchors.as_deref(),
             },
             named_groups: payload.named_groups.as_deref(),
         }
@@ -552,6 +576,15 @@ impl<'a> ClientHello<'a> {
     /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.4
     pub fn certificate_authorities(&self) -> Option<&'a [DistinguishedName]> {
         self.certificate_authorities
+    }
+
+    /// Get the [trust_anchors] extension sent by the client.
+    ///
+    /// Returns `None` if the client did not send this extension. The list may be empty.
+    ///
+    /// [trust_anchors]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-trust-anchor-ids-06#section-5
+    pub fn trust_anchors(&self) -> Option<&'a [TrustAnchorId]> {
+        self.trust_anchors
     }
 
     /// Get the [`named_groups`] extension sent by the client.

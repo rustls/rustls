@@ -33,6 +33,7 @@ use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::tracing::{debug, trace};
+use crate::verify::TrustAnchorId;
 
 pub(crate) enum ServerState {
     /// Reading an entire ClientHello
@@ -505,6 +506,7 @@ pub(crate) struct ExpectClientHello {
     pub(super) using_ems: bool,
     pub(super) previous_hello: Option<PreviousClientHello>,
     pub(super) send_tickets: usize,
+    pub(super) available_trust_anchors: Vec<TrustAnchorId>,
 }
 
 impl ExpectClientHello {
@@ -531,6 +533,7 @@ impl ExpectClientHello {
             using_ems: false,
             previous_hello: None,
             send_tickets: 0,
+            available_trust_anchors: Vec::new(),
         }
     }
 
@@ -625,15 +628,18 @@ impl ExpectClientHello {
         }
 
         // Choose a certificate.
-        let credentials = self
-            .config
-            .cert_resolver
-            .resolve(&ClientHello::new(
-                input.client_hello,
-                Some(&sig_schemes),
-                sni.as_ref().map(Cow::Borrowed),
-                Some(T::VERSION),
-            ))?;
+        let client_hello = ClientHello::new(
+            input.client_hello,
+            Some(&sig_schemes),
+            sni.as_ref().map(Cow::Borrowed),
+            Some(T::VERSION),
+        );
+        let resolver = &self.config.cert_resolver;
+        let credentials = resolver.resolve(&client_hello)?;
+        self.available_trust_anchors = match client_hello.trust_anchors {
+            Some(_) => resolver.available_trust_anchors(&client_hello),
+            None => Vec::new(),
+        };
         self.sni = sni;
 
         let (suite, skxg) = self.choose_suite_and_kx_group(
