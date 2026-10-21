@@ -6,7 +6,7 @@ of third-party cryptography providers available for Rustls.
 [README]: https://github.com/rustls/rustls#cryptography-providers
 
 These projects have not been evaluated by the Rustls maintainers, and no claim
-is made to their production worthyness or overall quality.
+is made to their production worthiness or overall quality.
 
 | Repository | Description |
 | -- | -- |
