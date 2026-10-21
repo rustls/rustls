@@ -60,6 +60,7 @@ fn pki_error(error: webpki::Error) -> Error {
         }
         InvalidCertValidity => CertificateError::Expired.into(),
         UnknownIssuer => CertificateError::UnknownIssuer.into(),
+        IssuerNotCertSigner => CertificateError::IssuerKeyUsageMissingCertSign.into(),
         CertNotValidForName(InvalidNameContext {
             expected,
             presented,
@@ -68,7 +69,7 @@ fn pki_error(error: webpki::Error) -> Error {
             presented,
         }
         .into(),
-        CertRevoked => CertificateError::Revoked.into(),
+        CertRevoked | CertDistrusted => CertificateError::Revoked.into(),
         UnknownRevocationStatus => CertificateError::UnknownRevocationStatus.into(),
         CrlExpired { time, next_update } => {
             CertificateError::ExpiredRevocationListContext { time, next_update }.into()
@@ -76,6 +77,7 @@ fn pki_error(error: webpki::Error) -> Error {
         IssuerNotCrlSigner => CertRevocationListError::IssuerInvalidForCrl.into(),
 
         InvalidSignatureForPublicKey => CertificateError::BadSignature.into(),
+        KeyUsageMissingDigitalSignature => CertificateError::KeyUsageMissingDigitalSignature.into(),
         UnsupportedSignatureAlgorithm(cx) => CertificateError::UnsupportedSignatureAlgorithm {
             signature_algorithm_id: cx.signature_algorithm_id,
             supported_algorithms: cx.supported_algorithms,
@@ -136,7 +138,7 @@ fn crl_error(e: webpki::Error) -> CertRevocationListError {
                 public_key_algorithm_id: cx.public_key_algorithm_id,
             }
         }
-        InvalidCrlNumber => CertRevocationListError::InvalidCrlNumber,
+        InvalidCrlNumber | MissingCrlNumber => CertRevocationListError::InvalidCrlNumber,
         InvalidSerialNumber => CertRevocationListError::InvalidRevokedCertSerialNumber,
         IssuerNotCrlSigner => CertRevocationListError::IssuerInvalidForCrl,
         MalformedExtensions | BadDer | BadDerTime => CertRevocationListError::ParseError,
@@ -164,6 +166,22 @@ mod tests {
     use alloc::vec;
 
     use super::*;
+
+    #[test]
+    fn pki_errors() {
+        assert_eq!(
+            pki_error(webpki::Error::CertDistrusted),
+            Error::InvalidCertificate(CertificateError::Revoked),
+        );
+        assert_eq!(
+            pki_error(webpki::Error::IssuerNotCertSigner),
+            Error::InvalidCertificate(CertificateError::IssuerKeyUsageMissingCertSign),
+        );
+        assert_eq!(
+            pki_error(webpki::Error::KeyUsageMissingDigitalSignature),
+            Error::InvalidCertificate(CertificateError::KeyUsageMissingDigitalSignature),
+        );
+    }
 
     #[test]
     fn pki_crl_errors() {
@@ -245,6 +263,7 @@ mod tests {
                 },
             ),
             (webpki::Error::InvalidCrlNumber, InvalidCrlNumber),
+            (webpki::Error::MissingCrlNumber, InvalidCrlNumber),
             (
                 webpki::Error::InvalidSerialNumber,
                 InvalidRevokedCertSerialNumber,

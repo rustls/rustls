@@ -385,6 +385,9 @@ pub enum CertificateError {
     /// The certificate chain is not issued by a known root certificate.
     UnknownIssuer,
 
+    /// The certificate's issuer lacks the `keyCertSign` keyUsage.
+    IssuerKeyUsageMissingCertSign,
+
     /// The certificate's revocation status could not be determined.
     UnknownRevocationStatus,
 
@@ -405,6 +408,9 @@ pub enum CertificateError {
     /// A certificate is not correctly signed by the key of its alleged
     /// issuer.
     BadSignature,
+
+    /// A certificate asked to verify a signature lacks the `digitalSignature` keyUsage.
+    KeyUsageMissingDigitalSignature,
 
     /// A signature inside a certificate or on a handshake was made with an unsupported algorithm.
     UnsupportedSignatureAlgorithm {
@@ -513,7 +519,9 @@ impl PartialEq<Self> for CertificateError {
             (Revoked, Revoked) => true,
             (UnhandledCriticalExtension, UnhandledCriticalExtension) => true,
             (UnknownIssuer, UnknownIssuer) => true,
+            (IssuerKeyUsageMissingCertSign, IssuerKeyUsageMissingCertSign) => true,
             (BadSignature, BadSignature) => true,
+            (KeyUsageMissingDigitalSignature, KeyUsageMissingDigitalSignature) => true,
             (
                 UnsupportedSignatureAlgorithm {
                     signature_algorithm_id: left_signature_algorithm_id,
@@ -602,6 +610,7 @@ impl From<&CertificateError> for AlertDescription {
             // OpenSSL, BoringSSL and AWS-LC all generate an Unknown CA alert for
             // the case where revocation status can not be determined, so we do the same here.
             UnknownIssuer
+            | IssuerKeyUsageMissingCertSign
             | UnknownRevocationStatus
             | ExpiredRevocationList
             | ExpiredRevocationListContext { .. } => Self::UnknownCa,
@@ -609,7 +618,9 @@ impl From<&CertificateError> for AlertDescription {
             BadSignature
             | UnsupportedSignatureAlgorithm { .. }
             | UnsupportedSignatureAlgorithmForPublicKey { .. } => Self::DecryptError,
-            InvalidPurpose | InvalidPurposeContext { .. } => Self::UnsupportedCertificate,
+            InvalidPurpose | InvalidPurposeContext { .. } | KeyUsageMissingDigitalSignature => {
+                Self::UnsupportedCertificate
+            }
             ApplicationVerificationFailure => Self::AccessDenied,
             // RFC 5246/RFC 9846
             // certificate_unknown
