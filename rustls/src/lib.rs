@@ -78,7 +78,7 @@
 //! on this topic.
 //!
 //! [Making a custom CryptoProvider]: https://docs.rs/rustls/latest/rustls/crypto/struct.CryptoProvider.html#making-a-custom-cryptoprovider
-//! [PROVIDERS.md]: ./PROVIDERS.md
+//! [PROVIDERS.md]: https://github.com/rustls/rustls/blob/main/PROVIDERS.md
 //!
 //! ## Design overview
 //!
