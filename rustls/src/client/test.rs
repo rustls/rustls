@@ -23,15 +23,15 @@ use crate::crypto::{
     TEST_PROVIDER, TLS13_TEST_SUITE, tls12_only, tls13_only, tls13_suite,
 };
 use crate::enums::{CertificateType, HandshakeType, ProtocolVersion};
-use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
+use crate::error::{CertificateError, Error, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::{
-    CertificateChain, ChangeCipherSpecPayload, ClientHelloPayload, Codec, Compression, ECCurveType,
-    EcParameters, EncryptedExtensions, ExtensionType, HandshakeMessagePayload, HandshakePayload,
-    HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, LengthPrefixedBuffer,
-    ListLength, MaybeEmpty, Message, MessagePayload, NewSessionTicketExtensions,
-    NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams, ServerExtensions,
-    ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
-    SessionId, SizedPayload,
+    CertificateChain, CertificatePayloadTls13, ChangeCipherSpecPayload, ClientHelloPayload, Codec,
+    Compression, ECCurveType, EcParameters, EncryptedExtensions, ExtensionType,
+    HandshakeMessagePayload, HandshakePayload, HelloRetryRequest, HelloRetryRequestExtensions,
+    KeyShareEntry, LengthPrefixedBuffer, ListLength, MaybeEmpty, Message, MessagePayload,
+    NewSessionTicketExtensions, NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams,
+    ServerExtensions, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams,
+    ServerKeyExchangePayload, SessionId, SizedPayload,
 };
 use crate::pki_types::PrivateKeyDer;
 use crate::pki_types::pem::PemObject;
@@ -45,7 +45,7 @@ use crate::verify::{
 };
 use crate::{
     ClientSide, Connection, DigitallySignedStruct, DistinguishedName, KeyLog, RootCertStore, Tcp,
-    VecInput,
+    TrustAnchorId, VecInput,
 };
 
 #[test]
@@ -735,6 +735,184 @@ fn client_requiring_rpk_receives_server_ee(
 }
 
 #[test]
+fn trust_anchors_extension_in_client_hello_if_server_verifier_requests_it() {
+    let verifier = ServerVerifierWithTrustAnchors(Some(Arc::from(vec![trust_anchor_id(1)])));
+
+    let tls12_provider = tls12_only(TEST_PROVIDER.clone());
+    let tls13_provider = tls13_only(TEST_PROVIDER.clone());
+    for (provider, expected) in [
+        (tls12_provider, None),
+        (tls13_provider, Some(vec![trust_anchor_id(1)])),
+    ] {
+        let client_hello = client_hello_sent_for_config(
+            ClientConfig::builder(provider.into())
+                .dangerous()
+                .with_custom_certificate_verifier(Arc::new(verifier.clone()))
+                .with_no_client_auth()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(client_hello.extensions.trust_anchors, expected);
+    }
+}
+
+#[test]
+fn test_client_keeps_server_trust_anchors_after_verification_failure() {
+    let available = vec![trust_anchor_id(1), trust_anchor_id(2)];
+    let (conn, result) = client_receives_tls13_server_flight(
+        Some(Arc::from(vec![trust_anchor_id(1)])),
+        EncryptedExtensions {
+            trust_anchors: Some(available.clone()),
+            ..EncryptedExtensions::default()
+        },
+        &[true, false],
+    );
+    assert_eq!(result, Err(CertificateError::UnknownIssuer.into()));
+    assert_eq!(conn.side().server_trust_anchors(), Some(&available[..]));
+    assert!(conn.side().trust_anchor_matched());
+}
+
+#[test]
+fn test_client_without_trust_anchor_ack() {
+    let (conn, result) = client_receives_tls13_server_flight(
+        Some(Arc::from(vec![trust_anchor_id(1)])),
+        EncryptedExtensions::default(),
+        &[false, false],
+    );
+    assert_eq!(result, Err(CertificateError::UnknownIssuer.into()));
+    assert_eq!(conn.side().server_trust_anchors(), None);
+    assert!(!conn.side().trust_anchor_matched());
+}
+
+#[test]
+fn test_client_rejects_unsolicited_trust_anchors() {
+    let (_, result) = client_receives_tls13_server_flight(
+        None,
+        EncryptedExtensions {
+            trust_anchors: Some(vec![trust_anchor_id(1)]),
+            ..EncryptedExtensions::default()
+        },
+        &[false],
+    );
+    assert_eq!(
+        result,
+        Err(PeerMisbehaved::UnsolicitedEncryptedExtension.into())
+    );
+
+    let (_, result) =
+        client_receives_tls13_server_flight(None, EncryptedExtensions::default(), &[true]);
+    assert_eq!(result, Err(PeerMisbehaved::UnsolicitedCertExtension.into()));
+}
+
+#[test]
+fn test_client_rejects_trust_anchor_ack_after_first_certificate() {
+    let (_, result) = client_receives_tls13_server_flight(
+        Some(Arc::from(vec![trust_anchor_id(1)])),
+        EncryptedExtensions::default(),
+        &[false, true],
+    );
+    assert_eq!(result, Err(PeerMisbehaved::UnsolicitedCertExtension.into()));
+}
+
+/// Feeds a TLS 1.3 ServerHello, `encrypted_extensions`, a Certificate whose entries carry
+/// a `trust_anchors` acknowledgement where `acks` says so, and a CertificateVerify, to a
+/// client requesting `requested` trust anchors.
+///
+/// The client's verifier rejects every certificate.
+fn client_receives_tls13_server_flight(
+    requested: Option<Arc<[TrustAnchorId]>>,
+    encrypted_extensions: EncryptedExtensions<'_>,
+    acks: &[bool],
+) -> (Connection<ClientSide, Tcp>, Result<(), Error>) {
+    let provider = Arc::new(tls13_only(TEST_PROVIDER.clone()));
+    let fake_server_crypto = Arc::new(FakeServerCrypto::new(provider.clone()));
+    let mut config = ClientConfig::builder(provider)
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(ServerVerifierWithTrustAnchors(requested)))
+        .with_no_client_auth()
+        .unwrap();
+    config.key_log = fake_server_crypto.clone();
+
+    let mut tls = Vec::new();
+    let mut conn = Arc::new(config)
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build(&mut tls)
+        .unwrap();
+
+    let sh = Message {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
+            ServerHelloPayload {
+                random: Random([0; 32]),
+                compression_method: Compression::Null,
+                cipher_suite: TLS13_TEST_SUITE.suite(),
+                legacy_version: ProtocolVersion::TLSv1_3,
+                session_id: client_hello_in(&tls).session_id,
+                extensions: Box::new(ServerExtensions {
+                    key_share: Some(KeyShareEntry {
+                        group: KEY_EXCHANGE_GROUP.name(),
+                        payload: KEY_EXCHANGE_GROUP
+                            .start()
+                            .unwrap()
+                            .pub_key()
+                            .to_vec()
+                            .into(),
+                    }),
+                    selected_version: Some(ProtocolVersion::TLSv1_3),
+                    ..ServerExtensions::default()
+                }),
+            },
+        ))),
+    };
+    let mut input = VecInput::default();
+    input
+        .read(&mut sh.into_wire_bytes().as_slice())
+        .unwrap();
+    process(&mut input, &mut conn).unwrap();
+
+    let mut certificate = CertificatePayloadTls13::new(
+        acks.iter()
+            .map(|_| CertificateDer::from(&b"does not matter"[..])),
+        None,
+    );
+    for (entry, ack) in certificate.entries.iter_mut().zip(acks) {
+        entry.extensions.trust_anchors = ack.then_some(());
+    }
+
+    let mut encrypter = fake_server_crypto.server_handshake_encrypter();
+    for (seq, payload) in [
+        HandshakePayload::EncryptedExtensions(Box::new(encrypted_extensions)),
+        HandshakePayload::CertificateTls13(certificate),
+        HandshakePayload::CertificateVerify(DigitallySignedStruct::new(
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+            b"does not matter".to_vec(),
+        )),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let msg = Record::<Payload<'_>>::from(Message {
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(payload)),
+        });
+        let mut encrypted = Vec::new();
+        encrypter
+            .encrypt(msg.borrow_outbound(), seq as u64, &mut encrypted)
+            .unwrap();
+        input
+            .read(&mut encrypted.as_slice())
+            .unwrap();
+    }
+
+    let result = process(&mut input, &mut conn);
+    (conn, result)
+}
+
+fn trust_anchor_id(byte: u8) -> TrustAnchorId {
+    TrustAnchorId::try_from(vec![byte]).unwrap()
+}
+
+#[test]
 fn test_client_rejects_recognized_misplaced_extension_in_tls13_server_hello() {
     // `supported_groups` and `signature_algorithms` are offered by the
     // client, but not specified for the ServerHello.
@@ -932,6 +1110,48 @@ impl ServerVerifier for ServerVerifierWithAuthorityNames {
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         vec![SignatureScheme::RSA_PKCS1_SHA1]
+    }
+
+    fn request_ocsp_response(&self) -> bool {
+        false
+    }
+
+    fn hash_config(&self, _: &mut dyn Hasher) {}
+}
+
+#[derive(Clone, Debug)]
+struct ServerVerifierWithTrustAnchors(Option<Arc<[TrustAnchorId]>>);
+
+impl ServerVerifier for ServerVerifierWithTrustAnchors {
+    fn requested_trust_anchors(&self) -> Option<Arc<[TrustAnchorId]>> {
+        self.0.clone()
+    }
+
+    fn verify_identity<'a>(
+        &self,
+        _identity: &ServerIdentity<'a, '_>,
+    ) -> Result<VerifiedIdentity<'a>, Error> {
+        Err(CertificateError::UnknownIssuer.into())
+    }
+
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn verify_tls12_signature(
+        &self,
+        _input: &SignatureVerificationInput<'_>,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        unreachable!()
+    }
+
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn verify_tls13_signature(
+        &self,
+        _input: &SignatureVerificationInput<'_>,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        unreachable!()
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        vec![SignatureScheme::ECDSA_NISTP256_SHA256]
     }
 
     fn request_ocsp_response(&self) -> bool {

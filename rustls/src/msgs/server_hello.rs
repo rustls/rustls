@@ -19,6 +19,7 @@ use crate::crypto::cipher::Payload;
 use crate::crypto::hpke::{HpkeKem, HpkeSymmetricCipherSuite};
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::InvalidMessage;
+use crate::verify::TrustAnchorId;
 
 #[derive(Clone, Debug)]
 pub(crate) struct ServerHelloPayload {
@@ -276,6 +277,10 @@ extension_struct! {
         /// Encrypted inner client hello response (RFC 9849)
         ExtensionType::EncryptedClientHello =>
             pub(crate) encrypted_client_hello_ack: Option<ServerEncryptedClientHello>,
+
+        /// Available trust anchor IDs (draft-ietf-tls-trust-anchor-ids-06)
+        ExtensionType::TrustAnchors =>
+            pub(crate) trust_anchors: Option<Vec<TrustAnchorId>>,
     } + {
         pub(crate) unknown_extensions: BTreeSet<u16>,
     }
@@ -292,6 +297,7 @@ impl EncryptedExtensions<'_> {
             early_data_ack,
             ticket_request,
             encrypted_client_hello_ack,
+            trust_anchors,
             unknown_extensions,
         } = self;
         EncryptedExtensions {
@@ -303,6 +309,7 @@ impl EncryptedExtensions<'_> {
             early_data_ack,
             ticket_request,
             encrypted_client_hello_ack,
+            trust_anchors,
             unknown_extensions,
         }
     }
@@ -352,6 +359,10 @@ impl<'a> Codec<'a> for EncryptedExtensions<'a> {
             out.read_one(&mut sub, |unknown| {
                 checker.check_unprocessed(unknown, Self::UNPROCESSED)
             })?;
+        }
+
+        if let Some([]) = out.trust_anchors.as_deref() {
+            return Err(InvalidMessage::IllegalEmptyList("AvailableTrustAnchorList"));
         }
 
         out.unknown_extensions = checker.into_btreeset();

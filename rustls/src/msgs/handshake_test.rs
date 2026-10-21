@@ -38,7 +38,7 @@ use crate::enums::{
 };
 use crate::error::InvalidMessage;
 use crate::sync::Arc;
-use crate::verify::{DigitallySignedStruct, DistinguishedName};
+use crate::verify::{DigitallySignedStruct, DistinguishedName, TrustAnchorId};
 
 #[test]
 fn rejects_short_random() {
@@ -217,6 +217,70 @@ fn refuses_certificate_ext_with_unknown_type() {
     assert_eq!(
         CertificateExtensions::read_bytes(&bytes).unwrap_err(),
         InvalidMessage::InvalidCertificateStatusType
+    );
+}
+
+#[test]
+fn trust_anchor_id_is_1_to_32_bytes() {
+    let id = TrustAnchorId::try_from(vec![0x81, 0xfd, 0x59, 0x01]).unwrap();
+    assert_eq!(id.get_encoding(), [4, 0x81, 0xfd, 0x59, 0x01]);
+    assert_eq!(
+        TrustAnchorId::read_bytes(&[4, 0x81, 0xfd, 0x59, 0x01]).unwrap(),
+        id
+    );
+    assert!(TrustAnchorId::try_from(vec![1; 32]).is_ok());
+
+    let empty = InvalidMessage::IllegalEmptyList("TrustAnchorId");
+    assert_eq!(TrustAnchorId::try_from(vec![]).unwrap_err(), empty);
+    assert_eq!(TrustAnchorId::read_bytes(&[0]).unwrap_err(), empty);
+
+    assert_eq!(
+        TrustAnchorId::try_from(vec![1; 33]).unwrap_err(),
+        InvalidMessage::MessageTooLarge
+    );
+    let mut too_long = vec![33];
+    too_long.extend([1; 33]);
+    assert_eq!(
+        TrustAnchorId::read_bytes(&too_long).unwrap_err(),
+        InvalidMessage::MessageTooLarge
+    );
+}
+
+#[test]
+fn trust_anchors_list_may_be_empty_only_in_client_hello() {
+    let empty_list = extension_list(ExtensionType::TrustAnchors, &[0, 0]);
+    assert_eq!(
+        ClientExtensions::read_bytes(&empty_list)
+            .unwrap()
+            .trust_anchors,
+        Some(vec![])
+    );
+    assert_eq!(
+        EncryptedExtensions::read_bytes(&empty_list).unwrap_err(),
+        InvalidMessage::IllegalEmptyList("AvailableTrustAnchorList")
+    );
+
+    let empty_id = extension_list(ExtensionType::TrustAnchors, &[0, 1, 0]);
+    let empty = InvalidMessage::IllegalEmptyList("TrustAnchorId");
+    assert_eq!(ClientExtensions::read_bytes(&empty_id).unwrap_err(), empty);
+    assert_eq!(
+        EncryptedExtensions::read_bytes(&empty_id).unwrap_err(),
+        empty
+    );
+}
+
+#[test]
+fn trust_anchors_ack_in_certificate_entry_is_empty() {
+    assert_eq!(
+        CertificateExtensions::read_bytes(&empty_extension_list(ExtensionType::TrustAnchors))
+            .unwrap()
+            .trust_anchors,
+        Some(())
+    );
+    assert_eq!(
+        CertificateExtensions::read_bytes(&extension_list(ExtensionType::TrustAnchors, &[0]))
+            .unwrap_err(),
+        InvalidMessage::TrailingData("Empty")
     );
 }
 
@@ -1176,6 +1240,7 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
             early_data_request: Some(()),
             certificate_compression_algorithms: Some(vec![CertificateCompressionAlgorithm::Brotli]),
             encrypted_client_hello: Some(EncryptedClientHello::Inner),
+            trust_anchors: Some(vec![TrustAnchorId::try_from(vec![1]).unwrap()]),
             ..Default::default()
         }),
     }
@@ -1327,6 +1392,7 @@ fn sample_certificate_payload_tls13() -> CertificatePayloadTls13<'static> {
                 status: Some(CertificateStatus {
                     ocsp_response: SizedPayload::from(Payload::new(vec![1, 2, 3])),
                 }),
+                trust_anchors: Some(()),
             },
         }],
     }
@@ -1418,6 +1484,7 @@ fn sample_encrypted_extensions() -> Box<EncryptedExtensions<'static>> {
         encrypted_client_hello_ack: Some(ServerEncryptedClientHello {
             retry_configs: vec![],
         }),
+        trust_anchors: Some(vec![TrustAnchorId::try_from(vec![1]).unwrap()]),
         unknown_extensions: Default::default(),
     })
 }

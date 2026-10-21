@@ -399,7 +399,7 @@ pub use crate::suites::{
 pub use crate::ticketer::TicketRotator;
 pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
-pub use crate::verify::{DigitallySignedStruct, DistinguishedName, SignerPublicKey};
+pub use crate::verify::{DigitallySignedStruct, DistinguishedName, SignerPublicKey, TrustAnchorId};
 pub use crate::versions::{ALL_VERSIONS, DEFAULT_VERSIONS, SupportedProtocolVersion};
 #[cfg(feature = "webpki")]
 pub use crate::webpki::RootCertStore;

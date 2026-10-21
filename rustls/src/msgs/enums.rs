@@ -78,6 +78,8 @@ enum_builder! {
         TicketRequest => 0x003a,
         NextProtocolNegotiation => 0x3374,
         ChannelId => 0x754f,
+        // TBD in draft-ietf-tls-trust-anchor-ids-06: this is BoringSSL's experimental value
+        TrustAnchors => 0xca34,
         RenegotiationInfo => 0xff01,
         EncryptedClientHello => 0xfe0d, // https://datatracker.ietf.org/doc/html/rfc9849#section-11.1
         EncryptedClientHelloOuterExtensions => 0xfd00, // https://datatracker.ietf.org/doc/html/rfc9849#section-5.1

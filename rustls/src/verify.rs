@@ -102,6 +102,16 @@ pub trait ServerVerifier: Debug + Send + Sync {
         None
     }
 
+    /// Return the [`TrustAnchorId`]s this verifier wants the server to match.
+    ///
+    /// If specified (even if empty), will be sent as the [`trust_anchors`] extension in
+    /// ClientHello. Note that this is only applicable to TLS 1.3.
+    ///
+    /// [`trust_anchors`]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-trust-anchor-ids-06#section-5
+    fn requested_trust_anchors(&self) -> Option<Arc<[TrustAnchorId]>> {
+        None
+    }
+
     /// Instance configuration should be input to `h`.
     fn hash_config(&self, h: &mut dyn Hasher);
 }
@@ -397,6 +407,50 @@ impl PartialEq for DistinguishedName {
 /// RFC 9846: `DistinguishedName authorities<3..2^16-1>;` however,
 /// RFC 5246: `DistinguishedName certificate_authorities<0..2^16-1>;`
 impl TlsListElement for DistinguishedName {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
+
+/// A trust anchor ID, as defined in [draft-ietf-tls-trust-anchor-ids-06].
+///
+/// This is the binary representation: the contents octets of the DER encoding of
+/// a relative object identifier under `1.3.6.1.4.1`, between 1 and 32 bytes long.
+/// For example, `32473.1` is `[0x81, 0xfd, 0x59, 0x01]`.
+///
+/// [draft-ietf-tls-trust-anchor-ids-06]: https://datatracker.ietf.org/doc/html/draft-ietf-tls-trust-anchor-ids-06#section-4
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TrustAnchorId(SizedPayload<'static, u8, NonEmpty>);
+
+impl TryFrom<Vec<u8>> for TrustAnchorId {
+    type Error = InvalidMessage;
+
+    /// Fails if `id` is empty or longer than 32 bytes.
+    fn try_from(id: Vec<u8>) -> Result<Self, Self::Error> {
+        match id.len() {
+            0 => Err(InvalidMessage::IllegalEmptyList("TrustAnchorId")),
+            1..=32 => Ok(Self(SizedPayload::from(id))),
+            _ => Err(InvalidMessage::MessageTooLarge),
+        }
+    }
+}
+
+impl AsRef<[u8]> for TrustAnchorId {
+    fn as_ref(&self) -> &[u8] {
+        self.0.bytes()
+    }
+}
+
+impl Codec<'_> for TrustAnchorId {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.0.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        Self::try_from(SizedPayload::<u8>::read(r)?.into_vec())
+    }
+}
+
+/// draft-ietf-tls-trust-anchor-ids-06: `TrustAnchorID RequestedTrustAnchorList<0..2^16-1>;`
+impl TlsListElement for TrustAnchorId {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 

@@ -612,6 +612,10 @@ extension_struct! {
     pub(crate) struct CertificateExtensions<'a> {
         ExtensionType::StatusRequest =>
             pub(crate) status: Option<CertificateStatus<'a>>,
+
+        /// Trust anchor match acknowledgement (draft-ietf-tls-trust-anchor-ids-06)
+        ExtensionType::TrustAnchors =>
+            pub(crate) trust_anchors: Option<()>,
     }
 }
 
@@ -619,6 +623,7 @@ impl CertificateExtensions<'_> {
     fn into_owned(self) -> CertificateExtensions<'static> {
         CertificateExtensions {
             status: self.status.map(|s| s.into_owned()),
+            trust_anchors: self.trust_anchors,
         }
     }
 }
@@ -1116,13 +1121,15 @@ impl CertificateRequestExtensions {
     /// CertificateRequest message.
     ///
     /// See RFC 9846 section 4.3 Table 1, plus `signed_certificate_timestamp` per
-    /// its IANA "TLS 1.3" registry entry (carried over from RFC 9846 section 4.3).
+    /// its IANA "TLS 1.3" registry entry (carried over from RFC 9846 section 4.3),
+    /// and `trust_anchors` (draft-ietf-tls-trust-anchor-ids-06 section 5.1).
     pub(super) const UNPROCESSED: &'static [ExtensionType] = &[
         ExtensionType::ServerName,
         ExtensionType::StatusRequest,
         ExtensionType::SCT,
         ExtensionType::OIDFilters,
         ExtensionType::SignatureAlgorithmsCert,
+        ExtensionType::TrustAnchors,
     ];
 }
 

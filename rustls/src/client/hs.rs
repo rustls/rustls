@@ -142,6 +142,10 @@ impl ExpectServerHello {
             .input
             .hello
             .server_sent_unsolicited_extensions(server_hello.received_types(), &allowed_unsolicited)
+            // `trust_anchors` is only ever answered in EncryptedExtensions
+            || server_hello
+                .received_types()
+                .any(|ext| ext == ExtensionType::TrustAnchors)
         {
             return Err(PeerMisbehaved::UnsolicitedServerHelloExtension.into());
         }
@@ -643,6 +647,13 @@ fn emit_client_hello_for_retry(
     if supported_versions.tls13 {
         if let Some(cas_extension) = config.verifier().root_hint_subjects() {
             exts.certificate_authority_names = Some(cas_extension.to_vec());
+        }
+
+        if let Some(trust_anchors) = config
+            .verifier()
+            .requested_trust_anchors()
+        {
+            exts.trust_anchors = Some(trust_anchors.to_vec());
         }
     }
 

@@ -26,7 +26,7 @@ use crate::enums::{
 use crate::error::InvalidMessage;
 use crate::msgs::enums::ServerNameType;
 use crate::tracing::warn;
-use crate::verify::DistinguishedName;
+use crate::verify::{DistinguishedName, TrustAnchorId};
 
 #[derive(Clone, Debug)]
 pub(crate) struct ClientHelloPayload {
@@ -211,6 +211,10 @@ extension_struct! {
         ExtensionType::CertificateAuthorities =>
             pub(crate) certificate_authority_names: Option<Vec<DistinguishedName>>,
 
+        /// Requested trust anchor IDs (draft-ietf-tls-trust-anchor-ids-06)
+        ExtensionType::TrustAnchors =>
+            pub(crate) trust_anchors: Option<Vec<TrustAnchorId>>,
+
         /// Offered key exchange shares (RFC 9846)
         ExtensionType::KeyShare =>
             pub(crate) key_shares: Option<Vec<KeyShareEntry>>,
@@ -263,6 +267,7 @@ impl ClientExtensions<'_> {
             cookie,
             preshared_key_modes,
             certificate_authority_names,
+            trust_anchors,
             key_shares,
             transport_parameters,
             ticket_request,
@@ -294,6 +299,7 @@ impl ClientExtensions<'_> {
             cookie: cookie.map(|x| x.into_owned()),
             preshared_key_modes,
             certificate_authority_names,
+            trust_anchors,
             key_shares,
             transport_parameters: transport_parameters.map(|x| x.into_owned()),
             ticket_request,
