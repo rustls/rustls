@@ -328,6 +328,12 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         /// as it can.  See [`ConnectionCommon::set_buffer_limit`] to control
         /// the size of this buffer.
         ///
+        /// For TLS 1.2, this also fails with [`Error::EncryptError`] if encrypting `buf` would
+        /// exceed the negotiated cipher suite's
+        /// [`confidentiality_limit`][crate::crypto::CipherSuiteCommon::confidentiality_limit].
+        /// In that case, none of `buf` is sent; a `close_notify` alert is queued for the next
+        /// [`Connection::write_tls`] call instead.
+        ///
         /// If the connection previously encountered a fatal error (for example, while
         /// processing received data in [`Connection::process_new_packets`]), this returns
         /// that error, even if `buf` is empty.
