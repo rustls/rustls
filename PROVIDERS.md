@@ -17,6 +17,7 @@ is made to their production worthiness or overall quality.
 | [`rustls-ccm`] | adds AES-CCM cipher suites (TLS 1.2 and 1.3) using [`RustCrypto`], for IoT/constrained-device protocols (IEEE 2030.5, Matter, RFC 7925). |
 | [`rustls-mbedtls-provider`] | a provider that uses [`mbedtls`] for cryptography. |
 | [`rustls-rustcrypto`] | an experimental provider that uses the crypto primitives from [`RustCrypto`] for cryptography. |
+| [`rustls-scytale`] | a provider that uses [`scytale`] for cryptography. |
 | [`rustls-wolfcrypt-provider`] | a work-in-progress provider that uses [`wolfCrypt`] for cryptography. |
 
 [`rustls-graviola`]: https://crates.io/crates/rustls-graviola
@@ -32,6 +33,8 @@ is made to their production worthiness or overall quality.
 [`boringssl`]: https://github.com/google/boringssl
 [`rustls-rustcrypto`]: https://github.com/RustCrypto/rustls-rustcrypto
 [`RustCrypto`]: https://github.com/RustCrypto
+[`rustls-scytale`]: https://crates.io/crates/rustls-scytale
+[`scytale`]: https://github.com/user-serviceable-parts/scytale
 [`rustls-wolfcrypt-provider`]: https://github.com/wolfSSL/rustls-wolfcrypt-provider
 [`wolfCrypt`]: https://www.wolfssl.com/products/wolfcrypt
 
