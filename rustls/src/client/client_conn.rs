@@ -819,15 +819,15 @@ mod connection {
         }
 
         fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
-            self.inner
+            let sz = self
+                .inner
                 .core
                 .data
                 .early_data
-                .check_write(data.len())
-                .map(|sz| {
-                    self.inner
-                        .send_early_plaintext(&data[..sz])
-                })
+                .check_write(data.len())?;
+            self.inner
+                .send_early_plaintext(&data[..sz])
+                .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
         }
     }
 

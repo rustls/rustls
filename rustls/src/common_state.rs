@@ -41,6 +41,9 @@ pub struct CommonState {
     pub(crate) may_receive_application_data: bool,
     pub(crate) early_traffic: bool,
     sent_fatal_alert: bool,
+    /// Error that closed the send path: set when a write cannot be encrypted
+    /// because the traffic keys are exhausted, so subsequent writes fail too.
+    write_error: Option<Error>,
     /// If we signaled end of stream.
     pub(crate) has_sent_close_notify: bool,
     /// If the peer has signaled end of stream.
@@ -78,6 +81,7 @@ impl CommonState {
             may_receive_application_data: false,
             early_traffic: false,
             sent_fatal_alert: false,
+            write_error: None,
             has_sent_close_notify: false,
             has_received_close_notify: false,
             #[cfg(feature = "std")]
@@ -354,7 +358,7 @@ impl CommonState {
         payload: OutboundChunks<'_>,
         limit: Limit,
         stop_for_key_update: bool,
-    ) -> usize {
+    ) -> Result<usize, Error> {
         // Here, the limit on sendable_tls applies to encrypted data,
         // but we're respecting it for plaintext data -- so we'll
         // be out by whatever the cipher+record overhead is.  That's a
@@ -379,7 +383,12 @@ impl CommonState {
         // that a write crossing the limit is not sent in part.
         if let Some(last) = (iter.len() as u64).checked_sub(1) {
             if !self.check_pre_encrypt_action(last) {
-                return len;
+                // RefreshOrClose records the reason in `write_error`; the Refuse
+                // action does not, and preserves the historical silent drop.
+                return match &self.write_error {
+                    Some(err) => Err(err.clone()),
+                    None => Ok(len),
+                };
             }
         }
 
@@ -394,14 +403,14 @@ impl CommonState {
             {
                 // driven by caller, as we don't have the `State` here
                 self.refresh_traffic_keys_pending = true;
-                return sent;
+                return Ok(sent);
             }
 
             sent += m.payload.len();
             self.send_single_fragment(m);
         }
 
-        len
+        Ok(len)
     }
 
     fn send_single_fragment(&mut self, m: OutboundPlainMessage<'_>) {
@@ -443,6 +452,7 @@ impl CommonState {
                         "traffic keys exhausted, closing connection to prevent security failure"
                     );
                     self.send_close_notify();
+                    self.write_error = Some(Error::EncryptError);
                     false
                 }
             },
@@ -458,13 +468,13 @@ impl CommonState {
         payload: OutboundChunks<'_>,
         limit: Limit,
         stop_for_key_update: bool,
-    ) -> usize {
+    ) -> Result<usize, Error> {
         debug_assert!(self.may_send_application_data);
         debug_assert!(self.record_layer.is_encrypting());
 
         if payload.is_empty() {
             // Don't send empty fragments.
-            return 0;
+            return Ok(0);
         }
 
         self.send_appdata_encrypt(payload, limit, stop_for_key_update)
@@ -499,7 +509,12 @@ impl CommonState {
         }
 
         while let Some(buf) = sendable_plaintext.pop() {
-            self.send_plain_non_buffering(buf.as_slice().into(), Limit::No, false);
+            if self
+                .send_plain_non_buffering(buf.as_slice().into(), Limit::No, false)
+                .is_err()
+            {
+                break;
+            }
         }
     }
 
@@ -809,18 +824,18 @@ impl CommonState {
         &mut self,
         payload: OutboundChunks<'_>,
         sendable_plaintext: &mut ChunkVecBuffer,
-    ) -> usize {
+    ) -> Result<usize, Error> {
         self.perhaps_write_key_update();
         self.send_plain(payload, Limit::Yes, sendable_plaintext)
     }
 
-    pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
+    pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> Result<usize, Error> {
         debug_assert!(self.early_traffic);
         debug_assert!(self.record_layer.is_encrypting());
 
         if data.is_empty() {
             // Don't send empty fragments.
-            return 0;
+            return Ok(0);
         }
 
         self.send_appdata_encrypt(data.into(), Limit::Yes, false)
@@ -836,7 +851,7 @@ impl CommonState {
         payload: OutboundChunks<'_>,
         limit: Limit,
         sendable_plaintext: &mut ChunkVecBuffer,
-    ) -> usize {
+    ) -> Result<usize, Error> {
         if !self.may_send_application_data {
             // If we haven't completed handshaking, buffer
             // plaintext to send once we do.
@@ -844,7 +859,7 @@ impl CommonState {
                 Limit::Yes => sendable_plaintext.append_limited_copy(payload),
                 Limit::No => sendable_plaintext.append(payload.to_vec()),
             };
-            return len;
+            return Ok(len);
         }
 
         self.send_plain_non_buffering(payload, limit, true)
