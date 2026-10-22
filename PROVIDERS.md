@@ -16,6 +16,7 @@ is made to their production worthiness or overall quality.
 | [`boring-rustls-provider`] | a work-in-progress provider that uses [`boringssl`] for cryptography. |
 | [`rustls-ccm`] | adds AES-CCM cipher suites (TLS 1.2 and 1.3) using [`RustCrypto`], for IoT/constrained-device protocols (IEEE 2030.5, Matter, RFC 7925). |
 | [`rustls-mbedtls-provider`] | a provider that uses [`mbedtls`] for cryptography. |
+| [`rustls-pure`] | a pure-Rust provider (no C or assembly) using [`RustCrypto`] primitives: TLS 1.3 only, ECDSA and Ed25519 certificates, tested against Wycheproof vectors. |
 | [`rustls-rustcrypto`] | an experimental provider that uses the crypto primitives from [`RustCrypto`] for cryptography. |
 | [`rustls-scytale`] | a provider that uses [`scytale`] for cryptography. |
 | [`rustls-wolfcrypt-provider`] | a work-in-progress provider that uses [`wolfCrypt`] for cryptography. |
@@ -31,6 +32,7 @@ is made to their production worthiness or overall quality.
 [`mbedtls`]: https://github.com/Mbed-TLS/mbedtls
 [`boring-rustls-provider`]: https://github.com/janrueth/boring-rustls-provider
 [`boringssl`]: https://github.com/google/boringssl
+[`rustls-pure`]: https://crates.io/crates/rustls-pure
 [`rustls-rustcrypto`]: https://github.com/RustCrypto/rustls-rustcrypto
 [`RustCrypto`]: https://github.com/RustCrypto
 [`rustls-scytale`]: https://crates.io/crates/rustls-scytale
