@@ -1699,6 +1699,11 @@ pub enum ApiMisuse {
     /// [`Connection::set_resumption_data()`]: crate::Connection::set_resumption_data()
     ResumptionDataProvidedTooLate,
 
+    /// [`Connection::set_resumption_data()`] is limited to 32KB of data.
+    ///
+    /// [`Connection::set_resumption_data()`]: crate::Connection::set_resumption_data()
+    ResumptionDataTooLarge,
+
     /// [`KernelConnection::update_tx_secret()`] and associated are not available for TLS1.2 connections.
     ///
     /// [`KernelConnection::update_tx_secret()`]: crate::conn::kernel::KernelConnection::update_tx_secret()
