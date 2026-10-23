@@ -1074,6 +1074,79 @@ fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
     assert_eq!(key_shares[0].group, NamedGroup(0xfe00));
 }
 
+#[test]
+fn hybrid_kx_component_not_offered_after_hrr_but_server_chooses_it() {
+    // The hybrid group is not the first preference, so the initial hello
+    // carries only the classical group's share.
+    let provider = CryptoProvider {
+        kx_groups: Cow::Owned(vec![FAKE_KX_GROUP, FAKE_HYBRID as _]),
+        ..HYBRID_PROVIDER
+    };
+    let config = ClientConfig::builder(provider.into())
+        .with_root_certificates(roots())
+        .with_no_client_auth()
+        .unwrap();
+    let mut tls = Vec::new();
+    let mut conn = Arc::new(config)
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build(&mut tls)
+        .unwrap();
+    let session_id = client_hello_in(&tls).session_id;
+
+    // The server asks for the hybrid group, so the retry hello offers only
+    // that share, and not the component the initial hello would have added.
+    let hrr = Message {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(
+            HandshakePayload::HelloRetryRequest(HelloRetryRequest {
+                cipher_suite: TLS13_TEST_SUITE.suite(),
+                legacy_version: ProtocolVersion::TLSv1_2,
+                session_id,
+                extensions: HelloRetryRequestExtensions {
+                    key_share: Some(FAKE_HYBRID.name()),
+                    supported_versions: Some(ProtocolVersion::TLSv1_3),
+                    ..HelloRetryRequestExtensions::default()
+                },
+            }),
+        )),
+    };
+    let mut input = VecInput::default();
+    input
+        .read(&mut hrr.into_wire_bytes().as_slice())
+        .unwrap();
+    process(&mut input, &mut conn).unwrap();
+
+    // The server then selects the component group, which the retry hello
+    // did not offer.
+    let sh = Message {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
+            ServerHelloPayload {
+                random: Random([0; 32]),
+                compression_method: Compression::Null,
+                cipher_suite: TLS13_TEST_SUITE.suite(),
+                legacy_version: ProtocolVersion::TLSv1_2,
+                session_id,
+                extensions: Box::new(ServerExtensions {
+                    key_share: Some(KeyShareEntry::new(
+                        FAKE_KX_GROUP.name(),
+                        KX_PEER_SHARE.to_vec(),
+                    )),
+                    selected_version: Some(ProtocolVersion::TLSv1_3),
+                    ..ServerExtensions::default()
+                }),
+            },
+        ))),
+    };
+    input
+        .read(&mut sh.into_wire_bytes().as_slice())
+        .unwrap();
+    assert_eq!(
+        process(&mut input, &mut conn).unwrap_err(),
+        PeerMisbehaved::WrongGroupForKeyShare.into()
+    );
+}
+
 fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPayload, Error> {
     let mut bytes = Vec::new();
     Arc::new(config)

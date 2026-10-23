@@ -125,6 +125,16 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             _ => None,
         };
 
+        // RFC 9846 section 4.3.8: the server's share must be "in the same group
+        // as one of the client's shares".  Checked against the shares actually
+        // sent, so a hybrid group's component only counts if it was offered.
+        if !hello
+            .offered_key_shares
+            .contains(&their_key_share.group)
+        {
+            return Err(PeerMisbehaved::WrongGroupForKeyShare.into());
+        }
+
         // We always send a key share when TLS 1.3 is enabled.
         let our_key_share = st.offered_key_share.unwrap();
         let our_key_share = KeyExchangeChoice::new(&config, output, our_key_share, their_key_share)

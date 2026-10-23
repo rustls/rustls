@@ -7,6 +7,7 @@ use pki_types::UnixTime;
 use zeroize::Zeroizing;
 
 use crate::crypto::cipher::Payload;
+use crate::crypto::kx::NamedGroup;
 use crate::crypto::{CipherSuite, CryptoProvider, Identity, SelectedCredential, SignatureScheme};
 use crate::enums::{ApplicationProtocol, CertificateType};
 use crate::error::{ApiMisuse, Error, InvalidMessage};
@@ -409,6 +410,7 @@ struct ClientHelloDetails {
     extension_order_seed: u16,
     offered_cert_compression: bool,
     offered_cipher_suites: Vec<CipherSuite>,
+    offered_key_shares: Vec<NamedGroup>,
 }
 
 impl ClientHelloDetails {
@@ -419,6 +421,7 @@ impl ClientHelloDetails {
             extension_order_seed,
             offered_cert_compression: false,
             offered_cipher_suites: Vec::new(),
+            offered_key_shares: Vec::new(),
         }
     }
 
