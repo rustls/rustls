@@ -238,8 +238,12 @@ impl<Side: SideData> NeedsInput<Side> {
             .deframer
             .input_quic(input.slice_mut())?;
 
-        self.0.process(input, &mut Vec::new())?;
-        Side::QuicHandshake::from_conn(self.0, output)
+        Side::QuicHandshake::from_conn(
+            self.0
+                .process(input, &mut Vec::new())?
+                .into_progress()?,
+            output,
+        )
     }
 
     /// Returns data learned during the connection, specific to this side.
