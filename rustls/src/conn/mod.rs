@@ -316,7 +316,9 @@ impl<T: Transport> Connection<ServerSide, T> {
     /// Integrity will be assured by rustls, but the data will be visible to the client. If secrecy
     /// from the client is desired, encrypt the data separately.
     pub fn set_resumption_data(&mut self, data: &[u8]) -> Result<(), Error> {
-        assert!(data.len() < 2usize.pow(15));
+        if data.len() >= (1 << 15) {
+            return Err(ApiMisuse::ResumptionDataTooLarge.into());
+        }
         match &mut self.state {
             Ok(st) => st.set_resumption_data(data),
             Err(e) => Err(e.clone()),

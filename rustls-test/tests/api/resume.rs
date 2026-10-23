@@ -153,6 +153,12 @@ fn resumption_combinations() {
         let mut server_output = Vec::new();
         let (mut client, mut server) =
             make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+        assert_eq!(
+            server
+                .set_resumption_data(&[0u8; 0x8000])
+                .err(),
+            Some(ApiMisuse::ResumptionDataTooLarge.into())
+        );
         server
             .set_resumption_data(resumption_data.as_bytes())
             .unwrap();
