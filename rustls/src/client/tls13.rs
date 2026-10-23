@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::mem;
+use core::time::Duration;
 
 use subtle::ConstantTimeEq;
 
@@ -1555,6 +1556,13 @@ pub(super) struct ExpectTraffic {
 
 impl ExpectTraffic {
     fn handle_new_ticket_impl(&self, nst: &NewSessionTicketPayloadTls13) -> Result<(), Error> {
+        // RFC 8446 section 4.6.1: a zero lifetime means the ticket
+        // should be discarded immediately.
+        if nst.lifetime == Duration::ZERO {
+            debug!("Ticket not saved: server sent zero lifetime");
+            return Ok(());
+        }
+
         let secret = self
             .resumption
             .derive_ticket_psk(nst.nonce.bytes());
