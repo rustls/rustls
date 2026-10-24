@@ -119,6 +119,18 @@ impl ExtensionType {
     pub(crate) fn is_recognized(&self) -> bool {
         ExtensionTypeName::try_from(*self).is_ok()
     }
+
+    /// Extensions specified only for TLS 1.3 that we may offer alongside TLS 1.2.
+    ///
+    /// `supported_versions` is checked separately.
+    pub(crate) const TLS13_ONLY: &'static [Self] = &[
+        Self::PreSharedKey,
+        Self::EarlyData,
+        Self::Cookie,
+        Self::PSKKeyExchangeModes,
+        Self::CertificateAuthorities,
+        Self::KeyShare,
+    ];
 }
 
 enum_builder! {
