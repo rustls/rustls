@@ -1,6 +1,8 @@
 //! The library's source of time.
 
+use core::any::Any;
 use core::fmt::Debug;
+use core::hash::Hasher;
 
 use pki_types::UnixTime;
 
@@ -8,13 +10,16 @@ use pki_types::UnixTime;
 ///
 /// This is used to, for example, check if a certificate has expired during
 /// certificate validation, or to check the age of a ticket.
-pub trait TimeProvider: Debug + Send + Sync {
+pub trait TimeProvider: Debug + Send + Sync + Any {
     /// Returns the current wall time.
     ///
     /// This is not required to be monotonic.
     ///
     /// Return `None` if unable to retrieve the time.
     fn current_time(&self) -> Option<UnixTime>;
+
+    /// Instance configuration should be input to `h`.
+    fn hash_config(&self, _: &mut dyn Hasher) {}
 }
 
 /// Default `TimeProvider` implementation that uses `std`
