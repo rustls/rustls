@@ -2192,9 +2192,11 @@ fn tls13_packed_handshake() {
     let client_config = Arc::new(
         ClientConfig::builder(unsafe_plaintext_crypto_provider(provider::DEFAULT_PROVIDER))
             .dangerous()
-            .with_custom_certificate_verifier(Arc::new(MockServerVerifier::rejects_certificate(
-                CertificateError::UnknownIssuer.into(),
-            )))
+            // the recorded server flight staples an OCSP response
+            .with_custom_certificate_verifier(Arc::new(
+                MockServerVerifier::rejects_certificate(CertificateError::UnknownIssuer.into())
+                    .requesting_ocsp_response(),
+            ))
             .with_no_client_auth()
             .unwrap(),
     );
