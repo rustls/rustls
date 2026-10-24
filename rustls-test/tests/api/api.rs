@@ -1210,7 +1210,7 @@ fn test_tls12_exporter() {
         let client_config = make_client_config(*kt, &provider);
         let server_config = make_server_config(*kt, &provider);
 
-        let (client_exporter, _) = do_exporter_test(client_config, server_config);
+        let (client_exporter, server_exporter) = do_exporter_test(client_config, server_config);
 
         // additionally, tls1.2 contexts over 0xffff bytes in length are not prefix-free,
         // so outlaw them.
@@ -1223,6 +1223,18 @@ fn test_tls12_exporter() {
                 .derive(b"label", Some(&[0; 0x10000]), &mut [0])
                 .unwrap_err()
         );
+
+        // RFC 5705 places no limit on the label length.
+        let long_label = [b'l'; 250];
+        let mut client_secret = [0u8; 32];
+        let mut server_secret = [0u8; 32];
+        client_exporter
+            .derive(&long_label, None, &mut client_secret)
+            .unwrap();
+        server_exporter
+            .derive(&long_label, None, &mut server_secret)
+            .unwrap();
+        assert_eq!(client_secret, server_secret);
     }
 }
 
@@ -1233,7 +1245,34 @@ fn test_tls13_exporter() {
         let client_config = make_client_config(*kt, &provider);
         let server_config = make_server_config(*kt, &provider);
 
-        do_exporter_test(client_config, server_config);
+        let (client_exporter, server_exporter) = do_exporter_test(client_config, server_config);
+
+        // RFC 8446 section 7.1 limits the prefixed label to 255 bytes, so
+        // the caller's label may be at most 249 bytes.
+        let longest_label = [b'l'; 249];
+        let mut client_secret = [0u8; 32];
+        let mut server_secret = [0u8; 32];
+        client_exporter
+            .derive(&longest_label, None, &mut client_secret)
+            .unwrap();
+        server_exporter
+            .derive(&longest_label, None, &mut server_secret)
+            .unwrap();
+        assert_eq!(client_secret, server_secret);
+
+        let too_long_label = [b'l'; 250];
+        assert_eq!(
+            client_exporter
+                .derive(&too_long_label, None, &mut client_secret)
+                .err(),
+            Some(ApiMisuse::ExporterLabelTooLong.into())
+        );
+        assert_eq!(
+            server_exporter
+                .derive(&too_long_label, None, &mut server_secret)
+                .err(),
+            Some(ApiMisuse::ExporterLabelTooLong.into())
+        );
     }
 }
 

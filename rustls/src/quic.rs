@@ -12,7 +12,7 @@ use crate::conn::{
     Transport, VerifyPeerIdentity, sealed,
 };
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
-use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
+use crate::crypto::tls13::{Hkdf, HkdfExpander, Label, OkmBlock};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{Message, MessagePayload, ServerExtensionsInput, TransportParameters};
 use crate::server::{ServerConfig, ServerSide};
@@ -849,8 +849,8 @@ impl Keys {
         client_dst_connection_id: &[u8],
         side: Side,
     ) -> Self {
-        const CLIENT_LABEL: &[u8] = b"client in";
-        const SERVER_LABEL: &[u8] = b"server in";
+        const CLIENT_LABEL: Label<'static> = Label::fixed(b"client in");
+        const SERVER_LABEL: Label<'static> = Label::fixed(b"server in");
         let salt = version.initial_salt();
         let hs_secret = suite
             .inner
@@ -949,33 +949,33 @@ impl Version {
     }
 
     /// Key derivation label for packet keys.
-    pub(crate) fn packet_key_label(&self) -> &'static [u8] {
+    pub(crate) fn packet_key_label(&self) -> Label<'static> {
         match self {
-            Self::V1 => b"quic key",
-            Self::V2 => b"quicv2 key",
+            Self::V1 => Label::fixed(b"quic key"),
+            Self::V2 => Label::fixed(b"quicv2 key"),
         }
     }
 
     /// Key derivation label for packet "IV"s.
-    pub(crate) fn packet_iv_label(&self) -> &'static [u8] {
+    pub(crate) fn packet_iv_label(&self) -> Label<'static> {
         match self {
-            Self::V1 => b"quic iv",
-            Self::V2 => b"quicv2 iv",
+            Self::V1 => Label::fixed(b"quic iv"),
+            Self::V2 => Label::fixed(b"quicv2 iv"),
         }
     }
 
     /// Key derivation for header keys.
-    pub(crate) fn header_key_label(&self) -> &'static [u8] {
+    pub(crate) fn header_key_label(&self) -> Label<'static> {
         match self {
-            Self::V1 => b"quic hp",
-            Self::V2 => b"quicv2 hp",
+            Self::V1 => Label::fixed(b"quic hp"),
+            Self::V2 => Label::fixed(b"quicv2 hp"),
         }
     }
 
-    fn key_update_label(&self) -> &'static [u8] {
+    fn key_update_label(&self) -> Label<'static> {
         match self {
-            Self::V1 => b"quic ku",
-            Self::V2 => b"quicv2 ku",
+            Self::V1 => Label::fixed(b"quic ku"),
+            Self::V2 => Label::fixed(b"quicv2 ku"),
         }
     }
 }
