@@ -1091,7 +1091,10 @@ pub(crate) fn hkdf_expand_label_aead_key(
     context: &[u8],
 ) -> AeadKey {
     hkdf_expand_label_inner(expander, label, context, key_len, |e, info| {
-        expand::<AeadKey, { AeadKey::MAX_LEN }>(e, info).with_length(key_len)
+        // Request exactly `key_len` bytes so `L` matches the length
+        // encoded in the HkdfLabel.
+        AeadKey::new_with(key_len, |out| e.expand_slice(info, out))
+            .expect("AEAD key length from cipher suite must be within MAX_LEN")
     })
 }
 
@@ -1238,6 +1241,53 @@ mod tests {
     use crate::crypto::TLS13_TEST_SUITE;
     use crate::key_log::KeyLog;
     use crate::tls13::Tls13CipherSuite;
+
+    /// Checks that HKDF-Expand-Label asks the expander for exactly the
+    /// number of bytes encoded in the HkdfLabel length field, for AEAD
+    /// keys of both supported sizes and for whole blocks.
+    #[test]
+    fn expand_label_length_matches_hkdf_label() {
+        let expander = LengthCheckingExpander;
+        let expected = [LengthCheckingExpander::FILL; LengthCheckingExpander::HASH_LEN];
+
+        for key_len in [16, 32] {
+            let key = hkdf_expand_label_aead_key(&expander, key_len, b"key", &[]);
+            assert_eq!(key.as_ref(), &expected[..key_len]);
+        }
+
+        let block = hkdf_expand_label_block(&expander, b"derived", &[]);
+        assert_eq!(block.as_ref(), &expected[..]);
+    }
+
+    /// An expander that rejects any request whose output length differs
+    /// from the length encoded at the start of the info.
+    struct LengthCheckingExpander;
+
+    impl LengthCheckingExpander {
+        const HASH_LEN: usize = 32;
+        const FILL: u8 = 0xab;
+    }
+
+    impl HkdfExpander for LengthCheckingExpander {
+        fn expand_slice(&self, info: &[&[u8]], output: &mut [u8]) -> Result<(), OutputLengthError> {
+            let info = info.concat();
+            let encoded = u16::from_be_bytes([info[0], info[1]]) as usize;
+            assert_eq!(output.len(), encoded, "L does not match HkdfLabel.length");
+            output.fill(Self::FILL);
+            Ok(())
+        }
+
+        fn expand_block(&self, info: &[&[u8]]) -> OkmBlock {
+            let mut block = [0u8; Self::HASH_LEN];
+            self.expand_slice(info, &mut block)
+                .unwrap();
+            OkmBlock::new(&block)
+        }
+
+        fn hash_len(&self) -> usize {
+            Self::HASH_LEN
+        }
+    }
 
     #[test]
     fn test_vectors() {
