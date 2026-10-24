@@ -17,7 +17,7 @@ use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::msgs::{
     AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, Delocator,
-    HandshakeAlignedProof, Locator, Message, MessagePayload,
+    HandshakeAlignedProof, Locator, MAX_FRAGMENT_LEN, Message, MessagePayload,
 };
 use crate::quic::QuicOutput;
 use crate::tracing::{trace, warn};
@@ -563,6 +563,14 @@ impl DecryptionState {
         encr: Record<InboundOpaque<'a>>,
     ) -> Result<Option<Decrypted<'a>>, Error> {
         let Some(decrypter) = &mut self.record_decrypter else {
+            // > The length MUST NOT exceed 2^14 bytes. An endpoint that receives a record
+            // > that exceeds this length MUST terminate the connection with a
+            // > "record_overflow" alert.
+            // <https://www.rfc-editor.org/rfc/rfc9846#section-5.1>
+            if encr.payload.len() > MAX_FRAGMENT_LEN.get() {
+                return Err(Error::PeerSentOversizedRecord);
+            }
+
             return Ok(Some(Decrypted {
                 want_close_before_decrypt: false,
                 plaintext: encr.into_plain_record(),
