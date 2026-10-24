@@ -431,6 +431,53 @@ fn test_client_rejects_non_empty_renegotiation_info_in_initial_handshake() {
 }
 
 #[test]
+fn test_client_rejects_tls13_extension_in_tls12_server_hello() {
+    let config = Arc::new(
+        ClientConfig::builder(Arc::new(TEST_PROVIDER.clone()))
+            .with_root_certificates(roots())
+            .with_no_client_auth()
+            .unwrap(),
+    );
+    let mut tls = Vec::new();
+    let mut conn = config
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build(&mut tls)
+        .unwrap();
+
+    // `key_share` was offered (TLS 1.3 is enabled), so it is not
+    // unsolicited, but it is only specified for TLS 1.3.
+    let sh = Message {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
+            ServerHelloPayload {
+                legacy_version: ProtocolVersion::TLSv1_2,
+                random: Random::new(config.provider().secure_random).unwrap(),
+                session_id: SessionId::empty(),
+                cipher_suite: TLS_TEST_SUITE.common.suite,
+                compression_method: Compression::Null,
+                extensions: Box::new(ServerExtensions {
+                    extended_main_secret_ack: Some(()),
+                    key_share: Some(KeyShareEntry::new(
+                        KEY_EXCHANGE_GROUP.name(),
+                        vec![0xaa; 32],
+                    )),
+                    ..ServerExtensions::default()
+                }),
+            },
+        ))),
+    };
+    let mut input = VecInput::default();
+    input
+        .read(&mut sh.into_wire_bytes().as_slice())
+        .unwrap();
+
+    assert_eq!(
+        process(&mut input, &mut conn).unwrap_err(),
+        PeerMisbehaved::UnsolicitedServerHelloExtension.into()
+    );
+}
+
+#[test]
 fn cas_extension_in_client_hello_if_server_verifier_requests_it() {
     let cas_sending_server_verifier =
         ServerVerifierWithAuthorityNames(Arc::from(vec![DistinguishedName::from(

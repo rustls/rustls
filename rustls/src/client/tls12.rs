@@ -43,7 +43,7 @@ mod server_hello {
         ClientHandler, ClientHelloInput, ClientSessionValue, ClientState, ExpectServerHello,
     };
     use crate::common_state::Protocol;
-    use crate::msgs::ServerHelloPayload;
+    use crate::msgs::{ExtensionType, ServerHelloPayload};
     use crate::sealed::Sealed;
     use crate::verify::HandshakeSignatureValid;
 
@@ -94,6 +94,15 @@ mod server_hello {
                 .is_some_and(|info| !info.is_empty())
             {
                 return Err(PeerMisbehaved::NonEmptyRenegotiationInfo.into());
+            }
+
+            // We may have offered these for TLS 1.3, so they are not unsolicited,
+            // but they have no meaning in a TLS 1.2 ServerHello.
+            if server_hello
+                .received_types()
+                .any(|ext| TLS13_ONLY_EXTS.contains(&ext))
+            {
+                return Err(PeerMisbehaved::UnsolicitedServerHelloExtension.into());
             }
 
             let ClientHelloInput {
@@ -233,6 +242,17 @@ mod server_hello {
     }
 
     impl Sealed for Handler {}
+
+    // Extensions specified only for TLS 1.3 that we may send in a ClientHello
+    // which also offers TLS 1.2.  `supported_versions` is checked separately.
+    const TLS13_ONLY_EXTS: &[ExtensionType] = &[
+        ExtensionType::PreSharedKey,
+        ExtensionType::EarlyData,
+        ExtensionType::Cookie,
+        ExtensionType::PSKKeyExchangeModes,
+        ExtensionType::CertificateAuthorities,
+        ExtensionType::KeyShare,
+    ];
 }
 
 struct ExpectCertificate {
