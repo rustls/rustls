@@ -18,7 +18,8 @@ use rustls::crypto::{
 };
 use rustls::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{
-    AlertDescription, ApiMisuse, CertificateError, Error, PeerIncompatible, PeerMisbehaved,
+    AlertDescription, ApiMisuse, CertificateError, EncryptedClientHelloError, Error,
+    PeerIncompatible, PeerMisbehaved,
 };
 use rustls::pki_types::EchConfigListBytes;
 use rustls::server::{
@@ -2012,6 +2013,39 @@ fn test_client_sends_no_application_data_after_ech_rejection() {
         Error::AlertReceived(AlertDescription::EncryptedClientHelloRequired)
     );
     assert!(server_received.is_empty());
+}
+
+#[test]
+fn test_client_ignores_ech_config_with_invalid_public_name() {
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let (public_key, _) = suite.generate_key_pair().unwrap();
+
+    // Names that RFC 9849 section 6.1.7 says clients ignore: a trailing dot,
+    // or a final label that a URL parser reads as an IPv4 literal.
+    for public_name in [
+        "testserver.com.",
+        "0x7f000001",
+        "example.0X1f",
+        "example.0x",
+    ] {
+        assert_eq!(
+            EchConfig::new(
+                encoding::ech_config_list(suite.suite(), &public_key.0, public_name),
+                &[suite],
+            )
+            .err(),
+            Some(EncryptedClientHelloError::NoCompatibleConfig.into()),
+            "{public_name}"
+        );
+    }
+
+    for public_name in ["testserver.com", "0xg.example", "example.0xg"] {
+        EchConfig::new(
+            encoding::ech_config_list(suite.suite(), &public_key.0, public_name),
+            &[suite],
+        )
+        .unwrap();
+    }
 }
 
 #[test]
