@@ -980,6 +980,12 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::SelectedTls12UsingTls13VersionExtension) => {
             quit(":SELECTED_TLS12_USING_TLS13_VERSION_EXTENSION:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::SelectedTls13UsingLegacyVersionField) => {
+            quit(":SELECTED_TLS13_USING_LEGACY_VERSION_FIELD:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::IllegalHelloRetryRequestWithWrongLegacyVersion) => {
+            quit(":ILLEGAL_HELLO_RETRY_REQUEST_WITH_WRONG_LEGACY_VERSION:")
+        }
         Error::PeerMisbehaved(PeerMisbehaved::OfferedIncorrectCompressions) => {
             quit(":INVALID_COMPRESSION_LIST:")
         }
