@@ -7,7 +7,7 @@ use zeroize::Zeroize;
 use super::hmac;
 use super::kx::ActiveKeyExchange;
 use crate::enums::ProtocolVersion;
-use crate::error::Error;
+use crate::error::{ApiMisuse, Error};
 
 /// Implementation of `HkdfExpander` via `hmac::Key`.
 pub struct HkdfExpanderUsingHmac(Box<dyn hmac::Key>);
@@ -133,16 +133,17 @@ pub trait HkdfExpander: Send + Sync {
 pub(crate) struct HkdfLabel<'a> {
     output_len: [u8; 2],
     label_len: [u8; 1],
-    label: &'a [u8],
+    label: Label<'a>,
     context_len: [u8; 1],
     context: &'a [u8],
 }
 
 impl<'a> HkdfLabel<'a> {
-    pub(crate) fn new(label: &'a [u8], context: &'a [u8], n: usize) -> Self {
+    pub(crate) fn new(label: Label<'a>, context: &'a [u8], n: usize) -> Self {
         Self {
             output_len: u16::to_be_bytes(n as u16),
-            label_len: u8::to_be_bytes((Self::LABEL_PREFIX.len() + label.len()) as u8),
+            // `Label` guarantees this fits in one byte.
+            label_len: u8::to_be_bytes((Label::PREFIX.len() + label.0.len()) as u8),
             label,
             context_len: u8::to_be_bytes(context.len() as u8),
             context,
@@ -161,14 +162,42 @@ impl<'a> HkdfLabel<'a> {
         [
             output_len,
             label_len,
-            Self::LABEL_PREFIX,
-            label,
+            Label::PREFIX,
+            label.0,
             context_len,
             context,
         ]
     }
+}
 
-    const LABEL_PREFIX: &'static [u8] = b"tls13 ";
+/// The label of a [HKDF-Expand-Label] derivation.
+///
+/// [`HkdfLabel`] holds the label after a fixed prefix, with a one byte
+/// length, so a label is at most 249 bytes. `Label::fixed()` checks that
+/// at compile time and `Label::tls13()` at run time.
+///
+/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc9846#section-7.1>
+#[derive(Clone, Copy)]
+pub(crate) struct Label<'a>(&'a [u8]);
+
+impl Label<'static> {
+    /// A label known at compile time.
+    pub(crate) const fn fixed<const N: usize>(label: &'static [u8; N]) -> Self {
+        const { assert!(Self::PREFIX.len() + N <= u8::MAX as usize) };
+        Self(label)
+    }
+}
+
+impl<'a> Label<'a> {
+    /// A label supplied at run time, which fails if it is too long to encode.
+    pub(crate) fn tls13(label: &'a [u8]) -> Result<Self, Error> {
+        match u8::try_from(Self::PREFIX.len() + label.len()) {
+            Ok(_) => Ok(Self(label)),
+            Err(_) => Err(ApiMisuse::ExporterLabelTooLong.into()),
+        }
+    }
+
+    const PREFIX: &'static [u8] = b"tls13 ";
 }
 
 /// A HKDF implementation oriented to the needs of TLS1.3.
