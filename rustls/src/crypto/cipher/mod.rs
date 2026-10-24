@@ -374,11 +374,18 @@ impl AeadKey {
         key
     }
 
-    pub(crate) fn with_length(self, len: usize) -> Self {
-        let Self { mut buf, used } = self;
-        assert!(len <= used);
-        buf[len..used].zeroize();
-        Self { buf, used: len }
+    /// Builds a key of `len` bytes by letting `fill` write directly into it.
+    pub(crate) fn new_with<E>(
+        len: usize,
+        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ) -> Result<Self, E> {
+        debug_assert!(len <= Self::MAX_LEN);
+        let mut key = Self {
+            buf: [0u8; Self::MAX_LEN],
+            used: len,
+        };
+        fill(&mut key.buf[..len])?;
+        Ok(key)
     }
 
     /// Largest possible AEAD key in the ciphersuites we support.
