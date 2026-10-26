@@ -1069,7 +1069,7 @@ pub(crate) fn hkdf_expand_label<T: From<[u8; N]>, const N: usize>(
     label: &[u8],
     context: &[u8],
 ) -> T {
-    hkdf_expand_label_inner(expander, label, context, N, |e, info| expand(e, info))
+    expand(expander, &HkdfLabel::new(label, context, N).info())
 }
 
 /// [HKDF-Expand-Label] where the output is one block in size.
@@ -1078,9 +1078,7 @@ pub(crate) fn hkdf_expand_label_block(
     label: &[u8],
     context: &[u8],
 ) -> OkmBlock {
-    hkdf_expand_label_inner(expander, label, context, expander.hash_len(), |e, info| {
-        e.expand_block(info)
-    })
+    expander.expand_block(&HkdfLabel::new(label, context, expander.hash_len()).info())
 }
 
 /// [HKDF-Expand-Label] where the output is an AEAD key.
@@ -1090,12 +1088,11 @@ pub(crate) fn hkdf_expand_label_aead_key(
     label: &[u8],
     context: &[u8],
 ) -> AeadKey {
-    hkdf_expand_label_inner(expander, label, context, key_len, |e, info| {
-        // Request exactly `key_len` bytes so `L` matches the length
-        // encoded in the HkdfLabel.
-        AeadKey::new_with(key_len, |out| e.expand_slice(info, out))
-            .expect("AEAD key length from cipher suite must be within MAX_LEN")
-    })
+    let label = HkdfLabel::new(label, context, key_len);
+    // Request exactly `key_len` bytes so `L` matches the length
+    // encoded in the HkdfLabel.
+    AeadKey::new_with(key_len, |out| expander.expand_slice(&label.info(), out))
+        .expect("AEAD key length from cipher suite must be within MAX_LEN")
 }
 
 /// [HKDF-Expand-Label] where the output is an IV.
@@ -1105,12 +1102,12 @@ pub(crate) fn hkdf_expand_label_iv(
     context: &[u8],
     iv_len: usize,
 ) -> Iv {
-    hkdf_expand_label_inner(expander, label, context, iv_len, |e, info| {
-        let mut buf = [0u8; Iv::MAX_LEN];
-        e.expand_slice(info, &mut buf[..iv_len])
-            .unwrap();
-        Iv::new(&buf[..iv_len]).expect("IV length from cipher suite must be within MAX_LEN")
-    })
+    let label = HkdfLabel::new(label, context, iv_len);
+    let mut buf = [0u8; Iv::MAX_LEN];
+    expander
+        .expand_slice(&label.info(), &mut buf[..iv_len])
+        .unwrap();
+    Iv::new(&buf[..iv_len]).expect("IV length from cipher suite must be within MAX_LEN")
 }
 
 /// [HKDF-Expand-Label] where the output is a slice.
@@ -1122,9 +1119,7 @@ fn hkdf_expand_label_slice(
     context: &[u8],
     output: &mut [u8],
 ) -> Result<(), OutputLengthError> {
-    hkdf_expand_label_inner(expander, label, context, output.len(), |e, info| {
-        e.expand_slice(info, output)
-    })
+    expander.expand_slice(&HkdfLabel::new(label, context, output.len()).info(), output)
 }
 
 pub(crate) fn server_ech_hrr_confirmation_secret(
@@ -1150,32 +1145,48 @@ pub(crate) fn server_ech_hrr_confirmation_secret(
     )
 }
 
-fn hkdf_expand_label_inner<F, T>(
-    expander: &dyn HkdfExpander,
-    label: &[u8],
-    context: &[u8],
-    n: usize,
-    f: F,
-) -> T
-where
-    F: FnOnce(&dyn HkdfExpander, &[&[u8]]) -> T,
-{
-    const LABEL_PREFIX: &[u8] = b"tls13 ";
+/// The `HkdfLabel` structure used as the `info` input to [HKDF-Expand-Label].
+///
+/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc9846#section-7.1>
+struct HkdfLabel<'a> {
+    output_len: [u8; 2],
+    label_len: [u8; 1],
+    label: &'a [u8],
+    context_len: [u8; 1],
+    context: &'a [u8],
+}
 
-    let output_len = u16::to_be_bytes(n as u16);
-    let label_len = u8::to_be_bytes((LABEL_PREFIX.len() + label.len()) as u8);
-    let context_len = u8::to_be_bytes(context.len() as u8);
+impl<'a> HkdfLabel<'a> {
+    fn new(label: &'a [u8], context: &'a [u8], n: usize) -> Self {
+        Self {
+            output_len: u16::to_be_bytes(n as u16),
+            label_len: u8::to_be_bytes((Self::LABEL_PREFIX.len() + label.len()) as u8),
+            label,
+            context_len: u8::to_be_bytes(context.len() as u8),
+            context,
+        }
+    }
 
-    let info = &[
-        &output_len[..],
-        &label_len[..],
-        LABEL_PREFIX,
-        label,
-        &context_len[..],
-        context,
-    ];
+    fn info(&self) -> [&[u8]; 6] {
+        let Self {
+            output_len,
+            label_len,
+            label,
+            context_len,
+            context,
+        } = self;
 
-    f(expander, info)
+        [
+            output_len,
+            label_len,
+            Self::LABEL_PREFIX,
+            label,
+            context_len,
+            context,
+        ]
+    }
+
+    const LABEL_PREFIX: &'static [u8] = b"tls13 ";
 }
 
 /// The kinds of secret we can extract from `KeySchedule`.
