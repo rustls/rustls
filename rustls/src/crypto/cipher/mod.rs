@@ -6,6 +6,7 @@ use core::{array, fmt};
 use pki_types::FipsStatus;
 use zeroize::Zeroize;
 
+use crate::crypto::tls13::{HkdfExpander, HkdfLabel, OutputLengthError};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{put_u16, put_u64};
@@ -375,16 +376,18 @@ impl AeadKey {
     }
 
     /// Builds a key of `len` bytes by letting `fill` write directly into it.
-    pub(crate) fn new_with<E>(
+    pub(crate) fn expand(
+        expander: &dyn HkdfExpander,
+        label: &HkdfLabel<'_>,
         len: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
-    ) -> Result<Self, E> {
+    ) -> Result<Self, OutputLengthError> {
         debug_assert!(len <= Self::MAX_LEN);
         let mut key = Self {
             buf: [0u8; Self::MAX_LEN],
             used: len,
         };
-        fill(&mut key.buf[..len])?;
+
+        expander.expand_slice(&label.info(), &mut key.buf[..len])?;
         Ok(key)
     }
 
