@@ -11,7 +11,7 @@ use crate::conn::{ConnectionRandoms, Exporter};
 use crate::crypto::cipher::{AeadKey, RecordDecrypter, RecordEncrypter, Tls12AeadAlgorithm};
 use crate::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::crypto::tls12::PrfSecret;
-use crate::crypto::{self, CipherSuite, SignatureScheme, hash};
+use crate::crypto::{self, CipherSuite, SignatureAlgorithm, SignatureScheme, hash};
 use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error, InvalidMessage};
 use crate::msgs::{Codec, HandshakeAlignedProof, KxDecode, Reader};
@@ -112,13 +112,25 @@ impl Suite for Tls12CipherSuite {
         client: &[CipherSuite],
         server: &[&'static Self],
     ) {
-        let client_suites = server
-            .iter()
-            .filter(|&&scs| client.contains(&scs.suite()));
+        let mut algorithms = SignatureAlgorithmSet::default();
+        for &suite in server {
+            if !client.contains(&suite.suite()) {
+                continue;
+            }
+
+            for &scheme in suite.sign {
+                let Some(alg) = scheme.algorithm() else {
+                    continue;
+                };
+
+                algorithms.insert(alg);
+            }
+        }
+
         schemes.retain(|scheme| {
-            client_suites
-                .clone()
-                .any(|&suite| suite.usable_for_signature_scheme(*scheme))
+            scheme
+                .algorithm()
+                .is_some_and(|alg| algorithms.contains(alg))
         });
     }
 
@@ -416,6 +428,28 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
 }
 
 type RecordCipherPair = (Box<dyn RecordDecrypter>, Box<dyn RecordEncrypter>);
+
+/// A compact set of [`SignatureAlgorithm`]s.
+///
+/// `SignatureScheme::algorithm()` only ever yields the handful of algorithms
+/// defined in [`SignatureAlgorithm`] (all with discriminants below 16), so a
+/// single word bitset suffices.
+#[derive(Clone, Copy, Default)]
+struct SignatureAlgorithmSet(u16);
+
+impl SignatureAlgorithmSet {
+    fn insert(&mut self, alg: SignatureAlgorithm) {
+        self.0 |= Self::bit(alg);
+    }
+
+    fn contains(&self, alg: SignatureAlgorithm) -> bool {
+        self.0 & Self::bit(alg) != 0
+    }
+
+    fn bit(alg: SignatureAlgorithm) -> u16 {
+        1 << (u8::from(alg) & 0xf)
+    }
+}
 
 pub(crate) fn decode_kx_params<'a, T: KxDecode<'a>>(
     kx_algorithm: KeyExchangeAlgorithm,
