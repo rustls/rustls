@@ -127,6 +127,50 @@ pub trait HkdfExpander: Send + Sync {
     fn hash_len(&self) -> usize;
 }
 
+/// The `HkdfLabel` structure used as the `info` input to [HKDF-Expand-Label].
+///
+/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc9846#section-7.1>
+pub(crate) struct HkdfLabel<'a> {
+    output_len: [u8; 2],
+    label_len: [u8; 1],
+    label: &'a [u8],
+    context_len: [u8; 1],
+    context: &'a [u8],
+}
+
+impl<'a> HkdfLabel<'a> {
+    pub(crate) fn new(label: &'a [u8], context: &'a [u8], n: usize) -> Self {
+        Self {
+            output_len: u16::to_be_bytes(n as u16),
+            label_len: u8::to_be_bytes((Self::LABEL_PREFIX.len() + label.len()) as u8),
+            label,
+            context_len: u8::to_be_bytes(context.len() as u8),
+            context,
+        }
+    }
+
+    pub(crate) fn info(&self) -> [&[u8]; 6] {
+        let Self {
+            output_len,
+            label_len,
+            label,
+            context_len,
+            context,
+        } = self;
+
+        [
+            output_len,
+            label_len,
+            Self::LABEL_PREFIX,
+            label,
+            context_len,
+            context,
+        ]
+    }
+
+    const LABEL_PREFIX: &'static [u8] = b"tls13 ";
+}
+
 /// A HKDF implementation oriented to the needs of TLS1.3.
 ///
 /// See [RFC 5869](https://datatracker.ietf.org/doc/html/rfc5869) for the terminology

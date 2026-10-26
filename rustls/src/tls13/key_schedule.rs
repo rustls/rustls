@@ -7,7 +7,7 @@ use crate::common_state::Side;
 use crate::conn::{Encrypter, Exporter, ReceivePath};
 use crate::crypto::cipher::{AeadKey, Iv, RecordDecrypter, Tls13AeadAlgorithm};
 use crate::crypto::kx::SharedSecret;
-use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expand};
+use crate::crypto::tls13::{Hkdf, HkdfExpander, HkdfLabel, OkmBlock, OutputLengthError, expand};
 use crate::crypto::{hash, hmac};
 use crate::error::{ApiMisuse, Error};
 use crate::key_log::KeyLog;
@@ -1143,50 +1143,6 @@ pub(crate) fn server_ech_hrr_confirmation_secret(
         SecretKind::ServerEchHrrConfirmationSecret.to_bytes(),
         hs_hash.as_ref(),
     )
-}
-
-/// The `HkdfLabel` structure used as the `info` input to [HKDF-Expand-Label].
-///
-/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc9846#section-7.1>
-struct HkdfLabel<'a> {
-    output_len: [u8; 2],
-    label_len: [u8; 1],
-    label: &'a [u8],
-    context_len: [u8; 1],
-    context: &'a [u8],
-}
-
-impl<'a> HkdfLabel<'a> {
-    fn new(label: &'a [u8], context: &'a [u8], n: usize) -> Self {
-        Self {
-            output_len: u16::to_be_bytes(n as u16),
-            label_len: u8::to_be_bytes((Self::LABEL_PREFIX.len() + label.len()) as u8),
-            label,
-            context_len: u8::to_be_bytes(context.len() as u8),
-            context,
-        }
-    }
-
-    fn info(&self) -> [&[u8]; 6] {
-        let Self {
-            output_len,
-            label_len,
-            label,
-            context_len,
-            context,
-        } = self;
-
-        [
-            output_len,
-            label_len,
-            Self::LABEL_PREFIX,
-            label,
-            context_len,
-            context,
-        ]
-    }
-
-    const LABEL_PREFIX: &'static [u8] = b"tls13 ";
 }
 
 /// The kinds of secret we can extract from `KeySchedule`.
