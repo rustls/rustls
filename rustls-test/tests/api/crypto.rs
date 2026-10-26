@@ -6,6 +6,7 @@ use std::borrow::Cow;
 use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
+use rustls::client::Resumption;
 use rustls::crypto::cipher::{AeadKey, EncodableVersion, InboundOpaque, Iv, Payload, Record};
 use rustls::crypto::tls13::{HkdfExpander, OkmBlock, expand};
 use rustls::crypto::{Credentials, CryptoProvider};
@@ -16,7 +17,7 @@ use rustls::{
     ServerSide, SideData, SupportedCipherSuite, Tcp, Tls13CipherSuite, VecInput,
 };
 use rustls_test::{
-    ClientConfigExt, ErrorFromPeer, KeyType, MultiTest, RawTls, ServerConfigExt,
+    ClientConfigExt, ClientStorage, ErrorFromPeer, KeyType, MultiTest, RawTls, ServerConfigExt,
     aes_128_gcm_with_1024_confidentiality_limit, do_handshake, do_handshake_until_error, encoding,
     make_client_config, make_pair, make_pair_for_arc_configs, make_pair_for_configs,
     make_server_config, provider_with_one_suite, transfer,
@@ -1169,13 +1170,7 @@ fn move_encrypted_extensions_into_server_hello(
         )
     };
 
-    let mut records = Vec::new();
-    let mut rest = flight;
-    while !rest.is_empty() {
-        let len = u16::from_be_bytes([rest[3], rest[4]]) as usize;
-        records.push(rest[..5 + len].to_vec());
-        rest = &rest[5 + len..];
-    }
+    let mut records = split_records(flight);
 
     let (key, iv) = traffic_key();
     let mut decrypter = suite.aead_alg.decrypter(key, iv);
@@ -1231,6 +1226,184 @@ fn move_encrypted_extensions_into_server_hello(
         .encrypt(remainder.borrow_outbound(), 0, &mut output)
         .unwrap();
     output
+}
+
+#[test]
+fn server_rejects_finished_in_end_of_early_data_record() {
+    let suite = cipher_suite::TLS13_AES_128_GCM_SHA256;
+    let provider: Arc<CryptoProvider> = provider_with_one_suite(
+        &provider::DEFAULT_PROVIDER,
+        SupportedCipherSuite::Tls13(suite),
+    )
+    .into();
+    let kt = KeyType::default();
+
+    let key_log = Arc::new(KeyLogToVec::new("client"));
+    let mut client_config = ClientConfig::builder(provider.clone()).finish(kt);
+    client_config.enable_early_data = true;
+    client_config.resumption = Resumption::store(Arc::new(ClientStorage::new()));
+    client_config.key_log = key_log.clone();
+    let mut server_config = ServerConfig::builder(provider).finish(kt);
+    server_config.max_early_data_size = 1234;
+    let (client_config, server_config) = (Arc::new(client_config), Arc::new(server_config));
+
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+    key_log.take();
+
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
+            .write(b"hello".into(), &mut client_output)
+            .unwrap(),
+        5
+    );
+
+    let early_records = split_records(&client_output)
+        .iter()
+        .filter(|record| record[0] == u8::from(ContentType::ApplicationData))
+        .count();
+    transfer(&mut client_output, &mut server_input);
+    let mut handler = server.read_tls(&mut server_input, &mut server_output);
+    while let Some(result) = handler.next_early_data() {
+        assert_eq!(result.unwrap().bytes(), b"hello");
+    }
+    handler
+        .handle_all(&mut Vec::new())
+        .unwrap();
+
+    transfer(&mut server_output, &mut client_input);
+    client
+        .read_tls(&mut client_input, &mut client_output)
+        .handle_all(&mut Vec::new())
+        .unwrap();
+    assert!(client.side().is_early_data_accepted());
+
+    let secrets = key_log.take();
+    let secret = |label: &str| {
+        secrets
+            .iter()
+            .find(|item| item.label == label)
+            .unwrap()
+            .secret
+            .clone()
+    };
+    let traffic_key = |secret: &[u8]| -> (AeadKey, Iv) {
+        let expander = suite
+            .hkdf_provider
+            .expander_for_okm(&OkmBlock::new(secret));
+        (
+            hkdf_expand_label::<AeadKey, 16>(&*expander, b"key"),
+            hkdf_expand_label::<Iv, 12>(&*expander, b"iv"),
+        )
+    };
+    let early_secret = secret("CLIENT_EARLY_TRAFFIC_SECRET");
+    let handshake_secret = secret("CLIENT_HANDSHAKE_TRAFFIC_SECRET");
+
+    let mut records = split_records(&client_output);
+    client_output.clear();
+    let mut encrypted = records
+        .iter_mut()
+        .filter(|record| record[0] == u8::from(ContentType::ApplicationData));
+
+    let (key, iv) = traffic_key(&early_secret);
+    let end_of_early_data = suite
+        .aead_alg
+        .decrypter(key, iv)
+        .decrypt(
+            Record {
+                typ: ContentType::ApplicationData,
+                version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+                payload: InboundOpaque(&mut encrypted.next().unwrap()[5..]),
+            },
+            early_records as u64,
+        )
+        .unwrap();
+    assert_eq!(end_of_early_data.typ, ContentType::Handshake);
+    assert_eq!(
+        end_of_early_data.payload[0],
+        HandshakeType::EndOfEarlyData.0
+    );
+    let mut handshake = end_of_early_data.payload.to_vec();
+
+    let (key, iv) = traffic_key(&handshake_secret);
+    let finished = suite
+        .aead_alg
+        .decrypter(key, iv)
+        .decrypt(
+            Record {
+                typ: ContentType::ApplicationData,
+                version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+                payload: InboundOpaque(&mut encrypted.next().unwrap()[5..]),
+            },
+            0,
+        )
+        .unwrap();
+    assert_eq!(finished.typ, ContentType::Handshake);
+    assert_eq!(finished.payload[0], HandshakeType::Finished.0);
+    handshake.extend_from_slice(finished.payload);
+
+    let (key, iv) = traffic_key(&early_secret);
+    let combined = Record {
+        typ: ContentType::Handshake,
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        payload: Payload::Borrowed(&handshake),
+    };
+    let mut flight = Vec::new();
+    suite
+        .aead_alg
+        .encrypter(key, iv)
+        .encrypt(
+            combined.borrow_outbound(),
+            early_records as u64,
+            &mut flight,
+        )
+        .unwrap();
+    server_input
+        .read(&mut Cursor::new(&flight))
+        .unwrap();
+
+    assert_eq!(
+        do_handshake_until_error(
+            &mut client_input,
+            &mut client_output,
+            &mut client,
+            &mut server_input,
+            &mut server_output,
+            &mut server,
+        )
+        .unwrap_err(),
+        ErrorFromPeer::Server(PeerMisbehaved::KeyEpochWithPendingFragment.into())
+    );
+}
+
+fn split_records(mut flight: &[u8]) -> Vec<Vec<u8>> {
+    let mut records = Vec::new();
+    while !flight.is_empty() {
+        let len = u16::from_be_bytes([flight[3], flight[4]]) as usize;
+        records.push(flight[..5 + len].to_vec());
+        flight = &flight[5 + len..];
+    }
+    records
 }
 
 fn hkdf_expand_label<T: From<[u8; N]>, const N: usize>(
