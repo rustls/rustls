@@ -1,9 +1,10 @@
+use alloc::vec::Vec;
 use core::fmt;
 
 use pki_types::FipsStatus;
 
 use crate::common_state::Protocol;
-use crate::crypto::{self, SignatureScheme, hash};
+use crate::crypto::{self, CipherSuite, SignatureScheme, hash};
 use crate::enums::ProtocolVersion;
 use crate::quic;
 use crate::suites::{CipherSuiteCommon, Suite, SupportedCipherSuite};
@@ -117,6 +118,14 @@ impl Suite for Tls13CipherSuite {
             Protocol::Tcp => true,
             Protocol::Quic(_) => self.quic.is_some(),
         }
+    }
+
+    fn filter_signature_schemes(
+        schemes: &mut Vec<SignatureScheme>,
+        _client: &[CipherSuite],
+        _server: &[&'static Self],
+    ) {
+        schemes.retain(|scheme| scheme.supported_in_tls13());
     }
 
     fn usable_for_signature_scheme(&self, scheme: SignatureScheme) -> bool {

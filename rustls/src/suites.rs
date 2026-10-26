@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use core::fmt;
 
 use pki_types::FipsStatus;
@@ -110,6 +111,12 @@ pub(crate) trait Suite: fmt::Debug {
     fn server_handler(&self) -> &'static dyn crate::server::ServerHandler<Self>;
 
     fn usable_for_protocol(&self, proto: Protocol) -> bool;
+
+    fn filter_signature_schemes(
+        schemes: &mut Vec<SignatureScheme>,
+        client: &[CipherSuite],
+        server: &[&'static Self],
+    );
 
     fn usable_for_signature_scheme(&self, _scheme: SignatureScheme) -> bool;
 
