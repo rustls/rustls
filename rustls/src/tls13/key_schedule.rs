@@ -1088,10 +1088,7 @@ pub(crate) fn hkdf_expand_label_aead_key(
     label: &[u8],
     context: &[u8],
 ) -> AeadKey {
-    let label = HkdfLabel::new(label, context, key_len);
-    // Request exactly `key_len` bytes so `L` matches the length
-    // encoded in the HkdfLabel.
-    AeadKey::new_with(key_len, |out| expander.expand_slice(&label.info(), out))
+    AeadKey::expand(expander, &HkdfLabel::new(label, context, key_len), key_len)
         .expect("AEAD key length from cipher suite must be within MAX_LEN")
 }
 
