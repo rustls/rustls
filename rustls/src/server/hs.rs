@@ -608,21 +608,7 @@ impl ExpectClientHello {
         let suites = <CryptoProvider as Borrow<[&'static T]>>::borrow(&self.config.provider);
 
         let mut sig_schemes = input.sig_schemes.to_owned();
-        if T::VERSION == ProtocolVersion::TLSv1_2 {
-            let client_suites = suites.iter().filter(|&&scs| {
-                input
-                    .client_hello
-                    .cipher_suites
-                    .contains(&scs.suite())
-            });
-            sig_schemes.retain(|scheme| {
-                client_suites
-                    .clone()
-                    .any(|&suite| suite.usable_for_signature_scheme(*scheme))
-            });
-        } else if T::VERSION == ProtocolVersion::TLSv1_3 {
-            sig_schemes.retain(SignatureScheme::supported_in_tls13);
-        }
+        T::filter_signature_schemes(&mut sig_schemes, &input.client_hello.cipher_suites, suites);
 
         // Choose a certificate.
         let credentials = self

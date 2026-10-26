@@ -11,7 +11,7 @@ use crate::conn::{ConnectionRandoms, Exporter};
 use crate::crypto::cipher::{AeadKey, RecordDecrypter, RecordEncrypter, Tls12AeadAlgorithm};
 use crate::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::crypto::tls12::PrfSecret;
-use crate::crypto::{self, SignatureScheme, hash};
+use crate::crypto::{self, CipherSuite, SignatureScheme, hash};
 use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error, InvalidMessage};
 use crate::msgs::{Codec, HandshakeAlignedProof, KxDecode, Reader};
@@ -105,6 +105,21 @@ impl Suite for Tls12CipherSuite {
     /// Say if the given `KeyExchangeAlgorithm` is supported by this cipher suite.
     fn usable_for_kx_algorithm(&self, kxa: KeyExchangeAlgorithm) -> bool {
         self.kx == kxa
+    }
+
+    fn filter_signature_schemes(
+        schemes: &mut Vec<SignatureScheme>,
+        client: &[CipherSuite],
+        server: &[&'static Self],
+    ) {
+        let client_suites = server
+            .iter()
+            .filter(|&&scs| client.contains(&scs.suite()));
+        schemes.retain(|scheme| {
+            client_suites
+                .clone()
+                .any(|&suite| suite.usable_for_signature_scheme(*scheme))
+        });
     }
 
     /// Return true if this suite is usable for a key only offering `scheme` signatures.
