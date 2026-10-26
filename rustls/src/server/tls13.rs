@@ -1266,6 +1266,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                 parsed: HandshakeMessagePayload(HandshakePayload::EndOfEarlyData),
                 ..
             } => {
+                cx.common.check_aligned_handshake()?;
                 self.key_schedule
                     .update_decrypter(cx.common);
                 self.transcript.add_message(&m);
