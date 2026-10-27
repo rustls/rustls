@@ -9089,18 +9089,39 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
 
     for i in 0..CONFIDENTIALITY_LIMIT {
         let message = format!("{i:08}");
-        client
+        let result = client
             .writer()
-            .write_all(message.as_bytes())
-            .unwrap();
+            .write_all(message.as_bytes());
         let (received, peer_closed) = receive(&mut client, &mut server);
 
         match i {
             1023 => {
+                let err = result.unwrap_err();
+                assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+                assert_eq!(err.to_string(), Error::EncryptError.to_string());
+
+                // The send path stays closed: later writes fail too.
+                let err = client
+                    .writer()
+                    .write(b"more")
+                    .unwrap_err();
+                assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+                assert_eq!(err.to_string(), Error::EncryptError.to_string());
+
+                // Vectored writes fail the same way (this is what
+                // tokio-rustls calls).
+                let err = client
+                    .writer()
+                    .write_vectored(&[IoSlice::new(b"more")])
+                    .unwrap_err();
+                assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+                assert_eq!(err.to_string(), Error::EncryptError.to_string());
+
                 assert!(peer_closed);
                 assert_eq!(received.len(), 0);
             }
             _ => {
+                result.unwrap();
                 assert!(!peer_closed);
                 assert_eq!(&received, message.as_bytes());
             }
@@ -9145,10 +9166,12 @@ fn tls12_connection_fails_after_alert_at_confidentiality_limit() {
     });
 
     // No application data may be encrypted with the exhausted key.
-    client
+    let err = client
         .writer()
         .write_all(b"later")
-        .unwrap();
+        .unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert_eq!(err.to_string(), Error::EncryptError.to_string());
     raw_server.receive_and_decrypt(&mut client, |m| {
         assert_eq!(
             format!("{m:?}"),
@@ -9185,10 +9208,12 @@ fn tls12_write_is_not_split_across_confidentiality_limit() {
     assert_eq!(received, two_records);
 
     // With one record left, none of a two-record write is sent.
-    client
+    let err = client
         .writer()
         .write_all(&two_records)
-        .unwrap();
+        .unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert_eq!(err.to_string(), Error::EncryptError.to_string());
     let (received, peer_closed) = receive(&mut client, &mut server);
     assert!(peer_closed);
     assert_eq!(received.len(), 0);
