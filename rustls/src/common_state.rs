@@ -24,16 +24,14 @@ pub struct CommonState {
     pub(crate) outputs: ConnectionOutputs,
     pub(crate) send: SendPath,
     pub(crate) recv: ReceivePath,
-    pub(crate) fips: FipsStatus,
 }
 
 impl CommonState {
     pub(crate) fn new(side: Side, fips: FipsStatus) -> Self {
         Self {
-            outputs: ConnectionOutputs::default(),
+            outputs: ConnectionOutputs::new(fips),
             send: SendPath::default(),
             recv: ReceivePath::new(side),
-            fips,
         }
     }
 
@@ -79,8 +77,8 @@ impl fmt::Debug for CommonState {
 }
 
 /// Facts about the connection learned through the handshake.
-#[derive(Default)]
 pub struct ConnectionOutputs {
+    pub(crate) fips: FipsStatus,
     negotiated_version: Option<ProtocolVersion>,
     handshake_kind: Option<HandshakeKind>,
     suite: Option<SupportedCipherSuite>,
@@ -93,6 +91,21 @@ pub struct ConnectionOutputs {
 }
 
 impl ConnectionOutputs {
+    fn new(fips: FipsStatus) -> Self {
+        Self {
+            fips,
+            negotiated_version: None,
+            handshake_kind: None,
+            suite: None,
+            negotiated_kx_group: None,
+            alpn_protocol: None,
+            peer_identity: None,
+            extended_main_secret: None,
+            exporter: None,
+            early_exporter: None,
+        }
+    }
+
     /// Retrieves the certificate chain or the raw public key used by the peer to authenticate.
     ///
     /// This is made available for both full and resumed handshakes.
@@ -139,6 +152,17 @@ impl ConnectionOutputs {
     /// This returns `None` until the version is agreed.
     pub fn protocol_version(&self) -> Option<ProtocolVersion> {
         self.negotiated_version
+    }
+
+    /// Return the FIPS validation status of the connection.
+    ///
+    /// This is different from [`CryptoProvider::fips()`][]:
+    /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
+    /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
+    ///
+    /// [`CryptoProvider::fips()`]: crate::crypto::CryptoProvider::fips()
+    pub fn fips(&self) -> FipsStatus {
+        self.fips
     }
 
     /// Whether the Extended Main Secret extension was negotiated.
@@ -221,6 +245,7 @@ impl ConnectionOutput for ConnectionOutputs {
 impl fmt::Debug for ConnectionOutputs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self {
+            fips,
             negotiated_version,
             handshake_kind,
             suite,
@@ -232,6 +257,7 @@ impl fmt::Debug for ConnectionOutputs {
             early_exporter: _,
         } = self;
         f.debug_struct("ConnectionOutputs")
+            .field("fips", fips)
             .field("negotiated_version", negotiated_version)
             .field("handshake_kind", handshake_kind)
             .field("suite", suite)
