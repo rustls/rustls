@@ -4,7 +4,6 @@ use core::fmt;
 use core::ops::Deref;
 
 use kernel::KernelConnection;
-use pki_types::FipsStatus;
 
 use crate::client::ClientSide;
 use crate::common_state::{
@@ -93,17 +92,6 @@ impl<Side: SideData, T: Transport> Connection<Side, T> {
     /// Returns data learned during the connection.
     pub fn side(&self) -> &Side {
         &self.side
-    }
-
-    /// Return the FIPS validation status of the connection.
-    ///
-    /// This is different from [`CryptoProvider::fips()`][]:
-    /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
-    /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
-    ///
-    /// [`CryptoProvider::fips()`]: crate::crypto::CryptoProvider::fips()
-    pub fn fips(&self) -> FipsStatus {
-        self.common.fips
     }
 
     /// Returns true if the connection is currently performing the TLS handshake.
@@ -294,7 +282,7 @@ impl<T: Transport> Connection<ServerSide, T> {
         self.common
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
-        self.common.fips = config.fips();
+        self.common.outputs.fips = config.fips();
 
         let mut output = SideCommonOutput {
             side: &mut self.side,
