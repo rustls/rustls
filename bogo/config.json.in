@@ -42,8 +42,6 @@
     "CertificateVerificationPassesOnResume-*": "we do not reverify certificates on resumption, so this passes without exercising anything",
     "CheckClientCertificateTypes": "we don't check TLS1.2 CertificateRequest.certificate_types",
     "CheckClientCertificateTypes": "we don't check TLS1.2 CertificateRequest.certificate_types",
-    "CheckECDSACurve-TLS12": "we don't have this check",
-    "CheckLeafCurve": "we don't check this in TLS1.2 (note CheckLeafCurve-TLS13 works)",
     "CheckRecordVersion-*": "we don't look at record version",
     "Client-RejectJDK11DowngradeRandom": "workarounds for oracle engineering quality",
     "Client-VerifyDefault-ECDSA_P521_SHA512-TLS12": "p521-sha512 accepted by default (where supported)",

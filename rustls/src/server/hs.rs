@@ -622,9 +622,25 @@ impl ExpectClientHello {
             ))?;
         self.sni = sni;
 
+        // RFC 8422 section 5.4: in TLS1.2 and below, the client's `supported_groups`
+        // extension also constrains the curve of the server's ECDSA certificate -- it
+        // may only be used with an ECDHE_ECDSA suite if its curve was offered.  (In
+        // TLS1.3 the certificate curve is governed by the signature scheme instead, so
+        // this is only relevant for TLS1.2 and below.)  We only apply this to curves we
+        // actually key-exchange on (and hence could have been offered); a cert on a
+        // curve we have no ECDHE for -- e.g. P-521 -- keeps its prior behaviour.
+        let ecdsa_cert_curve = match T::VERSION {
+            ProtocolVersion::TLSv1_2 => credentials
+                .identity
+                .ecdsa_curve()
+                .filter(|curve| curve.offered_for_key_exchange()),
+            _ => None,
+        };
+
         let (suite, skxg) = self.choose_suite_and_kx_group(
             suites,
             credentials.signer.scheme(),
+            ecdsa_cert_curve,
             input
                 .client_hello
                 .named_groups
@@ -662,6 +678,7 @@ impl ExpectClientHello {
         &self,
         suites: &[&'static T],
         sig_scheme: SignatureScheme,
+        ecdsa_cert_curve: Option<NamedGroup>,
         client_groups: &[NamedGroup],
         client_shares: &[KeyShareEntry],
         client_suites: &[CipherSuite],
@@ -713,6 +730,13 @@ impl ExpectClientHello {
             return Err(PeerIncompatible::NoKxGroupsInCommon.into());
         }
 
+        // RFC 8422 section 5.4: in TLS1.2 and below, an ECDSA certificate may only be
+        // used (with an ECDHE_ECDSA suite) if its curve appears in the client's offered
+        // `supported_groups`.  `ecdsa_cert_curve` is `Some` only for a TLS1.2 ECDSA
+        // certificate; a curve mismatch makes ECDHE_ECDSA suites unusable (but leaves
+        // other key exchanges, e.g. FFDHE, unaffected).
+        let ecdsa_curve_ok = ecdsa_cert_curve.map_or(true, |curve| client_groups.contains(&curve));
+
         // RFC 7919 (https://datatracker.ietf.org/doc/html/rfc7919#section-4) requires us to send
         // the InsufficientSecurity alert in case we don't recognize client's FFDHE groups (i.e.,
         // `suitable_suites` becomes empty). But that does not make a lot of sense (e.g., client
@@ -730,17 +754,26 @@ impl ExpectClientHello {
                 (suite.usable_for_signature_scheme(sig_scheme)
                 // And usable by the current protocol
                 && suite.usable_for_protocol(self.protocol)
-                // And support for one of the key exchange groups
-                && (ecdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::ECDHE)
+                // And support for one of the key exchange groups.  For ECDHE_ECDSA the
+                // certificate's curve must also have been offered (see `ecdsa_curve_ok`).
+                && (ecdhe_possible && ecdsa_curve_ok && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::ECDHE)
                 || ffdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE)))
                 .then_some(suite)
             });
 
-        let suite = self
+        let suite = match self
             .config
             .cipher_suite_selector
             .select(&mut client_suites, suites)
-            .ok_or(PeerIncompatible::NoCipherSuitesInCommon)?;
+        {
+            Some(suite) => suite,
+            // If the only thing preventing a shared ECDHE_ECDSA suite was the ECDSA
+            // certificate's curve not being offered, report that specifically.
+            None if !ecdsa_curve_ok && ecdhe_possible => {
+                return Err(PeerIncompatible::EcdsaCertificateCurveNotOffered.into());
+            }
+            None => return Err(PeerIncompatible::NoCipherSuitesInCommon.into()),
+        };
 
         // Finally, choose a key exchange group that is compatible with the selected cipher
         // suite.

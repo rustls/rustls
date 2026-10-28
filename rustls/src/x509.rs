@@ -48,6 +48,63 @@ fn asn1_wrap(tag: u8, bytes_a: &[u8], bytes_b: &[u8]) -> Vec<u8> {
 const DER_SEQUENCE_TAG: u8 = 0x30;
 const DER_BIT_STRING_TAG: u8 = 0x03;
 
+/// Given a DER-encoded `SubjectPublicKeyInfo`, return the content octets of its
+/// `AlgorithmIdentifier`.
+///
+/// That content is the concatenation of the `algorithm` OID and its
+/// `parameters`, which is exactly what a `pki_types::AlgorithmIdentifier`
+/// holds (i.e. it does not include the enclosing `SEQUENCE` tag and length).
+///
+/// Returns `None` if `spki` is not a well-formed `SEQUENCE { SEQUENCE, .. }`.
+pub(crate) fn spki_algorithm_identifier(spki: &[u8]) -> Option<&[u8]> {
+    // SubjectPublicKeyInfo ::= SEQUENCE { algorithm AlgorithmIdentifier, .. }
+    let (body, _) = read_der_sequence(spki)?;
+    // algorithm ::= AlgorithmIdentifier ::= SEQUENCE { algorithm OID, parameters .. }
+    let (alg_id, _) = read_der_sequence(body)?;
+    Some(alg_id)
+}
+
+/// Read one DER `SEQUENCE` from the front of `der`, returning `(content, rest)`.
+fn read_der_sequence(der: &[u8]) -> Option<(&[u8], &[u8])> {
+    let (&tag, rest) = der.split_first()?;
+    if tag != DER_SEQUENCE_TAG {
+        return None;
+    }
+    let (len, rest) = read_der_length(rest)?;
+    let content = rest.get(..len)?;
+    Some((content, &rest[len..]))
+}
+
+/// Read a DER definite-length prefix, returning `(length, rest)`.
+///
+/// Rejects the indefinite-length form (not valid DER) and non-minimal encodings.
+fn read_der_length(der: &[u8]) -> Option<(usize, &[u8])> {
+    let (&first, rest) = der.split_first()?;
+    match first {
+        // Short form: the length is the byte itself.
+        0..=0x7f => Some((usize::from(first), rest)),
+        // Indefinite length is not permitted in DER.
+        0x80 => None,
+        // Long form: the low 7 bits give the number of subsequent length octets.
+        _ => {
+            let n = usize::from(first & 0x7f);
+            if n > size_of::<usize>() {
+                return None;
+            }
+            let bytes = rest.get(..n)?;
+            // Reject non-minimal encodings (a leading zero length octet).
+            if bytes.first() == Some(&0) {
+                return None;
+            }
+            let mut len = 0usize;
+            for &b in bytes {
+                len = (len << 8) | usize::from(b);
+            }
+            Some((len, &rest[n..]))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::vec;

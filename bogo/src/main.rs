@@ -894,6 +894,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             }
             quit(":ECH_REJECTED:")
         }
+        Error::PeerIncompatible(PeerIncompatible::EcdsaCertificateCurveNotOffered) => {
+            quit(":WRONG_CURVE:")
+        }
         Error::PeerIncompatible(PeerIncompatible::NoCipherSuitesInCommon) => {
             quit(":NO_SHARED_CIPHER:")
         }
@@ -988,6 +991,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         }
         Error::PeerMisbehaved(PeerMisbehaved::WrongGroupForKeyShare) => quit(":WRONG_CURVE:"),
         Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedKxGroup) => quit(":WRONG_CURVE:"),
+        Error::PeerMisbehaved(PeerMisbehaved::ServerEcdsaCertificateCurveNotOffered) => {
+            quit(":BAD_ECC_CERT:")
+        }
         Error::PeerMisbehaved(PeerMisbehaved::RefusedToFollowHelloRetryRequest) => {
             quit(":WRONG_CURVE:")
         }

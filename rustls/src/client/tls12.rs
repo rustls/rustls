@@ -834,6 +834,31 @@ impl VerifySidePeerIdentity<ClientSide> for AwaitServerIdentityVerification {
                 })?
         };
 
+        // RFC 8422 section 5.4: in TLS1.2 and below, the elliptic curves the client
+        // advertises in its `supported_groups` extension also constrain the curve of
+        // the server's ECDSA leaf certificate -- it must be a curve we offered.
+        // (In TLS1.3 the certificate curve is instead implied by the signature
+        // scheme, so this check is specific to this TLS1.2 code path.)  We only apply
+        // it to curves we actually key-exchange on (and hence could have offered); a
+        // leaf on a curve we have no ECDHE for -- e.g. P-521 -- keeps its prior
+        // behaviour, since we never advertise it in the first place.
+        if let Some(cert_curve) = self
+            .peer_identity
+            .ecdsa_curve()
+            .filter(|curve| curve.offered_for_key_exchange())
+        {
+            let offered = self
+                .hs
+                .config
+                .provider()
+                .kx_groups
+                .iter()
+                .any(|kxg| kxg.name() == cert_curve);
+            if !offered {
+                return Err(PeerMisbehaved::ServerEcdsaCertificateCurveNotOffered.into());
+            }
+        }
+
         // 3.
         if let Some(client_auth) = &self.client_auth {
             let certs = match client_auth {

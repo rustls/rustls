@@ -1244,6 +1244,7 @@ pub enum PeerMisbehaved {
     SelectedUnofferedCompression,
     SelectedUnofferedKxGroup,
     SelectedUnofferedPsk,
+    ServerEcdsaCertificateCurveNotOffered,
     ServerEchoedCompatibilitySessionId,
     ServerHelloMustOfferUncompressedEcPoints,
     ServerNameDifferedOnRetry,
@@ -1288,7 +1289,8 @@ impl From<PeerMisbehaved> for AlertDescription {
             }
 
             PeerMisbehaved::InvalidCertCompression
-            | PeerMisbehaved::SelectedUnofferedCertCompression => Self::BadCertificate,
+            | PeerMisbehaved::SelectedUnofferedCertCompression
+            | PeerMisbehaved::ServerEcdsaCertificateCurveNotOffered => Self::BadCertificate,
 
             PeerMisbehaved::MissingKeyShare
             | PeerMisbehaved::MissingPskExtensionInSecondClientHello
@@ -1314,6 +1316,7 @@ impl From<PeerMisbehaved> for AlertDescription {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PeerIncompatible {
     EcPointsExtensionRequired,
+    EcdsaCertificateCurveNotOffered,
     ExtendedMainSecretExtensionRequired,
     IncorrectCertificateTypeExtension,
     KeyShareExtensionRequired,

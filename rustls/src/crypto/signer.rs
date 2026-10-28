@@ -12,6 +12,7 @@ use pki_types::{AlgorithmIdentifier, CertificateDer, SubjectPublicKeyInfoDer};
 use super::CryptoProvider;
 use crate::client::{ClientCredentialResolver, CredentialRequest};
 use crate::crypto::SignatureScheme;
+use crate::crypto::kx::NamedGroup;
 use crate::enums::CertificateType;
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible};
 use crate::msgs::{Codec, Reader};
@@ -282,6 +283,24 @@ impl<'a> Identity<'a> {
             Self::RawPublicKey(spki) => IdentityCertificateIterator::RawPublicKey(iter::once(
                 CertificateDer::from(spki.as_ref()),
             )),
+        }
+    }
+
+    /// If this identity's end-entity public key is an ECDSA key on one of the
+    /// NIST P-curves, return the corresponding [`NamedGroup`].
+    ///
+    /// Returns `None` for non-ECDSA keys, unrecognised curves, or (for X.509
+    /// identities) if the end-entity certificate cannot be parsed.
+    pub(crate) fn ecdsa_curve(&self) -> Option<NamedGroup> {
+        match self {
+            Self::RawPublicKey(spki) => NamedGroup::from_ecdsa_public_key(spki),
+            #[cfg(feature = "webpki")]
+            Self::X509(cert) => {
+                let parsed = ParsedCertificate::try_from(&cert.end_entity).ok()?;
+                NamedGroup::from_ecdsa_public_key(&parsed.subject_public_key_info())
+            }
+            #[cfg(not(feature = "webpki"))]
+            Self::X509(_) => None,
         }
     }
 

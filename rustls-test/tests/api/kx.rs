@@ -89,7 +89,11 @@ fn test_client_config_keyshare_mismatch() {
 fn exercise_all_key_exchange_methods() {
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
-    let key_type = KeyType::default();
+    // Use an RSA credential: this test offers a single key-exchange group at a time,
+    // and in TLS1.2 an ECDSA certificate may only be used when its curve is among the
+    // offered `supported_groups` (RFC 8422 section 5.4).  An RSA certificate keeps this
+    // test focused on key exchange without entangling that cert-curve rule.
+    let key_type = KeyType::Rsa2048;
 
     for (version, provider) in [
         (ProtocolVersion::TLSv1_2, provider::DEFAULT_TLS12_PROVIDER),

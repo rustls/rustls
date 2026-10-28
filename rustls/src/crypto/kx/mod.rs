@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::ops::Deref;
 
-use pki_types::FipsStatus;
+use pki_types::{FipsStatus, SubjectPublicKeyInfoDer, alg_id};
 use zeroize::Zeroize;
 
 use crate::enums::ProtocolVersion;
@@ -575,6 +575,35 @@ impl NamedGroup {
         }
     }
 
+    /// Whether rustls performs ephemeral ECDH key exchange on this named group,
+    /// and therefore advertises it in the `supported_groups` extension.
+    ///
+    /// This covers X25519 and the NIST P-256 and P-384 curves.  It is deliberately
+    /// false for `secp521r1`: rustls can verify and produce P-521 ECDSA signatures
+    /// but has no P-521 key exchange, so it never offers `secp521r1`.  The TLS1.2
+    /// leaf-curve check (RFC 8422 section 5.4) relies on a curve having been
+    /// offered, so it is only applied to curves for which this is true.
+    pub(crate) fn offered_for_key_exchange(self) -> bool {
+        matches!(self, Self::X25519 | Self::secp256r1 | Self::secp384r1)
+    }
+
+    /// If `spki` is an EC public key on one of the NIST P-curves rustls knows,
+    /// return the corresponding `NamedGroup`.
+    ///
+    /// Returns `None` for non-EC keys, unrecognised curves, or malformed input.
+    pub(crate) fn from_ecdsa_public_key(spki: &SubjectPublicKeyInfoDer<'_>) -> Option<Self> {
+        let alg_id = crate::x509::spki_algorithm_identifier(spki.as_ref())?;
+        Some(if alg_id == alg_id::ECDSA_P256.as_ref() {
+            Self::secp256r1
+        } else if alg_id == alg_id::ECDSA_P384.as_ref() {
+            Self::secp384r1
+        } else if alg_id == alg_id::ECDSA_P521.as_ref() {
+            Self::secp521r1
+        } else {
+            return None;
+        })
+    }
+
     /// Returns whether this `NamedGroup` is usable for the given protocol version.
     pub fn usable_for_version(&self, version: ProtocolVersion) -> bool {
         match version {
@@ -685,5 +714,33 @@ mod tests {
     #[test]
     fn test_enums() {
         test_enum16::<NamedGroup>(NamedGroup::secp256r1, NamedGroup::FFDHE8192);
+    }
+
+    #[test]
+    fn ecdsa_curve_from_spki() {
+        use pki_types::{SubjectPublicKeyInfoDer, alg_id};
+
+        use crate::crypto::public_key_to_spki;
+
+        // A `SubjectPublicKeyInfo` for each curve maps to the matching `NamedGroup`.
+        // (The public-key octets are arbitrary; only the algorithm identifier matters.)
+        for (alg, group, keylen) in [
+            (alg_id::ECDSA_P256, NamedGroup::secp256r1, 65),
+            (alg_id::ECDSA_P384, NamedGroup::secp384r1, 97),
+            (alg_id::ECDSA_P521, NamedGroup::secp521r1, 133),
+        ] {
+            let spki = public_key_to_spki(&alg, vec![0x04u8; keylen]);
+            assert_eq!(NamedGroup::from_ecdsa_public_key(&spki), Some(group));
+        }
+
+        // A non-EC key, an EC key on an unhandled curve, and malformed input all yield `None`.
+        let rsa = public_key_to_spki(&alg_id::RSA_ENCRYPTION, vec![0x00u8; 270]);
+        assert_eq!(NamedGroup::from_ecdsa_public_key(&rsa), None);
+        let p256k1 = public_key_to_spki(&alg_id::ECDSA_P256K1, vec![0x04u8; 65]);
+        assert_eq!(NamedGroup::from_ecdsa_public_key(&p256k1), None);
+        for junk in [&[][..], &[0x30][..], &[0x30, 0x01][..], &[0x02, 0x01, 0x00][..]] {
+            let spki = SubjectPublicKeyInfoDer::from(junk.to_vec());
+            assert_eq!(NamedGroup::from_ecdsa_public_key(&spki), None);
+        }
     }
 }

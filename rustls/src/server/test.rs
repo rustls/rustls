@@ -189,6 +189,11 @@ fn test_server_rejects_no_extended_main_secret_extension_when_require_ems_or_fip
     let mut input = VecInput::default();
 
     let mut ch = minimal_client_hello();
+    // Offer the server certificate's curve so the TLS1.2 ECDSA leaf-curve check
+    // (RFC 8422 section 5.4) does not reject it before the EMS requirement is examined.
+    if let Some(groups) = ch.extensions.named_groups.as_mut() {
+        groups.push(NamedGroup::secp256r1);
+    }
     ch.extensions
         .extended_main_secret_request
         .take();
@@ -221,6 +226,11 @@ fn test_server_rejects_non_empty_renegotiation_info_in_initial_handshake() {
     // a client behaving as if it were renegotiating an existing connection:
     // `renegotiated_connection` carries its verify_data instead of being empty.
     let mut ch = minimal_client_hello();
+    // Offer the server certificate's curve so the TLS1.2 ECDSA leaf-curve check
+    // (RFC 8422 section 5.4) does not reject it before the renegotiation_info check.
+    if let Some(groups) = ch.extensions.named_groups.as_mut() {
+        groups.push(NamedGroup::secp256r1);
+    }
     ch.extensions.renegotiation_info = Some(SizedPayload::from(vec![0x55; 12]));
     let ch = Message {
         version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
