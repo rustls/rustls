@@ -177,6 +177,7 @@ impl TryFrom<&Error> for AlertDescription {
             Error::PeerSentOversizedRecord => Self::RecordOverflow,
             Error::RejectedEch(_) => Self::EncryptedClientHelloRequired,
             Error::General(_) => Self::GeneralError,
+            Error::Other(_) => Self::InternalError,
 
             _ => return Err(()),
         })

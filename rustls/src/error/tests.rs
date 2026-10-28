@@ -366,7 +366,10 @@ fn alert_mapping() {
         (Error::AlertReceived(AlertDescription::UnknownCa), Err(())),
         (ApiMisuse::ExporterNotAvailable.into(), Err(())),
         (Error::Unreachable("unreachable"), Err(())),
-        (Error::Other(OtherError::new(TestError)), Err(())),
+        (
+            Error::Other(OtherError::new(TestError)),
+            Ok(AlertDescription::InternalError),
+        ),
         (
             CertificateError::BadEncoding.into(),
             Ok(AlertDescription::BadCertificate),
