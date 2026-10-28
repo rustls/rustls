@@ -348,7 +348,11 @@ impl From<Message<'_>> for Record<Payload<'_>> {
     fn from(msg: Message<'_>) -> Self {
         let typ = msg.payload.content_type();
         let payload = match msg.payload {
-            MessagePayload::ApplicationData(payload) => payload.into_owned(),
+            MessagePayload::ApplicationData(payload)
+            | MessagePayload::HandshakeFlight(payload)
+            | MessagePayload::Handshake {
+                encoded: payload, ..
+            } => payload.into_owned(),
             _ => {
                 let mut buf = Vec::new();
                 msg.payload.encode(&mut buf);
