@@ -426,7 +426,7 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
     pub(crate) fn new(transcript: &'a mut HandshakeHash) -> Self {
         Self {
             transcript,
-            body: Vec::new(),
+            body: Vec::with_capacity(512),
         }
     }
 
