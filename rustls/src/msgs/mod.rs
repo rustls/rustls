@@ -487,13 +487,7 @@ impl<'a> HandshakeMessagePayload<'a> {
     pub(crate) fn total_binder_length(&self) -> usize {
         match &self.0 {
             HandshakePayload::ClientHello(ch) => match &ch.preshared_key_offer {
-                Some(offer) => {
-                    let mut binders_encoding = Vec::new();
-                    offer
-                        .binders
-                        .encode(&mut binders_encoding);
-                    binders_encoding.len()
-                }
+                Some(offer) => offer.encoded_binders_len(),
                 _ => 0,
             },
             _ => 0,
