@@ -1432,7 +1432,7 @@ impl ExpectFinished {
         suite: &'static Tls13CipherSuite,
         peer_identity: Option<VerifiedIdentity<'static>>,
         chosen_alpn_protocol: Option<ApplicationProtocol<'static>>,
-        sni: Option<DnsName<'static>>,
+        sni: Option<&DnsName<'static>>,
         resumption_data: &[u8],
         resumption: &KeyScheduleResumption,
         config: &ServerConfig,
@@ -1445,7 +1445,7 @@ impl ExpectFinished {
         let secret = resumption.derive_ticket_psk(&nonce);
         let plain = ServerSessionValue::from(Tls13ServerSessionValue::new(
             CommonServerSessionValue::new(
-                sni.as_ref(),
+                sni,
                 suite.common.suite,
                 peer_identity,
                 chosen_alpn_protocol,
@@ -1539,7 +1539,7 @@ impl State<ServerSide> for ExpectFinished {
                 self.hs.suite,
                 self.peer_identity.clone(),
                 self.hs.alpn_protocol.clone(),
-                self.hs.sni.clone(),
+                self.hs.sni.as_ref(),
                 &self.hs.resumption_data,
                 &resumption,
                 &self.hs.config,
