@@ -1186,6 +1186,7 @@ pub enum PeerMisbehaved {
     DuplicateNewSessionTicketExtensions,
     DuplicateServerHelloExtensions,
     DuplicateServerNameTypes,
+    EarlyDataAcceptedWithVariedApplicationProtocol,
     EarlyDataAttemptedInSecondClientHello,
     EarlyDataExtensionWithoutResumption,
     EarlyDataOfferedWithVariedCipherSuite,
