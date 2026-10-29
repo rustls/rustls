@@ -301,6 +301,7 @@ mod tests {
                     intermediates: Vec::new(),
                 })),
                 quic_params: None,
+                alpn: None,
             },
             &[],
             now,

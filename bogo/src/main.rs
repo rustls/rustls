@@ -943,6 +943,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::EarlyDataOfferedWithVariedCipherSuite) => {
             quit(":CIPHER_MISMATCH_ON_EARLY_DATA:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::EarlyDataAcceptedWithVariedApplicationProtocol) => {
+            quit(":ALPN_MISMATCH_ON_EARLY_DATA:")
+        }
         Error::PeerMisbehaved(
             PeerMisbehaved::ServerEchoedCompatibilitySessionId | PeerMisbehaved::UnmatchedSessionId,
         ) => quit(":SERVER_ECHOED_INVALID_SESSION_ID:"),
