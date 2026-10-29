@@ -29,7 +29,9 @@ use crate::crypto::kx::{
     ActiveKeyExchange, HybridKeyExchange, NamedGroup, SharedSecret, StartedKeyExchange,
 };
 use crate::crypto::{Identity, SelectedCredential, SignatureScheme, Signer, VerifiedIdentity};
-use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
+use crate::enums::{
+    ApplicationProtocol, CertificateType, ContentType, HandshakeType, ProtocolVersion,
+};
 use crate::error::{
     ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved, RejectedEch,
 };
@@ -290,6 +292,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 sent_status_request: hello
                     .sent_extensions
                     .contains(&ExtensionType::StatusRequest),
+                alpn_protocol: None,
             },
             resuming_session,
             suite,
@@ -556,6 +559,7 @@ impl State<ClientSide> for ExpectEncryptedExtensions {
             selected_alpn,
             self.hs.config.check_selected_alpn,
         )?;
+        self.hs.alpn_protocol = selected_alpn.cloned();
 
         // RFC 9001 says: "While ALPN only specifies that servers use this alert, QUIC clients MUST
         // use error 0x0178 to terminate a connection when ALPN negotiation fails." We judge that
@@ -624,7 +628,17 @@ impl State<ClientSide> for ExpectEncryptedExtensions {
             Some(resuming_session) => {
                 if self.in_early_traffic {
                     match exts.early_data_ack {
-                        Some(()) => output.emit(Event::EarlyData(EarlyDataEvent::Accepted)),
+                        Some(()) => {
+                            // RFC 9846 section 4.3.10: early data is sent under the
+                            // ALPN protocol of the session being resumed.
+                            if resuming_session.alpn.as_ref() != selected_alpn {
+                                return Err(
+                                    PeerMisbehaved::EarlyDataAcceptedWithVariedApplicationProtocol
+                                        .into(),
+                                );
+                            }
+                            output.emit(Event::EarlyData(EarlyDataEvent::Accepted));
+                        }
                         None => {
                             output.emit(Event::EarlyData(EarlyDataEvent::Rejected));
                             // If no early traffic, set the encryption key for handshakes
@@ -649,6 +663,7 @@ impl State<ClientSide> for ExpectEncryptedExtensions {
                         suite: self.suite,
                         peer_identity,
                         quic_params,
+                        alpn: selected_alpn.cloned(),
                     },
                     client_auth: None,
                     sig_verified,
@@ -1250,12 +1265,14 @@ impl VerifySidePeerIdentity<ClientSide> for AwaitServerIdentityVerification {
                 signature: &self.cert_verify,
             })?;
 
+        let alpn = self.hs.alpn_protocol.clone();
         Ok(Box::new(ExpectFinished {
             hs: self.hs,
             session_input: Tls13ClientSessionInput {
                 suite: self.suite,
                 peer_identity: peer_identity.into_owned(),
                 quic_params: self.quic_params,
+                alpn,
             },
             client_auth: self.client_auth,
             sig_verified,
@@ -1564,6 +1581,7 @@ struct HandshakeState {
     key_schedule: KeyScheduleHandshake,
     kx_group: NamedGroup,
     sent_status_request: bool,
+    alpn_protocol: Option<ApplicationProtocol<'static>>,
 }
 
 // -- Traffic transit state (TLS1.3) --
