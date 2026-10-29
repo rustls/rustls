@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::time::Duration;
 
 use pki_types::{DnsName, UnixTime};
 
@@ -215,3 +216,6 @@ impl AsRef<[u8]> for ServerSessionKey<'_> {
         self.inner
     }
 }
+
+/// The `ticket_lifetime` advertised for TLS 1.3 tickets from [`ServerConfig::session_storage`].
+pub(crate) const STATEFUL_SESSION_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);
