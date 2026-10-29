@@ -6,7 +6,7 @@ use crate::crypto::cipher::{EncodableVersion, InboundOpaque, Record, RecordError
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader, U24};
-use crate::msgs::{HEADER_SIZE, read_record_header};
+use crate::msgs::{HANDSHAKE_HEADER_LEN, HEADER_SIZE, read_record_header};
 
 mod buffers;
 use buffers::Coalescer;
@@ -444,8 +444,6 @@ pub(crate) struct Deframed<'a> {
 #[must_use]
 #[derive(Clone, Copy)]
 pub(crate) struct HandshakeAlignedProof(());
-
-const HANDSHAKE_HEADER_LEN: usize = 1 + 3;
 
 /// TLS allows for handshake messages of up to 16MB.  We
 /// restrict that to 64KB to limit potential for denial-of-

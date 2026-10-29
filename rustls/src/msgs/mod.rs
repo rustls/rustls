@@ -376,6 +376,27 @@ impl<'a> Codec<'a> for HandshakeMessagePayload<'a> {
         self.payload_encode(bytes, Encoding::Standard);
     }
 
+    fn size_hint(&self) -> Option<usize> {
+        Some(
+            HANDSHAKE_HEADER_LEN
+                + match &self.0 {
+                    HandshakePayload::Certificate(_) | HandshakePayload::CertificateTls13(_) => {
+                        CertificatePayloadTls13::TYPICAL_LEN
+                    }
+
+                    HandshakePayload::ClientHello(_) => ClientHelloPayload::TYPICAL_LEN,
+                    HandshakePayload::EndOfEarlyData => 0,
+                    HandshakePayload::KeyUpdate(_) => 1,
+
+                    HandshakePayload::Finished(p)
+                    | HandshakePayload::MessageHash(p)
+                    | HandshakePayload::ClientKeyExchange(p) => p.bytes().len(),
+
+                    _ => 256,
+                },
+        )
+    }
+
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         Self::read_version(r, ProtocolVersion::TLSv1_2)
     }
@@ -689,6 +710,9 @@ impl Codec<'_> for ChangeCipherSpecPayload {
 
 /// Content type, version and size.
 pub(crate) const HEADER_SIZE: usize = 1 + 2 + 2;
+
+/// Handshake type and size.
+pub(crate) const HANDSHAKE_HEADER_LEN: usize = 1 + 3;
 
 /// Maximum message payload size.
 /// That's 2^14 payload bytes and a 2KB allowance for ciphertext overheads.
