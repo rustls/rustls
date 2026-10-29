@@ -367,7 +367,7 @@ impl CompressionCache {
         }
 
         // cache probe:
-        let encoding = original.get_encoding();
+        let encoding = original.encoding();
         let algorithm = compressor.algorithm();
 
         let mut cache = entries
@@ -413,7 +413,7 @@ impl CompressionCache {
         original: &CertificatePayloadTls13<'_>,
     ) -> Result<Arc<CompressionCacheEntry>, CompressionFailed> {
         let algorithm = compressor.algorithm();
-        let encoding = original.get_encoding();
+        let encoding = original.encoding();
         let uncompressed_len = encoding.len() as u32;
         let compressed = compressor.compress(encoding, CompressionLevel::Interactive)?;
 

@@ -276,12 +276,12 @@ pub(crate) mod tests {
     }
 
     fn get8<T: for<'a> Codec<'a>>(enum_value: &T) -> u8 {
-        let enc = enum_value.get_encoding();
+        let enc = enum_value.encoding();
         u8::from_be_bytes(enc.try_into().unwrap())
     }
 
     fn get16<T: for<'a> Codec<'a>>(enum_value: &T) -> u16 {
-        let enc = enum_value.get_encoding();
+        let enc = enum_value.encoding();
         u16::from_be_bytes(enc.try_into().unwrap())
     }
 }

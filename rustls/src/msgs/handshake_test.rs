@@ -467,14 +467,14 @@ fn can_round_trip_psk_identity() {
     let psk_id = PresharedKeyIdentity::read(&mut Reader::new(&bytes)).unwrap();
     println!("{psk_id:?}");
     assert_eq!(psk_id.obfuscated_ticket_age, 0x11223344);
-    assert_eq!(psk_id.get_encoding(), bytes.to_vec());
+    assert_eq!(psk_id.encoding(), bytes.to_vec());
 
     let bytes = [0, 5, 0x1, 0x2, 0x3, 0x4, 0x5, 0x11, 0x22, 0x33, 0x44];
     let psk_id = PresharedKeyIdentity::read(&mut Reader::new(&bytes)).unwrap();
     println!("{psk_id:?}");
     assert_eq!(psk_id.identity.bytes(), &[0x1, 0x2, 0x3, 0x4, 0x5]);
     assert_eq!(psk_id.obfuscated_ticket_age, 0x11223344);
-    assert_eq!(psk_id.get_encoding(), bytes.to_vec());
+    assert_eq!(psk_id.encoding(), bytes.to_vec());
 }
 
 #[test]
@@ -490,7 +490,7 @@ fn can_round_trip_psk_offer() {
     assert_eq!(psko.identities[0].obfuscated_ticket_age, 0x11223344);
     assert_eq!(psko.binders.len(), 1);
     assert_eq!(psko.binders[0].as_ref(), &[1, 2, 3]);
-    assert_eq!(psko.get_encoding(), bytes.to_vec());
+    assert_eq!(psko.encoding(), bytes.to_vec());
 }
 
 #[test]
@@ -505,7 +505,7 @@ fn can_round_trip_cert_status_req_for_ocsp() {
 
     let csr = CertificateStatusRequest::read(&mut Reader::new(&bytes)).unwrap();
     println!("{csr:?}");
-    assert_eq!(csr.get_encoding(), bytes.to_vec());
+    assert_eq!(csr.encoding(), bytes.to_vec());
 }
 
 #[test]
@@ -532,7 +532,7 @@ fn can_round_trip_cert_status_req_for_other() {
 
     let csr = CertificateStatusRequest::read(&mut Reader::new(&bytes)).unwrap();
     println!("{csr:?}");
-    assert_eq!(csr.get_encoding(), bytes.to_vec());
+    assert_eq!(csr.encoding(), bytes.to_vec());
 }
 
 #[test]
@@ -565,7 +565,7 @@ fn client_extensions_basics() {
 #[test]
 fn client_extensions_empty() {
     // both sides of empty-encoding branch
-    assert_eq!(ClientExtensions::default().get_encoding(), Vec::<u8>::new());
+    assert_eq!(ClientExtensions::default().encoding(), Vec::<u8>::new());
     assert_eq!(
         ClientExtensions::read_bytes(&[])
             .unwrap()
@@ -579,7 +579,7 @@ fn client_extensions_empty() {
             early_data_request: Some(()),
             ..Default::default()
         }
-        .get_encoding(),
+        .encoding(),
         early_data
     );
     assert_eq!(
@@ -655,7 +655,7 @@ fn client_extensions_ordering() {
     fn encoding_with_order(order_seed: u16, exts: &ClientExtensions<'_>) -> Vec<u8> {
         let mut e = exts.clone();
         e.order_seed = order_seed;
-        e.get_encoding()
+        e.encoding()
     }
 
     assert_ne!(
@@ -705,7 +705,7 @@ fn test_truncated_psk_offer() {
         binders: vec![PresharedKeyBinder::from(vec![1, 2, 3])],
     };
 
-    let mut enc = ext.get_encoding();
+    let mut enc = ext.encoding();
     println!("testing {ext:?} enc {enc:?}");
     for l in 0..enc.len() {
         if l == 9 {
@@ -720,7 +720,7 @@ fn test_truncated_psk_offer() {
 #[test]
 fn test_truncated_client_hello_is_detected() {
     let ch = sample_client_hello_payload();
-    let enc = ch.get_encoding();
+    let enc = ch.encoding();
     println!("testing {ch:?} enc {enc:?}");
 
     for l in 0..enc.len() {
@@ -736,7 +736,7 @@ fn test_truncated_client_hello_is_detected() {
 fn test_truncated_client_extension_is_detected() {
     let chp = sample_client_hello_payload();
 
-    let enc = chp.extensions.get_encoding();
+    let enc = chp.extensions.encoding();
     println!("testing enc {enc:?}");
 
     // "outer" truncation, i.e., where the extension-level length is longer than
@@ -750,7 +750,7 @@ fn test_truncated_client_extension_is_detected() {
 fn test_truncated_hello_retry_extension_is_detected() {
     let hrr = sample_hello_retry_request();
 
-    let mut enc = hrr.extensions.get_encoding();
+    let mut enc = hrr.extensions.encoding();
     println!("testing enc {enc:?}");
 
     // "outer" truncation, i.e., where the extension-level length is longer than
@@ -772,7 +772,7 @@ fn test_truncated_hello_retry_extension_is_detected() {
 fn test_truncated_server_extension_is_detected() {
     let shp = sample_server_hello_payload();
 
-    let mut enc = shp.extensions.get_encoding();
+    let mut enc = shp.extensions.encoding();
     println!("testing enc {enc:?}");
 
     // "outer" truncation, i.e., where the extension-level length is longer than
@@ -806,11 +806,11 @@ fn can_clone_all_server_extensions() {
 fn can_round_trip_all_tls12_handshake_payloads() {
     for hm in all_tls12_handshake_payloads().iter() {
         println!("{:?}", hm.0.handshake_type());
-        let bytes = hm.get_encoding();
+        let bytes = hm.encoding();
         let mut rd = Reader::new(&bytes);
         let other = HandshakeMessagePayload::read(&mut rd).unwrap();
         assert!(!rd.any_left());
-        assert_eq!(hm.get_encoding(), other.get_encoding());
+        assert_eq!(hm.encoding(), other.encoding());
 
         println!("{hm:?}");
         println!("{other:?}");
@@ -820,10 +820,10 @@ fn can_round_trip_all_tls12_handshake_payloads() {
 #[test]
 fn can_into_owned_all_tls12_handshake_payloads() {
     for hm in all_tls12_handshake_payloads().drain(..) {
-        let enc = hm.get_encoding();
+        let enc = hm.encoding();
         let debug = format!("{hm:?}");
         let other = hm.into_owned();
-        assert_eq!(enc, other.get_encoding());
+        assert_eq!(enc, other.encoding());
         assert_eq!(debug, format!("{other:?}"));
     }
 }
@@ -831,7 +831,7 @@ fn can_into_owned_all_tls12_handshake_payloads() {
 #[test]
 fn can_detect_truncation_of_all_tls12_handshake_payloads() {
     for hm in all_tls12_handshake_payloads().iter() {
-        let mut enc = hm.get_encoding();
+        let mut enc = hm.encoding();
         println!("test {hm:?} enc {enc:?}");
 
         // outer truncation
@@ -870,13 +870,13 @@ fn can_detect_truncation_of_all_tls12_handshake_payloads() {
 fn can_round_trip_all_tls13_handshake_payloads() {
     for hm in all_tls13_handshake_payloads().iter() {
         println!("{:?}", hm.0.handshake_type());
-        let bytes = hm.get_encoding();
+        let bytes = hm.encoding();
         let mut rd = Reader::new(&bytes);
 
         let other =
             HandshakeMessagePayload::read_version(&mut rd, ProtocolVersion::TLSv1_3).unwrap();
         assert!(!rd.any_left());
-        assert_eq!(hm.get_encoding(), other.get_encoding());
+        assert_eq!(hm.encoding(), other.encoding());
 
         println!("{hm:?}");
         println!("{other:?}");
@@ -886,10 +886,10 @@ fn can_round_trip_all_tls13_handshake_payloads() {
 #[test]
 fn can_into_owned_all_tls13_handshake_payloads() {
     for hm in all_tls13_handshake_payloads().drain(..) {
-        let enc = hm.get_encoding();
+        let enc = hm.encoding();
         let debug = format!("{hm:?}");
         let other = hm.into_owned();
-        assert_eq!(enc, other.get_encoding());
+        assert_eq!(enc, other.encoding());
         assert_eq!(debug, format!("{other:?}"));
     }
 }
@@ -897,7 +897,7 @@ fn can_into_owned_all_tls13_handshake_payloads() {
 #[test]
 fn can_detect_truncation_of_all_tls13_handshake_payloads() {
     for hm in all_tls13_handshake_payloads().iter() {
-        let mut enc = hm.get_encoding();
+        let mut enc = hm.encoding();
         println!("test {hm:?} enc {enc:?}");
 
         // outer truncation
@@ -941,7 +941,7 @@ fn put_u24(u: u32, b: &mut [u8]) {
 fn cannot_read_message_hash_from_network() {
     let mh = HandshakeMessagePayload(HandshakePayload::MessageHash(Payload::new(vec![1, 2, 3])));
     println!("mh {mh:?}");
-    let enc = mh.get_encoding();
+    let enc = mh.encoding();
     assert!(HandshakeMessagePayload::read_bytes(&enc).is_err());
 }
 
@@ -1099,7 +1099,7 @@ fn rejects_trailing_data_in_v18_echconfig() {
     // version(2) | length(2) | ECHConfigContents(length)
     let mut encoded = get_ech_config(ECHCONFIG_LIST_LOCALHOST)
         .remove(0)
-        .get_encoding();
+        .encoding();
     assert!(matches!(
         EchConfigPayload::read_bytes(&encoded).unwrap(),
         EchConfigPayload::V18(_)

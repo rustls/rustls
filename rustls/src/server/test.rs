@@ -51,7 +51,7 @@ fn serversessionvalue_no_sni() {
     ];
     let mut rd = Reader::new(&bytes);
     let ssv = ServerSessionValue::read(&mut rd).unwrap();
-    assert_eq!(ssv.get_encoding(), bytes);
+    assert_eq!(ssv.encoding(), bytes);
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn serversessionvalue_with_cert() {
             &[1, 2, 3],
             0x12345678,
         ))
-        .get_encoding()
+        .encoding()
     );
 
     let bytes = [
@@ -85,7 +85,7 @@ fn serversessionvalue_with_cert() {
     ];
     let mut rd = Reader::new(&bytes);
     let ssv = ServerSessionValue::read(&mut rd).unwrap();
-    assert_eq!(ssv.get_encoding(), bytes);
+    assert_eq!(ssv.encoding(), bytes);
 }
 
 #[test]
@@ -486,7 +486,7 @@ fn resume_with_early_data(index: usize) -> (Option<u16>, bool) {
     assert!(
         config
             .session_storage
-            .put(ServerSessionKey::new(ticket), session.get_encoding())
+            .put(ServerSessionKey::new(ticket), session.encoding())
     );
 
     let binder_len = TLS13_TEST_SUITE

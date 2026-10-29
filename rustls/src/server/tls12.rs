@@ -891,7 +891,7 @@ fn emit_ticket(
         secrets.master_secret(),
         using_ems,
     ))
-    .get_encoding();
+    .encoding();
 
     // If we can't produce a ticket for some reason, we can't
     // report an error. Send an empty one.
@@ -998,7 +998,7 @@ impl State<ServerSide> for ExpectFinished {
 
             let worked = self.hs.config.session_storage.put(
                 ServerSessionKey::from(&self.hs.session_id),
-                value.get_encoding(),
+                value.encoding(),
             );
             if worked {
                 debug!("Session saved");
