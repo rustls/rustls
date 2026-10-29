@@ -460,7 +460,7 @@ impl EchState {
         // Next we compute the proper extension payload.
         let payload = self
             .sender
-            .seal(&outer_hello.get_encoding(), &encoded_inner_hello)?;
+            .seal(&outer_hello.encoding(), &encoded_inner_hello)?;
 
         // And then we replace the placeholder extension with the real one.
         outer_hello.encrypted_client_hello = Some(outer_hello_ext(self, enc, payload));
@@ -1398,8 +1398,7 @@ mod tests {
 
     fn encode(server_hello: &ServerHelloPayload) -> Payload<'static> {
         Payload::new(
-            HandshakeMessagePayload(HandshakePayload::ServerHello(server_hello.clone()))
-                .get_encoding(),
+            HandshakeMessagePayload(HandshakePayload::ServerHello(server_hello.clone())).encoding(),
         )
     }
 

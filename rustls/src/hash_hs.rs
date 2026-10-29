@@ -131,7 +131,7 @@ impl HandshakeHash {
             HandshakeMessagePayload::build_handshake_hash(old_hash.as_ref());
 
         HandshakeHashBuffer {
-            buffer: old_handshake_hash_msg.get_encoding(),
+            buffer: old_handshake_hash_msg.encoding(),
             client_auth_enabled: self.client_auth.is_some(),
         }
     }
@@ -147,7 +147,7 @@ impl HandshakeHash {
         let old_handshake_hash_msg =
             HandshakeMessagePayload::build_handshake_hash(old_hash.as_ref());
 
-        self.add_raw(&old_handshake_hash_msg.get_encoding());
+        self.add_raw(&old_handshake_hash_msg.encoding());
     }
 
     /// Get the current hash value.

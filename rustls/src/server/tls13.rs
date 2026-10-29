@@ -1455,7 +1455,7 @@ impl ExpectFinished {
             secret.as_ref(),
             age_add,
         ))
-        .get_encoding();
+        .encoding();
 
         let ticketer = config.ticketer.as_deref();
         let (ticket, lifetime) = if let Some(ticketer) = ticketer {
