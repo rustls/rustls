@@ -735,7 +735,7 @@ impl ExpectClientHello {
         // `supported_groups`.  `ecdsa_cert_curve` is `Some` only for a TLS1.2 ECDSA
         // certificate; a curve mismatch makes ECDHE_ECDSA suites unusable (but leaves
         // other key exchanges, e.g. FFDHE, unaffected).
-        let ecdsa_curve_ok = ecdsa_cert_curve.map_or(true, |curve| client_groups.contains(&curve));
+        let ecdsa_curve_ok = ecdsa_cert_curve.is_none_or(|curve| client_groups.contains(&curve));
 
         // RFC 7919 (https://datatracker.ietf.org/doc/html/rfc7919#section-4) requires us to send
         // the InsufficientSecurity alert in case we don't recognize client's FFDHE groups (i.e.,

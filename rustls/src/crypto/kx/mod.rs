@@ -738,7 +738,12 @@ mod tests {
         assert_eq!(NamedGroup::from_ecdsa_public_key(&rsa), None);
         let p256k1 = public_key_to_spki(&alg_id::ECDSA_P256K1, vec![0x04u8; 65]);
         assert_eq!(NamedGroup::from_ecdsa_public_key(&p256k1), None);
-        for junk in [&[][..], &[0x30][..], &[0x30, 0x01][..], &[0x02, 0x01, 0x00][..]] {
+        for junk in [
+            &[][..],
+            &[0x30][..],
+            &[0x30, 0x01][..],
+            &[0x02, 0x01, 0x00][..],
+        ] {
             let spki = SubjectPublicKeyInfoDer::from(junk.to_vec());
             assert_eq!(NamedGroup::from_ecdsa_public_key(&spki), None);
         }
