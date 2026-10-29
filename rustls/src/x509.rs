@@ -188,4 +188,48 @@ mod tests {
         // ^ tag   ^ len   ^ no unused bits    ^ value
         assert_eq!(wrap_in_bit_string(&[0x55u8]), vec![0x03, 0x02, 0x00, 0x55]);
     }
+
+    #[test]
+    fn der_length_short_form() {
+        assert_eq!(read_der_length(&[0x00, 0xaa]), Some((0, &[0xaa][..])));
+        assert_eq!(read_der_length(&[0x7f, 0xbb]), Some((0x7f, &[0xbb][..])));
+    }
+
+    #[test]
+    fn der_length_long_form() {
+        // 0x82 => two following octets => 0x0100 = 256; remainder preserved.
+        assert_eq!(
+            read_der_length(&[0x82, 0x01, 0x00, 0xdd]),
+            Some((256, &[0xdd][..]))
+        );
+    }
+
+    #[test]
+    fn der_length_rejects_malformed() {
+        // empty, indefinite form, over-long count, truncated, and non-minimal.
+        assert_eq!(read_der_length(&[]), None);
+        assert_eq!(read_der_length(&[0x80]), None);
+        assert_eq!(read_der_length(&[0x89]), None);
+        assert_eq!(read_der_length(&[0x82, 0x01]), None);
+        assert_eq!(read_der_length(&[0x82, 0x00, 0x7f]), None);
+    }
+
+    #[test]
+    fn spki_algorithm_identifier_cases() {
+        // SEQUENCE { SEQUENCE { 0xff } } yields the inner algorithm bytes.
+        assert_eq!(
+            spki_algorithm_identifier(&[0x30, 0x03, 0x30, 0x01, 0xff]),
+            Some(&[0xff][..])
+        );
+        // Not a SEQUENCE; algorithm field not a SEQUENCE; declared length too long.
+        assert_eq!(spki_algorithm_identifier(&[0x02, 0x01, 0x00]), None);
+        assert_eq!(
+            spki_algorithm_identifier(&[0x30, 0x03, 0x02, 0x01, 0x00]),
+            None
+        );
+        assert_eq!(
+            spki_algorithm_identifier(&[0x30, 0x05, 0x30, 0x01, 0xff]),
+            None
+        );
+    }
 }

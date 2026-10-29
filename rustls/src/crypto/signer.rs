@@ -507,3 +507,24 @@ pub enum InconsistentKeys {
     /// [`SigningKey`]: crate::crypto::SigningKey
     Unknown,
 }
+
+#[cfg(test)]
+mod tests {
+    use std::vec;
+
+    use pki_types::alg_id;
+
+    use super::*;
+
+    #[test]
+    fn ecdsa_curve_of_raw_public_key() {
+        // An ECDSA raw public key reports its curve; a non-ECDSA one does not.
+        let p256 = public_key_to_spki(&alg_id::ECDSA_P256, vec![0x04u8; 65]);
+        assert_eq!(
+            Identity::RawPublicKey(p256).ecdsa_curve(),
+            Some(NamedGroup::secp256r1)
+        );
+        let rsa = public_key_to_spki(&alg_id::RSA_ENCRYPTION, vec![0x00u8; 270]);
+        assert_eq!(Identity::RawPublicKey(rsa).ecdsa_curve(), None);
+    }
+}
