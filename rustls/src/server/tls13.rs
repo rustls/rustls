@@ -1,7 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::time::Duration;
 
 pub(crate) use client_hello::TLS13_HANDLER;
 use pki_types::{DnsName, UnixTime};
@@ -10,7 +9,9 @@ use zeroize::Zeroizing;
 
 use super::config::ServerConfig;
 use super::hs::{HandshakeHashOrBuffer, ServerState};
-use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
+use super::{
+    CommonServerSessionValue, STATEFUL_SESSION_LIFETIME, ServerSessionKey, ServerSessionValue,
+};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{Event, HandshakeFlightTls13, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
@@ -1472,8 +1473,7 @@ impl ExpectFinished {
                 trace!("resumption not available; not issuing ticket");
                 return Ok(());
             }
-            let stateful_lifetime = Duration::from_secs(24 * 60 * 60); // this is a bit of a punt
-            (id.to_vec(), stateful_lifetime)
+            (id.to_vec(), STATEFUL_SESSION_LIFETIME)
         };
 
         let mut payload = NewSessionTicketPayloadTls13::new(lifetime, age_add, nonce, ticket);
