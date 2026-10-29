@@ -485,7 +485,8 @@ mod client_hello {
 
         let now = config.current_time()?;
         for (index, psk_id) in psk_offer.identities.iter().enumerate() {
-            let Some(mut session) = Tls13ServerSessionValue::from_ticket(psk_id, config) else {
+            let Some(mut session) = Tls13ServerSessionValue::from_ticket(psk_id, now, config)
+            else {
                 continue;
             };
 
@@ -1313,6 +1314,7 @@ pub(crate) struct Tls13ServerSessionValue<'a> {
 impl<'a> Tls13ServerSessionValue<'a> {
     fn from_ticket(
         id: &PresharedKeyIdentity,
+        now: UnixTime,
         config: &ServerConfig,
     ) -> Option<Tls13ServerSessionValue<'static>> {
         let plain = match config.ticketer.as_deref() {
@@ -1325,6 +1327,15 @@ impl<'a> Tls13ServerSessionValue<'a> {
         let Ok(ServerSessionValue::Tls13(tls13)) = ServerSessionValue::read_bytes(&plain) else {
             return None;
         };
+
+        if config.ticketer.is_none()
+            && tls13
+                .common
+                .has_expired(now, STATEFUL_SESSION_LIFETIME)
+        {
+            debug!("stored session has expired");
+            return None;
+        }
 
         Some(tls13.into_owned())
     }
