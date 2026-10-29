@@ -100,11 +100,17 @@ impl ClientHelloPayload {
             false
         }
     }
+
+    pub(crate) const TYPICAL_LEN: usize = 512;
 }
 
 impl Codec<'_> for ClientHelloPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.payload_encode(bytes, Encoding::Standard)
+    }
+
+    fn size_hint(&self) -> Option<usize> {
+        Some(Self::TYPICAL_LEN)
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {

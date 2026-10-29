@@ -69,6 +69,10 @@ impl<'a> Codec<'a> for ServerSessionValue<'a> {
         }
     }
 
+    fn size_hint(&self) -> Option<usize> {
+        Some(128)
+    }
+
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         match ProtocolVersion::read(r)? {
             ProtocolVersion::TLSv1_2 => Ok(Self::Tls12(Tls12ServerSessionValue::read(r)?)),

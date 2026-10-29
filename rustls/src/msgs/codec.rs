@@ -425,9 +425,14 @@ pub(crate) trait Codec<'a>: Sized {
     /// Convenience function for encoding the implementation
     /// into a vec and returning it
     fn encoding(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
+        let mut bytes = Vec::with_capacity(self.size_hint().unwrap_or_default());
         self.encode(&mut bytes);
         bytes
+    }
+
+    /// Starting capacity for the `encoding()` buffer
+    fn size_hint(&self) -> Option<usize> {
+        None
     }
 
     /// Function for wrapping a call to the read function in

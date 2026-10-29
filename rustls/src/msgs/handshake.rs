@@ -760,12 +760,18 @@ impl<'a> CertificatePayloadTls13<'a> {
                 .collect(),
         )
     }
+
+    pub(super) const TYPICAL_LEN: usize = 2048;
 }
 
 impl<'a> Codec<'a> for CertificatePayloadTls13<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.context.encode(bytes);
         self.entries.encode(bytes);
+    }
+
+    fn size_hint(&self) -> Option<usize> {
+        Some(Self::TYPICAL_LEN)
     }
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
