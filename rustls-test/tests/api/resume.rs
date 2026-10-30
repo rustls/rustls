@@ -2,26 +2,27 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use core::hash::Hasher;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use core::time::Duration;
 use std::fmt;
 use std::sync::Arc;
 
-use rustls::client::{Resumption, TicketRequest};
+use rustls::client::{ClientCredentialResolver, CredentialRequest, Resumption, TicketRequest};
 use rustls::crypto::kx::NamedGroup;
-use rustls::crypto::{CertificateIdentity, Identity, TicketProducer};
-use rustls::enums::ProtocolVersion;
+use rustls::crypto::{CertificateIdentity, Identity, SelectedCredential, TicketProducer};
+use rustls::enums::{CertificateType, ProtocolVersion};
 use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
 use rustls::server::{ServerSessionKey, Tls13Tickets};
 use rustls::{
     ClientConfig, ClientSide, Connection, HandshakeKind, ServerConfig, ServerSide, Tcp, VecInput,
 };
 use rustls_test::{
-    ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, MultiTest,
-    ServerConfigExt, do_handshake, do_handshake_collecting_early_data, do_handshake_until_error,
-    make_client_config, make_client_config_with_auth, make_client_config_with_kx_groups, make_pair,
-    make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
-    make_server_config_with_kx_groups, transfer, webpki_server_verifier_builder,
+    ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, MultiTest, ServerConfigExt,
+    do_handshake, do_handshake_collecting_early_data, do_handshake_until_error, make_client_config,
+    make_client_config_with_kx_groups, make_pair, make_pair_for_arc_configs, make_pair_for_configs,
+    make_server_config, make_server_config_with_kx_groups, transfer,
+    webpki_server_verifier_builder,
 };
 
 use super::provider;
@@ -80,14 +81,14 @@ fn client_only_attempts_resumption_with_compatible_security() {
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
 
         // disallowed case: unmatching `client_auth_cert_resolver`
-        let client_config = ClientConfig::builder(base_client_config.provider().clone())
-            .add_root_certs(expect.key_type)
-            .with_client_credential_resolver(
-                make_client_config_with_auth(expect.key_type, base_client_config.provider())
-                    .resolver()
-                    .clone(),
-            )
+        let mut client_config = ClientConfig::builder(base_client_config.provider().clone())
+            .dangerous()
+            .with_custom_certificate_verifier(base_client_config.verifier().clone())
+            .with_client_credential_resolver(Arc::new(ForwardingResolver(
+                base_client_config.resolver().clone(),
+            )))
             .unwrap();
+        client_config.resumption = base_client_config.resumption.clone();
 
         let mut client_output = Vec::new();
         let mut server_output = Vec::new();
@@ -107,39 +108,54 @@ fn client_only_attempts_resumption_with_compatible_security() {
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
 
         // disallowed case: unmatching `verifier`
-        if !expect.client_auth {
-            let mut client_config = ClientConfig::builder(base_client_config.provider().clone())
-                .dangerous()
-                .with_custom_certificate_verifier(Arc::new(
-                    webpki_server_verifier_builder(
-                        expect.key_type.client_root_store(),
-                        base_client_config.provider(),
-                    )
-                    .allow_unknown_revocation_status()
-                    .build()
-                    .unwrap(),
-                ))
-                .with_client_credential_resolver(client_config.resolver().clone())
-                .unwrap();
-            client_config.resumption = base_client_config.resumption.clone();
+        let mut client_config = ClientConfig::builder(base_client_config.provider().clone())
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(
+                webpki_server_verifier_builder(
+                    expect.key_type.client_root_store(),
+                    base_client_config.provider(),
+                )
+                .allow_unknown_revocation_status()
+                .build()
+                .unwrap(),
+            ))
+            .with_client_credential_resolver(base_client_config.resolver().clone())
+            .unwrap();
+        client_config.resumption = base_client_config.resumption.clone();
 
-            let mut client_output = Vec::new();
-            let mut server_output = Vec::new();
-            let (mut client, mut server) = make_pair_for_configs(
-                client_config,
-                ServerConfig::clone(&server_config),
-                &mut client_output,
-            );
-            do_handshake(
-                &mut client_input,
-                &mut client_output,
-                &mut client,
-                &mut server_input,
-                &mut server_output,
-                &mut server,
-            );
-            assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
-        }
+        let mut client_output = Vec::new();
+        let mut server_output = Vec::new();
+        let (mut client, mut server) = make_pair_for_configs(
+            client_config,
+            ServerConfig::clone(&server_config),
+            &mut client_output,
+        );
+        do_handshake(
+            &mut client_input,
+            &mut client_output,
+            &mut client,
+            &mut server_input,
+            &mut server_output,
+            &mut server,
+        );
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+    }
+}
+
+#[derive(Debug)]
+struct ForwardingResolver(Arc<dyn ClientCredentialResolver>);
+
+impl ClientCredentialResolver for ForwardingResolver {
+    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<SelectedCredential> {
+        self.0.resolve(request)
+    }
+
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        self.0.supported_certificate_types()
+    }
+
+    fn hash_config(&self, h: &mut dyn Hasher) {
+        self.0.hash_config(h)
     }
 }
 

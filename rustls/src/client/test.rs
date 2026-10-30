@@ -9,18 +9,19 @@ use std::vec;
 
 use pki_types::{CertificateDer, FipsStatus, ServerName, UnixTime};
 
+use super::handy::FailResolveClientCert;
 use super::{Tls12Session, Tls13ClientSessionInput, Tls13Session};
 use crate::client::{
-    ClientConfig, ClientSessionKey, ClientSessionMemoryCache, ClientSessionStore, Resumption,
-    Tls12Resumption,
+    ClientConfig, ClientCredentialResolver, ClientSessionKey, ClientSessionMemoryCache,
+    ClientSessionStore, CredentialRequest, Resumption, Tls12Resumption,
 };
 use crate::crypto::cipher::{EncodableVersion, Payload, Record, RecordEncrypter};
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::test_provider::{FakeKeyExchangeGroup, KEY_EXCHANGE_GROUP, TLS_TEST_SUITE};
 use crate::crypto::tls13::OkmBlock;
 use crate::crypto::{
-    CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme, SingleCredential,
-    TEST_PROVIDER, TLS13_TEST_SUITE, tls12_only, tls13_only, tls13_suite,
+    CipherSuite, Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme,
+    SingleCredential, TEST_PROVIDER, TLS13_TEST_SUITE, tls12_only, tls13_only, tls13_suite,
 };
 use crate::enums::{CertificateType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
@@ -37,6 +38,7 @@ use crate::pki_types::PrivateKeyDer;
 use crate::pki_types::pem::PemObject;
 use crate::suites::Suite;
 use crate::sync::Arc;
+use crate::time_provider::{DefaultTimeProvider, TimeProvider};
 use crate::tls13::Tls13ProtocolSuite;
 use crate::tls13::key_schedule::{derive_traffic_iv, derive_traffic_key};
 use crate::verify::{
@@ -631,6 +633,80 @@ impl ServerVerifier for ExpectSha1EcdsaVerifier {
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         vec![SignatureScheme::ECDSA_SHA1_Legacy]
+    }
+
+    fn hash_config(&self, _: &mut dyn Hasher) {}
+}
+
+#[test]
+fn config_hash_includes_concrete_type_of_each_component() {
+    fn config_hash(
+        time_provider: Arc<dyn TimeProvider>,
+        verifier: Arc<dyn ServerVerifier>,
+        resolver: Arc<dyn ClientCredentialResolver>,
+    ) -> [u8; 32] {
+        ClientConfig::builder_with_details(Arc::new(TEST_PROVIDER), time_provider)
+            .dangerous()
+            .with_custom_certificate_verifier(verifier)
+            .with_client_credential_resolver(resolver)
+            .unwrap()
+            .config_hash()
+    }
+
+    let base = || {
+        config_hash(
+            Arc::new(DefaultTimeProvider),
+            Arc::new(ServerVerifierRequiringRpk),
+            Arc::new(FailResolveClientCert {}),
+        )
+    };
+    assert_eq!(base(), base());
+
+    assert_ne!(
+        base(),
+        config_hash(
+            Arc::new(FixedTimeProvider),
+            Arc::new(ServerVerifierRequiringRpk),
+            Arc::new(FailResolveClientCert {}),
+        )
+    );
+    assert_ne!(
+        base(),
+        config_hash(
+            Arc::new(DefaultTimeProvider),
+            Arc::new(ExpectSha1EcdsaVerifier::default()),
+            Arc::new(FailResolveClientCert {}),
+        )
+    );
+    assert_ne!(
+        base(),
+        config_hash(
+            Arc::new(DefaultTimeProvider),
+            Arc::new(ServerVerifierRequiringRpk),
+            Arc::new(NoCredentialResolver),
+        )
+    );
+}
+
+#[derive(Debug)]
+struct FixedTimeProvider;
+
+impl TimeProvider for FixedTimeProvider {
+    fn current_time(&self) -> Option<UnixTime> {
+        Some(UnixTime::since_unix_epoch(Duration::from_secs(1)))
+    }
+}
+
+#[derive(Debug)]
+struct NoCredentialResolver;
+
+impl ClientCredentialResolver for NoCredentialResolver {
+    fn resolve(&self, _: &CredentialRequest<'_>) -> Option<SelectedCredential> {
+        None
+    }
+
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        &[]
     }
 
     fn hash_config(&self, _: &mut dyn Hasher) {}
