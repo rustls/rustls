@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::time::Duration;
 
 use pki_types::{DnsName, UnixTime};
 
@@ -123,6 +124,13 @@ impl<'a> CommonServerSessionValue<'a> {
         }
     }
 
+    /// Whether this session was created more than `lifetime` ago.
+    pub(crate) fn has_expired(&self, now: UnixTime, lifetime: Duration) -> bool {
+        self.creation_time_sec
+            .saturating_add(lifetime.as_secs())
+            < now.as_secs()
+    }
+
     pub(crate) fn can_resume(&self, suite: CipherSuite, sni: Option<&DnsName<'_>>) -> bool {
         // The RFCs underspecify what happens if we try to resume to
         // an unoffered/varying suite.  We merely don't resume in weird cases.
@@ -219,3 +227,9 @@ impl AsRef<[u8]> for ServerSessionKey<'_> {
         self.inner
     }
 }
+
+/// How long a session in [`ServerConfig::session_storage`] stays resumable.
+///
+/// Advertised as `ticket_lifetime` for stateful TLS 1.3 tickets.  Tickets from
+/// [`ServerConfig::ticketer`] are bounded by its key rotation instead.
+pub(crate) const STATEFUL_SESSION_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);

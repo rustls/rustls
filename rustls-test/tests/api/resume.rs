@@ -2,7 +2,7 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use core::time::Duration;
 use std::fmt;
 use std::sync::Arc;
@@ -12,7 +12,9 @@ use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{CertificateIdentity, Identity, TicketProducer};
 use rustls::enums::ProtocolVersion;
 use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
+use rustls::pki_types::UnixTime;
 use rustls::server::{ServerSessionKey, Tls13Tickets};
+use rustls::time_provider::TimeProvider;
 use rustls::{
     ClientConfig, ClientSide, Connection, HandshakeKind, ServerConfig, ServerSide, Tcp, VecInput,
 };
@@ -1687,6 +1689,127 @@ fn tls13_client_discards_zero_lifetime_ticket() {
         &mut server,
     );
     assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+}
+
+#[test]
+fn tls13_server_rejects_expired_stateful_session() {
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let client_config = Arc::new(make_client_config(KeyType::default(), &provider));
+
+    let clock = Arc::new(AdjustableClock::new());
+    let storage = Arc::new(ServerStorage::new());
+    let mut server_config = make_server_config(KeyType::default(), &provider);
+    server_config.session_storage = storage.clone();
+    server_config.time_provider = clock.clone();
+    let server_config = Arc::new(server_config);
+
+    // full handshake: the server stores the sessions and advertises a 24 hour lifetime
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+    assert_eq!(storage.puts(), 2);
+
+    // 25 hours later (by the server's clock) the stored session is found but not resumed
+    clock.advance(Duration::from_secs(25 * 60 * 60));
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+    assert_eq!(storage.takes(), 1);
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+}
+
+#[test]
+fn tls12_server_rejects_expired_stateful_session() {
+    let provider = provider::DEFAULT_TLS12_PROVIDER;
+    let client_config = Arc::new(make_client_config(KeyType::default(), &provider));
+
+    let clock = Arc::new(AdjustableClock::new());
+    let storage = Arc::new(ServerStorage::new());
+    let mut server_config = make_server_config(KeyType::default(), &provider);
+    server_config.session_storage = storage.clone();
+    server_config.time_provider = clock.clone();
+    let server_config = Arc::new(server_config);
+
+    // full handshake: the server stores the session under its session id
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+    assert_eq!(storage.puts(), 1);
+
+    // 25 hours later (by the server's clock) the stored session is found but not resumed
+    clock.advance(Duration::from_secs(25 * 60 * 60));
+    let mut client_output = Vec::new();
+    let mut server_output = Vec::new();
+    let (mut client, mut server) =
+        make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+    do_handshake(
+        &mut client_input,
+        &mut client_output,
+        &mut client,
+        &mut server_input,
+        &mut server_output,
+        &mut server,
+    );
+    assert_eq!(storage.gets(), 1);
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+}
+
+/// A `TimeProvider` that starts at the current time and only moves when told to.
+#[derive(Debug)]
+struct AdjustableClock(AtomicU64);
+
+impl AdjustableClock {
+    fn new() -> Self {
+        Self(AtomicU64::new(UnixTime::now().as_secs()))
+    }
+
+    fn advance(&self, by: Duration) {
+        self.0
+            .fetch_add(by.as_secs(), Ordering::SeqCst);
+    }
+}
+
+impl TimeProvider for AdjustableClock {
+    fn current_time(&self) -> Option<UnixTime> {
+        Some(UnixTime::since_unix_epoch(Duration::from_secs(
+            self.0.load(Ordering::SeqCst),
+        )))
+    }
 }
 
 /// Issues tickets with a `ticket_lifetime` of zero.
