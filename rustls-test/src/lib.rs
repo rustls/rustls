@@ -2227,6 +2227,9 @@ pub fn provider_with_suites(
     }
 }
 
+#[cfg(feature = "ring")]
+pub use rustls_ring;
+
 pub mod macros {
     //! Macros that bring a provider into the current scope.
     //!
@@ -2238,7 +2241,7 @@ pub mod macros {
     macro_rules! provider_ring {
         () => {
             #[allow(unused_imports)]
-            use rustls_ring as provider;
+            use $crate::rustls_ring as provider;
             #[allow(dead_code)]
             const fn provider_is_aws_lc_rs() -> bool {
                 false
