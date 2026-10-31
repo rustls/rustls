@@ -316,6 +316,34 @@ impl AsRef<[u8]> for Nonce {
     }
 }
 
+/// Authentication tag from an AEAD seal operation.
+pub struct AeadTag([u8; Self::LEN]);
+
+impl AeadTag {
+    /// All AEADs we support have 16-byte tags.
+    const LEN: usize = 16;
+}
+
+impl From<&[u8]> for AeadTag {
+    fn from(value: &[u8]) -> Self {
+        let mut array = [0u8; Self::LEN];
+        array.copy_from_slice(value);
+        Self(array)
+    }
+}
+
+impl From<[u8; Self::LEN]> for AeadTag {
+    fn from(value: [u8; Self::LEN]) -> Self {
+        Self(value)
+    }
+}
+
+impl AsRef<[u8]> for AeadTag {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 /// Size of TLS nonces (incorrectly termed "IV" in standard) for all supported ciphersuites
 /// (AES-GCM, Chacha20Poly1305)
 pub const NONCE_LEN: usize = 12;
