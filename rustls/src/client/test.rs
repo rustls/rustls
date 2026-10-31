@@ -15,7 +15,7 @@ use crate::client::{
     ClientConfig, ClientCredentialResolver, ClientSessionKey, ClientSessionMemoryCache,
     ClientSessionStore, CredentialRequest, Resumption, Tls12Resumption,
 };
-use crate::crypto::cipher::{EncodableVersion, Payload, Record, RecordEncrypter};
+use crate::crypto::cipher::{EncodableVersion, Payload, Record, RecordEncrypter, encrypt_record};
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::test_provider::{FakeKeyExchangeGroup, KEY_EXCHANGE_GROUP, TLS_TEST_SUITE};
 use crate::crypto::tls13::OkmBlock;
@@ -928,10 +928,7 @@ fn client_requiring_rpk_receives_server_ee(
     let ee = Record::<Payload<'_>>::from(ee);
     let ee = ee.borrow_outbound();
     let mut enc_ee = Vec::new();
-    encrypter
-        .encrypt(ee, 0, &mut enc_ee)
-        .unwrap();
-
+    encrypt_record(encrypter.as_mut(), ee, 0, &mut enc_ee).unwrap();
     input
         .read(&mut enc_ee.as_slice())
         .unwrap();
@@ -1076,10 +1073,7 @@ fn test_client_rejects_protected_change_cipher_spec() {
     let ccs = Record::<Payload<'_>>::from(ccs);
     let ccs = ccs.borrow_outbound();
     let mut enc_ccs = Vec::new();
-    encrypter
-        .encrypt(ccs, 0, &mut enc_ccs)
-        .unwrap();
-
+    encrypt_record(encrypter.as_mut(), ccs, 0, &mut enc_ccs).unwrap();
     input
         .read(&mut enc_ccs.as_slice())
         .unwrap();

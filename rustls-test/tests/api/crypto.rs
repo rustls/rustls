@@ -7,7 +7,9 @@ use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
 use rustls::client::Resumption;
-use rustls::crypto::cipher::{AeadKey, EncodableVersion, InboundOpaque, Iv, Payload, Record};
+use rustls::crypto::cipher::{
+    AeadKey, EncodableVersion, InboundOpaque, Iv, Payload, Record, encrypt_record,
+};
 use rustls::crypto::tls13::{HkdfExpander, OkmBlock, expand};
 use rustls::crypto::{Credentials, CryptoProvider};
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
@@ -1222,9 +1224,13 @@ fn move_encrypted_extensions_into_server_hello(
         version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
         payload: Payload::Borrowed(remainder),
     };
-    encrypter
-        .encrypt(remainder.borrow_outbound(), 0, &mut output)
-        .unwrap();
+    encrypt_record(
+        encrypter.as_mut(),
+        remainder.borrow_outbound(),
+        0,
+        &mut output,
+    )
+    .unwrap();
     output
 }
 
@@ -1369,15 +1375,16 @@ fn server_rejects_finished_in_end_of_early_data_record() {
         payload: Payload::Borrowed(&handshake),
     };
     let mut flight = Vec::new();
-    suite
-        .aead_alg
-        .encrypter(key, iv)
-        .encrypt(
-            combined.borrow_outbound(),
-            early_records as u64,
-            &mut flight,
-        )
-        .unwrap();
+    encrypt_record(
+        suite
+            .aead_alg
+            .encrypter(key, iv)
+            .as_mut(),
+        combined.borrow_outbound(),
+        early_records as u64,
+        &mut flight,
+    )
+    .unwrap();
     server_input
         .read(&mut Cursor::new(&flight))
         .unwrap();
