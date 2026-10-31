@@ -7,7 +7,9 @@ use crate::common_state::Side;
 use crate::conn::{Encrypter, Exporter, ReceivePath};
 use crate::crypto::cipher::{AeadKey, Iv, RecordDecrypter, Tls13AeadAlgorithm};
 use crate::crypto::kx::SharedSecret;
-use crate::crypto::tls13::{Hkdf, HkdfExpander, HkdfLabel, OkmBlock, OutputLengthError, expand};
+use crate::crypto::tls13::{
+    Hkdf, HkdfExpander, HkdfLabel, Label, OkmBlock, OutputLengthError, expand,
+};
 use crate::crypto::{hash, hmac};
 use crate::error::{ApiMisuse, Error};
 use crate::key_log::KeyLog;
@@ -309,7 +311,7 @@ impl KeyScheduleHandshakeStart {
                 .hkdf_provider
                 .extract_from_secret(None, client_hello_inner_random)
                 .as_ref(),
-            SecretKind::ServerEchConfirmationSecret.to_bytes(),
+            SecretKind::ServerEchConfirmationSecret.label(),
             hs_hash.as_ref(),
         )
     }
@@ -786,7 +788,7 @@ fn expand_secret(
     let expander = hkdf.expander_for_okm(secret);
 
     (
-        hkdf_expand_label_aead_key(expander.as_ref(), aead_key_len, b"key", &[]),
+        hkdf_expand_label_aead_key(expander.as_ref(), aead_key_len, Label::fixed(b"key"), &[]),
         derive_traffic_iv(expander.as_ref(), iv_len),
     )
 }
@@ -853,7 +855,7 @@ impl KeySchedule {
     /// ```
     /// where `hs_hash` is `Messages`.
     fn derive(&self, kind: SecretKind, hs_hash: &[u8]) -> OkmBlock {
-        hkdf_expand_label_block(self.current.as_ref(), kind.to_bytes(), hs_hash)
+        hkdf_expand_label_block(self.current.as_ref(), kind.label(), hs_hash)
     }
 
     fn derive_logged_secret(
@@ -983,7 +985,7 @@ impl KeyScheduleSuite {
         let expander = suite
             .hkdf_provider
             .expander_for_okm(base_key);
-        let hmac_key = hkdf_expand_label_block(expander.as_ref(), b"finished", &[]);
+        let hmac_key = hkdf_expand_label_block(expander.as_ref(), Label::fixed(b"finished"), &[]);
 
         suite
             .hkdf_provider
@@ -999,7 +1001,7 @@ impl KeyScheduleSuite {
             .suite()
             .hkdf_provider
             .expander_for_okm(base_key);
-        hkdf_expand_label_block(expander.as_ref(), b"traffic upd", &[])
+        hkdf_expand_label_block(expander.as_ref(), Label::fixed(b"traffic upd"), &[])
     }
 
     /// Derive the PSK to use given a resumption_master_secret and
@@ -1010,7 +1012,7 @@ impl KeyScheduleSuite {
             .suite()
             .hkdf_provider
             .expander_for_okm(rms);
-        hkdf_expand_label_block(expander.as_ref(), b"resumption", nonce)
+        hkdf_expand_label_block(expander.as_ref(), Label::fixed(b"resumption"), nonce)
     }
 
     fn export_keying_material(
@@ -1020,6 +1022,8 @@ impl KeyScheduleSuite {
         context: Option<&[u8]>,
         out: &mut [u8],
     ) -> Result<(), Error> {
+        let label = Label::try_new(label).ok_or(ApiMisuse::ExporterLabelTooLong)?;
+
         let suite = self.state.suite();
         let secret = {
             let h_empty = suite.common.hash_provider.hash(&[]);
@@ -1038,8 +1042,13 @@ impl KeyScheduleSuite {
         let expander = suite
             .hkdf_provider
             .expander_for_okm(&secret);
-        hkdf_expand_label_slice(expander.as_ref(), b"exporter", h_context.as_ref(), out)
-            .map_err(|_| ApiMisuse::ExporterOutputTooLong.into())
+        hkdf_expand_label_slice(
+            expander.as_ref(),
+            Label::fixed(b"exporter"),
+            h_context.as_ref(),
+            out,
+        )
+        .map_err(|_| ApiMisuse::ExporterOutputTooLong.into())
     }
 }
 
@@ -1050,14 +1059,14 @@ pub(crate) fn derive_traffic_key(
     expander: &dyn HkdfExpander,
     aead_alg: &dyn Tls13AeadAlgorithm,
 ) -> AeadKey {
-    hkdf_expand_label_aead_key(expander, aead_alg.key_len(), b"key", &[])
+    hkdf_expand_label_aead_key(expander, aead_alg.key_len(), Label::fixed(b"key"), &[])
 }
 
 /// [HKDF-Expand-Label] where the output is an IV with a specified length.
 ///
 /// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc9846#section-7.1>
 pub(crate) fn derive_traffic_iv(expander: &dyn HkdfExpander, iv_len: usize) -> Iv {
-    hkdf_expand_label_iv(expander, b"iv", &[], iv_len)
+    hkdf_expand_label_iv(expander, Label::fixed(b"iv"), &[], iv_len)
 }
 
 /// [HKDF-Expand-Label] where the output length is a compile-time constant, and therefore
@@ -1066,7 +1075,7 @@ pub(crate) fn derive_traffic_iv(expander: &dyn HkdfExpander, iv_len: usize) -> I
 /// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc9846#section-7.1>
 pub(crate) fn hkdf_expand_label<T: From<[u8; N]>, const N: usize>(
     expander: &dyn HkdfExpander,
-    label: &[u8],
+    label: Label<'_>,
     context: &[u8],
 ) -> T {
     expand(expander, &HkdfLabel::new(label, context, N).info())
@@ -1075,7 +1084,7 @@ pub(crate) fn hkdf_expand_label<T: From<[u8; N]>, const N: usize>(
 /// [HKDF-Expand-Label] where the output is one block in size.
 pub(crate) fn hkdf_expand_label_block(
     expander: &dyn HkdfExpander,
-    label: &[u8],
+    label: Label<'_>,
     context: &[u8],
 ) -> OkmBlock {
     expander.expand_block(&HkdfLabel::new(label, context, expander.hash_len()).info())
@@ -1085,7 +1094,7 @@ pub(crate) fn hkdf_expand_label_block(
 pub(crate) fn hkdf_expand_label_aead_key(
     expander: &dyn HkdfExpander,
     key_len: usize,
-    label: &[u8],
+    label: Label<'_>,
     context: &[u8],
 ) -> AeadKey {
     AeadKey::expand(expander, &HkdfLabel::new(label, context, key_len), key_len)
@@ -1095,7 +1104,7 @@ pub(crate) fn hkdf_expand_label_aead_key(
 /// [HKDF-Expand-Label] where the output is an IV.
 pub(crate) fn hkdf_expand_label_iv(
     expander: &dyn HkdfExpander,
-    label: &[u8],
+    label: Label<'_>,
     context: &[u8],
     iv_len: usize,
 ) -> Iv {
@@ -1112,7 +1121,7 @@ pub(crate) fn hkdf_expand_label_iv(
 /// This can fail because HKDF-Expand is limited in its maximum output length.
 fn hkdf_expand_label_slice(
     expander: &dyn HkdfExpander,
-    label: &[u8],
+    label: Label<'_>,
     context: &[u8],
     output: &mut [u8],
 ) -> Result<(), OutputLengthError> {
@@ -1137,7 +1146,7 @@ pub(crate) fn server_ech_hrr_confirmation_secret(
         hkdf_provider
             .extract_from_secret(None, client_hello_inner_random)
             .as_ref(),
-        SecretKind::ServerEchHrrConfirmationSecret.to_bytes(),
+        SecretKind::ServerEchHrrConfirmationSecret.label(),
         hs_hash.as_ref(),
     )
 }
@@ -1160,23 +1169,23 @@ enum SecretKind {
 }
 
 impl SecretKind {
-    fn to_bytes(self) -> &'static [u8] {
+    fn label(self) -> Label<'static> {
         use self::SecretKind::*;
         match self {
-            ResumptionPskBinderKey => b"res binder",
-            ClientEarlyTrafficSecret => b"c e traffic",
-            EarlyExporterMasterSecret => b"e exp master",
-            ClientHandshakeTrafficSecret => b"c hs traffic",
-            ServerHandshakeTrafficSecret => b"s hs traffic",
-            ClientApplicationTrafficSecret => b"c ap traffic",
-            ServerApplicationTrafficSecret => b"s ap traffic",
-            ExporterMasterSecret => b"exp master",
-            ResumptionMasterSecret => b"res master",
-            DerivedSecret => b"derived",
+            ResumptionPskBinderKey => Label::fixed(b"res binder"),
+            ClientEarlyTrafficSecret => Label::fixed(b"c e traffic"),
+            EarlyExporterMasterSecret => Label::fixed(b"e exp master"),
+            ClientHandshakeTrafficSecret => Label::fixed(b"c hs traffic"),
+            ServerHandshakeTrafficSecret => Label::fixed(b"s hs traffic"),
+            ClientApplicationTrafficSecret => Label::fixed(b"c ap traffic"),
+            ServerApplicationTrafficSecret => Label::fixed(b"s ap traffic"),
+            ExporterMasterSecret => Label::fixed(b"exp master"),
+            ResumptionMasterSecret => Label::fixed(b"res master"),
+            DerivedSecret => Label::fixed(b"derived"),
             // https://datatracker.ietf.org/doc/html/rfc9849#section-7.2
-            ServerEchConfirmationSecret => b"ech accept confirmation",
+            ServerEchConfirmationSecret => Label::fixed(b"ech accept confirmation"),
             // https://datatracker.ietf.org/doc/html/rfc9849#section-7.2.1
-            ServerEchHrrConfirmationSecret => b"hrr ech accept confirmation",
+            ServerEchHrrConfirmationSecret => Label::fixed(b"hrr ech accept confirmation"),
         }
     }
 
@@ -1215,11 +1224,11 @@ mod tests {
         let expected = [LengthCheckingExpander::FILL; LengthCheckingExpander::HASH_LEN];
 
         for key_len in [16, 32] {
-            let key = hkdf_expand_label_aead_key(&expander, key_len, b"key", &[]);
+            let key = hkdf_expand_label_aead_key(&expander, key_len, Label::fixed(b"key"), &[]);
             assert_eq!(key.as_ref(), &expected[..key_len]);
         }
 
-        let block = hkdf_expand_label_block(&expander, b"derived", &[]);
+        let block = hkdf_expand_label_block(&expander, Label::fixed(b"derived"), &[]);
         assert_eq!(block.as_ref(), &expected[..]);
     }
 
