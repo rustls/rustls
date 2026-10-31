@@ -12,7 +12,7 @@ use webpki::ExtendedKeyUsage;
 
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{CipherSuite, GetRandomFailed, InconsistentKeys};
-use crate::enums::{ContentType, HandshakeType};
+use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::msgs::{Codec, EchConfigPayload};
 
 #[cfg(test)]
@@ -1624,6 +1624,9 @@ pub enum ApiMisuse {
 
     /// Raw keys cannot be used with TLS 1.2.
     InvalidSignerForProtocolVersion,
+
+    /// Record protection was requested for an unsupported protocol version.
+    UnsupportedProtocolVersion(ProtocolVersion),
 
     /// QUIC attempted with a configuration that does not support TLS1.3.
     QuicRequiresTls13Support,

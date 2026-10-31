@@ -1,16 +1,15 @@
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 
 use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
 use pki_types::FipsStatus;
 use rustls::crypto::cipher::{
-    AeadKey, InboundOpaque, Iv, Nonce, OutboundPlain, Record, RecordDecrypter, RecordEncrypter,
-    Tls13AeadAlgorithm, UnsupportedOperationError, encode_record_header, make_tls13_aad,
+    AeadKey, AeadTag, EncryptInput, EncryptInto, InboundOpaque, Iv, Nonce, Record, RecordDecrypter,
+    RecordEncrypter, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::crypto::{self, CipherSuite};
-use rustls::enums::ContentType;
+use rustls::enums::ProtocolVersion;
 use rustls::error::Error;
 use rustls::version::TLS13_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite};
@@ -238,59 +237,37 @@ struct AeadRecordDecrypter {
 }
 
 impl RecordEncrypter for AeadRecordEncrypter {
-    fn encrypt(
-        &mut self,
-        msg: Record<OutboundPlain<'_>>,
-        seq: u64,
-        out: &mut Vec<u8>,
-    ) -> Result<(), Error> {
-        let total_len = self.encrypted_payload_len(msg.payload.len());
+    fn encrypt_input(&mut self, mut input: EncryptInput<'_>) -> Result<Option<AeadTag>, Error> {
+        let nonce = aead::Nonce::assume_unique_for_key(input.nonce(&self.iv).to_array()?);
+        let aad = aead::Aad::from(input.aad());
 
-        let typ = ContentType::ApplicationData;
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(typ, msg.version.encode(), total_len));
-
-        let header = encode_record_header(typ, msg.version, total_len as u16);
-        out.reserve(header.len() + total_len);
-        out.extend_from_slice(&header);
-        let start = out.len();
-
-        match msg.payload.single_chunk() {
-            // Contiguous plaintext is sealed out-of-place, straight from the borrowed
-            // input and the inner content type byte is specified as `extra_in`.
-            Some(plain) => {
-                out.resize(start + total_len, 0);
-                let (ciphertext, typ_and_tag) = out[start..].split_at_mut(plain.len());
+        match input.contiguous(nonce.as_ref()) {
+            EncryptInto::Contiguous {
+                plain,
+                extra_plain,
+                cipher,
+                tag,
+            } => {
                 self.enc_key
-                    .seal_out_of_place_scatter(
-                        nonce,
-                        aad,
-                        plain,
-                        ciphertext,
-                        &msg.typ.to_array(),
-                        typ_and_tag,
-                    )
+                    .seal_out_of_place_scatter(nonce, aad, plain, cipher, extra_plain.as_ref(), tag)
                     .map_err(|_| Error::EncryptError)?;
+                Ok(None)
             }
-            // Fragmented plaintext is gathered into `out` and then sealed in place.
-            // We can't use the out-of-place seal as it requires contiguous input.
-            None => {
-                msg.payload.copy_to_vec(out);
-                out.extend_from_slice(&msg.typ.to_array());
-
-                let tag = self
-                    .enc_key
-                    .seal_in_place_separate_tag(nonce, aad, &mut out[start..])
-                    .map_err(|_| Error::EncryptError)?;
-                out.extend_from_slice(tag.as_ref());
-            }
+            EncryptInto::Gathered(in_place) => self
+                .enc_key
+                .seal_in_place_separate_tag(nonce, aad, in_place)
+                .map(|tag| Some(AeadTag::from(tag.as_ref())))
+                .map_err(|_| Error::EncryptError),
+            _ => unimplemented!("unknown EncryptInto case"),
         }
-
-        Ok(())
     }
 
-    fn encrypted_payload_len(&self, payload_len: usize) -> usize {
-        payload_len + 1 + self.enc_key.algorithm().tag_len()
+    fn tag_len(&self) -> usize {
+        self.enc_key.algorithm().tag_len()
+    }
+
+    fn version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_3
     }
 }
 
@@ -328,59 +305,41 @@ struct GcmRecordEncrypter {
 }
 
 impl RecordEncrypter for GcmRecordEncrypter {
-    fn encrypt(
-        &mut self,
-        msg: Record<OutboundPlain<'_>>,
-        seq: u64,
-        out: &mut Vec<u8>,
-    ) -> Result<(), Error> {
-        let total_len = self.encrypted_payload_len(msg.payload.len());
+    fn encrypt_input(&mut self, mut input: EncryptInput<'_>) -> Result<Option<AeadTag>, Error> {
+        let nonce = aead::Nonce::assume_unique_for_key(input.nonce(&self.iv).to_array()?);
+        let aad = aead::Aad::from(input.aad());
 
-        let typ = ContentType::ApplicationData;
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls13_aad(typ, msg.version.encode(), total_len));
-
-        let header = encode_record_header(typ, msg.version, total_len as u16);
-        out.reserve(header.len() + total_len);
-        out.extend_from_slice(&header);
-        let start = out.len();
-
-        match msg.payload.single_chunk() {
-            // Contiguous plaintext is sealed out-of-place, straight from the borrowed
-            // input and the inner content type byte is specified as `extra_in`.
-            Some(plain) => {
-                out.resize(start + total_len, 0);
-                let (ciphertext, typ_and_tag) = out[start..].split_at_mut(plain.len());
+        match input.contiguous(nonce.as_ref()) {
+            EncryptInto::Contiguous {
+                plain,
+                extra_plain,
+                cipher,
+                tag,
+            } => {
                 self.enc_key
-                    .seal_out_of_place_scatter(
-                        nonce,
-                        aad,
-                        plain,
-                        ciphertext,
-                        &msg.typ.to_array(),
-                        typ_and_tag,
-                    )
+                    .seal_out_of_place_scatter(nonce, aad, plain, cipher, extra_plain.as_ref(), tag)
                     .map_err(|_| Error::EncryptError)?;
+                Ok(None)
             }
-            // Fragmented plaintext is gathered into `out` and then sealed in place.
-            // We can't use the out-of-place seal as it requires contiguous input.
-            None => {
-                msg.payload.copy_to_vec(out);
-                out.extend_from_slice(&msg.typ.to_array());
-
-                let tag = self
-                    .enc_key
-                    .seal_in_place_separate_tag(nonce, aad, &mut out[start..])
-                    .map_err(|_| Error::EncryptError)?;
-                out.extend_from_slice(tag.as_ref());
-            }
+            EncryptInto::Gathered(in_place) => self
+                .enc_key
+                .seal_in_place_separate_tag(nonce, aad, in_place)
+                .map(|tag| Some(AeadTag::from(tag.as_ref())))
+                .map_err(|_| Error::EncryptError),
+            _ => unimplemented!("unknown EncryptInto case"),
         }
-
-        Ok(())
     }
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
         payload_len + 1 + self.enc_key.algorithm().tag_len()
+    }
+
+    fn tag_len(&self) -> usize {
+        self.enc_key.algorithm().tag_len()
+    }
+
+    fn version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_3
     }
 }
 
@@ -501,8 +460,8 @@ mod tests {
     use std::vec;
     use std::vec::Vec;
 
-    use rustls::crypto::cipher::{EncodableVersion, InboundOpaque};
-    use rustls::enums::ProtocolVersion;
+    use rustls::crypto::cipher::{EncodableVersion, InboundOpaque, OutboundPlain, encrypt_record};
+    use rustls::enums::{ContentType, ProtocolVersion};
 
     use super::*;
 
@@ -554,9 +513,7 @@ mod tests {
         );
         let payload_len = encrypter.encrypted_payload_len(record.payload.len());
         let mut out = vec![fill; PREFIX_LEN];
-        encrypter
-            .encrypt(record, TEST_SEQ, &mut out)
-            .unwrap();
+        encrypt_record(encrypter.as_mut(), record, TEST_SEQ, &mut out).unwrap();
         assert_eq!(out[..PREFIX_LEN], [fill; PREFIX_LEN]);
         assert_eq!(out.len(), PREFIX_LEN + HEADER_LEN + payload_len);
         out.split_off(PREFIX_LEN + HEADER_LEN)

@@ -9,7 +9,8 @@ use rustls::client::{
     ClientSessionKey, ServerVerifierBuilder, Tls13Session, WantsClientCert, WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{
-    EncodableVersion, InboundOpaque, Payload, Record, RecordDecrypter, RecordEncrypter,
+    EncodableVersion, EncryptInput, InboundOpaque, Payload, Record, RecordDecrypter,
+    RecordEncrypter, encrypt_record,
 };
 use rustls::crypto::kx::{NamedGroup, SupportedKxGroup};
 use rustls::crypto::{
@@ -1585,10 +1586,7 @@ impl RawTls {
     pub fn encrypt(&mut self, msg: &Record<Payload<'_>>) -> Vec<u8> {
         let msg = msg.borrow_outbound();
         let mut record = vec![];
-        self.encrypter
-            .encrypt(msg, self.enc_seq, &mut record)
-            .unwrap();
-
+        encrypt_record(self.encrypter.as_mut(), msg, self.enc_seq, &mut record).unwrap();
         self.enc_seq += 1;
         record
     }
@@ -2016,8 +2014,8 @@ pub fn certificate_error_expecting_name(expected: &str) -> CertificateError {
 mod plaintext {
     use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
-        AeadKey, InboundOpaque, Iv, OutboundPlain, RecordDecrypter, RecordEncrypter,
-        Tls13AeadAlgorithm, UnsupportedOperationError, encode_record_header,
+        AeadKey, AeadTag, InboundOpaque, Iv, RecordDecrypter, RecordEncrypter, Tls13AeadAlgorithm,
+        UnsupportedOperationError,
     };
 
     use super::*;
@@ -2049,26 +2047,19 @@ mod plaintext {
     struct Encrypter;
 
     impl RecordEncrypter for Encrypter {
-        fn encrypt(
-            &mut self,
-            record: Record<OutboundPlain<'_>>,
-            _seq: u64,
-            out: &mut Vec<u8>,
-        ) -> Result<(), Error> {
-            out.extend_from_slice(&encode_record_header(
-                ContentType::ApplicationData,
-                record.version,
-                record.payload.len() as u16,
-            ));
-            for ch in record.payload.chunks() {
-                out.extend_from_slice(ch);
-            }
-
-            Ok(())
+        fn encrypt_input(&mut self, mut input: EncryptInput<'_>) -> Result<Option<AeadTag>, Error> {
+            // This is a do-nothing encrypter that just copies plaintext to ciphertext. That's
+            // accomplished by EncryptInput::gather, so just call that and return no tag.
+            let _ = input.gather(&[]);
+            Ok(None)
         }
 
-        fn encrypted_payload_len(&self, payload_len: usize) -> usize {
-            payload_len
+        fn tag_len(&self) -> usize {
+            0
+        }
+
+        fn version(&self) -> ProtocolVersion {
+            ProtocolVersion::TLSv1_3
         }
     }
 

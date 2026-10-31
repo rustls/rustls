@@ -157,28 +157,286 @@ pub trait RecordDecrypter: Send + Sync {
 
 /// Objects with this trait can encrypt TLS records.
 pub trait RecordEncrypter: Send + Sync {
-    /// Encrypt the given TLS record, appending it to `out`.
+    /// Apply record protection to the plaintext described by `input`.
     ///
-    /// `seq` is the sequence number of this record, which can be used to derive a unique [`Nonce`].
+    /// The [`EncryptInput`] carries all the context required for encrypting the record payload.
     ///
-    /// A full wire-format TLS record, including all framing the ciphersuite requires,
-    /// such as any explicit nonce, padding and/or authentication tag, must be appended to `out`.
-    /// Any existing data on the front of `out` must be left alone.
-    fn encrypt(
-        &mut self,
-        record: Record<OutboundPlain<'_>>,
-        seq: u64,
-        out: &mut Vec<u8>,
-    ) -> Result<(), Error>;
+    /// If a tag is returned, it will be appended to the output buffer.
+    fn encrypt_input(&mut self, input: EncryptInput<'_>) -> Result<Option<AeadTag>, Error>;
 
-    /// Return the length of the ciphertext that results from encrypting plaintext of length `payload_len`.
+    /// Length of a tag in the AEAD scheme in use.
+    fn tag_len(&self) -> usize;
+
+    /// The TLS protocol version in use.
+    fn version(&self) -> ProtocolVersion;
+
+    /// Whether the AEAD uses an 8 byte GCM explicit nonce.
+    ///
+    /// The explicit nonce follows the `GenericAEADCipher` construction of [RFC 5246 Section
+    /// 6.2.3.3][1]. It is needed for TLS 1.2 GCM ciphersuites.
+    ///
+    /// [1]: https://www.rfc-editor.org/info/rfc5246/#section-6.2.3.3
+    fn gcm_explicit_nonce(&self) -> bool {
+        false
+    }
+
+    /// Return the length of the ciphertext that results from encrypting plaintext of length
+    /// `payload_len`.
     ///
     /// For a zero `payload_len` this should return the _minimum_ overhead for any
     /// payload.  Then, to fragment a long payload into chunks of length `F`,
     /// Rustls will first set `A := encrypted_payload_len(0)` and then supply the
-    /// payload to [`Self::encrypt()`] in chunks of length `F - A`.  Each `encrypt()`
-    /// is then free to pad or otherwise transform the length at its option.
-    fn encrypted_payload_len(&self, payload_len: usize) -> usize;
+    /// payload to [`Self::encrypt_input()`] in chunks of length `F - A`.
+    fn encrypted_payload_len(&self, payload_len: usize) -> usize {
+        match (self.version(), self.gcm_explicit_nonce()) {
+            (ProtocolVersion::TLSv1_3, _) => payload_len + 1 + self.tag_len(),
+            (ProtocolVersion::TLSv1_2, false) => payload_len + self.tag_len(),
+            (ProtocolVersion::TLSv1_2, true) => {
+                payload_len + GCM_EXPLICIT_NONCE_LEN + self.tag_len()
+            }
+            v => panic!("unsupported protocol version {v:?}"),
+        }
+    }
+}
+
+/// Use `encrypter` to oncrypt the given TLS record, appending it to `out`.
+///
+/// `seq` is the sequence number of this record, which can be used to derive a unique [`Nonce`].
+pub fn encrypt_record(
+    encrypter: &mut dyn RecordEncrypter,
+    record: Record<OutboundPlain<'_>>,
+    seq: u64,
+    out: &mut Vec<u8>,
+) -> Result<(), Error> {
+    let input = EncryptInput::new(encrypter, record, seq, out)?;
+    if let Some(tag) = encrypter.encrypt_input(input)? {
+        out.extend_from_slice(tag.as_ref());
+    }
+
+    Ok(())
+}
+
+/// Context required for [`RecordEncrypter`]s to encrypt a TLS record.
+///
+/// Rather than prescribing one record layout, this offers what an implementation needs through
+/// methods, so that each implementation uses only those that match what its AEAD supports.
+pub struct EncryptInput<'a> {
+    version: ProtocolVersion,
+    gcm_explicit_nonce_len: usize,
+    record: Record<OutboundPlain<'a>>,
+    seq: u64,
+    out: &'a mut Vec<u8>,
+    total_len: usize,
+}
+
+impl<'a> EncryptInput<'a> {
+    /// Prepare `out` to have `record` encrypted into it by `encrypter`.
+    ///
+    /// `seq` is the sequence number of this record, which can be used to derive a unique [`Nonce`].
+    ///
+    /// [`RecordEncrypter::encrypted_payload_len()`] bytes of ciphertext and additional
+    /// authenticated data are appended to `out`, which will be resized as needed.
+    ///
+    /// `encrypter.version()` selects TLS1.2 or TLS1.3 record protection; any other version yields
+    /// [`ApiMisuse::UnsupportedProtocolVersion`].
+    pub fn new(
+        encrypter: &dyn RecordEncrypter,
+        record: Record<OutboundPlain<'a>>,
+        seq: u64,
+        out: &'a mut Vec<u8>,
+    ) -> Result<Self, Error> {
+        if !matches!(
+            encrypter.version(),
+            ProtocolVersion::TLSv1_2 | ProtocolVersion::TLSv1_3
+        ) {
+            return Err(ApiMisuse::UnsupportedProtocolVersion(encrypter.version()).into());
+        }
+
+        let total_len = encrypter.encrypted_payload_len(record.payload.len());
+        let typ = match encrypter.version() {
+            ProtocolVersion::TLSv1_3 => ContentType::ApplicationData,
+            ProtocolVersion::TLSv1_2 => record.typ,
+            v => panic!("unsupported protocol version {v:?}"),
+        };
+        let header = encode_record_header(typ, record.version, total_len as u16);
+        out.reserve(header.len() + total_len);
+        out.extend_from_slice(&header);
+
+        let gcm_explicit_nonce_len = if encrypter.gcm_explicit_nonce() {
+            GCM_EXPLICIT_NONCE_LEN
+        } else {
+            0
+        };
+
+        Ok(Self {
+            version: encrypter.version(),
+            gcm_explicit_nonce_len,
+            record,
+            seq,
+            out,
+            total_len,
+        })
+    }
+
+    /// Lay out the output buffer for encryption.
+    ///
+    /// If the plaintext is contiguous, then the buffer is laid out for sealing contiguous plaintext
+    /// out of place and returned as `EncryptInput::Contiguous`. The encryption provider should then
+    /// seal out of place.
+    ///
+    /// If the plaintext is fragmented, then it is gathered into a buffer which is laid out for
+    /// sealing in place. If a tag is returned from [`RecordEncrypter::encrypt_input`], it will be
+    /// appended to the output buffer.
+    ///
+    /// Encryption providers that do not support out of place sealing should use [`Self::gather`]
+    /// instead.
+    pub fn contiguous(&mut self, nonce: &[u8]) -> EncryptInto<'_> {
+        match self.record.payload.single_chunk() {
+            // Contiguous plaintext is sealed out-of-place, straight from the borrowed input and the
+            // inner content type byte is specified as `extra_plain`.
+            Some(plain) => {
+                self.copy_gcm_explicit_nonce(nonce);
+                let start = self.out.len();
+                self.out
+                    .resize(start + self.total_len - self.gcm_explicit_nonce_len, 0);
+                let (ciphertext, tag) = self.out[start..].split_at_mut(plain.len());
+                let extra_plain = match self.version {
+                    ProtocolVersion::TLSv1_3 => ExtraPlaintext(self.record.typ.to_array(), 1),
+                    ProtocolVersion::TLSv1_2 => ExtraPlaintext([0], 0),
+                    v => panic!("unsupported protocol version {v:?}"),
+                };
+                EncryptInto::Contiguous {
+                    plain,
+                    extra_plain,
+                    cipher: ciphertext,
+                    tag,
+                }
+            }
+            // Fragmented plaintext is gathered into a buffer and then sealed in place. We can't use
+            // the out-of-place seal as it requires contiguous input.
+            None => EncryptInto::Gathered(self.gather(nonce)),
+        }
+    }
+
+    /// Gather the plaintext into the output buffer for sealing in place.
+    ///
+    /// The caller is responsible for sealing the `payload`. If a tag is returned from
+    /// [`RecordEncrypter::encrypt_input`], it will be appended to the output buffer.
+    pub fn gather(&mut self, nonce: &[u8]) -> &mut [u8] {
+        self.copy_gcm_explicit_nonce(nonce);
+        let start = self.out.len();
+        self.record
+            .payload
+            .copy_to_vec(self.out);
+        if self.version == ProtocolVersion::TLSv1_3 {
+            self.out
+                .extend_from_slice(&self.record.typ.to_array());
+        }
+        &mut self.out[start..]
+    }
+
+    /// The content type that the record header carries on the wire.
+    pub fn record_type(&self) -> ContentType {
+        match self.version {
+            ProtocolVersion::TLSv1_3 => ContentType::ApplicationData,
+            ProtocolVersion::TLSv1_2 => self.record.typ,
+            v => panic!("unsupported protocol version {v:?}"),
+        }
+    }
+
+    /// The additional data to authenticate along with the payload.
+    pub fn aad(&self) -> Aad {
+        let version = self.record.version.encode();
+        match self.version {
+            ProtocolVersion::TLSv1_3 => Aad::Tls13(make_tls13_aad(
+                ContentType::ApplicationData,
+                version,
+                self.total_len,
+            )),
+            ProtocolVersion::TLSv1_2 => Aad::Tls12(make_tls12_aad(
+                self.seq,
+                self.record.typ,
+                version,
+                self.record.payload.len(),
+            )),
+            v => panic!("unsupported protocol version {v:?}"),
+        }
+    }
+
+    /// The nonce derived from the given IV and the input record's sequence number.
+    pub fn nonce(&self, iv: &Iv) -> Nonce {
+        Nonce::new(iv, self.seq)
+    }
+
+    /// Copy the explicit nonce, if any, into the output.
+    ///
+    /// The explicit nonce follows the `GenericAEADCipher` construction of [RFC 5246 Section
+    /// 6.2.3.3][1]. It is needed for TLS 1.2 GCM ciphersuites.
+    ///
+    /// [1]: https://www.rfc-editor.org/info/rfc5246/#section-6.2.3.3
+    fn copy_gcm_explicit_nonce(&mut self, nonce: &[u8]) {
+        if self.gcm_explicit_nonce_len > 0 {
+            let prefix_len = nonce.len() - self.gcm_explicit_nonce_len;
+            self.out
+                .extend_from_slice(&nonce[prefix_len..]);
+        }
+    }
+
+    /// The sequence number for the outgoing record.
+    #[doc(hidden)] // Only for test purposes
+    pub fn seq(&self) -> u64 {
+        self.seq
+    }
+}
+
+/// Enumeration representing buffers an encryption provider should encrypt into.
+#[non_exhaustive]
+pub enum EncryptInto<'a> {
+    /// The plaintext was contiguous.
+    ///
+    /// The encryption provider should seal `plain` and `extra_plain` out of place into `cipher`,
+    /// writing any extra ciphertext and the tag into `tag`.
+    Contiguous {
+        /// Plaintext input to encrypt.
+        plain: &'a [u8],
+        /// Extra plaintext
+        extra_plain: ExtraPlaintext,
+        /// Ciphertext output buffer.
+        cipher: &'a mut [u8],
+        /// Authentication tag output buffer.
+        tag: &'a mut [u8],
+    },
+    /// The plaintext has been gathered into the provided buffer.
+    Gathered(&'a mut [u8]),
+}
+
+/// Extra plaintext for out of place sealing.
+///
+/// This is only ever used for the TLS 1.3 content type byte, so it can be at most 1 byte long.
+pub struct ExtraPlaintext([u8; 1], usize);
+
+impl AsRef<[u8]> for ExtraPlaintext {
+    fn as_ref(&self) -> &[u8] {
+        &self.0[..self.1]
+    }
+}
+
+/// The additional data authenticated along with a record's payload.
+#[non_exhaustive]
+pub enum Aad {
+    /// The TLS1.2 encoding, see [`make_tls12_aad()`].
+    Tls12([u8; TLS12_AAD_SIZE]),
+    /// The TLS1.3 encoding, see [`make_tls13_aad()`].
+    Tls13([u8; TLS13_AAD_SIZE]),
+}
+
+impl AsRef<[u8]> for Aad {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Tls12(aad) => aad,
+            Self::Tls13(aad) => aad,
+        }
+    }
 }
 
 /// A write or read IV.
@@ -384,8 +642,6 @@ pub fn make_tls12_aad(
     out
 }
 
-const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
-
 /// A key for an AEAD algorithm.
 ///
 /// This is a value type for a byte string up to `AeadKey::MAX_LEN` bytes in length.
@@ -453,6 +709,22 @@ impl From<[u8; 16]> for AeadKey {
         }
     }
 }
+
+/// Length of the AAD for TLS 1.2.
+///
+/// 8 bytes of sequence number, 1 byte of content type, 2 bytes of protocol version and 2 bytes of
+/// payload length.
+pub const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
+
+/// TLS 1.3 AAD length.
+///
+/// 1 byte for content type, 2 bytes for version, 2 bytes for payload length.
+pub const TLS13_AAD_SIZE: usize = 1 + 2 + 2;
+
+/// Length of `explicit_nonce` for GCM suites in TLS 1.2.
+///
+/// <https://www.rfc-editor.org/info/rfc5246/#section-6.2.3.3>
+pub const GCM_EXPLICIT_NONCE_LEN: usize = 8;
 
 #[cfg(test)]
 pub(crate) struct FakeAead;

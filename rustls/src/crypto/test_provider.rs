@@ -5,9 +5,8 @@ use core::time::Duration;
 use std::borrow::Cow;
 
 use crate::crypto::cipher::{
-    AeadKey, InboundOpaque, Iv, KeyBlockShape, OutboundPlain, Record, RecordDecrypter,
+    AeadKey, AeadTag, EncryptInput, InboundOpaque, Iv, KeyBlockShape, Record, RecordDecrypter,
     RecordEncrypter, Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError,
-    encode_record_header,
 };
 use crate::crypto::kx::{
     KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup,
@@ -16,7 +15,7 @@ use crate::crypto::{
     self, CipherSuite, CipherSuiteCommon, GetRandomFailed, HashAlgorithm, SignatureScheme,
     TicketProducer, WebPkiSupportedAlgorithms, hash, hmac, tls12, tls13,
 };
-use crate::enums::ContentType;
+use crate::enums::ProtocolVersion;
 use crate::error::PeerMisbehaved;
 use crate::pki_types::{
     AlgorithmIdentifier, InvalidSignature, PrivateKeyDer, SignatureVerificationAlgorithm,
@@ -380,40 +379,25 @@ impl Tls12AeadAlgorithm for Aead {
 pub(crate) struct Tls13Cipher;
 
 impl RecordEncrypter for Tls13Cipher {
-    fn encrypt(
-        &mut self,
-        record: Record<OutboundPlain<'_>>,
-        seq: u64,
-        out: &mut Vec<u8>,
-    ) -> Result<(), Error> {
-        let total_len = self.encrypted_payload_len(record.payload.len());
-        out.extend_from_slice(&encode_record_header(
-            ContentType::ApplicationData,
-            record.version,
-            total_len as u16,
-        ));
+    fn encrypt_input(&mut self, mut input: EncryptInput<'_>) -> Result<Option<AeadTag>, Error> {
+        let out = input.gather(&[]);
 
-        let mut mask = AEAD_MASK.iter().cycle();
-
-        let typ = record.typ.to_array();
-        for ch in record
-            .payload
-            .chunks()
-            .chain([&typ[..]])
+        for (p, mask) in out
+            .iter_mut()
+            .zip(AEAD_MASK.iter().cycle())
         {
-            for (p, mask) in ch.iter().zip(mask.by_ref()) {
-                out.push(*p ^ *mask);
-            }
+            *p ^= *mask;
         }
 
-        out.extend_from_slice(&seq.to_be_bytes());
-        out.extend_from_slice(AEAD_TAG);
-
-        Ok(())
+        Ok(Some(test_tag(input.seq())))
     }
 
-    fn encrypted_payload_len(&self, payload_len: usize) -> usize {
-        payload_len + 1 + AEAD_OVERHEAD
+    fn tag_len(&self) -> usize {
+        AEAD_OVERHEAD
+    }
+
+    fn version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_3
     }
 }
 
@@ -452,35 +436,25 @@ impl RecordDecrypter for Tls13Cipher {
 struct Tls12Cipher;
 
 impl RecordEncrypter for Tls12Cipher {
-    fn encrypt(
-        &mut self,
-        record: Record<OutboundPlain<'_>>,
-        seq: u64,
-        out: &mut Vec<u8>,
-    ) -> Result<(), Error> {
-        let total_len = self.encrypted_payload_len(record.payload.len());
-        out.extend_from_slice(&encode_record_header(
-            record.typ,
-            record.version,
-            total_len as u16,
-        ));
+    fn encrypt_input(&mut self, mut input: EncryptInput<'_>) -> Result<Option<AeadTag>, Error> {
+        let out = input.gather(&[]);
 
-        let mut mask = AEAD_MASK.iter().cycle();
-
-        for ch in record.payload.chunks() {
-            for (p, mask) in ch.iter().zip(mask.by_ref()) {
-                out.push(*p ^ *mask);
-            }
+        for (p, mask) in out
+            .iter_mut()
+            .zip(AEAD_MASK.iter().cycle())
+        {
+            *p ^= *mask;
         }
 
-        out.extend_from_slice(&seq.to_be_bytes());
-        out.extend_from_slice(AEAD_TAG);
-
-        Ok(())
+        Ok(Some(test_tag(input.seq())))
     }
 
-    fn encrypted_payload_len(&self, payload_len: usize) -> usize {
-        payload_len + AEAD_OVERHEAD
+    fn tag_len(&self) -> usize {
+        AEAD_OVERHEAD
+    }
+
+    fn version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_2
     }
 }
 
@@ -514,6 +488,15 @@ impl RecordDecrypter for Tls12Cipher {
 
         Ok(record.into_plain_record())
     }
+}
+
+/// Construct a fake AEAD tag by concatenating `seq` with `AEAD_TAG`.
+fn test_tag(seq: u64) -> AeadTag {
+    let mut tag = [0u8; AEAD_OVERHEAD];
+    tag[..8].copy_from_slice(&seq.to_be_bytes());
+    tag[8..].copy_from_slice(AEAD_TAG);
+
+    AeadTag::from(tag)
 }
 
 const AEAD_MASK: &[u8] = b"AeadMaskPattern";
