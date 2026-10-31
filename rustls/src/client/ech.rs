@@ -1070,6 +1070,7 @@ mod tests {
                         SubjectPublicKeyInfoDer::from(&b"spki"[..]),
                     )),
                     quic_params: None,
+                    alpn: None,
                 },
                 &[0x55; 32],
                 UnixTime::now(),
