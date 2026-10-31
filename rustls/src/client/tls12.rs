@@ -43,7 +43,7 @@ mod server_hello {
         ClientHandler, ClientHelloInput, ClientSessionValue, ClientState, ExpectServerHello,
     };
     use crate::common_state::Protocol;
-    use crate::msgs::ServerHelloPayload;
+    use crate::msgs::{ExtensionType, ServerHelloPayload};
     use crate::sealed::Sealed;
     use crate::verify::HandshakeSignatureValid;
 
@@ -94,6 +94,15 @@ mod server_hello {
                 .is_some_and(|info| !info.is_empty())
             {
                 return Err(PeerMisbehaved::NonEmptyRenegotiationInfo.into());
+            }
+
+            // We may have offered these for TLS 1.3, so they are not unsolicited,
+            // but they have no meaning in a TLS 1.2 ServerHello.
+            if server_hello
+                .received_types()
+                .any(|ext| ExtensionType::TLS13_ONLY.contains(&ext))
+            {
+                return Err(PeerMisbehaved::UnsolicitedServerHelloExtension.into());
             }
 
             let ClientHelloInput {
