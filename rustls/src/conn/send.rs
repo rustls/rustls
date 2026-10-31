@@ -2,7 +2,9 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use super::{DataKind, SEQ_HARD_LIMIT, SEQ_SOFT_LIMIT};
-use crate::crypto::cipher::{EncodableVersion, OutboundPlain, Record, RecordEncrypter};
+use crate::crypto::cipher::{
+    EncodableVersion, OutboundPlain, Record, RecordEncrypter, encrypt_record,
+};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, ApiMisuse, Error};
 use crate::msgs::{AlertLevel, Fragmenter, HEADER_SIZE, Message, MessagePayload};
@@ -377,8 +379,8 @@ impl Encrypting {
         assert!(self.write_seq < SEQ_HARD_LIMIT);
         let seq = self.write_seq;
         self.write_seq += 1;
-        self.encrypter
-            .encrypt(plain, seq, output)
+
+        encrypt_record(self.encrypter.as_mut(), plain, seq, output)
     }
 
     fn send_key_update_request(&mut self, tls: &mut Vec<u8>) -> Result<(), Error> {

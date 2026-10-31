@@ -1,16 +1,16 @@
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 
 use pki_types::FipsStatus;
 use ring::aead;
 use rustls::crypto::cipher::{
-    AeadKey, InboundOpaque, Iv, KeyBlockShape, NONCE_LEN, Nonce, OutboundPlain, Record,
+    AeadKey, AeadTag, EncryptInput, InboundOpaque, Iv, KeyBlockShape, NONCE_LEN, Nonce, Record,
     RecordDecrypter, RecordEncrypter, Tls12AeadAlgorithm, UnsupportedOperationError,
-    encode_record_header, make_tls12_aad,
+    make_tls12_aad,
 };
 use rustls::crypto::kx::KeyExchangeAlgorithm;
 use rustls::crypto::tls12::PrfUsingHmac;
 use rustls::crypto::{CipherSuite, SignatureScheme};
+use rustls::enums::ProtocolVersion;
 use rustls::error::Error;
 use rustls::version::TLS12_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls12CipherSuite};
@@ -297,38 +297,27 @@ impl RecordDecrypter for GcmRecordDecrypter {
 }
 
 impl RecordEncrypter for GcmRecordEncrypter {
-    fn encrypt(
-        &mut self,
-        record: Record<OutboundPlain<'_>>,
-        seq: u64,
-        out: &mut Vec<u8>,
-    ) -> Result<(), Error> {
-        let total_len = self.encrypted_payload_len(record.payload.len());
-        let header = encode_record_header(record.typ, record.version, total_len as u16);
-        out.reserve(header.len() + total_len);
-        out.extend_from_slice(&header);
+    fn encrypt_input(&mut self, mut input: EncryptInput<'_>) -> Result<Option<AeadTag>, Error> {
+        let nonce = aead::Nonce::assume_unique_for_key(input.nonce(&self.iv).to_array()?);
+        let aad = aead::Aad::from(input.aad());
+        let in_place = input.gather(nonce.as_ref());
 
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls12_aad(
-            seq,
-            record.typ,
-            record.version.encode(),
-            record.payload.len(),
-        ));
-        out.extend_from_slice(&nonce.as_ref()[4..]);
-        let start = out.len();
-        record.payload.copy_to_vec(out);
-
-        let tag = self
-            .enc_key
-            .seal_in_place_separate_tag(nonce, aad, &mut out[start..])
-            .map_err(|_| Error::EncryptError)?;
-        out.extend_from_slice(tag.as_ref());
-        Ok(())
+        self.enc_key
+            .seal_in_place_separate_tag(nonce, aad, in_place)
+            .map(|tag| Some(AeadTag::from(tag.as_ref())))
+            .map_err(|_| Error::EncryptError)
     }
 
-    fn encrypted_payload_len(&self, payload_len: usize) -> usize {
-        payload_len + GCM_EXPLICIT_NONCE_LEN + self.enc_key.algorithm().tag_len()
+    fn tag_len(&self) -> usize {
+        self.enc_key.algorithm().tag_len()
+    }
+
+    fn gcm_explicit_nonce(&self) -> bool {
+        true
+    }
+
+    fn version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_2
     }
 }
 
@@ -388,38 +377,27 @@ impl RecordDecrypter for ChaCha20Poly1305RecordDecrypter {
 }
 
 impl RecordEncrypter for ChaCha20Poly1305RecordEncrypter {
-    fn encrypt(
-        &mut self,
-        record: Record<OutboundPlain<'_>>,
-        seq: u64,
-        out: &mut Vec<u8>,
-    ) -> Result<(), Error> {
-        let total_len = self.encrypted_payload_len(record.payload.len());
-        let header = encode_record_header(record.typ, record.version, total_len as u16);
-        out.reserve(header.len() + total_len);
-        out.extend_from_slice(&header);
+    fn encrypt_input(&mut self, mut input: EncryptInput<'_>) -> Result<Option<AeadTag>, Error> {
+        let nonce = aead::Nonce::assume_unique_for_key(
+            input
+                .nonce(&self.enc_offset)
+                .to_array()?,
+        );
+        let aad = aead::Aad::from(input.aad());
+        let in_place = input.gather(nonce.as_ref());
 
-        let nonce =
-            aead::Nonce::assume_unique_for_key(Nonce::new(&self.enc_offset, seq).to_array()?);
-        let aad = aead::Aad::from(make_tls12_aad(
-            seq,
-            record.typ,
-            record.version.encode(),
-            record.payload.len(),
-        ));
-        let start = out.len();
-        record.payload.copy_to_vec(out);
-
-        let tag = self
-            .enc_key
-            .seal_in_place_separate_tag(nonce, aad, &mut out[start..])
-            .map_err(|_| Error::EncryptError)?;
-        out.extend_from_slice(tag.as_ref());
-        Ok(())
+        self.enc_key
+            .seal_in_place_separate_tag(nonce, aad, in_place)
+            .map(|tag| Some(AeadTag::from(tag.as_ref())))
+            .map_err(|_| Error::EncryptError)
     }
 
-    fn encrypted_payload_len(&self, payload_len: usize) -> usize {
-        payload_len + self.enc_key.algorithm().tag_len()
+    fn tag_len(&self) -> usize {
+        self.enc_key.algorithm().tag_len()
+    }
+
+    fn version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_2
     }
 }
 
