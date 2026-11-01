@@ -422,12 +422,20 @@ pub trait ClientCredentialResolver: fmt::Debug + Send + Sync + Any {
 
 /// Context from the server to inform client credential selection.
 pub struct CredentialRequest<'a> {
+    pub(super) negotiated_version: ProtocolVersion,
     pub(super) negotiated_type: CertificateType,
     pub(super) root_hint_subjects: &'a [DistinguishedName],
     pub(super) signature_schemes: &'a [SignatureScheme],
 }
 
 impl CredentialRequest<'_> {
+    /// The negotiated TLS protocol version.
+    ///
+    /// This determines how to interpret [`Self::signature_schemes()`].
+    pub fn negotiated_version(&self) -> ProtocolVersion {
+        self.negotiated_version
+    }
+
     /// List of certificate authority subject distinguished names provided by the server.
     ///
     /// If the list is empty, the client should send whatever certificate it has. The hints

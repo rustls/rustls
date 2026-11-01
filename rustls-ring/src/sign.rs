@@ -11,6 +11,7 @@ use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
 #[cfg(test)]
 use rustls::crypto::CryptoProvider;
 use rustls::crypto::{SignatureScheme, Signer, SigningKey, public_key_to_spki};
+use rustls::enums::ProtocolVersion;
 use rustls::error::Error;
 
 /// A `SigningKey` for RSA-PKCS1 or RSA-PSS.
@@ -48,7 +49,11 @@ impl RsaSigningKey {
 }
 
 impl SigningKey for RsaSigningKey {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
+    fn choose_scheme(
+        &self,
+        offered: &[SignatureScheme],
+        _version: ProtocolVersion,
+    ) -> Option<Box<dyn Signer>> {
         Self::SCHEMES
             .iter()
             .find(|scheme| offered.contains(scheme))
@@ -217,7 +222,11 @@ impl EcdsaSigner {
 }
 
 impl SigningKey for EcdsaSigner {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
+    fn choose_scheme(
+        &self,
+        offered: &[SignatureScheme],
+        _version: ProtocolVersion,
+    ) -> Option<Box<dyn Signer>> {
         if offered.contains(&self.scheme) {
             Some(Box::new(self.clone()))
         } else {
@@ -301,7 +310,11 @@ impl Ed25519Signer {
 }
 
 impl SigningKey for Ed25519Signer {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
+    fn choose_scheme(
+        &self,
+        offered: &[SignatureScheme],
+        _version: ProtocolVersion,
+    ) -> Option<Box<dyn Signer>> {
         if offered.contains(&self.scheme) {
             Some(Box::new(self.clone()))
         } else {
@@ -452,15 +465,24 @@ mod tests {
         );
 
         assert!(
-            k.choose_scheme(&[SignatureScheme::RSA_PKCS1_SHA256])
-                .is_none()
+            k.choose_scheme(
+                &[SignatureScheme::RSA_PKCS1_SHA256],
+                ProtocolVersion::TLSv1_2
+            )
+            .is_none()
         );
         assert!(
-            k.choose_scheme(&[SignatureScheme::ECDSA_NISTP384_SHA384])
-                .is_none()
+            k.choose_scheme(
+                &[SignatureScheme::ECDSA_NISTP384_SHA384],
+                ProtocolVersion::TLSv1_2
+            )
+            .is_none()
         );
         let s = k
-            .choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256])
+            .choose_scheme(
+                &[SignatureScheme::ECDSA_NISTP256_SHA256],
+                ProtocolVersion::TLSv1_2,
+            )
             .unwrap();
         assert_eq!(
             format!("{s:?}"),
@@ -508,15 +530,24 @@ mod tests {
         );
 
         assert!(
-            k.choose_scheme(&[SignatureScheme::RSA_PKCS1_SHA256])
-                .is_none()
+            k.choose_scheme(
+                &[SignatureScheme::RSA_PKCS1_SHA256],
+                ProtocolVersion::TLSv1_2
+            )
+            .is_none()
         );
         assert!(
-            k.choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256])
-                .is_none()
+            k.choose_scheme(
+                &[SignatureScheme::ECDSA_NISTP256_SHA256],
+                ProtocolVersion::TLSv1_2
+            )
+            .is_none()
         );
         let s = k
-            .choose_scheme(&[SignatureScheme::ECDSA_NISTP384_SHA384])
+            .choose_scheme(
+                &[SignatureScheme::ECDSA_NISTP384_SHA384],
+                ProtocolVersion::TLSv1_2,
+            )
             .unwrap();
         assert_eq!(
             format!("{s:?}"),
@@ -550,15 +581,21 @@ mod tests {
         assert_eq!(format!("{k:?}"), "Ed25519Signer { scheme: ED25519, .. }");
 
         assert!(
-            k.choose_scheme(&[SignatureScheme::RSA_PKCS1_SHA256])
-                .is_none()
+            k.choose_scheme(
+                &[SignatureScheme::RSA_PKCS1_SHA256],
+                ProtocolVersion::TLSv1_2
+            )
+            .is_none()
         );
         assert!(
-            k.choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256])
-                .is_none()
+            k.choose_scheme(
+                &[SignatureScheme::ECDSA_NISTP256_SHA256],
+                ProtocolVersion::TLSv1_2
+            )
+            .is_none()
         );
         let s = k
-            .choose_scheme(&[SignatureScheme::ED25519])
+            .choose_scheme(&[SignatureScheme::ED25519], ProtocolVersion::TLSv1_2)
             .unwrap();
         assert_eq!(format!("{s:?}"), "Ed25519Signer { scheme: ED25519, .. }");
         assert_eq!(s.scheme(), SignatureScheme::ED25519);
@@ -595,16 +632,19 @@ mod tests {
         assert_eq!(format!("{k:?}"), "RsaSigningKey { .. }");
 
         assert!(
-            k.choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256])
-                .is_none()
+            k.choose_scheme(
+                &[SignatureScheme::ECDSA_NISTP256_SHA256],
+                ProtocolVersion::TLSv1_2
+            )
+            .is_none()
         );
         assert!(
-            k.choose_scheme(&[SignatureScheme::ED25519])
+            k.choose_scheme(&[SignatureScheme::ED25519], ProtocolVersion::TLSv1_2)
                 .is_none()
         );
 
         let s = k
-            .choose_scheme(&[SignatureScheme::RSA_PSS_SHA256])
+            .choose_scheme(&[SignatureScheme::RSA_PSS_SHA256], ProtocolVersion::TLSv1_2)
             .unwrap();
         assert_eq!(format!("{s:?}"), "RsaSigner { scheme: RSA_PSS_SHA256, .. }");
         assert_eq!(s.scheme(), SignatureScheme::RSA_PSS_SHA256);
@@ -618,7 +658,8 @@ mod tests {
             SignatureScheme::RSA_PSS_SHA384,
             SignatureScheme::RSA_PSS_SHA512,
         ] {
-            k.choose_scheme(&[*scheme]).unwrap();
+            k.choose_scheme(&[*scheme], ProtocolVersion::TLSv1_2)
+                .unwrap();
         }
     }
 

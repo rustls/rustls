@@ -16,7 +16,7 @@ use crate::crypto::{
     self, CipherSuite, CipherSuiteCommon, GetRandomFailed, HashAlgorithm, SignatureScheme,
     TicketProducer, WebPkiSupportedAlgorithms, hash, hmac, tls12, tls13,
 };
-use crate::enums::ContentType;
+use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::PeerMisbehaved;
 use crate::pki_types::{
     AlgorithmIdentifier, InvalidSignature, PrivateKeyDer, SignatureVerificationAlgorithm,
@@ -556,7 +556,11 @@ impl SignatureVerificationAlgorithm for VerifyAlgorithm {
 struct SigningKey;
 
 impl crypto::SigningKey for SigningKey {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn crypto::Signer>> {
+    fn choose_scheme(
+        &self,
+        offered: &[SignatureScheme],
+        _version: ProtocolVersion,
+    ) -> Option<Box<dyn crypto::Signer>> {
         match offered.contains(&SIGNATURE_SCHEME) {
             true => Some(Box::new(Self)),
             false => None,

@@ -1092,7 +1092,11 @@ fn test_keys_match() {
 struct SigningKeyNoneSpki;
 
 impl SigningKey for SigningKeyNoneSpki {
-    fn choose_scheme(&self, _offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
+    fn choose_scheme(
+        &self,
+        _offered: &[SignatureScheme],
+        _version: ProtocolVersion,
+    ) -> Option<Box<dyn Signer>> {
         unimplemented!("Not meant to be called during tests")
     }
 
@@ -1118,7 +1122,11 @@ impl SigningKey for SigningKeySomeSpki {
         )
     }
 
-    fn choose_scheme(&self, _offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
+    fn choose_scheme(
+        &self,
+        _offered: &[SignatureScheme],
+        _version: ProtocolVersion,
+    ) -> Option<Box<dyn Signer>> {
         unimplemented!("Not meant to be called during tests")
     }
 }
@@ -2264,6 +2272,12 @@ fn large_client_hello_acceptor() {
                 .process(&mut input, &mut vec![])
                 .unwrap(),
             ServerHandshake::Accepted(accepted) => {
+                assert_eq!(
+                    accepted
+                        .client_hello()
+                        .negotiated_version(),
+                    None
+                );
                 println!("{accepted:?}");
                 break;
             }

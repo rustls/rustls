@@ -198,7 +198,12 @@ impl server::ServerCredentialResolver for FixedSignatureSchemeServerCertResolver
         }
 
         self.credentials
-            .signer(&[self.scheme])
+            .signer(
+                &[self.scheme],
+                client_hello
+                    .negotiated_version()
+                    .ok_or(Error::NoSuitableCertificate)?,
+            )
             .ok_or(Error::PeerIncompatible(
                 PeerIncompatible::NoSignatureSchemesInCommon,
             ))
