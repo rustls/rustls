@@ -160,6 +160,61 @@ impl ClientCredentialResolver for ForwardingResolver {
 }
 
 #[test]
+fn tls12_resumption_disabled_with_shared_store() {
+    use rustls::client::Tls12Resumption;
+
+    for (provider, version) in [
+        (provider::DEFAULT_TLS12_PROVIDER, ProtocolVersion::TLSv1_2),
+        (provider::DEFAULT_TLS13_PROVIDER, ProtocolVersion::TLSv1_3),
+    ] {
+        let mut client_config = make_client_config(KeyType::default(), &provider);
+        let server_config = Arc::new(make_server_config(KeyType::default(), &provider));
+        let store = Arc::new(ClientStorage::new());
+        for (mode, mut expected) in [
+            (Tls12Resumption::SessionIdOnly, HandshakeKind::Full),
+            (Tls12Resumption::SessionIdOnly, HandshakeKind::Resumed),
+            (Tls12Resumption::Disabled, HandshakeKind::Full),
+            (Tls12Resumption::SessionIdOnly, HandshakeKind::Resumed),
+        ] {
+            // Disabling TLS 1.2 must leave TLS 1.3 ticket resumption enabled.
+            if version == ProtocolVersion::TLSv1_3 && mode == Tls12Resumption::Disabled {
+                expected = HandshakeKind::Resumed;
+            }
+            client_config.resumption = Resumption::store(store.clone()).tls12_resumption(mode);
+            let mut client_input = VecInput::default();
+            let mut server_input = VecInput::default();
+            let mut client_output = Vec::new();
+            let mut server_output = Vec::new();
+            let (mut client, mut server) = make_pair_for_arc_configs(
+                &Arc::new(client_config.clone()),
+                &server_config,
+                &mut client_output,
+            );
+            do_handshake(
+                &mut client_input,
+                &mut client_output,
+                &mut client,
+                &mut server_input,
+                &mut server_output,
+                &mut server,
+            );
+            assert_eq!(client.protocol_version(), Some(version));
+            assert_eq!(server.protocol_version(), Some(version));
+            assert_eq!(
+                client.handshake_kind(),
+                Some(expected),
+                "{version:?}/{mode:?}"
+            );
+            assert_eq!(
+                server.handshake_kind(),
+                Some(expected),
+                "{version:?}/{mode:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn resumption_combinations() {
     for (client_config, server_config, expect) in MultiTest::new(provider::DEFAULT_PROVIDER) {
         let mut client_input = VecInput::default();
