@@ -6,9 +6,12 @@ use core::hash::Hasher;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use pki_types::{CertificateDer, DnsName};
+use pki_types::{CertificateDer, DnsName, SubjectPublicKeyInfoDer};
 use rustls::client::{ClientCredentialResolver, CredentialRequest};
-use rustls::crypto::{CipherSuite, Credentials, Identity, SelectedCredential, SignatureScheme};
+use rustls::crypto::{
+    CipherSuite, Credentials, Identity, SelectedCredential, SignatureScheme, Signer, SigningKey,
+    SingleCredential,
+};
 use rustls::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use rustls::error::{CertificateError, Error, PeerMisbehaved};
 use rustls::server::{ClientHello, ServerCredentialResolver, ServerNameResolver};
@@ -17,7 +20,7 @@ use rustls::{
 };
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, MultiTest, ServerCheckCertResolve,
-    certificate_error_expecting_name, do_handshake_until_error, make_client_config,
+    certificate_error_expecting_name, do_handshake, do_handshake_until_error, make_client_config,
     make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
     make_server_config_with_client_verifier, make_server_config_with_mandatory_client_auth,
     provider_with_one_suite, server_name, transfer, webpki_client_verifier_builder,
@@ -330,6 +333,7 @@ struct ClientCheckCertResolve {
     expect_queries: usize,
     expect_root_hint_subjects: Vec<DistinguishedName>,
     expect_sigschemes: Vec<SignatureScheme>,
+    expect_version: ProtocolVersion,
 }
 
 impl ClientCheckCertResolve {
@@ -337,12 +341,14 @@ impl ClientCheckCertResolve {
         expect_queries: usize,
         expect_root_hint_subjects: Vec<DistinguishedName>,
         expect_sigschemes: Vec<SignatureScheme>,
+        expect_version: ProtocolVersion,
     ) -> Self {
         Self {
             query_count: AtomicUsize::new(0),
             expect_queries,
             expect_root_hint_subjects,
             expect_sigschemes,
+            expect_version,
         }
     }
 }
@@ -366,6 +372,7 @@ impl ClientCredentialResolver for ClientCheckCertResolve {
         }
 
         assert_eq!(request.signature_schemes(), self.expect_sigschemes);
+        assert_eq!(request.negotiated_version(), self.expect_version);
         assert_eq!(
             request.root_hint_subjects(),
             &self.expect_root_hint_subjects
@@ -398,6 +405,7 @@ fn test_client_cert_resolve(
                 1,
                 expected_root_hint_subjects.clone(),
                 default_signature_schemes(version),
+                version,
             )))
             .unwrap();
 
@@ -720,4 +728,91 @@ fn sni_resolver_rejects_bad_certs() {
             Credentials::new_unchecked(bad_chain, kt.load_key(&provider::DEFAULT_PROVIDER))
         )
     );
+}
+
+#[test]
+fn signing_keys_receive_negotiated_version() {
+    let kt = KeyType::EcdsaP256;
+    for (version, client_provider) in [
+        (ProtocolVersion::TLSv1_2, provider::DEFAULT_TLS12_PROVIDER),
+        (ProtocolVersion::TLSv1_3, provider::DEFAULT_TLS13_PROVIDER),
+    ] {
+        for use_sni in [false, true] {
+            let client_calls = Arc::new(AtomicUsize::new(0));
+            let server_calls = Arc::new(AtomicUsize::new(0));
+            let credentials = |provider, calls| {
+                Credentials::new(
+                    kt.identity(),
+                    Box::new(CheckSigningVersion {
+                        key: kt.load_key(provider),
+                        expected: version,
+                        calls,
+                    }),
+                )
+                .unwrap()
+            };
+            let client_config = ClientConfig::builder(client_provider.clone().into())
+                .add_root_certs(kt)
+                .with_client_credential_resolver(Arc::new(SingleCredential::from(credentials(
+                    &client_provider,
+                    client_calls.clone(),
+                ))))
+                .unwrap();
+            // The server offers both versions. Its signing key must receive the version
+            // actually negotiated with this client, not the server's highest enabled version.
+            let server_provider = provider::DEFAULT_PROVIDER;
+            let mut server_config =
+                make_server_config_with_mandatory_client_auth(kt, &server_provider);
+            let server_credentials = credentials(&server_provider, server_calls.clone());
+            server_config.cert_resolver = if use_sni {
+                let mut resolver = ServerNameResolver::new();
+                resolver
+                    .add(DnsName::try_from("localhost").unwrap(), server_credentials)
+                    .unwrap();
+                Arc::new(resolver)
+            } else {
+                Arc::new(SingleCredential::from(server_credentials))
+            };
+            let mut client_input = VecInput::default();
+            let mut server_input = VecInput::default();
+            let mut client_output = Vec::new();
+            let mut server_output = Vec::new();
+            let (mut client, mut server) =
+                make_pair_for_configs(client_config, server_config, &mut client_output);
+            do_handshake(
+                &mut client_input,
+                &mut client_output,
+                &mut client,
+                &mut server_input,
+                &mut server_output,
+                &mut server,
+            );
+            assert_eq!(client_calls.load(Ordering::SeqCst), 1);
+            assert_eq!(server_calls.load(Ordering::SeqCst), 1);
+        }
+    }
+}
+
+#[derive(Debug)]
+struct CheckSigningVersion {
+    key: Box<dyn SigningKey>,
+    expected: ProtocolVersion,
+    calls: Arc<AtomicUsize>,
+}
+
+impl SigningKey for CheckSigningVersion {
+    fn choose_scheme(
+        &self,
+        offered: &[SignatureScheme],
+        version: ProtocolVersion,
+    ) -> Option<Box<dyn Signer>> {
+        assert_eq!(version, self.expected);
+        self.calls
+            .fetch_add(1, Ordering::SeqCst);
+        self.key.choose_scheme(offered, version)
+    }
+
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+        self.key.public_key()
+    }
 }

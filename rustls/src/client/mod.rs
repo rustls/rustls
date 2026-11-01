@@ -9,7 +9,7 @@ use zeroize::Zeroizing;
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{CipherSuite, CryptoProvider, Identity, SelectedCredential, SignatureScheme};
-use crate::enums::{ApplicationProtocol, CertificateType};
+use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, InvalidMessage};
 use crate::msgs::{
     CertificateChain, Codec, ExtensionType, MaybeEmpty, NewSessionTicketPayloadTls13, Reader,
@@ -455,6 +455,7 @@ enum ClientAuthDetails {
 
 impl ClientAuthDetails {
     fn resolve(
+        negotiated_version: ProtocolVersion,
         negotiated_type: CertificateType,
         resolver: &dyn ClientCredentialResolver,
         root_hint_subjects: Option<&[DistinguishedName]>,
@@ -463,6 +464,7 @@ impl ClientAuthDetails {
         compressor: Option<&'static dyn compress::CertCompressor>,
     ) -> Self {
         let server_hello = CredentialRequest {
+            negotiated_version,
             negotiated_type,
             root_hint_subjects: root_hint_subjects.unwrap_or_default(),
             signature_schemes,

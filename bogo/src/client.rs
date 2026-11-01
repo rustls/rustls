@@ -14,7 +14,7 @@ use rustls::crypto::{
     Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme, Signer, SigningKey,
     VerifiedIdentity,
 };
-use rustls::enums::{ApplicationProtocol, CertificateType};
+use rustls::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use rustls::error::{ApiMisuse, CertificateError, EncryptedClientHelloError};
 use rustls::pki_types::{ServerName, SubjectPublicKeyInfoDer};
 use rustls::server::danger::SignatureVerificationInput;
@@ -268,7 +268,10 @@ impl client::ClientCredentialResolver for MultipleClientCredentialResolver {
                     continue;
                 }
 
-                if let Some(signer) = cert.certkey.signer(&[sig_scheme]) {
+                if let Some(signer) = cert
+                    .certkey
+                    .signer(&[sig_scheme], request.negotiated_version())
+                {
                     assert!(
                         Some(i as isize) == self.expect_selected || self.expect_selected.is_none()
                     );
@@ -278,7 +281,9 @@ impl client::ClientCredentialResolver for MultipleClientCredentialResolver {
         }
 
         if let Some(cert) = &self.default
-            && let Some(signer) = cert.certkey.signer(sig_schemes)
+            && let Some(signer) = cert
+                .certkey
+                .signer(sig_schemes, request.negotiated_version())
         {
             assert!(matches!(self.expect_selected, Some(-1) | None));
             return Some(signer);
@@ -360,11 +365,16 @@ struct FixedSignatureSchemeSigningKey {
 }
 
 impl SigningKey for FixedSignatureSchemeSigningKey {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
+    fn choose_scheme(
+        &self,
+        offered: &[SignatureScheme],
+        version: ProtocolVersion,
+    ) -> Option<Box<dyn Signer>> {
         if offered.contains(&self.scheme) {
-            self.key.choose_scheme(&[self.scheme])
+            self.key
+                .choose_scheme(&[self.scheme], version)
         } else {
-            self.key.choose_scheme(&[])
+            self.key.choose_scheme(&[], version)
         }
     }
 

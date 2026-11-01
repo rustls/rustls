@@ -17,7 +17,7 @@ use rustls::crypto::{
     SelectedCredential, SignatureScheme, TicketProducer, WebPkiSupportedAlgorithms, hash, tls12,
     tls13,
 };
-use rustls::enums::ContentType;
+use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::{PeerIncompatible, PeerMisbehaved};
 use rustls::pki_types::{
     AlgorithmIdentifier, CertificateDer, FipsStatus, InvalidSignature, PrivateKeyDer,
@@ -76,7 +76,12 @@ struct DummyCert(Arc<Credentials>);
 impl ServerCredentialResolver for DummyCert {
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error> {
         self.0
-            .signer(client_hello.signature_schemes())
+            .signer(
+                client_hello.signature_schemes(),
+                client_hello
+                    .negotiated_version()
+                    .ok_or(Error::NoSuitableCertificate)?,
+            )
             .ok_or(Error::PeerIncompatible(
                 PeerIncompatible::NoSignatureSchemesInCommon,
             ))
@@ -497,7 +502,11 @@ impl SignatureVerificationAlgorithm for VerifyAlgorithm {
 pub struct SigningKey;
 
 impl crypto::SigningKey for SigningKey {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn crypto::Signer>> {
+    fn choose_scheme(
+        &self,
+        offered: &[SignatureScheme],
+        _version: ProtocolVersion,
+    ) -> Option<Box<dyn crypto::Signer>> {
         match offered.contains(&SIGNATURE_SCHEME) {
             true => Some(Box::new(Self)),
             false => None,

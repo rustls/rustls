@@ -6,8 +6,9 @@ However, if your private key resides in a HSM, or in another process, or perhaps
 another machine, rustls has some extension points to support this:
 
 The main trait you must implement is [`SigningKey`][signing_key]. The primary method here
-is [`choose_scheme()`][choose_scheme] where you are given a set of [`SignatureScheme`s][sig_scheme] the client says
-it supports: you must choose one (or return `None` -- this aborts the handshake). Having
+is [`choose_scheme()`][choose_scheme] where you receive the [`SignatureScheme`s][sig_scheme] the peer
+supports and the negotiated [`ProtocolVersion`][protocol_version]. Choose a scheme compatible with
+both your key and that version (or return `None` -- this aborts the handshake). Having
 done that, you return an implementation of the [`Signer`][signer] trait.
 The [`sign()`][sign_method] performs the signature and returns it.
 
@@ -27,6 +28,7 @@ For a complete example of implementing a custom [`SigningKey`][signing_key] and
 [signing_key]: crate::crypto::SigningKey
 [choose_scheme]: crate::crypto::SigningKey::choose_scheme
 [sig_scheme]: crate::crypto::SignatureScheme
+[protocol_version]: crate::enums::ProtocolVersion
 [signer]: crate::crypto::Signer
 [sign_method]: crate::crypto::Signer::sign
 [credentials]: crate::crypto::Credentials

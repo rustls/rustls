@@ -969,6 +969,7 @@ impl ExpectCertificateRequest {
             .copied();
 
         let client_auth = ClientAuthDetails::resolve(
+            ProtocolVersion::TLSv1_3,
             self.negotiated_client_type
                 .unwrap_or(CertificateType::X509),
             self.hs.config.resolver().as_ref(),

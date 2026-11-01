@@ -959,7 +959,12 @@ impl ServerCredentialResolver for ResolvesCertChainByCaName {
             );
             return self.0[0]
                 .1
-                .signer(client_hello.signature_schemes())
+                .signer(
+                    client_hello.signature_schemes(),
+                    client_hello
+                        .negotiated_version()
+                        .ok_or(Error::NoSuitableCertificate)?,
+                )
                 .ok_or(Error::PeerIncompatible(
                     PeerIncompatible::NoSignatureSchemesInCommon,
                 ));
@@ -974,7 +979,12 @@ impl ServerCredentialResolver for ResolvesCertChainByCaName {
             }) {
                 println!("ResolvesCertChainByCaName: found matching CA name: {name}");
                 return credentials
-                    .signer(client_hello.signature_schemes())
+                    .signer(
+                        client_hello.signature_schemes(),
+                        client_hello
+                            .negotiated_version()
+                            .ok_or(Error::NoSuitableCertificate)?,
+                    )
                     .ok_or(Error::PeerIncompatible(
                         PeerIncompatible::NoSignatureSchemesInCommon,
                     ));
@@ -984,7 +994,12 @@ impl ServerCredentialResolver for ResolvesCertChainByCaName {
         println!("ResolvesCertChainByCaName: no matching CA name found, returning default Cert");
         self.0[0]
             .1
-            .signer(client_hello.signature_schemes())
+            .signer(
+                client_hello.signature_schemes(),
+                client_hello
+                    .negotiated_version()
+                    .ok_or(Error::NoSuitableCertificate)?,
+            )
             .ok_or(Error::PeerIncompatible(
                 PeerIncompatible::NoSignatureSchemesInCommon,
             ))

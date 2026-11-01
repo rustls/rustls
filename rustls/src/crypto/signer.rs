@@ -12,7 +12,7 @@ use pki_types::{AlgorithmIdentifier, CertificateDer, SubjectPublicKeyInfoDer};
 use super::CryptoProvider;
 use crate::client::{ClientCredentialResolver, CredentialRequest};
 use crate::crypto::SignatureScheme;
-use crate::enums::CertificateType;
+use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible};
 use crate::msgs::{Codec, Reader};
 use crate::server::{ClientHello, ServerCredentialResolver};
@@ -56,7 +56,7 @@ impl ClientCredentialResolver for SingleCredential {
             (Identity::X509(_), CertificateType::X509)
             | (Identity::RawPublicKey(_), CertificateType::RawPublicKey) => self
                 .credentials
-                .signer(request.signature_schemes()),
+                .signer(request.signature_schemes(), request.negotiated_version()),
             _ => None,
         }
     }
@@ -73,7 +73,12 @@ impl ClientCredentialResolver for SingleCredential {
 impl ServerCredentialResolver for SingleCredential {
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error> {
         self.credentials
-            .signer(client_hello.signature_schemes())
+            .signer(
+                client_hello.signature_schemes(),
+                client_hello
+                    .negotiated_version()
+                    .ok_or(Error::NoSuitableCertificate)?,
+            )
             .ok_or(Error::PeerIncompatible(
                 PeerIncompatible::NoSignatureSchemesInCommon,
             ))
@@ -177,11 +182,18 @@ impl Credentials {
 
     /// Attempt to produce a `SelectedCredential` using one of the given signature schemes.
     ///
-    /// Calls [`SigningKey::choose_scheme()`] and propagates `identity` and `ocsp`.
-    pub fn signer(&self, sig_schemes: &[SignatureScheme]) -> Option<SelectedCredential> {
+    /// Calls [`SigningKey::choose_scheme()`] for the negotiated `version` and propagates
+    /// `identity` and `ocsp`.
+    pub fn signer(
+        &self,
+        sig_schemes: &[SignatureScheme],
+        version: ProtocolVersion,
+    ) -> Option<SelectedCredential> {
         Some(SelectedCredential {
             identity: self.identity.clone(),
-            signer: self.key.choose_scheme(sig_schemes)?,
+            signer: self
+                .key
+                .choose_scheme(sig_schemes, version)?,
             ocsp: self.ocsp.clone(),
         })
     }
@@ -417,11 +429,20 @@ impl<'a> CertificateIdentity<'a> {
 /// [`ServerCredentialResolver`]: crate::server::ServerCredentialResolver
 /// [`ClientCredentialResolver`]: crate::client::ClientCredentialResolver
 pub trait SigningKey: Debug + Send + Sync {
-    /// Choose a `SignatureScheme` from those offered.
+    /// Choose a `SignatureScheme` from those offered for the negotiated TLS `version`.
+    ///
+    /// The version determines how to interpret the schemes. In TLS 1.2, an ECDSA scheme
+    /// identifies a hash algorithm independently of the key's curve (RFC 5246 section 7.4.1.4.1).
+    /// In TLS 1.3, each ECDSA scheme also identifies the curve (RFC 8446 section 4.2.3).
+    /// The offered schemes have already been filtered to those allowed for `version`.
     ///
     /// Expresses the choice by returning something that implements `Signer`,
     /// using the chosen scheme.
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>>;
+    fn choose_scheme(
+        &self,
+        offered: &[SignatureScheme],
+        version: ProtocolVersion,
+    ) -> Option<Box<dyn Signer>>;
 
     /// Get the RFC 5280-compliant SubjectPublicKeyInfo (SPKI) of this [`SigningKey`].
     ///

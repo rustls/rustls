@@ -429,6 +429,7 @@ pub trait ServerCredentialResolver: Debug + Send + Sync {
 /// A struct representing the received Client Hello
 #[derive(Debug)]
 pub struct ClientHello<'a> {
+    pub(super) negotiated_version: Option<ProtocolVersion>,
     pub(super) server_name: Option<Cow<'a, DnsName<'a>>>,
     pub(super) signature_schemes: &'a [SignatureScheme],
     pub(super) alpn: Option<&'a Vec<ApplicationProtocol<'a>>>,
@@ -446,6 +447,7 @@ impl<'a> ClientHello<'a> {
     #[cfg(test)]
     pub(super) fn empty() -> Self {
         Self {
+            negotiated_version: None,
             server_name: None,
             signature_schemes: &[],
             alpn: None,
@@ -464,6 +466,7 @@ impl<'a> ClientHello<'a> {
         version: Option<ProtocolVersion>,
     ) -> Self {
         Self {
+            negotiated_version: version,
             server_name,
             signature_schemes: signature_schemes.unwrap_or_else(|| {
                 payload
@@ -488,6 +491,15 @@ impl<'a> ClientHello<'a> {
             },
             named_groups: payload.named_groups.as_deref(),
         }
+    }
+
+    /// The negotiated TLS protocol version.
+    ///
+    /// This is `Some` during credential resolution and determines how to interpret
+    /// [`Self::signature_schemes()`]. It is `None` when inspecting a ClientHello through
+    /// [`super::Accepted::client_hello()`], before a server configuration has been chosen.
+    pub fn negotiated_version(&self) -> Option<ProtocolVersion> {
+        self.negotiated_version
     }
 
     /// Get the server name indicator.

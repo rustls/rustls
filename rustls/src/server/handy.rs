@@ -217,7 +217,12 @@ mod sni_resolver {
                 return Err(Error::NoSuitableCertificate);
             };
 
-            match credentials.signer(client_hello.signature_schemes) {
+            match credentials.signer(
+                client_hello.signature_schemes,
+                client_hello
+                    .negotiated_version()
+                    .ok_or(Error::NoSuitableCertificate)?,
+            ) {
                 Some(signer) => Ok(signer),
                 None => Err(PeerIncompatible::NoSignatureSchemesInCommon.into()),
             }
