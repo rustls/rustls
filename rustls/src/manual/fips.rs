@@ -9,12 +9,13 @@ Use:
 
 ```toml
 rustls = { version = "0.24" }
-rustls-aws-lc-rs = { version = "0.1", features = ["fips"] }
+rustls-aws-lc-rs = { version = "0.24", features = ["fips"] }
 ```
 
 ## 2. Use the FIPS `CryptoProvider`
 
-Instantiate your `ClientConfig` or `ServerConfig` using the FIPS `CryptoProvider`.
+Instantiate your `ClientConfig` or `ServerConfig` using the FIPS `CryptoProvider`,
+`rustls_aws_lc_rs::DEFAULT_FIPS_PROVIDER`.
 
 ## 3. Validate the FIPS status of your `ClientConfig`/`ServerConfig` at run-time
 
@@ -22,8 +23,9 @@ See [`ClientConfig::fips()`] or [`ServerConfig::fips()`].
 
 You could, for example:
 
-```rust,ignore
-# let client_config = unreachable!();
+```rust,no_run
+# use rustls::pki_types::FipsStatus;
+# let client_config: rustls::ClientConfig = unreachable!();
 assert!(matches!(client_config.fips(), FipsStatus::Certified { .. }));
 ```
 
