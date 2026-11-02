@@ -163,10 +163,7 @@ impl ClientVerifierBuilder {
     /// and to determine what to do with anonymous clients that do not respond to the client
     /// certificate authentication offer with a client certificate.
     ///
-    /// If `with_signature_verification_algorithms` was not called on the builder, a default set of
-    /// signature verification algorithms is used, controlled by the selected [`CryptoProvider`].
-    ///
-    /// Once built, the provided `Arc<dyn ClientVerifier>` can be used with a Rustls
+    /// Once built, the created `WebPkiClientVerifier` can be used with a Rustls
     /// [`ServerConfig`] to configure client certificate validation using
     /// [`with_client_cert_verifier`][ConfigBuilder<ClientConfig, WantsVerifier>::with_client_cert_verifier].
     ///
@@ -195,9 +192,9 @@ impl ClientVerifierBuilder {
 /// A client certificate verifier that uses the `webpki` crate[^1] to perform client certificate
 /// validation.
 ///
-/// It must be created via [`WebPkiClientVerifier::builder()`].
+/// It must be created via [`WebPkiClientVerifier::builder(roots, provider)`].
 ///
-/// Once built, the provided `Arc<dyn ClientVerifier>` can be used with a Rustls [`ServerConfig`]
+/// Once built, a `WebPkiClientVerifier` can be used with a Rustls [`ServerConfig`]
 /// to configure client certificate validation using [`with_client_cert_verifier`][ConfigBuilder<ClientConfig, WantsVerifier>::with_client_cert_verifier].
 ///
 /// Example:
@@ -280,7 +277,7 @@ impl WebPkiClientVerifier {
     /// Create a new `WebPkiClientVerifier` that disables client authentication. The server will
     /// not offer client authentication and anonymous clients will be accepted.
     ///
-    /// This is in contrast to using `WebPkiClientVerifier::builder().allow_unauthenticated().build()`,
+    /// This is in contrast to using `WebPkiClientVerifier::builder(roots, provider).allow_unauthenticated().build()`,
     /// which will produce a verifier that will offer client authentication, but not require it.
     pub fn no_client_auth() -> Arc<dyn ClientVerifier> {
         Arc::new(NoClientAuth {})

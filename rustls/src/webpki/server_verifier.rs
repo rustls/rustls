@@ -102,10 +102,7 @@ impl ServerVerifierBuilder {
     /// Build a server certificate verifier, allowing control over the root certificates to use as
     /// trust anchors, and to control how server certificate revocation checking is performed.
     ///
-    /// If `with_signature_verification_algorithms` was not called on the builder, a default set of
-    /// signature verification algorithms is used, controlled by the selected [`crypto::CryptoProvider`].
-    ///
-    /// Once built, the provided `Arc<dyn ServerVerifier>` can be used with a Rustls
+    /// Once built, the provided `WebPkiServerVerifier` can be used with a Rustls
     /// [`ClientConfig`] to configure server certificate validation using
     /// [`with_webpki_verifier`][ConfigBuilder<ClientConfig, WantsVerifier>::with_webpki_verifier].
     ///
