@@ -215,7 +215,7 @@ impl HybridLayout {
 ///
 /// This type carries both configuration and implementation. Specifically,
 /// it has a TLS-level name expressed using the [`NamedGroup`] enum, and
-/// a function which produces a [`ActiveKeyExchange`].
+/// a function which produces a [`StartedKeyExchange`].
 ///
 /// Compare with [`NamedGroup`], which carries solely a protocol identifier.
 pub trait SupportedKxGroup: Send + Sync + Debug {
@@ -464,25 +464,32 @@ pub trait ActiveKeyExchange: Send + Sync {
 ///    This optimization is permitted and described in
 ///    <https://www.ietf.org/archive/id/draft-ietf-tls-hybrid-design-11.html#section-3.2>
 ///
-/// Both of these only happen if the classical algorithm appears separately in
-/// the client's [`CryptoProvider::kx_groups`][super::CryptoProvider::kx_groups],
-/// and if the hybrid algorithm appears first in that list.
+/// Both of these only happen if the hybrid algorithm is the one chosen for the
+/// client's initial key share (usually the first item in
+/// [`CryptoProvider::kx_groups`][super::CryptoProvider::kx_groups]), and the classical
+/// algorithm also appears separately in that list.
 ///
 /// # How it works
-/// This function is only called by rustls for clients.  It is called when
-/// constructing the initial `ClientHello`.  rustls follows these steps:
+/// This is only used by rustls for TLS1.3 clients.  When constructing a `ClientHello`,
+/// rustls calls [`SupportedKxGroup::start()`] for the chosen group, then follows these steps:
 ///
-/// 1. If the return value is `None`, nothing further happens.
-/// 2. If the given [`NamedGroup`] does not appear in
+/// 1. If that returns [`StartedKeyExchange::Single`], nothing further happens.
+/// 2. If it returns [`StartedKeyExchange::Hybrid`], rustls calls
+///    [`HybridKeyExchange::component()`].  If the returned [`NamedGroup`] is not usable
+///    with TLS1.3, or does not appear in
 ///    [`CryptoProvider::kx_groups`][super::CryptoProvider::kx_groups], nothing further happens.
-/// 3. The given key share is added to the `ClientHello`, after the hybrid entry.
+/// 3. Otherwise, the returned key share is added to the `ClientHello`, after the hybrid entry.
+///    This is skipped if the `ClientHello` is a reply to a `HelloRetryRequest` that
+///    named a specific group.
 ///
 /// Then, one of three things may happen when the server replies to the `ClientHello`:
 ///
-/// 1. The server sends a `HelloRetryRequest`.  Everything is thrown away and
-///    we start again.
+/// 1. The server sends a `HelloRetryRequest`.  If it names a different group, the key
+///    exchange is discarded and the process starts again with that group.  Otherwise,
+///    the same key exchange is offered again in the next `ClientHello`.
 /// 2. The server agrees to our hybrid key exchange: rustls calls
-///    [`ActiveKeyExchange::complete()`] consuming `self`.
+///    [`HybridKeyExchange::into_key_exchange()`] and then
+///    [`ActiveKeyExchange::complete()`] on the result.
 /// 3. The server agrees to our classical key exchange: rustls calls
 ///    [`HybridKeyExchange::complete_component()`] which
 ///    discards the hybrid key data, and completes just the classical key exchange.
