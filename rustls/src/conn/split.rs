@@ -5,13 +5,14 @@ use core::ops::Range;
 use std::sync::MutexGuard;
 
 use super::kernel::KernelConnection;
-use super::receive::{Discard, JoinOutput};
+use super::receive::JoinOutput;
 use super::{
     Connection, ConnectionOutputs, DataKind, Encrypter, MessageIter, MessageIterMode, ReceivePath,
     SendOutput, SendPath, SideData, Tcp, TlsInputBuffer,
 };
 use crate::client::ClientSide;
-use crate::common_state::UnborrowedPayload;
+use crate::common_state::{ConnectionOutput, Event, OutputEvent, UnborrowedPayload};
+use crate::conn::private::SideOutput;
 use crate::crypto::cipher::OutboundPlain;
 use crate::enums::ProtocolVersion;
 use crate::error::{AlertDescription, ApiMisuse, Error};
@@ -592,6 +593,16 @@ impl SendOutput for SendAdapter<'_> {
         self.as_locked(true)
             .send_msg(m, must_encrypt)
     }
+}
+
+struct Discard;
+
+impl ConnectionOutput for Discard {
+    fn handle(&mut self, _ev: OutputEvent<'_>) {}
+}
+
+impl SideOutput for Discard {
+    fn emit(&mut self, _ev: Event) {}
 }
 
 #[cfg(test)]
