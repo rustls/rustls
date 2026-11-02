@@ -965,33 +965,6 @@ pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, S
     (client_config, server_config)
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn do_handshake_collecting(
-    client_input: &mut VecInput,
-    client_output: &mut Vec<u8>,
-    client: &mut Connection<ClientSide, Tcp>,
-    client_received: &mut Vec<u8>,
-    server_input: &mut VecInput,
-    server_output: &mut Vec<u8>,
-    server: &mut Connection<ServerSide, Tcp>,
-    server_received: &mut Vec<u8>,
-) -> (usize, usize) {
-    let (mut to_client, mut to_server) = (0, 0);
-    while server.is_handshaking() || client.is_handshaking() {
-        to_server += transfer(client_output, server_input);
-        server
-            .read_tls(server_input, server_output)
-            .handle_all(server_received)
-            .unwrap();
-        to_client += transfer(server_output, client_input);
-        client
-            .read_tls(client_input, client_output)
-            .handle_all(client_received)
-            .unwrap();
-    }
-    (to_server, to_client)
-}
-
 /// Like [`HandshakeIo::handshake()`], but collects early data received by the server into `server_early_data`.
 pub fn do_handshake_collecting_early_data(
     client_input: &mut VecInput,
