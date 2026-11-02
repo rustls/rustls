@@ -362,8 +362,7 @@ pub struct WebPkiSupportedAlgorithms {
 impl WebPkiSupportedAlgorithms {
     /// Creating a `WebPkiSupportedAlgorithms` and checking its consistency.
     ///
-    /// This is intended to only be called in const context, so the panics are
-    /// compile-time.
+    /// This is intended to only be called in const context.
     pub const fn new(
         all: &'static [&'static dyn SignatureVerificationAlgorithm],
         mapping: &'static [(
@@ -382,7 +381,6 @@ impl WebPkiSupportedAlgorithms {
             if s.mapping[i].1.is_empty() {
                 return Err(ApiMisuse::NoSignatureVerificationAlgorithms);
             }
-            assert!(!s.mapping[i].1.is_empty());
             i += 1;
         }
 
