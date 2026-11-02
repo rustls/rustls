@@ -236,6 +236,7 @@
 //!       .handle_all(&mut plaintext)
 //!       .unwrap();
 //!     io::stdout().write(&plaintext).unwrap();
+//!     plaintext.clear();
 //!   }
 //!
 //!   if !sent_request && !client.is_handshaking() {
