@@ -32,9 +32,11 @@
 //! [cc_cd]: crate::ClientConfig::cert_decompressors
 //! [sc_cd]: crate::ServerConfig::cert_decompressors
 
+#[cfg(feature = "std")]
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::fmt::Debug;
+#[cfg(feature = "std")]
 use std::sync::Mutex;
 
 use crate::crypto::cipher::Payload;
@@ -46,7 +48,7 @@ use crate::sync::Arc;
 /// by crate features.
 pub fn default_cert_decompressors() -> &'static [&'static dyn CertDecompressor] {
     &[
-        #[cfg(feature = "brotli")]
+        #[cfg(all(feature = "brotli", feature = "std"))]
         BROTLI_DECOMPRESSOR,
         #[cfg(feature = "zlib")]
         ZLIB_DECOMPRESSOR,
@@ -71,7 +73,7 @@ pub trait CertDecompressor: Debug + Send + Sync {
 /// by crate features.
 pub fn default_cert_compressors() -> &'static [&'static dyn CertCompressor] {
     &[
-        #[cfg(feature = "brotli")]
+        #[cfg(all(feature = "brotli", feature = "std"))]
         BROTLI_COMPRESSOR,
         #[cfg(feature = "zlib")]
         ZLIB_COMPRESSOR,
@@ -198,7 +200,7 @@ mod feat_zlib_rs {
 pub use feat_zlib_rs::{ZLIB_COMPRESSOR, ZLIB_DECOMPRESSOR};
 
 #[allow(clippy::std_instead_of_core)] // awaits core::io::Cursor (1.97) in crate MSRV
-#[cfg(feature = "brotli")]
+#[cfg(all(feature = "brotli", feature = "std"))]
 mod feat_brotli {
     use std::io::{Cursor, Write};
 
@@ -287,7 +289,7 @@ mod feat_brotli {
     const QUALITY_SLOW: u32 = 11;
 }
 
-#[cfg(feature = "brotli")]
+#[cfg(all(feature = "brotli", feature = "std"))]
 pub use feat_brotli::{BROTLI_COMPRESSOR, BROTLI_DECOMPRESSOR};
 
 /// An LRU cache for compressions.
@@ -303,12 +305,14 @@ pub enum CompressionCache {
     Disabled,
 
     /// Compressions are stored in an LRU cache.
+    #[cfg(feature = "std")]
     Enabled(CompressionCacheInner),
 }
 
 /// Innards of an enabled CompressionCache.
 ///
 /// You cannot make one of these directly. Use [`CompressionCache::new`].
+#[cfg(feature = "std")]
 #[derive(Debug)]
 pub struct CompressionCacheInner {
     /// Maximum size of underlying storage.
@@ -321,8 +325,8 @@ pub struct CompressionCacheInner {
 }
 
 impl CompressionCache {
-    /// Make a `CompressionCache` that stores up to `size` compressed
-    /// certificate messages.
+    /// Make a `CompressionCache` that stores up to `size` compressed certificate messages.
+    #[cfg(feature = "std")]
     pub fn new(size: usize) -> Self {
         if size == 0 {
             return Self::Disabled;
@@ -346,10 +350,12 @@ impl CompressionCache {
     ) -> Result<Arc<CompressionCacheEntry>, CompressionFailed> {
         match self {
             Self::Disabled => Self::uncached_compression(compressor, original),
+            #[cfg(feature = "std")]
             Self::Enabled(_) => self.compression_for_impl(compressor, original),
         }
     }
 
+    #[cfg(feature = "std")]
     fn compression_for_impl(
         &self,
         compressor: &dyn CertCompressor,
@@ -420,7 +426,9 @@ impl CompressionCache {
         // this `CompressionCacheEntry` in fact never makes it into the cache, so
         // `original` is left empty
         Ok(Arc::new(CompressionCacheEntry {
+            #[cfg(feature = "std")]
             algorithm,
+            #[cfg(feature = "std")]
             original: Vec::new(),
             compressed: CompressedCertificatePayload {
                 alg: algorithm,
@@ -431,17 +439,25 @@ impl CompressionCache {
     }
 }
 
+#[cfg_attr(not(feature = "std"), expect(clippy::derivable_impls))]
 impl Default for CompressionCache {
     fn default() -> Self {
         // 4 entries allows 2 certificate chains times 2 compression algorithms
-        Self::new(4)
+        #[cfg(feature = "std")]
+        {
+            Self::new(4)
+        }
+        #[cfg(not(feature = "std"))]
+        Self::Disabled
     }
 }
 
 #[derive(Debug)]
 pub(crate) struct CompressionCacheEntry {
     // cache key is algorithm + original:
+    #[cfg(feature = "std")]
     algorithm: CertificateCompressionAlgorithm,
+    #[cfg(feature = "std")]
     original: Vec<u8>,
 
     // cache value is compression result:

@@ -13,7 +13,7 @@ autobenches = false
 default = ["aws-lc-sys", "std"]
 aws-lc-sys = ["aws-lc-rs/aws-lc-sys"]
 fips = ["aws-lc-rs/fips"]
-std = []
+std = ["rustls/std"]
 
 [dependencies]
 aws-lc-rs = { workspace = true, features = ["prebuilt-nasm"] }

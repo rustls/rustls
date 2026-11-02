@@ -217,6 +217,7 @@ fn server_external_verifier_does_not_call_trait() {
         server_output.clear();
 
         assert!(!client.is_handshaking());
+        let server = server.split().unwrap();
         assert!(server.outputs.peer_identity().is_some());
     }
 }

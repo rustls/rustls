@@ -23,7 +23,9 @@ use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::{ClientHelloPayload, ClientTicketRequest, ServerNamePayload};
 use crate::suites::Suite;
 use crate::sync::Arc;
-use crate::time_provider::{DefaultTimeProvider, TimeProvider};
+#[cfg(feature = "std")]
+use crate::time_provider::DefaultTimeProvider;
+use crate::time_provider::TimeProvider;
 use crate::verify::{ClientVerifier, DistinguishedName, NoClientAuth};
 use crate::{KeyLog, NoKeyLog, Tls12CipherSuite, Tls13CipherSuite, compress};
 
@@ -252,6 +254,7 @@ impl ServerConfig {
     /// are reported at the end of the builder process.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
+    #[cfg(feature = "std")]
     pub fn builder(provider: Arc<CryptoProvider>) -> ConfigBuilder<Self, WantsVerifier> {
         Self::builder_with_details(provider, Arc::new(DefaultTimeProvider))
     }
@@ -734,7 +737,10 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             cipher_suite_selector: &PreferClientOrder,
             kx_selector: &PreferClientOrder,
             max_fragment_size: None,
+            #[cfg(feature = "std")]
             session_storage: handy::ServerSessionMemoryCache::new(256),
+            #[cfg(not(feature = "std"))]
+            session_storage: Arc::new(handy::NoServerSessionStorage {}),
             ticketer: None,
             cert_resolver,
             alpn_protocols: Vec::new(),

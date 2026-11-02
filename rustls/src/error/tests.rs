@@ -657,6 +657,7 @@ fn rand_error_mapping() {
     assert_eq!(err, Error::FailedToGetRandomBytes);
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn time_error_mapping() {
     use std::time::SystemTime;

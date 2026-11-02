@@ -36,7 +36,9 @@ pub use receive::{SliceInput, TlsInputBuffer, VecInput};
 mod send;
 pub(crate) use send::{Encrypter, SendOutput, SendPath};
 
+#[cfg(feature = "std")]
 pub(crate) mod split;
+#[cfg(feature = "std")]
 use split::SplitConnection;
 
 /// A TLS connection, parametrized by the side ([`ClientSide`] or [`ServerSide`]).
@@ -196,6 +198,7 @@ impl<Side: SideData> Connection<Side, Tcp> {
     ///
     /// - the handshake is not complete. Check with [`Connection::is_handshaking()`].
     /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write()`].
+    #[cfg(feature = "std")]
     pub fn split(self) -> Result<SplitConnection<Side>, Error> {
         SplitConnection::try_from(self)
     }

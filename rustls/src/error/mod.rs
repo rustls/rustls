@@ -4,6 +4,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
+#[cfg(feature = "std")]
 use std::time::SystemTimeError;
 
 use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
@@ -320,6 +321,7 @@ impl From<InconsistentKeys> for Error {
     }
 }
 
+#[cfg(feature = "std")]
 impl From<SystemTimeError> for Error {
     #[inline]
     fn from(_: SystemTimeError) -> Self {
@@ -597,10 +599,8 @@ impl From<&CertificateError> for AlertDescription {
     fn from(e: &CertificateError) -> Self {
         use CertificateError::*;
         match e {
-            BadEncoding
-            | UnhandledCriticalExtension
-            | NotValidForName
-            | NotValidForNameContext { .. } => Self::BadCertificate,
+            BadEncoding | UnhandledCriticalExtension | NotValidForName => Self::BadCertificate,
+            NotValidForNameContext { .. } => Self::BadCertificate,
             // RFC 5246/RFC 9846
             // certificate_expired
             //  A certificate has expired or **is not currently valid**.
@@ -635,6 +635,7 @@ impl From<&CertificateError> for AlertDescription {
 impl fmt::Display for CertificateError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            #[cfg(feature = "std")]
             Self::NotValidForNameContext {
                 expected,
                 presented,

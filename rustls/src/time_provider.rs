@@ -19,10 +19,12 @@ pub trait TimeProvider: Debug + Send + Sync + Any {
 }
 
 /// Default `TimeProvider` implementation that uses `std`
+#[cfg(feature = "std")]
 #[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct DefaultTimeProvider;
 
+#[cfg(feature = "std")]
 impl TimeProvider for DefaultTimeProvider {
     fn current_time(&self) -> Option<UnixTime> {
         Some(UnixTime::now())

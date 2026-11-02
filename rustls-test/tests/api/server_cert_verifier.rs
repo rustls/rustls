@@ -254,6 +254,7 @@ fn client_external_verifier_does_not_call_trait() {
         };
 
         assert!(!server.is_handshaking());
+        let client = client.split().unwrap();
         assert!(client.outputs.peer_identity().is_some());
     }
 }

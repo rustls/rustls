@@ -23,6 +23,7 @@ impl StoresServerSessions for NoServerSessionStorage {
     }
 }
 
+#[cfg(feature = "std")]
 mod cache {
     use core::fmt::Formatter;
 
@@ -148,9 +149,10 @@ mod cache {
     }
 }
 
+#[cfg(feature = "std")]
 pub use cache::ServerSessionMemoryCache;
 
-#[cfg(feature = "webpki")]
+#[cfg(all(feature = "webpki", feature = "std"))]
 mod sni_resolver {
     use core::fmt::Debug;
 
@@ -255,7 +257,7 @@ mod sni_resolver {
     }
 }
 
-#[cfg(feature = "webpki")]
+#[cfg(all(feature = "webpki", feature = "std"))]
 pub use sni_resolver::ServerNameResolver;
 
 #[cfg(test)]

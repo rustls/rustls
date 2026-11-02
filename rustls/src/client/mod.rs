@@ -6,6 +6,7 @@ use core::time::Duration;
 use pki_types::UnixTime;
 use zeroize::Zeroizing;
 
+use crate::compress;
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{CipherSuite, CryptoProvider, Identity, SelectedCredential, SignatureScheme};
@@ -16,6 +17,7 @@ use crate::msgs::{
     SessionId, SizedPayload,
 };
 use crate::sync::Arc;
+use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13ProtocolSuite;
 use crate::tracing::{debug, trace};
 use crate::verify::{DistinguishedName, VerifiedIdentity};
@@ -24,7 +26,6 @@ pub use crate::webpki::{
     ServerVerifierBuilder, VerifierBuilderError, WebPkiServerVerifier,
     verify_identity_signed_by_trust_anchor, verify_server_name,
 };
-use crate::{Tls12CipherSuite, compress};
 
 mod config;
 pub use config::{
@@ -39,6 +40,7 @@ mod ech;
 pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
 
 mod handy;
+#[cfg(feature = "std")]
 pub use handy::ClientSessionMemoryCache;
 
 mod hs;
