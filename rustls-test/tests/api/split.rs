@@ -12,25 +12,16 @@ use rustls::crypto::cipher::OutboundPlain;
 use rustls::error::{AlertDescription, ApiMisuse, InvalidMessage};
 use rustls::server::ServerSide;
 use rustls::split::{ReceiveTraffic, ReceiveTrafficState, SplitConnection};
-use rustls::{Error, SideData, SliceInput, VecInput};
+use rustls::{Error, SideData, SliceInput};
 use rustls_test::{
-    KeyType, do_handshake, make_client_config, make_pair, make_pair_for_configs, make_server_config,
+    KeyType, make_client_config, make_pair, make_pair_for_configs, make_server_config,
 };
 
 #[test]
 fn split_pairwise() {
-    let mut server_output = Vec::new();
     let (mut client, mut server, mut buf) =
         make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
-    let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
-    do_handshake(
-        &mut client_input,
-        &mut buf.client_output,
-        &mut client,
-        &mut server_input,
-        &mut server_output,
-        &mut server,
-    );
+    buf.handshake(&mut client, &mut server);
 
     let client_split = client.split().unwrap();
     println!("{client_split:?}");
@@ -143,18 +134,9 @@ fn split_pairwise() {
 
 #[test]
 fn split_sender_refuses_data_after_close_notify() {
-    let mut server_output = Vec::new();
     let (mut client, mut server, mut buf) =
         make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
-    let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
-    do_handshake(
-        &mut client_input,
-        &mut buf.client_output,
-        &mut client,
-        &mut server_input,
-        &mut server_output,
-        &mut server,
-    );
+    buf.handshake(&mut client, &mut server);
 
     client
         .send_close_notify(&mut buf.client_output)
@@ -179,18 +161,9 @@ fn split_sender_refuses_data_after_close_notify() {
 
 #[test]
 fn split_incremental() {
-    let mut server_output = Vec::new();
     let (mut client, mut server, mut buf) =
         make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
-    let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
-    do_handshake(
-        &mut client_input,
-        &mut buf.client_output,
-        &mut client,
-        &mut server_input,
-        &mut server_output,
-        &mut server,
-    );
+    buf.handshake(&mut client, &mut server);
 
     let SplitConnection {
         send: mut client_send,
@@ -228,18 +201,9 @@ fn split_incremental() {
 
 #[test]
 fn split_client_tickets_received() {
-    let mut server_output = Vec::new();
     let (mut client, mut server, mut buf) =
         make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
-    let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
-    do_handshake(
-        &mut client_input,
-        &mut buf.client_output,
-        &mut client,
-        &mut server_input,
-        &mut server_output,
-        &mut server,
-    );
+    buf.handshake(&mut client, &mut server);
 
     assert_eq!(
         client
@@ -266,18 +230,9 @@ fn split_fails_during_handshake() {
 
 #[test]
 fn key_update() {
-    let mut server_output = Vec::new();
     let (mut client, mut server, mut buf) =
         make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
-    let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
-    do_handshake(
-        &mut client_input,
-        &mut buf.client_output,
-        &mut client,
-        &mut server_input,
-        &mut server_output,
-        &mut server,
-    );
+    buf.handshake(&mut client, &mut server);
 
     let SplitConnection {
         send: mut client_send,
@@ -332,18 +287,9 @@ fn key_update() {
 
 #[test]
 fn key_update_alongside_data() {
-    let mut server_output = Vec::new();
     let (mut client, mut server, mut buf) =
         make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
-    let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
-    do_handshake(
-        &mut client_input,
-        &mut buf.client_output,
-        &mut client,
-        &mut server_input,
-        &mut server_output,
-        &mut server,
-    );
+    buf.handshake(&mut client, &mut server);
 
     let SplitConnection {
         send: mut client_send,
@@ -377,18 +323,9 @@ fn key_update_alongside_data() {
 
 #[test]
 fn close_alongside_data() {
-    let mut server_output = Vec::new();
     let (mut client, mut server, mut buf) =
         make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
-    let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
-    do_handshake(
-        &mut client_input,
-        &mut buf.client_output,
-        &mut client,
-        &mut server_input,
-        &mut server_output,
-        &mut server,
-    );
+    buf.handshake(&mut client, &mut server);
 
     let SplitConnection {
         send: mut client_send,
@@ -421,18 +358,9 @@ fn close_alongside_data() {
 
 #[test]
 fn read_invalid_data_and_send_alert() {
-    let mut server_output = Vec::new();
     let (mut client, mut server, mut buf) =
         make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
-    let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
-    do_handshake(
-        &mut client_input,
-        &mut buf.client_output,
-        &mut client,
-        &mut server_input,
-        &mut server_output,
-        &mut server,
-    );
+    buf.handshake(&mut client, &mut server);
 
     let SplitConnection { send, receive, .. } = client.split().unwrap();
 
@@ -449,12 +377,12 @@ fn read_invalid_data_and_send_alert() {
     send.close(&mut buf.client_output)
         .unwrap();
 
-    server_input
+    buf.server_input
         .read(&mut Cursor::new(&mut buf.client_output))
         .unwrap();
     assert_eq!(
         server
-            .read_tls(&mut server_input, &mut server_output)
+            .read_tls(&mut buf.server_input, &mut buf.server_output)
             .handle_all(&mut Vec::new())
             .err(),
         Some(Error::AlertReceived(AlertDescription::DecodeError))
@@ -500,7 +428,6 @@ fn kernel_conversion_fails_with_pending_send_data() {
 /// This queues an encrypted response on the server's send half, awaiting the
 /// next send-side operation.
 fn split_server_with_queued_key_update() -> SplitConnection<ServerSide> {
-    let mut server_output = Vec::new();
     let mut server_config =
         make_server_config(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     server_config.enable_secret_extraction = true;
@@ -508,15 +435,7 @@ fn split_server_with_queued_key_update() -> SplitConnection<ServerSide> {
         make_client_config(KeyType::default(), &super::provider::DEFAULT_PROVIDER),
         server_config,
     );
-    let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
-    do_handshake(
-        &mut client_input,
-        &mut buf.client_output,
-        &mut client,
-        &mut server_input,
-        &mut server_output,
-        &mut server,
-    );
+    buf.handshake(&mut client, &mut server);
 
     let SplitConnection {
         send: mut client_send,

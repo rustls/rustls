@@ -11,10 +11,8 @@ use rustls::enums::ProtocolVersion;
 use rustls::error::{ApiMisuse, InvalidMessage};
 use rustls::kernel::KernelConnection;
 use rustls::server::ServerSide;
-use rustls::{
-    ClientConfig, ConnectionTrafficSecrets, Error, ExtractedSecrets, ServerConfig, VecInput,
-};
-use rustls_test::{ClientStorage, ClientStorageOp, MultiTest, do_handshake, make_pair_for_configs};
+use rustls::{ClientConfig, ConnectionTrafficSecrets, Error, ExtractedSecrets, ServerConfig};
+use rustls_test::{ClientStorage, ClientStorageOp, MultiTest, make_pair_for_configs};
 
 use super::provider;
 
@@ -183,16 +181,8 @@ fn kernel_pair(
     let mut server_config = Arc::unwrap_or_clone(server_config);
     server_config.enable_secret_extraction = true;
 
-    let mut server_output = Vec::new();
     let (mut client, mut server, mut buf) = make_pair_for_configs(client_config, server_config);
-    do_handshake(
-        &mut VecInput::default(),
-        &mut buf.client_output,
-        &mut client,
-        &mut VecInput::default(),
-        &mut server_output,
-        &mut server,
-    );
+    buf.handshake(&mut client, &mut server);
 
     (
         client

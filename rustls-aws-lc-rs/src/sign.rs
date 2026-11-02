@@ -468,8 +468,8 @@ mod tests {
         CertificateParams, CertifiedIssuer, ExtendedKeyUsagePurpose, IsCa, KeyPair, KeyUsagePurpose,
     };
     use rustls::crypto::Identity;
-    use rustls::{ClientConfig, Connection, RootCertStore, ServerConfig, VecInput};
-    use rustls_test::do_handshake;
+    use rustls::{ClientConfig, Connection, RootCertStore, ServerConfig};
+    use rustls_test::HandshakeBuffers;
 
     use super::*;
     use crate::DEFAULT_PROVIDER;
@@ -789,8 +789,7 @@ mod tests {
 
         let mut roots = RootCertStore::empty();
         roots.add(issuer.der().clone()).unwrap();
-        let mut client_output = Vec::new();
-        let mut server_output = Vec::new();
+        let mut buf = HandshakeBuffers::default();
         let mut client = Arc::new(
             ClientConfig::builder(provider)
                 .with_root_certificates(roots)
@@ -798,20 +797,11 @@ mod tests {
                 .unwrap(),
         )
         .connect("localhost".try_into().unwrap())
-        .build(&mut client_output)
+        .build(&mut buf.client_output)
         .unwrap();
 
-        let mut client_input = VecInput::default();
-        let mut server_input = VecInput::default();
         let mut server = Connection::new(Arc::new(server_config)).unwrap();
-        do_handshake(
-            &mut client_input,
-            &mut client_output,
-            &mut client,
-            &mut server_input,
-            &mut server_output,
-            &mut server,
-        );
+        buf.handshake(&mut client, &mut server);
     }
 }
 

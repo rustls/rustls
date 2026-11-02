@@ -16,10 +16,10 @@ use rustls::quic::{self, ClientHandshake, Quic, QuicEvent, ServerHandshake, Side
 use rustls::server::Tls13Tickets;
 use rustls::{
     CipherSuiteCommon, ClientSide, Connection, HandshakeKind, ServerSide, SideData, SliceInput,
-    Tls13CipherSuite, VecInput,
+    Tls13CipherSuite,
 };
 use rustls_test::{
-    ClientStorage, KeyType, MultiTest, do_handshake, encoding, make_client_config,
+    ClientStorage, KeyType, MultiTest, encoding, make_client_config,
     make_client_config_with_kx_groups, make_pair_for_arc_configs, make_server_config,
     make_server_config_with_kx_groups, server_name,
 };
@@ -1519,21 +1519,11 @@ fn quic_client_ignores_stored_session_with_non_quic_suite() {
     let storage = Arc::new(ClientStorage::new());
     let mut client_config = make_client_config(KeyType::default(), &tcp_provider);
     client_config.resumption = Resumption::store(storage.clone());
-    let mut server_output = Vec::new();
     let (mut client, mut server, mut buf) = make_pair_for_arc_configs(
         &Arc::new(client_config),
         &Arc::new(make_server_config(KeyType::default(), &tcp_provider)),
     );
-    let mut client_input = VecInput::default();
-    let mut server_input = VecInput::default();
-    do_handshake(
-        &mut client_input,
-        &mut buf.client_output,
-        &mut client,
-        &mut server_input,
-        &mut server_output,
-        &mut server,
-    );
+    buf.handshake(&mut client, &mut server);
     assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
     assert!(
         storage
