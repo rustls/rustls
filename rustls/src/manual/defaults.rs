@@ -18,23 +18,22 @@ it's _much_ more likely that both peers will have good quality implementations.
 
 ### About the post-quantum-secure key exchange `X25519MLKEM768`
 
-[X25519MLKEM768] -- a hybrid[^1], post-quantum-secure[^2] key exchange
+[X25519MLKEM768][RFC10024] -- a hybrid[^1], post-quantum-secure[^2] key exchange
 algorithm -- is available when using the aws-lc-rs provider, set as the highest-priority key
 exchange algorithm by default.
 
-[X25519MLKEM768] is pre-standardization, but is now widely deployed,
-for example, by [Chrome] and [Cloudflare].
+[X25519MLKEM768][RFC10024] is now standardized, and widely deployed, for example, by [Chrome] and [Cloudflare].
 
 You may see unexpected connection failures (such as [tldr.fail])
 -- [please report these to us][interop-bug].
 
 The two components of this key exchange are well regarded:
-X25519 alone is already used by default by rustls, and tends to have
+X25519 alone was previously preferred by default by rustls, and tends to have
 higher quality implementations than other elliptic curves.
 ML-KEM-768 was standardized by NIST in [FIPS203].
 
-MLKEM768 is available separately, but is not currently enabled
-by default out of conservatism.
+MLKEM768, MLKEM1024, and [SECP256R1MLKEM768][RFC10024] are available separately,
+but are not currently enabled by default out of conservatism/minimalism.
 
 [^1]: meaning: a construction that runs a classical and post-quantum
       key exchange, and uses the output of both together.  This is a hedge
@@ -46,7 +45,7 @@ by default out of conservatism.
       do not currently exist, and may never exist, but current traffic could be captured
       now and attacked later.
 
-[X25519MLKEM768]: <https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/>
+[RFC10024]: <https://datatracker.ietf.org/doc/rfc10024/>
 [FIPS203]: <https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.203.pdf>
 [Chrome]: <https://security.googleblog.com/2024/09/a-new-path-for-kyber-on-web.html>
 [Cloudflare]: <https://blog.cloudflare.com/pq-2024/#ml-kem-768-and-x25519>
