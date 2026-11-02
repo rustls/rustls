@@ -16,11 +16,11 @@ use rustls::{
     ClientConfig, Connection, DistinguishedName, ServerConfig, SupportedCipherSuite, VecInput,
 };
 use rustls_test::{
-    ClientConfigExt, ErrorFromPeer, KeyType, MultiTest, ServerCheckCertResolve,
-    certificate_error_expecting_name, do_handshake_until_error, make_client_config,
-    make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
-    make_server_config_with_client_verifier, make_server_config_with_mandatory_client_auth,
-    provider_with_one_suite, server_name, transfer, webpki_client_verifier_builder,
+    ClientConfigExt, ErrorFromPeer, HandshakeBuffers, KeyType, MultiTest, ServerCheckCertResolve,
+    certificate_error_expecting_name, make_client_config, make_pair_for_arc_configs,
+    make_pair_for_configs, make_server_config, make_server_config_with_client_verifier,
+    make_server_config_with_mandatory_client_auth, provider_with_one_suite, server_name, transfer,
+    webpki_client_verifier_builder,
 };
 
 use super::{provider, provider_is_aws_lc_rs};
@@ -37,24 +37,14 @@ fn server_cert_resolve_with_sni() {
             ..Default::default()
         });
 
-        let mut client_output = Vec::new();
-        let mut server_output = Vec::new();
+        let mut buf = HandshakeBuffers::default();
         let mut client = client_config
             .connect(server_name("the.value.from.sni"))
-            .build(&mut client_output)
+            .build(&mut buf.client_output)
             .unwrap();
         let mut server = Connection::new(Arc::new(server_config)).unwrap();
-        let mut client_input = VecInput::default();
-        let mut server_input = VecInput::default();
 
-        let err = do_handshake_until_error(
-            &mut client_input,
-            &mut client_output,
-            &mut client,
-            &mut server_input,
-            &mut server_output,
-            &mut server,
-        );
+        let err = buf.handshake_until_error(&mut client, &mut server);
         assert_eq!(
             err.err(),
             Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
@@ -78,24 +68,14 @@ fn server_cert_resolve_with_alpn() {
             ..Default::default()
         });
 
-        let mut client_output = Vec::new();
-        let mut server_output = Vec::new();
+        let mut buf = HandshakeBuffers::default();
         let mut client = Arc::new(client_config)
             .connect(server_name("sni-value"))
-            .build(&mut client_output)
+            .build(&mut buf.client_output)
             .unwrap();
 
         let mut server = Connection::new(Arc::new(server_config)).unwrap();
-        let mut client_input = VecInput::default();
-        let mut server_input = VecInput::default();
-        let err = do_handshake_until_error(
-            &mut client_input,
-            &mut client_output,
-            &mut client,
-            &mut server_input,
-            &mut server_output,
-            &mut server,
-        );
+        let err = buf.handshake_until_error(&mut client, &mut server);
         assert_eq!(
             err.err(),
             Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
@@ -121,18 +101,8 @@ fn server_cert_resolve_with_named_groups() {
             ..Default::default()
         });
 
-        let mut server_output = Vec::new();
         let (mut client, mut server, mut buf) = make_pair_for_configs(client_config, server_config);
-        let mut client_input = VecInput::default();
-        let mut server_input = VecInput::default();
-        let err = do_handshake_until_error(
-            &mut client_input,
-            &mut buf.client_output,
-            &mut client,
-            &mut server_input,
-            &mut server_output,
-            &mut server,
-        );
+        let err = buf.handshake_until_error(&mut client, &mut server);
         assert_eq!(
             err.err(),
             Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
@@ -152,24 +122,14 @@ fn client_trims_terminating_dot() {
             ..Default::default()
         });
 
-        let mut client_output = Vec::new();
-        let mut server_output = Vec::new();
+        let mut buf = HandshakeBuffers::default();
         let mut client = client_config
             .connect(server_name("some-host.com."))
-            .build(&mut client_output)
+            .build(&mut buf.client_output)
             .unwrap();
         let mut server = Connection::new(Arc::new(server_config)).unwrap();
-        let mut client_input = VecInput::default();
-        let mut server_input = VecInput::default();
 
-        let err = do_handshake_until_error(
-            &mut client_input,
-            &mut client_output,
-            &mut client,
-            &mut server_input,
-            &mut server_output,
-            &mut server,
-        );
+        let err = buf.handshake_until_error(&mut client, &mut server);
         assert_eq!(
             err.err(),
             Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
@@ -195,24 +155,14 @@ fn check_sigalgs_reduced_by_ciphersuite(
         ..Default::default()
     });
 
-    let mut client_output = Vec::new();
-    let mut server_output = Vec::new();
+    let mut buf = HandshakeBuffers::default();
     let mut client = Arc::new(client_config)
         .connect(server_name("localhost"))
-        .build(&mut client_output)
+        .build(&mut buf.client_output)
         .unwrap();
     let mut server = Connection::new(Arc::new(server_config)).unwrap();
-    let mut client_input = VecInput::default();
-    let mut server_input = VecInput::default();
 
-    let err = do_handshake_until_error(
-        &mut client_input,
-        &mut client_output,
-        &mut client,
-        &mut server_input,
-        &mut server_output,
-        &mut server,
-    );
+    let err = buf.handshake_until_error(&mut client, &mut server);
     assert_eq!(
         Some(ErrorFromPeer::Server(Error::NoSuitableCertificate)),
         err.err()
@@ -285,24 +235,14 @@ fn client_with_sni_disabled_does_not_send_sni() {
         let mut client_config = Arc::unwrap_or_clone(client_config);
         client_config.enable_sni = false;
 
-        let mut client_output = Vec::new();
-        let mut server_output = Vec::new();
+        let mut buf = HandshakeBuffers::default();
         let mut client = Arc::new(client_config)
             .connect(server_name("value-not-sent"))
-            .build(&mut client_output)
+            .build(&mut buf.client_output)
             .unwrap();
 
         let mut server = Connection::new(server_config).unwrap();
-        let mut client_input = VecInput::default();
-        let mut server_input = VecInput::default();
-        let err = do_handshake_until_error(
-            &mut client_input,
-            &mut client_output,
-            &mut client,
-            &mut server_input,
-            &mut server_output,
-            &mut server,
-        );
+        let err = buf.handshake_until_error(&mut client, &mut server);
         dbg!(&err);
         assert_eq!(
             err.err(),
@@ -399,21 +339,11 @@ fn test_client_cert_resolve(
             )))
             .unwrap();
 
-        let mut server_output = Vec::new();
         let (mut client, mut server, mut buf) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-        let mut client_input = VecInput::default();
-        let mut server_input = VecInput::default();
 
         assert_eq!(
-            do_handshake_until_error(
-                &mut client_input,
-                &mut buf.client_output,
-                &mut client,
-                &mut server_input,
-                &mut server_output,
-                &mut server
-            ),
+            buf.handshake_until_error(&mut client, &mut server),
             Err(ErrorFromPeer::Server(Error::PeerMisbehaved(
                 PeerMisbehaved::NoCertificatesPresented
             )))
@@ -558,41 +488,20 @@ fn sni_resolver_works() {
     let server_config = Arc::new(server_config);
 
     let mut server1 = Connection::new(server_config.clone()).unwrap();
-    let mut client_output = Vec::new();
-    let mut server_output = Vec::new();
+    let mut buf = HandshakeBuffers::default();
     let mut client1 = Arc::new(make_client_config(kt, &provider))
         .connect(server_name("localhost"))
-        .build(&mut client_output)
+        .build(&mut buf.client_output)
         .unwrap();
-    let mut client_input = VecInput::default();
-    let mut server_input = VecInput::default();
-    let err = do_handshake_until_error(
-        &mut client_input,
-        &mut client_output,
-        &mut client1,
-        &mut server_input,
-        &mut server_output,
-        &mut server1,
-    );
-    assert_eq!(err, Ok(()));
+    buf.handshake(&mut client1, &mut server1);
 
     let mut server2 = Connection::new(server_config).unwrap();
-    let mut client_output = Vec::new();
-    let mut server_output = Vec::new();
+    let mut buf = HandshakeBuffers::default();
     let mut client2 = Arc::new(make_client_config(kt, &provider))
         .connect(server_name("notlocalhost"))
-        .build(&mut client_output)
+        .build(&mut buf.client_output)
         .unwrap();
-    let mut client_input = VecInput::default();
-    let mut server_input = VecInput::default();
-    let err = do_handshake_until_error(
-        &mut client_input,
-        &mut client_output,
-        &mut client2,
-        &mut server_input,
-        &mut server_output,
-        &mut server2,
-    );
+    let err = buf.handshake_until_error(&mut client2, &mut server2);
     assert_eq!(
         err,
         Err(ErrorFromPeer::Server(Error::NoSuitableCertificate))
@@ -644,23 +553,12 @@ fn sni_resolver_lower_cases_configured_names() {
     let server_config = Arc::new(server_config);
 
     let mut server1 = Connection::new(server_config).unwrap();
-    let mut client_output = Vec::new();
-    let mut server_output = Vec::new();
+    let mut buf = HandshakeBuffers::default();
     let mut client1 = Arc::new(make_client_config(kt, &provider))
         .connect(server_name("localhost"))
-        .build(&mut client_output)
+        .build(&mut buf.client_output)
         .unwrap();
-    let mut client_input = VecInput::default();
-    let mut server_input = VecInput::default();
-    let err = do_handshake_until_error(
-        &mut client_input,
-        &mut client_output,
-        &mut client1,
-        &mut server_input,
-        &mut server_output,
-        &mut server1,
-    );
-    assert_eq!(err, Ok(()));
+    buf.handshake(&mut client1, &mut server1);
 }
 
 #[test]
@@ -684,23 +582,12 @@ fn sni_resolver_lower_cases_queried_names() {
     let server_config = Arc::new(server_config);
 
     let mut server1 = Connection::new(server_config).unwrap();
-    let mut client_output = Vec::new();
-    let mut server_output = Vec::new();
+    let mut buf = HandshakeBuffers::default();
     let mut client1 = Arc::new(make_client_config(kt, &provider))
         .connect(server_name("LOCALHOST"))
-        .build(&mut client_output)
+        .build(&mut buf.client_output)
         .unwrap();
-    let mut client_input = VecInput::default();
-    let mut server_input = VecInput::default();
-    let err = do_handshake_until_error(
-        &mut client_input,
-        &mut client_output,
-        &mut client1,
-        &mut server_input,
-        &mut server_output,
-        &mut server1,
-    );
-    assert_eq!(err, Ok(()));
+    buf.handshake(&mut client1, &mut server1);
 }
 
 #[test]
