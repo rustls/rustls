@@ -65,9 +65,6 @@ pub use crate::suites::CipherSuiteCommon;
 
 /// Controls core cryptography used by rustls.
 ///
-/// This structure provides defaults. Everything in it can be overridden at
-/// runtime by replacing field values as needed.
-///
 /// # Using a specific `CryptoProvider`
 ///
 /// Supply the provider when constructing your [`ClientConfig`] or [`ServerConfig`]:
