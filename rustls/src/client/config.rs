@@ -100,8 +100,10 @@ pub struct ClientConfig {
     /// [`ServerVerifier::hash_config()`]: crate::verify::ServerVerifier::hash_config()
     pub resumption: Resumption,
 
-    /// The maximum size of plaintext input to be emitted in a single TLS record.
-    /// A value of None is equivalent to the [TLS maximum] of 16 kB.
+    /// The maximum size of TLS record to be emitted.
+    ///
+    /// A value of None is equivalent to the [TLS maximum] of 16 kB, and this is
+    /// the default.
     ///
     /// rustls enforces an arbitrary minimum of 32 bytes for this field.
     /// Out of range values are reported as errors when initializing a connection.

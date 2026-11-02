@@ -80,7 +80,8 @@ pub struct ServerConfig {
     /// The default is [`PreferClientOrder`].
     pub kx_selector: &'static dyn KeyExchangeSelector,
 
-    /// The maximum size of plaintext input to be emitted in a single TLS record.
+    /// The maximum size of TLS record to be emitted.
+    ///
     /// A value of None is equivalent to the [TLS maximum] of 16 kB, and this is
     /// the default.
     ///
