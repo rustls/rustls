@@ -225,7 +225,7 @@ pub enum Identity<'a> {
 impl<'a> Identity<'a> {
     /// Create a `PeerIdentity::X509` from a certificate chain.
     ///
-    /// Returns `None` if `cert_chain` is empty.
+    /// Returns `Err(ApiMisuse::EmptyCertificateChain)` if `cert_chain` is empty.
     pub fn from_cert_chain(mut cert_chain: Vec<CertificateDer<'a>>) -> Result<Self, ApiMisuse> {
         let mut iter = cert_chain.drain(..);
         let Some(first) = iter.next() else {
