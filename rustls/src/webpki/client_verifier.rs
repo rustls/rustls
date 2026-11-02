@@ -165,7 +165,7 @@ impl ClientVerifierBuilder {
     ///
     /// Once built, the created `WebPkiClientVerifier` can be used with a Rustls
     /// [`ServerConfig`] to configure client certificate validation using
-    /// [`with_client_cert_verifier`][ConfigBuilder<ClientConfig, WantsVerifier>::with_client_cert_verifier].
+    /// [`with_client_cert_verifier`][ConfigBuilder<ServerConfig, WantsVerifier>::with_client_cert_verifier].
     ///
     /// # Errors
     /// This function will return a [`VerifierBuilderError`] if:
