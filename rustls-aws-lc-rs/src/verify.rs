@@ -83,8 +83,6 @@ pub static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = match WebPkiSupported
 };
 
 /// An array of all the verification algorithms exported by this crate.
-///
-/// This will be empty if the crate is built without the `ring` and `aws-lc-rs` features.
 pub static ALL_VERIFICATION_ALGS: &[&dyn SignatureVerificationAlgorithm] = &[
     ECDSA_P256_SHA256,
     ECDSA_P256_SHA384,
