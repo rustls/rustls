@@ -20,12 +20,11 @@ use rustls::split::ReceiveTrafficState;
 use rustls::{ClientConfig, Connection, HandshakeKind, ServerConfig, SliceInput, VecInput};
 use rustls_test::{
     ClientConfigExt, KeyType, MultiTest, OtherSession, RawTls, ServerConfigExt, TestNonBlockIo,
-    check_fill_buf, check_fill_buf_err, check_iter, check_read, check_read_err,
-    do_handshake_collecting, encoding, make_client_config, make_client_config_with_auth,
-    make_client_config_with_kx_groups, make_disjoint_suite_configs, make_pair,
-    make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
-    make_server_config_with_kx_groups, make_server_config_with_mandatory_client_auth, server_name,
-    transfer, transfer_eof,
+    check_fill_buf, check_fill_buf_err, check_iter, check_read, check_read_err, encoding,
+    make_client_config, make_client_config_with_auth, make_client_config_with_kx_groups,
+    make_disjoint_suite_configs, make_pair, make_pair_for_arc_configs, make_pair_for_configs,
+    make_server_config, make_server_config_with_kx_groups,
+    make_server_config_with_mandatory_client_auth, server_name, transfer, transfer_eof,
 };
 use rustls_util::{Stream, StreamOwned, complete_io};
 
@@ -34,11 +33,8 @@ use super::provider;
 #[test]
 fn client_data_sent() {
     for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
-        let mut server_output = Vec::new();
         let (mut client, mut server, mut buf) =
             make_pair_for_arc_configs(&client_config, &server_config);
-        let mut client_input = VecInput::default();
-        let mut server_input = VecInput::default();
 
         assert_eq!(
             client
@@ -47,26 +43,15 @@ fn client_data_sent() {
             ApiMisuse::WriteBeforeHandshakeComplete.into()
         );
 
-        // The client's buffered plaintext may be delivered as part of the final handshake
-        // flight, so collect it during the handshake as well as afterwards.
-        let mut server_received = Vec::new();
-        do_handshake_collecting(
-            &mut client_input,
-            &mut buf.client_output,
-            &mut client,
-            &mut Vec::new(),
-            &mut server_input,
-            &mut server_output,
-            &mut server,
-            &mut server_received,
-        );
+        buf.handshake(&mut client, &mut server);
 
+        let mut server_received = Vec::new();
         client
             .write(b"hello".into(), &mut buf.client_output)
             .unwrap();
-        transfer(&mut buf.client_output, &mut server_input);
+        transfer(&mut buf.client_output, &mut buf.server_input);
         server
-            .read_tls(&mut server_input, &mut server_output)
+            .read_tls(&mut buf.server_input, &mut buf.server_output)
             .handle_all(&mut server_received)
             .unwrap();
 
@@ -77,39 +62,25 @@ fn client_data_sent() {
 #[test]
 fn server_data_sent() {
     for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
-        let mut server_output = Vec::new();
         let (mut client, mut server, mut buf) =
             make_pair_for_arc_configs(&client_config, &server_config);
-        let mut client_input = VecInput::default();
-        let mut server_input = VecInput::default();
 
         assert_eq!(
             server
-                .write(b"hello".into(), &mut server_output)
+                .write(b"hello".into(), &mut buf.server_output)
                 .unwrap_err(),
             ApiMisuse::WriteBeforeHandshakeComplete.into()
         );
 
-        // The server's buffered plaintext may be delivered as part of the final handshake
-        // flight, so collect it during the handshake as well as afterwards.
-        let mut client_received = Vec::new();
-        do_handshake_collecting(
-            &mut client_input,
-            &mut buf.client_output,
-            &mut client,
-            &mut client_received,
-            &mut server_input,
-            &mut server_output,
-            &mut server,
-            &mut Vec::new(),
-        );
+        buf.handshake(&mut client, &mut server);
 
+        let mut client_received = Vec::new();
         server
-            .write(b"hello".into(), &mut server_output)
+            .write(b"hello".into(), &mut buf.server_output)
             .unwrap();
-        transfer(&mut server_output, &mut client_input);
+        transfer(&mut buf.server_output, &mut buf.client_input);
         client
-            .read_tls(&mut client_input, &mut buf.client_output)
+            .read_tls(&mut buf.client_input, &mut buf.client_output)
             .handle_all(&mut client_received)
             .unwrap();
 
@@ -120,40 +91,27 @@ fn server_data_sent() {
 #[test]
 fn both_data_sent() {
     for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
-        let mut server_output = Vec::new();
         let (mut client, mut server, mut buf) =
             make_pair_for_arc_configs(&client_config, &server_config);
-        let mut client_input = VecInput::default();
-        let mut server_input = VecInput::default();
+        buf.handshake(&mut client, &mut server);
 
         let mut client_received = Vec::new();
         let mut server_received = Vec::new();
-        do_handshake_collecting(
-            &mut client_input,
-            &mut buf.client_output,
-            &mut client,
-            &mut client_received,
-            &mut server_input,
-            &mut server_output,
-            &mut server,
-            &mut server_received,
-        );
-
         server
-            .write(b"from-server!".into(), &mut server_output)
+            .write(b"from-server!".into(), &mut buf.server_output)
             .unwrap();
         client
             .write(b"from-client!".into(), &mut buf.client_output)
             .unwrap();
 
-        transfer(&mut server_output, &mut client_input);
+        transfer(&mut buf.server_output, &mut buf.client_input);
         client
-            .read_tls(&mut client_input, &mut buf.client_output)
+            .read_tls(&mut buf.client_input, &mut buf.client_output)
             .handle_all(&mut client_received)
             .unwrap();
-        transfer(&mut buf.client_output, &mut server_input);
+        transfer(&mut buf.client_output, &mut buf.server_input);
         server
-            .read_tls(&mut server_input, &mut server_output)
+            .read_tls(&mut buf.server_input, &mut buf.server_output)
             .handle_all(&mut server_received)
             .unwrap();
 
