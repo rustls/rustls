@@ -58,9 +58,9 @@ impl<'a> Record<Payload<'a>> {
         }
     }
 
-    /// Convert into an owned `Record<Plain<'static>>`.
-    pub fn into_owned(self) -> Self {
-        Self {
+    /// Convert into an owned `Record<Payload<'static>>`.
+    pub fn into_owned(self) -> Record<Payload<'static>> {
+        Record {
             typ: self.typ,
             version: self.version,
             payload: self.payload.into_owned(),
