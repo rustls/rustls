@@ -133,7 +133,8 @@ impl ConnectionOutputs {
     /// This function may return `None` depending on the state of the connection,
     /// the type of handshake, and the protocol version.
     ///
-    /// If [`CommonState::is_handshaking()`] is true this function will return `None`.
+    /// This function will return `None` if called prior to the key exchange group being determined.
+    ///
     /// Similarly, if the [`ConnectionOutputs::handshake_kind()`] is [`HandshakeKind::Resumed`]
     /// and the [`ConnectionOutputs::protocol_version()`] is TLS 1.2, then no key exchange will have
     /// occurred and this function will return `None`.
