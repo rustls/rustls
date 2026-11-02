@@ -213,8 +213,6 @@ impl EchGreaseConfig {
     /// but doesn't have a real ECH configuration to use for the remote server. In this case
     /// a placeholder or "GREASE"[^0] extension is used.
     ///
-    /// Returns an error if the HPKE provider does not support the given suite.
-    ///
     /// [^0]: <https://www.rfc-editor.org/rfc/rfc8701>
     pub fn new(suite: &'static dyn Hpke, placeholder_key: HpkePublicKey) -> Self {
         Self {
