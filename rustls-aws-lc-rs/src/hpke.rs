@@ -687,7 +687,7 @@ static DH_KEM_X25519_HKDF_SHA256: &DhKem<SHA256_OUTPUT_LEN> = &DhKem {
     hkdf: RING_HKDF_HMAC_SHA256,
 };
 
-/// Generate a NIST P-256, P-384 or P-512 key pair expressed as a raw big-endian fixed-length
+/// Generate a NIST P-256, P-384 or P-521 key pair expressed as a raw big-endian fixed-length
 /// integer.
 ///
 /// We must disambiguate the [`AsBigEndian`] trait in-use and this function uses

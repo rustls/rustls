@@ -345,7 +345,7 @@ pub struct WebPkiSupportedAlgorithms {
     /// - The list of verification algorithms for each mapping must be non-empty.
     ///
     /// This is one (`SignatureScheme`) to many ([`SignatureVerificationAlgorithm`]) because
-    /// (depending on the protocol version) there is not necessary a 1-to-1 mapping.
+    /// (depending on the protocol version) there is not necessarily a 1-to-1 mapping.
     ///
     /// For TLS1.2, all `SignatureVerificationAlgorithm`s are tried in sequence.
     ///

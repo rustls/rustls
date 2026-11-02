@@ -223,7 +223,7 @@ pub struct ServerConfig {
     /// The default caches the most recently used 4 compressions.
     pub cert_compression_cache: Arc<compress::CompressionCache>,
 
-    /// How to decompress the clients's certificate chain.
+    /// How to decompress the client's certificate chain.
     ///
     /// If this is non-empty, the [RFC 8879] certificate compression
     /// extension is offered when requesting client authentication,
@@ -512,14 +512,14 @@ impl<'a> ClientHello<'a> {
     /// Returns `None` if the client did not include an ALPN extension.
     ///
     /// Application Layer Protocol Negotiation (ALPN) is a TLS extension that lets a client
-    /// submit a set of identifiers that each a represent an application-layer protocol.
+    /// submit a set of identifiers that each represent an application-layer protocol.
     /// The server will then pick its preferred protocol from the set submitted by the client.
     /// Each identifier is represented as a byte array, although common values are often ASCII-encoded.
     /// See the official RFC-7301 specifications at <https://datatracker.ietf.org/doc/html/rfc7301>
     /// for more information on ALPN.
     ///
     /// For example, a HTTP client might specify "http/1.1" and/or "h2". Other well-known values
-    /// are listed in the at IANA registry at
+    /// are listed in the IANA registry at
     /// <https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids>.
     ///
     /// The server can specify supported ALPN protocols by setting [`ServerConfig::alpn_protocols`].

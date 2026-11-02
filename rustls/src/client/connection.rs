@@ -345,7 +345,7 @@ pub struct ClientSide {
 }
 
 impl ClientSide {
-    /// Returns True if the server signalled it will process early data.
+    /// Returns true if the server signalled it will process early data.
     ///
     /// If you sent early data and this returns false at the end of the
     /// handshake then the server will not process the data.  This
