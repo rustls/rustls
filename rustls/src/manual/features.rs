@@ -22,7 +22,6 @@ and are dependent on the provider used.
 * ALPN support
 * SNI support
 * Tunable fragment size to make TLS messages match size of underlying transport
-* Optional use of vectored IO to minimise system calls
 * TLS1.2 session resumption
 * TLS1.2 resumption via tickets ([RFC 5077](https://tools.ietf.org/html/rfc5077))
 * TLS1.3 resumption via tickets or session storage
