@@ -305,8 +305,9 @@ impl<T: Transport> Connection<ServerSide, T> {
     /// Set the resumption data to embed in future resumption tickets supplied to the client.
     ///
     /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other
-    /// data. Should be called while `is_handshaking` returns true to ensure all transmitted
-    /// resumption tickets are affected.
+    /// data. Should be called before the `ClientHello` is fully processed to ensure all transmitted
+    /// resumption tickets are affected (it returns [`ApiMisuse::ResumptionDataProvidedTooLate`]
+    /// otherwise.)
     ///
     /// Integrity will be assured by rustls, but the data will be visible to the client. If secrecy
     /// from the client is desired, encrypt the data separately.
