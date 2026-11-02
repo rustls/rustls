@@ -47,7 +47,11 @@ use crate::{ConnectionOutputs, ConnectionTrafficSecrets, Error, SupportedCipherS
 /// minimal interfaces you need to implement a well-behaved TLS connection on
 /// top of kTLS.
 ///
+/// Get one of these by calling [`SplitConnection::dangerous_into_kernel_connection()`].
+///
 /// See the [`crate::kernel`] module docs for more details.
+///
+/// [`SplitConnection::dangerous_into_kernel_connection()`]: crate::split::SplitConnection
 pub struct KernelConnection<Side> {
     state: Box<dyn KernelState>,
     tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
