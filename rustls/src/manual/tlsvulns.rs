@@ -60,7 +60,7 @@ obviously predictable, since it was published on the wire.
 OpenSSL contained a countermeasure for this problem from 2002 onwards: it encrypts an empty message before each real
 one, so that the IV used in the real message is unpredictable.  This was turned off by default due to bugs in IE6.
 
-TLSv1.1 fix this vulnerability, but not any of the other deficiencies of CBC mode (see above).
+TLSv1.1 fixed this vulnerability, but not any of the other deficiencies of CBC mode (see above).
 
 rustls does not support these ciphersuites.
 
