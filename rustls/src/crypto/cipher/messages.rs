@@ -393,11 +393,6 @@ impl<'a> From<&'a Vec<u8>> for OutboundPlain<'a> {
 }
 
 /// An externally length'd payload
-///
-/// When encountered in an [`Record`], it represents a plaintext payload. It can be
-/// decrypted from an [`InboundOpaque`] or encrypted by a
-/// [`RecordEncrypter`](crate::crypto::cipher::RecordEncrypter), and it is also used for
-/// joining and fragmenting.
 #[non_exhaustive]
 #[derive(Clone, Eq, PartialEq)]
 pub enum Payload<'a> {
