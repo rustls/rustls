@@ -33,6 +33,8 @@ pub trait KeyLog: Debug + Send + Sync {
     ///   from the client in a TLSv1.3 session.
     /// - `EXPORTER_SECRET`: `secret` is the post-handshake exporter secret
     ///   in a TLSv1.3 session.
+    /// - `EARLY_EXPORTER_SECRET`: `secret` is the early exporter secret
+    ///   in a TLSv1.3 handshake.
     ///
     /// These strings are standardised by IANA:
     /// <https://www.iana.org/assignments/tls-parameters#tls-sslkeylogfile-labels>
