@@ -565,20 +565,21 @@ pub trait TicketerFactory: Debug + Send + Sync {
 
 /// A trait for the ability to encrypt and decrypt tickets.
 pub trait TicketProducer: Debug + Send + Sync {
-    /// Encrypt and authenticate `plain`, returning the resulting
-    /// ticket.  Return None if `plain` cannot be encrypted for
-    /// some reason: an empty ticket will be sent and the connection
-    /// will continue.
+    /// Encrypt and authenticate `plain`, returning the resulting ticket.
+    ///
+    /// Return None if `plain` cannot be encrypted for some reason: an empty
+    /// ticket (in TLS1.2), or no ticket (in TLS1.3), will be sent and the
+    /// connection will continue.
     fn encrypt(&self, plain: &[u8]) -> Option<Vec<u8>>;
 
-    /// Decrypt `cipher`, validating its authenticity protection
-    /// and recovering the plaintext.  `cipher` is fully attacker
-    /// controlled, so this decryption must be side-channel free,
-    /// panic-proof, and otherwise bullet-proof.  If the decryption
-    /// fails, return None.
+    /// Decrypt `cipher`, validating its authenticity protection and recovering the plaintext.
+    ///
+    /// `cipher` is fully attacker controlled, so this decryption must be side-channel free,
+    /// panic free, and otherwise bullet-proof.  If the decryption fails, return None.
     fn decrypt(&self, cipher: &[u8]) -> Option<Vec<u8>>;
 
     /// Returns the lifetime of tickets produced now.
+    ///
     /// The lifetime is provided as a hint to clients that the
     /// ticket will not be useful after the given time.
     ///
