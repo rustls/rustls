@@ -759,16 +759,6 @@ pub(super) struct JoinOutput<'a, Send: SendOutput + 'a> {
     pub(super) side: &'a mut dyn SideOutput,
 }
 
-pub(super) struct Discard;
-
-impl ConnectionOutput for Discard {
-    fn handle(&mut self, _ev: OutputEvent<'_>) {}
-}
-
-impl SideOutput for Discard {
-    fn emit(&mut self, _ev: Event) {}
-}
-
 /// Tracking technically-allowed protocol actions
 /// that we limit to avoid denial-of-service vectors.
 struct TemperCounters {
