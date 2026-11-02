@@ -1,15 +1,24 @@
 /*! # Customising private key usage
 
-By default rustls supports PKCS#8-format[^1] RSA or ECDSA keys, plus PKCS#1-format RSA keys.
+By default, rustls loads private keys using the [`KeyProvider`][] of the configured
+[`CryptoProvider`][]. This takes a [`PrivateKeyDer`] and allows use of an in-memory
+private key in a variety of encodings and key types.
 
 However, if your private key resides in a HSM, or in another process, or perhaps
 another machine, rustls has some extension points to support this:
 
-The main trait you must implement is [`SigningKey`][signing_key]. The primary method here
-is [`choose_scheme()`][choose_scheme] where you are given a set of [`SignatureScheme`s][sig_scheme] the client says
-it supports: you must choose one (or return `None` -- this aborts the handshake). Having
-done that, you return an implementation of the [`Signer`][signer] trait.
-The [`sign()`][sign_method] performs the signature and returns it.
+The main trait you must implement is [`SigningKey`][]. The primary method here
+is [`choose_scheme()`][], where you are given the [`SignatureScheme`][]s
+the peer says it supports (on the server, rustls first removes any that are unusable with the
+negotiated protocol version and cipher suites). You must choose one and return an implementation
+of the [`Signer`][] trait, or return `None` if none are acceptable. The other method,
+[`public_key()`][], returns the key's SubjectPublicKeyInfo if it is available; this
+is used to check that the key matches its certificate.
+
+A [`Signer`][] is used once: [`scheme()`][] reports the chosen scheme,
+and [`sign()`][] consumes the signer, performs the signature, and returns it.
+The message given to `sign()` is not pre-hashed; hashing it according to the chosen
+scheme is up to the implementation.
 
 (Unfortunately this is currently designed for keys with low latency access, like in a
 PKCS#11 provider, Microsoft CryptoAPI, etc. so is blocking rather than asynchronous.
@@ -17,25 +26,44 @@ It's a TODO to make these and other extension points async.)
 
 Once you have these two pieces, configuring a server to use them involves, briefly:
 
-- packaging your [`SigningKey`][signing_key] with the matching certificate chain into a [`Credentials`][credentials]
-- making a [`ServerNameResolver`][cert_using_sni] and feeding in your [`Credentials`][credentials] for all SNI hostnames you want to use it for,
-- setting that as your `ServerConfig`'s [`cert_resolver`][cert_resolver]
+- packaging your [`SigningKey`][] with the matching identity (typically a certificate
+  chain) into a [`Credentials`][] using [`Credentials::new()`][].
+  This fails if `public_key()` returns `None` or the keys don't match; use
+  [`Credentials::new_unchecked()`][] to skip that check.
+- wrapping the [`Credentials`][] in a [`ServerCredentialResolver`][]:
+  - for a single identity, use [`SingleCredential`][];
+  - to select by SNI hostname, make a [`ServerNameResolver`][] and
+    [`add()`][] your [`Credentials`][] for each hostname;
+  - or implement [`ServerCredentialResolver`][] yourself, calling
+    [`Credentials::signer()`][] to obtain the [`SelectedCredential`][].
+- passing that resolver to [`ConfigBuilder::with_server_credential_resolver()`][]
+  (which sets [`ServerConfig::cert_resolver`][]).
 
-For a complete example of implementing a custom [`SigningKey`][signing_key] and
-[`Signer`][signer] see the [`signer` module in the `rustls-cng` crate][rustls-cng-signer].
-
-[signing_key]: crate::crypto::SigningKey
-[choose_scheme]: crate::crypto::SigningKey::choose_scheme
-[sig_scheme]: crate::crypto::SignatureScheme
-[signer]: crate::crypto::Signer
-[sign_method]: crate::crypto::Signer::sign
-[credentials]: crate::crypto::Credentials
-[cert_using_sni]: crate::server::ServerNameResolver
-[cert_resolver]: crate::ServerConfig::cert_resolver
-[rustls-cng-signer]: https://github.com/rustls/rustls-cng/blob/dev/src/signer.rs
-
-[^1]: For PKCS#8 it does not support password encryption -- there's not a meaningful threat
-      model addressed by this, and the encryption supported is typically extremely poor.
+[`KeyProvider`]: crate::crypto::KeyProvider
+[`CryptoProvider`]: crate::crypto::CryptoProvider
+[`SigningKey`]: crate::crypto::SigningKey
+[`choose_scheme()`]: crate::crypto::SigningKey::choose_scheme
+[`SignatureScheme`]: crate::crypto::SignatureScheme
+[`Signer`]: crate::crypto::Signer
+[`public_key()`]: crate::crypto::SigningKey::public_key
+[`scheme()`]: crate::crypto::Signer::scheme
+[`sign()`]: crate::crypto::Signer::sign
+[`Credentials`]: crate::crypto::Credentials
+[`Credentials::new()`]: crate::crypto::Credentials::new
+[`Credentials::new_unchecked()`]: crate::crypto::Credentials::new_unchecked
+[`ServerCredentialResolver`]: crate::server::ServerCredentialResolver
+[`SingleCredential`]: crate::crypto::SingleCredential
+[`ServerNameResolver`]: crate::server::ServerNameResolver
+[`add()`]: crate::server::ServerNameResolver::add
+[`Credentials::signer()`]: crate::crypto::Credentials::signer
+[`SelectedCredential`]: crate::crypto::SelectedCredential
+[`ConfigBuilder::with_server_credential_resolver()`]: crate::ConfigBuilder::with_server_credential_resolver
+[`ServerConfig::cert_resolver`]: crate::ServerConfig::cert_resolver
+[`PeerIncompatible::NoSignatureSchemesInCommon`]: crate::error::PeerIncompatible::NoSignatureSchemesInCommon
+[`ClientCredentialResolver`]: crate::client::ClientCredentialResolver
+[`ConfigBuilder::with_client_credential_resolver()`]: crate::ConfigBuilder::with_client_credential_resolver
+[`PrivateKeyDer`]: pki_types::PrivateKeyDer
+[`ConfigBuilder::with_single_cert()`]: crate::ConfigBuilder::with_single_cert
 
 # Unexpected EOF
 
