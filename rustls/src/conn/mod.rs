@@ -738,7 +738,7 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
     }
 }
 
-/// Data specific to the peer's side (client or server).
+/// Data specific to our side of the connection (client or server).
 #[expect(private_bounds)]
 pub trait SideData: SideOutput + fmt::Debug + private::Side + Sized + 'static {
     /// Type representing an in-progress TCP handshake.
