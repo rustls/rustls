@@ -22,7 +22,7 @@ pub use crate::verify::VerifiedIdentity;
 use crate::webpki::ParsedCertificate;
 use crate::{DynHasher, SignerPublicKey, x509};
 
-/// Server certificate resolver which always resolves to the same identity and key.
+/// Certificate resolver which always resolves to the same identity and key.
 ///
 /// For use with [`ConfigBuilder::with_server_credential_resolver()`] or
 /// [`ConfigBuilder::with_client_credential_resolver()`].
@@ -134,7 +134,7 @@ impl Credentials {
     /// Use [`Self::new_unchecked()`] to avoid this consistency check.
     ///
     /// This constructor should be used with all [`SigningKey`] implementations
-    /// that can provide a public key, including those provided by rustls itself.
+    /// that can provide a public key.
     #[cfg(feature = "webpki")]
     pub fn new(identity: Arc<Identity<'static>>, key: Box<dyn SigningKey>) -> Result<Self, Error> {
         let id_spki = match &*identity {
@@ -392,9 +392,7 @@ impl<'a> CertificateIdentity<'a> {
 /// This interface is used by rustls to use a private signing key
 /// for authentication.  This includes server and client authentication.
 ///
-/// Objects of this type are always used within Rustls as
-/// `Arc<dyn SigningKey>`. There are no concrete public structs in Rustls
-/// that implement this trait.
+/// Objects of this type are always used within Rustls as `Box<dyn SigningKey>`.
 ///
 /// You can obtain a `SigningKey` by calling the [`KeyProvider::load_private_key()`]
 /// method, which is usually referenced via [`CryptoProvider::key_provider`].
@@ -406,7 +404,7 @@ impl<'a> CertificateIdentity<'a> {
 ///
 /// A signing key created outside of the `KeyProvider` extension trait can be used
 /// to create a [`Credentials`], which in turn can be used to create a
-/// [`ServerNameResolver`]. Alternately, a `Credentials` can be returned from a
+/// [`ServerNameResolver`]. Alternately, a `SelectedCredential` can be returned from a
 /// custom implementation of the [`ServerCredentialResolver`] or [`ClientCredentialResolver`] traits.
 ///
 /// [`KeyProvider::load_private_key()`]: crate::crypto::KeyProvider::load_private_key
