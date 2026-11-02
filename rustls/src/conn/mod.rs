@@ -194,10 +194,7 @@ impl<Side: SideData> Connection<Side, Tcp> {
     /// It also separates out the [`ConnectionOutputs`] which gives the application direct control
     /// of how long this is kept.
     ///
-    /// This fails if:
-    ///
-    /// - the handshake is not complete. Check with [`Connection::is_handshaking()`].
-    /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write()`].
+    /// This fails if the handshake is not complete. Check with [`Connection::is_handshaking()`].
     #[cfg(feature = "std")]
     pub fn split(self) -> Result<SplitConnection<Side>, Error> {
         SplitConnection::try_from(self)
