@@ -35,7 +35,7 @@ impl CommonState {
         }
     }
 
-    /// Writes a `close_notify` warning alert to into the `tls` buffer.
+    /// Writes a `close_notify` warning alert into the `tls` buffer.
     ///
     /// This informs the peer that the connection is being closed. Does nothing if any
     /// `close_notify` or fatal alert was already sent.

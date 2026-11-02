@@ -166,7 +166,7 @@ impl Credentials {
     /// matches that derived from `key`.
     ///
     /// This avoids parsing the end-entity certificate, which is useful when using client
-    /// certificates that are not fully standards compliant, but known to usable by the peer.
+    /// certificates that are not fully standards compliant, but known to be usable by the peer.
     pub fn new_unchecked(identity: Arc<Identity<'static>>, key: Box<dyn SigningKey>) -> Self {
         Self {
             identity,
