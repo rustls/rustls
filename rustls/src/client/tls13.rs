@@ -231,6 +231,11 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                     hello.sent_extensions = accepted.sent_extensions;
                     EchStatus::Accepted
                 }
+                // The server rejected our ECH offer, so it cannot resume: the outer
+                // hello only offered a GREASE PSK (RFC 9849 section 6.1.2).
+                None if server_hello.preshared_key.is_some() => {
+                    return Err(PeerMisbehaved::SelectedPskWithRejectedEch.into());
+                }
                 // The server rejected our ECH offer.
                 None => EchStatus::Rejected,
             };

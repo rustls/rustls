@@ -956,6 +956,7 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             quit(":INCONSISTENT_ECH_NEGOTIATION:")
         }
         Error::PeerMisbehaved(PeerMisbehaved::IllegalHelloRetryRequestWithInvalidEch)
+        | Error::PeerMisbehaved(PeerMisbehaved::SelectedPskWithRejectedEch)
         | Error::PeerMisbehaved(PeerMisbehaved::UnsolicitedEchExtension) => {
             quit(":UNEXPECTED_EXTENSION:")
         }

@@ -894,12 +894,14 @@ mod tests {
     use crate::crypto::cipher::Record;
     use crate::crypto::hpke::{HpkeAead, HpkeKdf};
     use crate::crypto::kx::SharedSecret;
+    use crate::crypto::test_provider::KEY_EXCHANGE_GROUP;
     use crate::crypto::{
         CipherSuite, CryptoProvider, GetRandomFailed, Identity, TEST_PROVIDER, tls13_only,
     };
     use crate::msgs::{
-        Compression, Deframer, HelloRetryRequestExtensions, NewSessionTicketPayloadTls13, Random,
-        Reader, ServerExtensions, SessionId, SupportedProtocolVersions,
+        Compression, Deframer, HelloRetryRequestExtensions, KeyShareEntry,
+        NewSessionTicketPayloadTls13, Random, Reader, ServerExtensions, SessionId,
+        SupportedProtocolVersions,
     };
     use crate::quic::Side;
     use crate::sync::Arc;
@@ -1068,6 +1070,58 @@ mod tests {
                 Ok(())
             }
         }
+    }
+
+    #[test]
+    fn ech_rejecting_server_hello_cannot_select_psk() {
+        let (mut conn, first_flight) =
+            ech_client_with_inner_ticket(tls13_only(TEST_PROVIDER.clone()));
+        let hello = client_hello_in(&first_flight);
+
+        // this random carries no ECH confirmation, so the server used the outer
+        // hello, whose only PSK identity is GREASE
+        let server_hello = Message {
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ServerHello(ServerHelloPayload {
+                    legacy_version: ProtocolVersion::TLSv1_2,
+                    random: Random([0x55; 32]),
+                    session_id: hello.session_id,
+                    cipher_suite: TEST_PROVIDER.tls13_cipher_suites[0]
+                        .common
+                        .suite,
+                    compression_method: Compression::Null,
+                    extensions: Box::new(ServerExtensions {
+                        key_share: Some(KeyShareEntry {
+                            group: KEY_EXCHANGE_GROUP.name(),
+                            payload: KEY_EXCHANGE_GROUP
+                                .start()
+                                .unwrap()
+                                .pub_key()
+                                .to_vec()
+                                .into(),
+                        }),
+                        preshared_key: Some(0),
+                        selected_version: Some(ProtocolVersion::TLSv1_3),
+                        ..ServerExtensions::default()
+                    }),
+                }),
+            )),
+        };
+        let mut input = VecInput::default();
+        input
+            .read(
+                &mut server_hello
+                    .into_wire_bytes()
+                    .as_slice(),
+            )
+            .unwrap();
+        assert_eq!(
+            conn.read_tls(&mut input, &mut Vec::new())
+                .handle_all(&mut Vec::new())
+                .unwrap_err(),
+            PeerMisbehaved::SelectedPskWithRejectedEch.into()
+        );
     }
 
     #[test]
