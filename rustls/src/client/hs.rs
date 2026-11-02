@@ -301,11 +301,12 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // We always send a key share when TLS 1.3 is enabled.
         let offered_key_share = self.next.offered_key_share.unwrap();
 
-        // A retry request is illegal if it contains no cookie and asks for
-        // retry of a group we already sent.
+        // A retry request is illegal if it asks for retry of a group we
+        // already sent a share for, whether or not it also carries a cookie.
+        // <https://www.rfc-editor.org/rfc/rfc9846#section-4.3.8>
         let config = &self.next.input.config;
 
-        if let (None, Some(req_group)) = (&hrr.cookie, hrr.key_share) {
+        if let Some(req_group) = hrr.key_share {
             let offered_hybrid = offered_key_share
                 .share
                 .as_hybrid_checked(&config.provider().kx_groups, ProtocolVersion::TLSv1_3)

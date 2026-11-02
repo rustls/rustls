@@ -263,6 +263,47 @@ fn test_client_rejects_hrr_selecting_tls12_cipher_suite() {
 }
 
 #[test]
+fn test_client_rejects_hrr_with_cookie_and_offered_group() {
+    let config = ClientConfig::builder(Arc::new(TEST_PROVIDER.clone()))
+        .with_root_certificates(roots())
+        .with_no_client_auth()
+        .unwrap();
+    let mut tls = Vec::new();
+    let mut conn = Arc::new(config)
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build(&mut tls)
+        .unwrap();
+
+    // server replies with HRR carrying a cookie, but its key_share names the
+    // group the client already sent a share for.
+    let hrr = Message {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(
+            HandshakePayload::HelloRetryRequest(HelloRetryRequest {
+                cipher_suite: TLS13_TEST_SUITE.suite(),
+                legacy_version: ProtocolVersion::TLSv1_2,
+                session_id: client_hello_in(&tls).session_id,
+                extensions: HelloRetryRequestExtensions {
+                    cookie: Some(SizedPayload::from(vec![1, 2, 3, 4])),
+                    key_share: Some(KEY_EXCHANGE_GROUP.name()),
+                    supported_versions: Some(ProtocolVersion::TLSv1_3),
+                    ..HelloRetryRequestExtensions::default()
+                },
+            }),
+        )),
+    };
+
+    let mut input = VecInput::default();
+    input
+        .read(&mut hrr.into_wire_bytes().as_slice())
+        .unwrap();
+    assert_eq!(
+        process(&mut input, &mut conn).unwrap_err(),
+        PeerMisbehaved::IllegalHelloRetryRequestWithOfferedGroup.into()
+    );
+}
+
+#[test]
 fn test_client_rejects_server_hello_with_varied_session_id() {
     let config = ClientConfig::builder(Arc::new(tls13_only(TEST_PROVIDER.clone())))
         .with_root_certificates(roots())
