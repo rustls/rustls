@@ -183,13 +183,11 @@ fn kernel_pair(
     let mut server_config = Arc::unwrap_or_clone(server_config);
     server_config.enable_secret_extraction = true;
 
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) =
-        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let (mut client, mut server, mut buf) = make_pair_for_configs(client_config, server_config);
     do_handshake(
         &mut VecInput::default(),
-        &mut client_output,
+        &mut buf.client_output,
         &mut client,
         &mut VecInput::default(),
         &mut server_output,

@@ -821,42 +821,53 @@ pub fn webpki_server_verifier_builder(
     WebPkiServerVerifier::builder(roots, provider)
 }
 
+#[derive(Debug, Default)]
+pub struct HandshakeBuffers {
+    pub client_input: VecInput,
+    pub client_output: Vec<u8>,
+    pub server_input: VecInput,
+    pub server_output: Vec<u8>,
+}
+
 pub fn make_pair(
     kt: KeyType,
     provider: &CryptoProvider,
-    client_output: &mut Vec<u8>,
-) -> (Connection<ClientSide, Tcp>, Connection<ServerSide, Tcp>) {
+) -> (
+    Connection<ClientSide, Tcp>,
+    Connection<ServerSide, Tcp>,
+    HandshakeBuffers,
+) {
     make_pair_for_configs(
         make_client_config(kt, provider),
         make_server_config(kt, provider),
-        client_output,
     )
 }
 
 pub fn make_pair_for_configs(
     client_config: ClientConfig,
     server_config: ServerConfig,
-    client_output: &mut Vec<u8>,
-) -> (Connection<ClientSide, Tcp>, Connection<ServerSide, Tcp>) {
-    make_pair_for_arc_configs(
-        &Arc::new(client_config),
-        &Arc::new(server_config),
-        client_output,
-    )
+) -> (
+    Connection<ClientSide, Tcp>,
+    Connection<ServerSide, Tcp>,
+    HandshakeBuffers,
+) {
+    make_pair_for_arc_configs(&Arc::new(client_config), &Arc::new(server_config))
 }
 
 pub fn make_pair_for_arc_configs(
     client_config: &Arc<ClientConfig>,
     server_config: &Arc<ServerConfig>,
-    client_output: &mut Vec<u8>,
-) -> (Connection<ClientSide, Tcp>, Connection<ServerSide, Tcp>) {
-    (
-        client_config
-            .connect(server_name("localhost"))
-            .build(client_output)
-            .unwrap(),
-        Connection::new(server_config.clone()).unwrap(),
-    )
+) -> (
+    Connection<ClientSide, Tcp>,
+    Connection<ServerSide, Tcp>,
+    HandshakeBuffers,
+) {
+    let mut buf = HandshakeBuffers::default();
+    let client = client_config
+        .connect(server_name("localhost"))
+        .build(&mut buf.client_output)
+        .unwrap();
+    (client, Connection::new(server_config.clone()).unwrap(), buf)
 }
 
 /// Return a client and server config that don't share a common cipher suite
@@ -1117,10 +1128,8 @@ pub fn do_suite_and_kx_test(
         expect_version,
         expect_suite.suite()
     );
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) =
-        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let (mut client, mut server, mut buf) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
 
@@ -1141,7 +1150,7 @@ pub fn do_suite_and_kx_test(
     assert!(client.is_handshaking());
     assert!(server.is_handshaking());
 
-    transfer(&mut client_output, &mut server_input);
+    transfer(&mut buf.client_output, &mut server_input);
     server
         .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
@@ -1176,7 +1185,7 @@ pub fn do_suite_and_kx_test(
 
     transfer(&mut server_output, &mut client_input);
     client
-        .read_tls(&mut client_input, &mut client_output)
+        .read_tls(&mut client_input, &mut buf.client_output)
         .handle_all(&mut Vec::new())
         .unwrap();
 
@@ -1205,14 +1214,14 @@ pub fn do_suite_and_kx_test(
         );
     }
 
-    transfer(&mut client_output, &mut server_input);
+    transfer(&mut buf.client_output, &mut server_input);
     server
         .read_tls(&mut server_input, &mut server_output)
         .handle_all(&mut Vec::new())
         .unwrap();
     transfer(&mut server_output, &mut client_input);
     client
-        .read_tls(&mut client_input, &mut client_output)
+        .read_tls(&mut client_input, &mut buf.client_output)
         .handle_all(&mut Vec::new())
         .unwrap();
 

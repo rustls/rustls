@@ -43,15 +43,14 @@ fn client_can_override_certificate_verification() {
             Arc::new(MockServerVerifier::accepts_anything())
         }))
     {
-        let mut client_output = Vec::new();
         let mut server_output = Vec::new();
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -69,15 +68,14 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
             ))
         }))
     {
-        let mut client_output = Vec::new();
         let mut server_output = Vec::new();
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let errs = do_handshake_until_both_error(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -108,15 +106,14 @@ fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
 
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
-        let mut client_output = Vec::new();
         let mut server_output = Vec::new();
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config, &mut client_output);
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let errs = do_handshake_until_both_error(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -147,15 +144,14 @@ fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
 
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
-        let mut client_output = Vec::new();
         let mut server_output = Vec::new();
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config, &mut client_output);
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let errs = do_handshake_until_both_error(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -178,15 +174,14 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
             Arc::new(MockServerVerifier::offers_no_signature_schemes())
         }))
     {
-        let mut client_output = Vec::new();
         let mut server_output = Vec::new();
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let errs = do_handshake_until_both_error(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -356,15 +351,14 @@ fn test_pinned_ocsp_response_given_to_custom_server_cert_verifier() {
                 .unwrap(),
         );
 
-        let mut client_output = Vec::new();
         let mut server_output = Vec::new();
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -423,18 +417,14 @@ fn client_can_request_certain_trusted_cas() {
             .with_no_client_auth()
             .unwrap();
 
-        let mut client_output = Vec::new();
         let mut server_output = Vec::new();
-        let (mut client, mut server) = make_pair_for_arc_configs(
-            &Arc::new(cas_sending_client_config),
-            &server_config,
-            &mut client_output,
-        );
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&Arc::new(cas_sending_client_config), &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -447,19 +437,15 @@ fn client_can_request_certain_trusted_cas() {
             .with_no_client_auth()
             .unwrap();
 
-        let mut client_output = Vec::new();
         let mut server_output = Vec::new();
-        let (mut client, mut server) = make_pair_for_arc_configs(
-            &Arc::new(cas_unaware_client_config),
-            &server_config,
-            &mut client_output,
-        );
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&Arc::new(cas_unaware_client_config), &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
 
         cas_unaware_error_count += do_handshake_until_error(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
