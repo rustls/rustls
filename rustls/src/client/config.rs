@@ -54,7 +54,7 @@ use crate::{DistinguishedName, DynHasher, KeyLog, compress};
 /// # Defaults
 ///
 /// * [`ClientConfig::max_fragment_size`]: the default is `None` (meaning 16kB).
-/// * [`ClientConfig::resumption`]: supports resumption with up to 256 server names, using session
+/// * [`ClientConfig::resumption`]: supports resumption for up to 32 server names, using session
 ///   ids or tickets, with a max of eight tickets per server.
 /// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ClientConfig::key_log`]: key material is not logged.
