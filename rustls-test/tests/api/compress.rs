@@ -42,15 +42,14 @@ fn test_server_uses_cached_compressed_certificates() {
 
     for _i in 0..10 {
         dbg!(_i);
-        let mut client_output = Vec::new();
         let mut server_output = Vec::new();
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -88,15 +87,13 @@ fn test_server_uses_uncompressed_certificate_if_compression_fails() {
     let mut client_config = make_client_config(KeyType::default(), &provider);
     client_config.cert_decompressors = vec![&NeverDecompressor];
 
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) =
-        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let (mut client, mut server, mut buf) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(
         &mut client_input,
-        &mut client_output,
+        &mut buf.client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
@@ -113,15 +110,13 @@ fn test_client_uses_uncompressed_certificate_if_compression_fails() {
     let mut client_config = make_client_config_with_auth(KeyType::default(), &provider);
     client_config.cert_compressors = vec![&FailingCompressor];
 
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) =
-        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let (mut client, mut server, mut buf) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     do_handshake(
         &mut client_input,
-        &mut client_output,
+        &mut buf.client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
@@ -181,15 +176,14 @@ fn test_server_can_opt_out_of_compression_cache() {
 
     for _i in 0..10 {
         dbg!(_i);
-        let mut client_output = Vec::new();
         let mut server_output = Vec::new();
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&client_config, &server_config, &mut client_output);
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         do_handshake(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -228,16 +222,14 @@ fn test_cert_decompression_by_client_produces_invalid_cert_payload() {
     let mut client_config = make_client_config(KeyType::default(), &provider);
     client_config.cert_decompressors = vec![&GarbageDecompressor];
 
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) =
-        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let (mut client, mut server, mut buf) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     assert_eq!(
         do_handshake_until_error(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -247,7 +239,7 @@ fn test_cert_decompression_by_client_produces_invalid_cert_payload() {
             InvalidMessage::CertificatePayloadTooLarge
         )))
     );
-    transfer(&mut client_output, &mut server_input);
+    transfer(&mut buf.client_output, &mut server_input);
     assert_eq!(
         server
             .read_tls(&mut server_input, &mut server_output)
@@ -266,16 +258,14 @@ fn test_cert_decompression_by_server_produces_invalid_cert_payload() {
     let mut client_config = make_client_config_with_auth(KeyType::default(), &provider);
     client_config.cert_compressors = vec![&IdentityCompressor];
 
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) =
-        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let (mut client, mut server, mut buf) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     assert_eq!(
         do_handshake_until_error(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -288,7 +278,7 @@ fn test_cert_decompression_by_server_produces_invalid_cert_payload() {
     transfer(&mut server_output, &mut client_input);
     assert_eq!(
         client
-            .read_tls(&mut client_input, &mut client_output)
+            .read_tls(&mut client_input, &mut buf.client_output)
             .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::AlertReceived(AlertDescription::BadCertificate),
@@ -303,16 +293,14 @@ fn test_cert_decompression_by_client_rejects_trailing_data() {
     let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
     client_config.cert_decompressors = vec![&TrailingDataDecompressor];
 
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) =
-        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let (mut client, mut server, mut buf) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     assert_eq!(
         do_handshake_until_error(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -322,7 +310,7 @@ fn test_cert_decompression_by_client_rejects_trailing_data() {
             InvalidMessage::TrailingData("read_bytes")
         )))
     );
-    transfer(&mut client_output, &mut server_input);
+    transfer(&mut buf.client_output, &mut server_input);
     assert_eq!(
         server
             .read_tls(&mut server_input, &mut server_output)
@@ -341,16 +329,14 @@ fn test_cert_decompression_by_server_rejects_trailing_data() {
     let mut client_config = make_client_config_with_auth(KeyType::Rsa2048, &provider);
     client_config.cert_compressors = vec![&IdentityCompressor];
 
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) =
-        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let (mut client, mut server, mut buf) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     assert_eq!(
         do_handshake_until_error(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -363,7 +349,7 @@ fn test_cert_decompression_by_server_rejects_trailing_data() {
     transfer(&mut server_output, &mut client_input);
     assert_eq!(
         client
-            .read_tls(&mut client_input, &mut client_output)
+            .read_tls(&mut client_input, &mut buf.client_output)
             .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::AlertReceived(AlertDescription::DecodeError),
@@ -378,16 +364,14 @@ fn test_cert_decompression_by_client_rejects_unsolicited_ocsp() {
     let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
     client_config.cert_decompressors = vec![&UnsolicitedOcspDecompressor];
 
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) =
-        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let (mut client, mut server, mut buf) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     assert_eq!(
         do_handshake_until_error(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -408,16 +392,14 @@ fn test_cert_decompression_by_server_rejects_nonempty_context() {
     let mut client_config = make_client_config_with_auth(KeyType::Rsa2048, &provider);
     client_config.cert_compressors = vec![&IdentityCompressor];
 
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) =
-        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let (mut client, mut server, mut buf) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     assert_eq!(
         do_handshake_until_error(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -430,7 +412,7 @@ fn test_cert_decompression_by_server_rejects_nonempty_context() {
     transfer(&mut server_output, &mut client_input);
     assert_eq!(
         client
-            .read_tls(&mut client_input, &mut client_output)
+            .read_tls(&mut client_input, &mut buf.client_output)
             .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::AlertReceived(AlertDescription::DecodeError),
@@ -446,16 +428,14 @@ fn test_cert_decompression_by_server_fails() {
     let mut client_config = make_client_config_with_auth(KeyType::default(), &provider);
     client_config.cert_compressors = vec![&IdentityCompressor];
 
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) =
-        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let (mut client, mut server, mut buf) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     assert_eq!(
         do_handshake_until_error(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -468,7 +448,7 @@ fn test_cert_decompression_by_server_fails() {
     transfer(&mut server_output, &mut client_input);
     assert_eq!(
         client
-            .read_tls(&mut client_input, &mut client_output)
+            .read_tls(&mut client_input, &mut buf.client_output)
             .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::AlertReceived(AlertDescription::BadCertificate),
@@ -496,16 +476,14 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
         .with_client_credential_resolver(Arc::new(SingleCredential::from(big_cert_and_key)))
         .unwrap();
 
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) =
-        make_pair_for_configs(client_config, server_config, &mut client_output);
+    let (mut client, mut server, mut buf) = make_pair_for_configs(client_config, server_config);
     let mut client_input = VecInput::default();
     let mut server_input = VecInput::default();
     assert_eq!(
         do_handshake_until_error(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -518,7 +496,7 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
     transfer(&mut server_output, &mut client_input);
     assert_eq!(
         client
-            .read_tls(&mut client_input, &mut client_output)
+            .read_tls(&mut client_input, &mut buf.client_output)
             .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::AlertReceived(AlertDescription::BadCertificate),

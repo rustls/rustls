@@ -121,15 +121,13 @@ fn server_cert_resolve_with_named_groups() {
             ..Default::default()
         });
 
-        let mut client_output = Vec::new();
         let mut server_output = Vec::new();
-        let (mut client, mut server) =
-            make_pair_for_configs(client_config, server_config, &mut client_output);
+        let (mut client, mut server, mut buf) = make_pair_for_configs(client_config, server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
         let err = do_handshake_until_error(
             &mut client_input,
-            &mut client_output,
+            &mut buf.client_output,
             &mut client,
             &mut server_input,
             &mut server_output,
@@ -401,17 +399,16 @@ fn test_client_cert_resolve(
             )))
             .unwrap();
 
-        let mut client_output = Vec::new();
         let mut server_output = Vec::new();
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config, &mut client_output);
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
         let mut client_input = VecInput::default();
         let mut server_input = VecInput::default();
 
         assert_eq!(
             do_handshake_until_error(
                 &mut client_input,
-                &mut client_output,
+                &mut buf.client_output,
                 &mut client,
                 &mut server_input,
                 &mut server_output,

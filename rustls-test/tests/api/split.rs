@@ -19,17 +19,13 @@ use rustls_test::{
 
 #[test]
 fn split_pairwise() {
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) = make_pair(
-        KeyType::default(),
-        &super::provider::DEFAULT_PROVIDER,
-        &mut client_output,
-    );
+    let (mut client, mut server, mut buf) =
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
-        &mut client_output,
+        &mut buf.client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
@@ -147,17 +143,13 @@ fn split_pairwise() {
 
 #[test]
 fn split_sender_refuses_data_after_close_notify() {
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) = make_pair(
-        KeyType::default(),
-        &super::provider::DEFAULT_PROVIDER,
-        &mut client_output,
-    );
+    let (mut client, mut server, mut buf) =
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
-        &mut client_output,
+        &mut buf.client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
@@ -165,7 +157,7 @@ fn split_sender_refuses_data_after_close_notify() {
     );
 
     client
-        .send_close_notify(&mut client_output)
+        .send_close_notify(&mut buf.client_output)
         .unwrap();
     let SplitConnection {
         send: mut client_send,
@@ -187,17 +179,13 @@ fn split_sender_refuses_data_after_close_notify() {
 
 #[test]
 fn split_incremental() {
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) = make_pair(
-        KeyType::default(),
-        &super::provider::DEFAULT_PROVIDER,
-        &mut client_output,
-    );
+    let (mut client, mut server, mut buf) =
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
-        &mut client_output,
+        &mut buf.client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
@@ -240,17 +228,13 @@ fn split_incremental() {
 
 #[test]
 fn split_client_tickets_received() {
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) = make_pair(
-        KeyType::default(),
-        &super::provider::DEFAULT_PROVIDER,
-        &mut client_output,
-    );
+    let (mut client, mut server, mut buf) =
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
-        &mut client_output,
+        &mut buf.client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
@@ -269,12 +253,7 @@ fn split_client_tickets_received() {
 
 #[test]
 fn split_fails_during_handshake() {
-    let mut client_output = Vec::new();
-    let (client, server) = make_pair(
-        KeyType::default(),
-        &super::provider::DEFAULT_PROVIDER,
-        &mut client_output,
-    );
+    let (client, server, _) = make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     assert_eq!(
         client.split().err(),
         Some(Error::ApiMisuse(ApiMisuse::SplitDuringHandshake))
@@ -287,17 +266,13 @@ fn split_fails_during_handshake() {
 
 #[test]
 fn key_update() {
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) = make_pair(
-        KeyType::default(),
-        &super::provider::DEFAULT_PROVIDER,
-        &mut client_output,
-    );
+    let (mut client, mut server, mut buf) =
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
-        &mut client_output,
+        &mut buf.client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
@@ -357,17 +332,13 @@ fn key_update() {
 
 #[test]
 fn key_update_alongside_data() {
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) = make_pair(
-        KeyType::default(),
-        &super::provider::DEFAULT_PROVIDER,
-        &mut client_output,
-    );
+    let (mut client, mut server, mut buf) =
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
-        &mut client_output,
+        &mut buf.client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
@@ -406,17 +377,13 @@ fn key_update_alongside_data() {
 
 #[test]
 fn close_alongside_data() {
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) = make_pair(
-        KeyType::default(),
-        &super::provider::DEFAULT_PROVIDER,
-        &mut client_output,
-    );
+    let (mut client, mut server, mut buf) =
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
-        &mut client_output,
+        &mut buf.client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
@@ -454,17 +421,13 @@ fn close_alongside_data() {
 
 #[test]
 fn read_invalid_data_and_send_alert() {
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
-    let (mut client, mut server) = make_pair(
-        KeyType::default(),
-        &super::provider::DEFAULT_PROVIDER,
-        &mut client_output,
-    );
+    let (mut client, mut server, mut buf) =
+        make_pair(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
-        &mut client_output,
+        &mut buf.client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
@@ -482,11 +445,12 @@ fn read_invalid_data_and_send_alert() {
         Error::InvalidMessage(InvalidMessage::InvalidContentType)
     );
 
-    client_output.clear();
-    send.close(&mut client_output).unwrap();
+    buf.client_output.clear();
+    send.close(&mut buf.client_output)
+        .unwrap();
 
     server_input
-        .read(&mut Cursor::new(&mut client_output))
+        .read(&mut Cursor::new(&mut buf.client_output))
         .unwrap();
     assert_eq!(
         server
@@ -536,20 +500,18 @@ fn kernel_conversion_fails_with_pending_send_data() {
 /// This queues an encrypted response on the server's send half, awaiting the
 /// next send-side operation.
 fn split_server_with_queued_key_update() -> SplitConnection<ServerSide> {
-    let mut client_output = Vec::new();
     let mut server_output = Vec::new();
     let mut server_config =
         make_server_config(KeyType::default(), &super::provider::DEFAULT_PROVIDER);
     server_config.enable_secret_extraction = true;
-    let (mut client, mut server) = make_pair_for_configs(
+    let (mut client, mut server, mut buf) = make_pair_for_configs(
         make_client_config(KeyType::default(), &super::provider::DEFAULT_PROVIDER),
         server_config,
-        &mut client_output,
     );
     let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
     do_handshake(
         &mut client_input,
-        &mut client_output,
+        &mut buf.client_output,
         &mut client,
         &mut server_input,
         &mut server_output,
