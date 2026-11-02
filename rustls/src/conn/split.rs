@@ -139,6 +139,9 @@ impl SendTraffic {
     /// When you need to handle a [`ReceiveTrafficState::FlushSender`] state, you can call this
     /// method with [`OutboundPlain::new_empty()`] to flush any pending TLS data to the peer.
     ///
+    /// If this returns an error, it may nevertheless have written data into `tls` which should
+    /// be communicated to the peer.
+    ///
     /// See [`Connection::write()`][crate::Connection::write] for the conditions under which
     /// this fails.
     pub fn write(
