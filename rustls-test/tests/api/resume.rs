@@ -19,10 +19,9 @@ use rustls::{
 };
 use rustls_test::{
     ClientStorage, ClientStorageOp, ErrorFromPeer, HandshakeBuffers, KeyType, MultiTest,
-    ServerConfigExt, do_handshake_collecting_early_data, make_client_config,
-    make_client_config_with_kx_groups, make_pair, make_pair_for_arc_configs, make_pair_for_configs,
-    make_server_config, make_server_config_with_kx_groups, transfer,
-    webpki_server_verifier_builder,
+    ServerConfigExt, make_client_config, make_client_config_with_kx_groups, make_pair,
+    make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
+    make_server_config_with_kx_groups, transfer, webpki_server_verifier_builder,
 };
 
 use super::provider;
@@ -538,7 +537,6 @@ fn early_data_is_available_on_resumption() {
         make_pair_for_arc_configs(&client_config, &server_config);
     buf.handshake(&mut client, &mut server);
 
-    let mut server_output = Vec::new();
     let (mut client, mut server, mut buf) =
         make_pair_for_arc_configs(&client_config, &server_config);
     assert!(client.early_data().is_some());
@@ -571,15 +569,7 @@ fn early_data_is_available_on_resumption() {
         Some(Error::ApiMisuse(ApiMisuse::ExporterNotAvailable)),
     );
     let mut received_early_data = Vec::new();
-    do_handshake_collecting_early_data(
-        &mut buf.client_input,
-        &mut buf.client_output,
-        &mut client,
-        &mut buf.server_input,
-        &mut server_output,
-        &mut server,
-        &mut received_early_data,
-    );
+    buf.handshake_collecting_early_data(&mut client, &mut server, &mut received_early_data);
 
     assert_eq!(&received_early_data[..], b"hello");
     let server_early_exporter = server.early_exporter().unwrap();
@@ -626,7 +616,6 @@ fn early_data_is_limited_on_client() {
         make_pair_for_arc_configs(&client_config, &server_config);
     buf.handshake(&mut client, &mut server);
 
-    let mut server_output = Vec::new();
     let (mut client, mut server, mut buf) =
         make_pair_for_arc_configs(&client_config, &server_config);
     assert!(client.early_data().is_some());
@@ -646,15 +635,7 @@ fn early_data_is_limited_on_client() {
         1234
     );
     let mut received_early_data = Vec::new();
-    do_handshake_collecting_early_data(
-        &mut buf.client_input,
-        &mut buf.client_output,
-        &mut client,
-        &mut buf.server_input,
-        &mut server_output,
-        &mut server,
-        &mut received_early_data,
-    );
+    buf.handshake_collecting_early_data(&mut client, &mut server, &mut received_early_data);
 
     assert_eq!(&received_early_data[..], [0xaa; 1234]);
 }
@@ -974,38 +955,27 @@ fn early_data_is_dropped_by_next_payload() {
 #[test]
 fn next_early_data_yields_nothing_without_early_data() {
     let (client_config, server_config) = early_data_configs();
-    let mut client_input = VecInput::default();
-    let mut server_input = VecInput::default();
-    let mut server_output = Vec::new();
 
     // A full (non-resumed) handshake never carries early data.
     let (mut client, mut server, mut buf) =
         make_pair_for_arc_configs(&client_config, &server_config);
     assert!(client.early_data().is_none());
-    transfer(&mut buf.client_output, &mut server_input);
+    transfer(&mut buf.client_output, &mut buf.server_input);
     assert_eq!(
-        server_read(&mut server, &mut server_input, &mut server_output),
+        server_read(&mut server, &mut buf.server_input, &mut buf.server_output),
         (Vec::new(), Vec::new())
     );
     let mut received_early_data = Vec::new();
-    do_handshake_collecting_early_data(
-        &mut client_input,
-        &mut buf.client_output,
-        &mut client,
-        &mut server_input,
-        &mut server_output,
-        &mut server,
-        &mut received_early_data,
-    );
+    buf.handshake_collecting_early_data(&mut client, &mut server, &mut received_early_data);
     assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
     assert!(received_early_data.is_empty());
 
     client
         .write(b"normal".into(), &mut buf.client_output)
         .unwrap();
-    transfer(&mut buf.client_output, &mut server_input);
+    transfer(&mut buf.client_output, &mut buf.server_input);
     assert_eq!(
-        server_read(&mut server, &mut server_input, &mut server_output),
+        server_read(&mut server, &mut buf.server_input, &mut buf.server_output),
         (Vec::new(), b"normal".to_vec())
     );
 }
@@ -1019,9 +989,6 @@ fn rejected_early_data_is_skipped() {
     rejecting_config.max_early_data_size = 0;
     let (mut client, _, mut buf) = resumable_pair(&client_config, &server_config);
     let mut server = Connection::new(Arc::new(rejecting_config)).unwrap();
-    let mut client_input = VecInput::default();
-    let mut server_input = VecInput::default();
-    let mut server_output = Vec::new();
 
     assert_eq!(
         client
@@ -1031,22 +998,14 @@ fn rejected_early_data_is_skipped() {
             .unwrap(),
         5
     );
-    transfer(&mut buf.client_output, &mut server_input);
+    transfer(&mut buf.client_output, &mut buf.server_input);
     assert_eq!(
-        server_read(&mut server, &mut server_input, &mut server_output),
+        server_read(&mut server, &mut buf.server_input, &mut buf.server_output),
         (Vec::new(), Vec::new())
     );
 
     let mut received_early_data = Vec::new();
-    do_handshake_collecting_early_data(
-        &mut client_input,
-        &mut buf.client_output,
-        &mut client,
-        &mut server_input,
-        &mut server_output,
-        &mut server,
-        &mut received_early_data,
-    );
+    buf.handshake_collecting_early_data(&mut client, &mut server, &mut received_early_data);
     assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
     assert!(!client.side().is_early_data_accepted());
     assert!(client.early_data().is_none());
@@ -1055,9 +1014,9 @@ fn rejected_early_data_is_skipped() {
     client
         .write(b"normal".into(), &mut buf.client_output)
         .unwrap();
-    transfer(&mut buf.client_output, &mut server_input);
+    transfer(&mut buf.client_output, &mut buf.server_input);
     assert_eq!(
-        server_read(&mut server, &mut server_input, &mut server_output),
+        server_read(&mut server, &mut buf.server_input, &mut buf.server_output),
         (Vec::new(), b"normal".to_vec())
     );
 }

@@ -894,6 +894,30 @@ impl HandshakeBuffers {
             Ok(_) => Ok(()),
         }
     }
+
+    /// Like [`HandshakeBuffers::handshake()`], but collects early data received by the server into `server_early_data`.
+    pub fn handshake_collecting_early_data(
+        &mut self,
+        client: &mut Connection<ClientSide, Tcp>,
+        server: &mut Connection<ServerSide, Tcp>,
+        server_early_data: &mut Vec<u8>,
+    ) {
+        while server.is_handshaking() || client.is_handshaking() {
+            transfer(&mut self.client_output, &mut self.server_input);
+            let mut handler = server.read_tls(&mut self.server_input, &mut self.server_output);
+            while let Some(result) = handler.next_early_data() {
+                server_early_data.extend_from_slice(result.unwrap().bytes());
+            }
+            handler
+                .handle_all(&mut Vec::new())
+                .unwrap();
+            transfer(&mut self.server_output, &mut self.client_input);
+            client
+                .read_tls(&mut self.client_input, &mut self.client_output)
+                .handle_all(&mut Vec::new())
+                .unwrap();
+        }
+    }
 }
 
 pub fn make_pair(
@@ -963,33 +987,6 @@ pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, S
     let client_config = ClientConfig::builder(server_provider.into()).finish(kt);
 
     (client_config, server_config)
-}
-
-/// Like [`HandshakeIo::handshake()`], but collects early data received by the server into `server_early_data`.
-pub fn do_handshake_collecting_early_data(
-    client_input: &mut VecInput,
-    client_output: &mut Vec<u8>,
-    client: &mut Connection<ClientSide, Tcp>,
-    server_input: &mut VecInput,
-    server_output: &mut Vec<u8>,
-    server: &mut Connection<ServerSide, Tcp>,
-    server_early_data: &mut Vec<u8>,
-) {
-    while server.is_handshaking() || client.is_handshaking() {
-        transfer(client_output, server_input);
-        let mut handler = server.read_tls(server_input, server_output);
-        while let Some(result) = handler.next_early_data() {
-            server_early_data.extend_from_slice(result.unwrap().bytes());
-        }
-        handler
-            .handle_all(&mut Vec::new())
-            .unwrap();
-        transfer(server_output, client_input);
-        client
-            .read_tls(client_input, client_output)
-            .handle_all(&mut Vec::new())
-            .unwrap();
-    }
 }
 
 #[derive(PartialEq, Debug)]
