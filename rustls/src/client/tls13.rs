@@ -34,6 +34,7 @@ use crate::error::{
     ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved, RejectedEch,
 };
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
+use crate::key_log::KeyLog;
 use crate::msgs::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, ChangeCipherSpecPayload, ClientExtensions,
     Codec, EchConfigPayload, EncryptedExtensions, ExtensionType, HandshakeMessagePayload,
@@ -42,7 +43,7 @@ use crate::msgs::{
     ServerHelloPayload, SizedPayload,
 };
 use crate::sealed::Sealed;
-use crate::suites::PartiallyExtractedSecrets;
+use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
 use crate::sync::Arc;
 use crate::tls13::key_schedule::{
     ClientHandshakeSecrets, ClientTrafficSecrets, EarlyTrafficEncrypter, KeyScheduleEarlyClient,
@@ -58,7 +59,7 @@ use crate::verify::{
     DigitallySignedStruct, FinishedMessageVerified, HandshakeSignatureValid, PeerVerified,
     ServerIdentity, SignatureVerificationInput,
 };
-use crate::{ConnectionTrafficSecrets, KeyLog, compress, crypto, quic};
+use crate::{compress, crypto, quic};
 
 pub(crate) static TLS13_HANDLER: &dyn ClientHandler<Tls13CipherSuite> = &Handler;
 

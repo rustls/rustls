@@ -1927,6 +1927,7 @@ fn test_client_handshake() {
             };
         };
 
+        let client = client.split().unwrap();
         println!("ok {:?}", client.outputs.handshake_kind());
         assert!(!server.is_handshaking());
     }
@@ -1976,7 +1977,7 @@ fn client_handshake_receives_half_rtt_data() {
     assert!(server_output.len() > handshake_flight_len);
 
     // Drive the client's handshake over that single buffer.
-    let split = loop {
+    let conn = loop {
         let mut client_input = SliceInput::new(&mut server_output);
         let next = client
             .process(&mut client_input, &mut client_output)
@@ -2002,6 +2003,7 @@ fn client_handshake_receives_half_rtt_data() {
     };
 
     // The handshake completed, and the client's `Finished` is in `client_output`.
+    let split = conn.split().unwrap();
     assert_eq!(
         split.outputs.protocol_version(),
         Some(ProtocolVersion::TLSv1_3)
@@ -2145,6 +2147,7 @@ fn client_handshake_sends_early_data() {
         else {
             panic!("unexpected state");
         };
+        let client = client.split().unwrap();
         assert!(
             client
                 .side_outputs
@@ -2433,6 +2436,8 @@ fn test_acceptor_continues_tls13_hrr_with_compatibility_ccs() {
         client.handshake_kind(),
         Some(HandshakeKind::FullWithHelloRetryRequest)
     );
+
+    let server = server.split().unwrap();
     assert_eq!(
         server.outputs.handshake_kind(),
         Some(HandshakeKind::FullWithHelloRetryRequest)

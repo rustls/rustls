@@ -9,7 +9,9 @@ use pki_types::PrivateKeyDer;
 use pki_types::{FipsStatus, ServerName, UnixTime};
 
 use super::ech::EchMode;
-use super::handy::{ClientSessionMemoryCache, FailResolveClientCert, NoClientSessionStorage};
+#[cfg(feature = "std")]
+use super::handy::ClientSessionMemoryCache;
+use super::handy::{FailResolveClientCert, NoClientSessionStorage};
 use super::{Tls12Session, Tls13Session};
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::connection::ClientConnectionBuilder;
@@ -25,7 +27,9 @@ use crate::error::{ApiMisuse, Error};
 use crate::key_log::NoKeyLog;
 use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
-use crate::time_provider::{DefaultTimeProvider, TimeProvider};
+#[cfg(feature = "std")]
+use crate::time_provider::DefaultTimeProvider;
+use crate::time_provider::TimeProvider;
 use crate::verify::ServerVerifier;
 #[cfg(feature = "webpki")]
 use crate::webpki::{self, WebPkiServerVerifier};
@@ -195,6 +199,7 @@ impl ClientConfig {
     /// This will use the provider's configured ciphersuites.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
+    #[cfg(feature = "std")]
     pub fn builder(provider: Arc<CryptoProvider>) -> ConfigBuilder<Self, WantsVerifier> {
         Self::builder_with_details(provider, Arc::new(DefaultTimeProvider))
     }
@@ -552,6 +557,7 @@ impl Resumption {
     ///
     /// This is the default `Resumption` choice, and enables resuming a TLS 1.2 session with
     /// a session id or RFC 5077 ticket.
+    #[cfg(feature = "std")]
     pub fn in_memory_sessions(num: usize) -> Self {
         Self {
             store: Arc::new(ClientSessionMemoryCache::new(num)),
@@ -591,7 +597,14 @@ impl Default for Resumption {
     /// Create an in-memory session store resumption with up to 256 server names, allowing
     /// a TLS 1.2 session to resume with a session id or RFC 5077 ticket.
     fn default() -> Self {
-        Self::in_memory_sessions(256)
+        #[cfg(feature = "std")]
+        {
+            Self::in_memory_sessions(256)
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            Self::disabled()
+        }
     }
 }
 

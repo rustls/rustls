@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-rustls = { path = "../rustls", default-features = false }
+rustls = { path = "../rustls", default-features = false, features = ["std"] }
 rustls-fuzzing-provider = { path = "../rustls-fuzzing-provider" }
 
 # Prevent this from interfering with workspaces

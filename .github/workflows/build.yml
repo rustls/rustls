@@ -160,6 +160,7 @@ jobs:
 
       - name: cargo test (debug; no default features; std)
         run: |
+          cargo test --locked -p rustls --no-default-features --features std
           cargo test --locked -p rustls-ring --no-default-features --features std
           cargo test --locked -p rustls-aws-lc-rs --no-default-features --features std --features aws-lc-sys
 

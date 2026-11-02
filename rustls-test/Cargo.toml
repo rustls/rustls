@@ -14,7 +14,7 @@ tracing = ["rustls/tracing", "rustls-util/tracing"]
 zlib = ["rustls/zlib"]
 
 [dependencies]
-rustls = { path = "../rustls", default-features = false, features = ["webpki"] }
+rustls = { path = "../rustls", default-features = false, features = ["std", "webpki"] }
 rustls-ring = { path = "../rustls-ring", optional = true }
 tracing = { workspace = true, features = ["std"] }
 

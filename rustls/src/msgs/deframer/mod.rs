@@ -1,6 +1,6 @@
+use alloc::collections::VecDeque;
 use core::mem;
 use core::ops::Range;
-use std::collections::VecDeque;
 
 use crate::crypto::cipher::{EncodableVersion, InboundOpaque, Record, RecordError};
 use crate::enums::{ContentType, ProtocolVersion};

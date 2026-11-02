@@ -3,10 +3,12 @@ use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::ops::Range;
 use core::{fmt, mem};
+#[cfg(feature = "std")]
 use std::io::{self, Read};
 
 use super::private::SideOutput;
 use super::send::{SendOutput, SendPath};
+#[cfg(feature = "std")]
 use super::split::SendAdapter;
 use super::{Connection, SEQ_SOFT_LIMIT, SideData, StateMachine, Transport};
 use crate::common_state::{
@@ -54,6 +56,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<'a, 'm, 's, Side: SideData> MessageIter<'a, 'm, Side, SendAdapter<'s>> {
     pub(super) fn receive(
         input: &'m mut dyn TlsInputBuffer,
@@ -945,6 +948,7 @@ impl VecInput {
     /// Once the buffer contains 64 kB of data, we will not read any more bytes until some
     /// are consumed by reading from the buffer via
     /// [`Connection::read_tls()`][super::Connection::read_tls()].
+    #[cfg(feature = "std")]
     pub fn read(&mut self, rd: &mut dyn Read) -> io::Result<usize> {
         if self.received_close_notify {
             return Ok(0);
@@ -966,6 +970,7 @@ impl VecInput {
     }
 
     /// Resize the internal `buf` if necessary for reading more bytes.
+    #[cfg(feature = "std")]
     fn prepare_read(&mut self) -> Result<(), &'static str> {
         /// TLS allows for handshake messages of up to 16MB.  We
         /// restrict that to 64KB to limit potential for denial-of-

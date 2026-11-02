@@ -8,6 +8,7 @@ publish = false
 rustls = { path = "../rustls", default-features = false, features = ["tracing", "webpki"] }
 
 [dev-dependencies]
+rustls = { path = "../rustls", default-features = false, features = ["std"] }
 tracing-subscriber = { workspace = true }
 
 [lints]
