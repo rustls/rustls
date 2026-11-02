@@ -53,7 +53,7 @@ states that look like:
 ```ignore
 struct ExpectTraffic {
    (...)
-    _cert_verified: verify::ServerVerified,
+    _cert_verified: verify::PeerVerified,
     _sig_verified: verify::HandshakeSignatureValid,
     _fin_verified: verify::FinishedMessageVerified,
 }
@@ -87,11 +87,11 @@ the message type before further operations.
 A sample sequence for a full TLSv1.2 handshake by a client looks like:
 
 - `hs::ExpectServerHello` (Note: ClientHello is logically sent before this state); transition to `tls12::ExpectCertificate`
-- `tls12::ExpectCertificate`; transition to `tls12::ExpectServerKX`
-- `tls12::ExpectServerKX`; transition to `tls12::ExpectServerDoneOrCertReq`
+- `tls12::ExpectCertificate`; transition to `tls12::ExpectServerKx`
+- `tls12::ExpectServerKx`; transition to `tls12::ExpectServerDoneOrCertReq`
 - `tls12::ExpectServerDoneOrCertReq`; delegates to `tls12::ExpectCertificateRequest` or `tls12::ExpectServerDone` depending on incoming message.
-  - `tls12::ExpectServerDone`; transition to `tls12::ExpectCCS`
-- `tls12::ExpectCCS`; transition to `tls12::ExpectFinished`
+  - `tls12::ExpectServerDone`; transition to `tls12::ExpectCcs`
+- `tls12::ExpectCcs`; transition to `tls12::ExpectFinished`
 - `tls12::ExpectFinished`; transition to `tls12::ExpectTraffic`
 - `tls12::ExpectTraffic`; terminal state; transitions to `tls12::ExpectTraffic`
 
