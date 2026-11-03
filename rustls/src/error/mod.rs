@@ -1224,6 +1224,7 @@ pub enum PeerMisbehaved {
     MissingQuicTransportParameters,
     NoCertificatesPresented,
     NonEmptyRenegotiationInfo,
+    NonEmptySessionIdInQuic,
     OfferedDuplicateCertificateCompressions,
     OfferedDuplicateKeyShares,
     OfferedEarlyDataWithOldProtocolVersion,
