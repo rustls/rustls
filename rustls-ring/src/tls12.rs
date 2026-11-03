@@ -287,10 +287,6 @@ impl RecordDecrypter for GcmRecordDecrypter {
             .map_err(|_| Error::DecryptError)?
             .len();
 
-        if plain_len > MAX_FRAGMENT_LEN {
-            return Err(Error::PeerSentOversizedRecord);
-        }
-
         payload.truncate(plain_len);
         Ok(record.into_plain_record())
     }
@@ -378,10 +374,6 @@ impl RecordDecrypter for ChaCha20Poly1305RecordDecrypter {
             .map_err(|_| Error::DecryptError)?
             .len();
 
-        if plain_len > MAX_FRAGMENT_LEN {
-            return Err(Error::PeerSentOversizedRecord);
-        }
-
         payload.truncate(plain_len);
         Ok(record.into_plain_record())
     }
@@ -440,8 +432,6 @@ fn gcm_iv(write_iv: &[u8], explicit: &[u8]) -> Iv {
 
     Iv::new(&iv).expect("IV length is NONCE_LEN, which is within MAX_LEN")
 }
-
-const MAX_FRAGMENT_LEN: usize = 16384;
 
 #[cfg(test)]
 mod tests {
