@@ -570,6 +570,60 @@ mod tests {
     }
 
     #[test]
+    fn input_quic_dissects_lazily() {
+        // many empty handshake messages in a single QUIC CRYPTO buffer
+        const COUNT: usize = 1000;
+        let mut input = [0x21, 0, 0, 0].repeat(COUNT);
+        input.extend([0x21, 0, 0, 1]);
+
+        let mut deframer = Deframer::default();
+        deframer.input_quic(&mut input).unwrap();
+        assert_eq!(deframer.spans.len(), 2);
+
+        for _ in 0..COUNT {
+            let span = deframer
+                .complete_span(&input)
+                .unwrap()
+                .unwrap();
+            assert_eq!(deframer.spans.len(), 1);
+            let record = deframer.record(span, &input);
+            assert_eq!(record.payload, &[0x21, 0, 0, 0]);
+        }
+
+        // trailing incomplete message
+        assert!(
+            deframer
+                .complete_span(&input)
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(deframer.spans.len(), 1);
+        assert!(deframer.aligned().is_none());
+    }
+
+    #[test]
+    fn complete_span_rejects_excess_size_message() {
+        const X: u8 = 0xff;
+        // an empty message followed by one declaring a 0x010000-byte body
+        let mut input = vec![0x21, 0, 0, 0, 0x21, 0x01, 0x00, 0x00, X];
+        let mut deframer = Deframer::default();
+
+        deframer.input_quic(&mut input).unwrap();
+        let span = deframer
+            .complete_span(&input)
+            .unwrap()
+            .unwrap();
+        assert_eq!(deframer.record(span, &input).payload, &[0x21, 0, 0, 0]);
+
+        assert_eq!(
+            deframer
+                .complete_span(&input)
+                .unwrap_err(),
+            InvalidMessage::HandshakePayloadTooLarge
+        );
+    }
+
+    #[test]
     fn iter_only_returns_full_messages() {
         let input = [0, 0, 0, 0x21, 0, 0, 1, 0xab, 0x21, 0, 0, 1];
 
