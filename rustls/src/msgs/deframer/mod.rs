@@ -146,15 +146,28 @@ impl Deframer {
 
         // otherwise, we can expect `msg` to contain a handshake header introducing
         // a new message (and perhaps several of them.)
+        self.dissect(payload, self.spans.len(), bounds, version);
+    }
+
+    /// Insert spans covering `payload` into `spans` at `index`.
+    ///
+    /// `bounds` locates `payload` in the containing buffer.
+    fn dissect(
+        &mut self,
+        payload: &[u8],
+        index: usize,
+        bounds: Range<usize>,
+        version: ProtocolVersion,
+    ) {
         let iter = DissectHandshakeIter {
             version,
             payload,
             bounds,
         };
 
-        for span in iter {
+        for (i, span) in iter.enumerate() {
             self.too_large |= span.size.unwrap_or_default() > MAX_HANDSHAKE_SIZE;
-            self.spans.push_back(span);
+            self.spans.insert(index + i, span);
         }
     }
 
@@ -256,22 +269,8 @@ impl Deframer {
             first.bounds.end += len;
 
             // finally, attempt to re-dissect `first`
-            let record = Record {
-                typ: ContentType::Handshake,
-                version: EncodableVersion::Legacy(first.version),
-                payload: delocator.slice_from_range(&first.bounds),
-            };
-
-            let iter = DissectHandshakeIter {
-                version: first.version,
-                payload: record.payload,
-                bounds: first.bounds.start..first.bounds.end,
-            };
-
-            for (i, span) in iter.enumerate() {
-                self.too_large |= span.size.unwrap_or_default() > MAX_HANDSHAKE_SIZE;
-                self.spans.insert(index + i, span);
-            }
+            let payload = delocator.slice_from_range(&first.bounds);
+            self.dissect(payload, index, first.bounds, first.version);
         }
     }
 
