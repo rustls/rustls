@@ -1240,6 +1240,7 @@ pub enum PeerMisbehaved {
     SelectedDifferentCipherSuiteAfterRetry,
     SelectedDifferentProtocolVersionAfterRetry,
     SelectedInvalidPsk,
+    SelectedPskWithRejectedEch,
     SelectedTls12UsingTls13VersionExtension,
     SelectedTls13UsingLegacyVersionField,
     SelectedUnofferedApplicationProtocol,

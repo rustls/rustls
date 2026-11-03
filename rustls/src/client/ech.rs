@@ -896,16 +896,20 @@ mod tests {
     use crate::crypto::cipher::Record;
     use crate::crypto::hpke::{HpkeAead, HpkeKdf};
     use crate::crypto::kx::SharedSecret;
-    use crate::crypto::{CipherSuite, GetRandomFailed, Identity, TEST_PROVIDER, tls13_only};
+    use crate::crypto::test_provider::KEY_EXCHANGE_GROUP;
+    use crate::crypto::{
+        CipherSuite, CryptoProvider, GetRandomFailed, Identity, TEST_PROVIDER, tls13_only,
+    };
     use crate::msgs::{
-        Compression, Deframer, HelloRetryRequestExtensions, NewSessionTicketPayloadTls13, Random,
-        Reader, ServerExtensions, SessionId, SupportedProtocolVersions,
+        Compression, Deframer, HelloRetryRequestExtensions, KeyShareEntry,
+        NewSessionTicketPayloadTls13, Random, Reader, ServerExtensions, SessionId,
+        SupportedProtocolVersions,
     };
     use crate::quic::Side;
     use crate::sync::Arc;
     use crate::tls13::Tls13ProtocolSuite;
     use crate::tls13::key_schedule::KeySchedulePreHandshake;
-    use crate::{RootCertStore, VecInput};
+    use crate::{ClientSide, Connection, RootCertStore, Tcp, VecInput};
 
     #[test]
     fn server_hello_conf_alters_server_hello_random() {
@@ -1013,74 +1017,12 @@ mod tests {
 
     #[test]
     fn ech_rejected_by_hello_retry_request_conceals_inner_psk() {
-        let mut roots = RootCertStore::empty();
-        roots
-            .add(CertificateDer::from_slice(include_bytes!(
-                "../../../test-ca/rsa-2048/ca.der"
-            )))
-            .unwrap();
-
         // `TEST_PROVIDER`'s fixed-fill `SecureRandom` would mask a regression here: a
         // fresh GREASE PSK generated for the retry would repeat the first hello's
         // identity by happenstance. A counter makes consecutive fills distinct.
         let mut provider = tls13_only(TEST_PROVIDER.clone());
         provider.secure_random = &CountingRandom;
-
-        let config = ClientConfig::builder(Arc::new(provider))
-            .with_ech(EchMode::Enable(EchConfig {
-                config: EchConfigPayload::V18(EchConfigContents {
-                    key_config: HpkeKeyConfig {
-                        config_id: 0,
-                        kem_id: MockHpke::SUITE.kem,
-                        public_key: vec![0; 32].into(),
-                        symmetric_cipher_suites: vec![MockHpke::SUITE.sym],
-                    },
-                    maximum_name_length: 255,
-                    public_name: DnsName::try_from("public.example.com").unwrap(),
-                    extensions: vec![],
-                }),
-                suite: &MockHpke,
-            }))
-            .with_root_certificates(roots)
-            .with_no_client_auth()
-            .unwrap();
-        let store = Arc::new(ClientSessionMemoryCache::new(256));
-        let config = Arc::new(ClientConfig {
-            resumption: Resumption::store(store.clone()),
-            ..config
-        });
-
-        // cache a ticket for the concealed inner name
-        let server_name = ServerName::try_from("inner.example.com").unwrap();
-        store.insert_tls13_ticket(
-            ClientSessionKey {
-                config_hash: config.config_hash(),
-                server_name: server_name.clone(),
-            },
-            Tls13Session::new(
-                &NewSessionTicketPayloadTls13::new(
-                    Duration::from_secs(1800),
-                    0x1234_5678,
-                    [0u8; 32],
-                    TICKET.to_vec(),
-                ),
-                Tls13ClientSessionInput {
-                    suite: Tls13ProtocolSuite::Tcp(TEST_PROVIDER.tls13_cipher_suites[0]),
-                    peer_identity: VerifiedIdentity::assertion(Identity::RawPublicKey(
-                        SubjectPublicKeyInfoDer::from(&b"spki"[..]),
-                    )),
-                    quic_params: None,
-                },
-                &[0x55; 32],
-                UnixTime::now(),
-            ),
-        );
-
-        let mut first_flight = Vec::new();
-        let mut conn = config
-            .connect(server_name)
-            .build(&mut first_flight)
-            .unwrap();
+        let (mut conn, first_flight) = ech_client_with_inner_ticket(provider);
 
         // the ticket belongs to the concealed inner name, so the outer hello offers
         // a GREASE PSK in its place
@@ -1118,39 +1060,6 @@ mod tests {
         assert_ne!(psk_identity(&second), TICKET);
         assert_eq!(psk_identity(&second), psk_identity(&first));
 
-        fn client_hello_in(bytes: &[u8]) -> ClientHelloPayload {
-            let mut reader = Reader::new(bytes);
-            while reader.any_left() {
-                let record = Record::<Payload<'_>>::read(&mut reader)
-                    .unwrap()
-                    .into_owned();
-                if let Ok(Message {
-                    payload:
-                        MessagePayload::Handshake {
-                            parsed: HandshakeMessagePayload(HandshakePayload::ClientHello(ch)),
-                            ..
-                        },
-                    ..
-                }) = Message::try_from(&record)
-                {
-                    return ch;
-                }
-            }
-            panic!("no ClientHello written");
-        }
-
-        fn psk_identity(hello: &ClientHelloPayload) -> &[u8] {
-            hello
-                .preshared_key_offer
-                .as_ref()
-                .unwrap()
-                .identities[0]
-                .identity
-                .bytes()
-        }
-
-        const TICKET: &[u8] = b"inner name resumption ticket";
-
         #[derive(Debug)]
         struct CountingRandom;
 
@@ -1163,6 +1072,58 @@ mod tests {
                 Ok(())
             }
         }
+    }
+
+    #[test]
+    fn ech_rejecting_server_hello_cannot_select_psk() {
+        let (mut conn, first_flight) =
+            ech_client_with_inner_ticket(tls13_only(TEST_PROVIDER.clone()));
+        let hello = client_hello_in(&first_flight);
+
+        // this random carries no ECH confirmation, so the server used the outer
+        // hello, whose only PSK identity is GREASE
+        let server_hello = Message {
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ServerHello(ServerHelloPayload {
+                    legacy_version: ProtocolVersion::TLSv1_2,
+                    random: Random([0x55; 32]),
+                    session_id: hello.session_id,
+                    cipher_suite: TEST_PROVIDER.tls13_cipher_suites[0]
+                        .common
+                        .suite,
+                    compression_method: Compression::Null,
+                    extensions: Box::new(ServerExtensions {
+                        key_share: Some(KeyShareEntry {
+                            group: KEY_EXCHANGE_GROUP.name(),
+                            payload: KEY_EXCHANGE_GROUP
+                                .start()
+                                .unwrap()
+                                .pub_key()
+                                .to_vec()
+                                .into(),
+                        }),
+                        preshared_key: Some(0),
+                        selected_version: Some(ProtocolVersion::TLSv1_3),
+                        ..ServerExtensions::default()
+                    }),
+                }),
+            )),
+        };
+        let mut input = VecInput::default();
+        input
+            .read(
+                &mut server_hello
+                    .into_wire_bytes()
+                    .as_slice(),
+            )
+            .unwrap();
+        assert_eq!(
+            conn.read_tls(&mut input, &mut Vec::new())
+                .handle_all(&mut Vec::new())
+                .unwrap_err(),
+            PeerMisbehaved::SelectedPskWithRejectedEch.into()
+        );
     }
 
     #[test]
@@ -1260,6 +1221,109 @@ mod tests {
         );
         assert_eq!(server_name, ServerName::from(public_name()));
     }
+
+    /// A client offering ECH for `inner.example.com` with a ticket cached for that name,
+    /// and the first flight it wrote.
+    fn ech_client_with_inner_ticket(
+        provider: CryptoProvider,
+    ) -> (Connection<ClientSide, Tcp>, Vec<u8>) {
+        let mut roots = RootCertStore::empty();
+        roots
+            .add(CertificateDer::from_slice(include_bytes!(
+                "../../../test-ca/rsa-2048/ca.der"
+            )))
+            .unwrap();
+
+        let config = ClientConfig::builder(Arc::new(provider))
+            .with_ech(EchMode::Enable(EchConfig {
+                config: EchConfigPayload::V18(EchConfigContents {
+                    key_config: HpkeKeyConfig {
+                        config_id: 0,
+                        kem_id: MockHpke::SUITE.kem,
+                        public_key: vec![0; 32].into(),
+                        symmetric_cipher_suites: vec![MockHpke::SUITE.sym],
+                    },
+                    maximum_name_length: 255,
+                    public_name: DnsName::try_from("public.example.com").unwrap(),
+                    extensions: vec![],
+                }),
+                suite: &MockHpke,
+            }))
+            .with_root_certificates(roots)
+            .with_no_client_auth()
+            .unwrap();
+        let store = Arc::new(ClientSessionMemoryCache::new(256));
+        let config = Arc::new(ClientConfig {
+            resumption: Resumption::store(store.clone()),
+            ..config
+        });
+
+        // cache a ticket for the concealed inner name
+        let server_name = ServerName::try_from("inner.example.com").unwrap();
+        store.insert_tls13_ticket(
+            ClientSessionKey {
+                config_hash: config.config_hash(),
+                server_name: server_name.clone(),
+            },
+            Tls13Session::new(
+                &NewSessionTicketPayloadTls13::new(
+                    Duration::from_secs(1800),
+                    0x1234_5678,
+                    [0u8; 32],
+                    TICKET.to_vec(),
+                ),
+                Tls13ClientSessionInput {
+                    suite: Tls13ProtocolSuite::Tcp(TEST_PROVIDER.tls13_cipher_suites[0]),
+                    peer_identity: VerifiedIdentity::assertion(Identity::RawPublicKey(
+                        SubjectPublicKeyInfoDer::from(&b"spki"[..]),
+                    )),
+                    quic_params: None,
+                },
+                &[0x55; 32],
+                UnixTime::now(),
+            ),
+        );
+
+        let mut first_flight = Vec::new();
+        let conn = config
+            .connect(server_name)
+            .build(&mut first_flight)
+            .unwrap();
+        (conn, first_flight)
+    }
+
+    fn client_hello_in(bytes: &[u8]) -> ClientHelloPayload {
+        let mut reader = Reader::new(bytes);
+        while reader.any_left() {
+            let record = Record::<Payload<'_>>::read(&mut reader)
+                .unwrap()
+                .into_owned();
+            if let Ok(Message {
+                payload:
+                    MessagePayload::Handshake {
+                        parsed: HandshakeMessagePayload(HandshakePayload::ClientHello(ch)),
+                        ..
+                    },
+                ..
+            }) = Message::try_from(&record)
+            {
+                return ch;
+            }
+        }
+        panic!("no ClientHello written");
+    }
+
+    fn psk_identity(hello: &ClientHelloPayload) -> &[u8] {
+        hello
+            .preshared_key_offer
+            .as_ref()
+            .unwrap()
+            .identities[0]
+            .identity
+            .bytes()
+    }
+
+    const TICKET: &[u8] = b"inner name resumption ticket";
 
     fn ech_state() -> EchState {
         let config = EchConfig {
