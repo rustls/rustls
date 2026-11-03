@@ -270,8 +270,6 @@ fn unspecified_err(e: aws_lc_rs::error::Unspecified) -> Error {
     Error::Other(OtherError::new(e))
 }
 
-const MAX_FRAGMENT_LEN: usize = 16384;
-
 #[cfg(test)]
 mod tests {
 

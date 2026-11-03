@@ -592,6 +592,9 @@ impl DecryptionState {
 
         let encrypted_len = encr.payload.len();
         match decrypter.decrypt(encr, self.read_seq) {
+            Ok(plaintext) if plaintext.payload.len() > MAX_FRAGMENT_LEN.get() => {
+                Err(Error::PeerSentOversizedRecord)
+            }
             Ok(plaintext) => {
                 self.read_seq += 1;
                 if !self.has_decrypted {
