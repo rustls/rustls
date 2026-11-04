@@ -1,15 +1,14 @@
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::mem;
 
-pub(crate) use client_hello::{FirstClientHello, TLS13_HANDLER, handle_retried_client_hello};
+pub(crate) use client_hello::TLS13_HANDLER;
 use pki_types::{DnsName, UnixTime};
 use subtle::ConstantTimeEq;
 use zeroize::Zeroizing;
 
 use super::config::ServerConfig;
-use super::hs::{HandshakeHashOrBuffer, ServerState};
+use super::hs::ServerState;
 use super::{
     CommonServerSessionValue, STATEFUL_SESSION_LIFETIME, ServerSessionKey, ServerSessionValue,
 };
@@ -33,7 +32,6 @@ use crate::msgs::{
     PresharedKeyIdentity, Reader, ServerTicketRequestHint, SizedPayload,
 };
 use crate::server::ServerSide;
-use crate::server::hs::ExpectClientHello;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::{
@@ -91,7 +89,7 @@ mod client_hello {
             kx_group: &'static dyn SupportedKxGroup,
             credentials: SelectedCredential,
             input: ClientHelloInput<'_>,
-            mut st: ExpectClientHello,
+            st: ExpectClientHello,
             output: &mut dyn Output<'_>,
         ) -> Result<ServerState, Error> {
             let randoms = st.randoms(&input)?;
@@ -125,12 +123,8 @@ mod client_hello {
                         .find(|compressor| offered.contains(&compressor.algorithm()))
                         .copied());
 
-            let extensions = Tls13Extensions::new(
-                input.client_hello,
-                mem::take(&mut st.extra_exts),
-                output,
-                &st.config,
-            )?;
+            let extensions =
+                Tls13Extensions::new(input.client_hello, st.extra_exts, output, &st.config)?;
 
             let first = FirstClientHello {
                 suite,
@@ -148,15 +142,36 @@ mod client_hello {
                     .is_some(),
             };
 
+            let transcript = st
+                .transcript
+                .start_hash(suite.common.hash_provider);
+            let context = ServerContext {
+                config: st.config,
+                protocol: st.protocol,
+                sni: st.sni,
+                resumption_data: st.resumption_data,
+            };
+
             let hello = RetryableClientHello::new(input)?;
-            continue_client_hello(first, hello, false, st, output)
+            continue_client_hello(first, hello, transcript, context, false, output)
         }
     }
 
     impl Sealed for Handler {}
 
+    /// Server state carried over from [`ExpectClientHello`] into the TLS 1.3 handshake.
+    struct ServerContext {
+        config: Arc<ServerConfig>,
+        protocol: Protocol,
+        sni: Option<DnsName<'static>>,
+        resumption_data: Vec<u8>,
+    }
+
     /// Everything the server decides from the first `ClientHello`.
-    pub(crate) struct FirstClientHello {
+    ///
+    /// If a HelloRetryRequest is sent, this is retained in [`ExpectRetriedClientHello`]
+    /// and the second `ClientHello` only contributes a [`RetryableClientHello`].
+    struct FirstClientHello {
         suite: &'static Tls13CipherSuite,
         kx_group: &'static dyn SupportedKxGroup,
         credential: SelectedCredential,
@@ -203,70 +218,87 @@ mod client_hello {
         }
     }
 
-    /// Handle a `ClientHello` sent in response to our HelloRetryRequest.
+    /// Awaiting the `ClientHello` sent in response to our HelloRetryRequest.
     ///
     /// Only the fields in [`RetryableClientHello`] are taken from it; everything
     /// else was decided from the first `ClientHello`.
-    pub(crate) fn handle_retried_client_hello(
+    pub(super) struct ExpectRetriedClientHello {
         first: FirstClientHello,
-        input: ClientHelloInput<'_>,
-        st: ExpectClientHello,
-        output: &mut dyn Output<'_>,
-    ) -> Result<ServerState, Error> {
-        if !input
-            .client_hello
-            .supported_versions
-            .is_some_and(|versions| versions.tls13)
-        {
-            return Err(PeerIncompatible::SupportedVersionsExtensionRequired.into());
+        context: ServerContext,
+        transcript: HandshakeHash,
+    }
+
+    impl State<ServerSide> for ExpectRetriedClientHello {
+        fn handle<'m>(
+            self: Box<Self>,
+            input: Input<'m>,
+            output: &mut dyn Output<'m>,
+        ) -> Result<ServerState, Error> {
+            let Self {
+                first,
+                context,
+                transcript,
+            } = *self;
+            let input = ClientHelloInput::from_input(&input)?;
+
+            if !input
+                .client_hello
+                .supported_versions
+                .is_some_and(|versions| versions.tls13)
+            {
+                return Err(PeerIncompatible::SupportedVersionsExtensionRequired.into());
+            }
+
+            let sni = input
+                .client_hello
+                .server_name
+                .as_ref()
+                .and_then(ServerNamePayload::to_dns_name_normalized);
+            if context.sni != sni {
+                return Err(PeerMisbehaved::ServerNameDifferedOnRetry.into());
+            }
+
+            // RFC 9846 section 4.2.4: the server must negotiate the same cipher suite it
+            // named in its HelloRetryRequest
+            if !input
+                .client_hello
+                .cipher_suites
+                .contains(&first.suite.common.suite)
+            {
+                return Err(PeerMisbehaved::CipherSuiteDifferedOnRetry.into());
+            }
+
+            let retry = RetryableClientHello::new(input)?;
+
+            // EarlyData extension is illegal in second ClientHello
+            if retry.early_data_requested {
+                return Err(PeerMisbehaved::EarlyDataAttemptedInSecondClientHello.into());
+            }
+
+            // RFC 9846 section 4.2.2 allows the second ClientHello to update a PreSharedKey
+            // offer (binders, incompatible PSKs), but not to withdraw it altogether
+            if first.offered_psk && retry.preshared_key_offer.is_none() {
+                return Err(PeerMisbehaved::MissingPskExtensionInSecondClientHello.into());
+            }
+
+            continue_client_hello(first, retry, transcript, context, true, output)
         }
+    }
 
-        let sni = input
-            .client_hello
-            .server_name
-            .as_ref()
-            .and_then(ServerNamePayload::to_dns_name_normalized);
-        if st.sni != sni {
-            return Err(PeerMisbehaved::ServerNameDifferedOnRetry.into());
+    impl From<Box<ExpectRetriedClientHello>> for ServerState {
+        fn from(value: Box<ExpectRetriedClientHello>) -> Self {
+            Self::Tls13(value)
         }
-
-        // RFC 9846 section 4.2.4: the server must negotiate the same cipher suite it
-        // named in its HelloRetryRequest
-        if !input
-            .client_hello
-            .cipher_suites
-            .contains(&first.suite.common.suite)
-        {
-            return Err(PeerMisbehaved::CipherSuiteDifferedOnRetry.into());
-        }
-
-        let hello = RetryableClientHello::new(input)?;
-
-        // EarlyData extension is illegal in second ClientHello
-        if hello.early_data_requested {
-            return Err(PeerMisbehaved::EarlyDataAttemptedInSecondClientHello.into());
-        }
-
-        // RFC 9846 section 4.2.2 allows the second ClientHello to update a PreSharedKey
-        // offer (binders, incompatible PSKs), but not to withdraw it altogether
-        if first.offered_psk && hello.preshared_key_offer.is_none() {
-            return Err(PeerMisbehaved::MissingPskExtensionInSecondClientHello.into());
-        }
-
-        continue_client_hello(first, hello, true, st, output)
     }
 
     fn continue_client_hello(
         first: FirstClientHello,
         hello: RetryableClientHello<'_>,
+        mut transcript: HandshakeHash,
+        cx: ServerContext,
         retried: bool,
-        mut st: ExpectClientHello,
         output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
-        let mut transcript = st
-            .transcript
-            .start(first.suite.common.hash_provider)?;
-
         // See if there is a KeyShare for the selected kx group.
         let chosen_share = hello
             .key_shares
@@ -289,18 +321,16 @@ mod client_hello {
                 output,
                 first.kx_group.name(),
             )?;
-            if !st.protocol.is_quic() {
+            if !cx.protocol.is_quic() {
                 emit_fake_ccs(output)?;
             }
 
-            let skip_early_data = max_early_data_size(st.config.max_early_data_size);
+            let skip_early_data = max_early_data_size(cx.config.max_early_data_size);
 
-            let next = Box::new(ExpectClientHello {
-                transcript: HandshakeHashOrBuffer::Hash(transcript),
-                session_id: SessionId::empty(),
-                using_ems: false,
-                previous_hello: Some(Box::new(first)),
-                ..st
+            let next = Box::new(ExpectRetriedClientHello {
+                first,
+                context: cx,
+                transcript,
             });
             return if hello.early_data_requested {
                 Ok(Box::new(ExpectAndSkipRejectedEarlyData {
@@ -313,7 +343,7 @@ mod client_hello {
             };
         };
 
-        let suite = match st.protocol {
+        let suite = match cx.protocol {
             Protocol::Tcp => Tls13ProtocolSuite::Tcp(first.suite),
             Protocol::Quic(_) => Tls13ProtocolSuite::Quic(quic::Suite {
                 inner: first.suite,
@@ -329,21 +359,22 @@ mod client_hello {
             first.psk_modes,
             hello.message,
             &transcript,
-            st.sni.as_ref(),
+            cx.sni.as_ref(),
             suite,
-            &st.config,
+            &cx.config,
         )?;
 
+        let send_tickets;
         if !first
             .psk_modes
             .map(|offer| offer.psk_dhe)
             .unwrap_or_default()
         {
             debug!("Client unwilling to resume, PSK_DHE_KE not offered");
-            st.send_tickets = 0;
+            send_tickets = 0;
             resuming = None;
         } else {
-            st.send_tickets = st
+            send_tickets = cx
                 .config
                 .send_tls13_tickets
                 .resolve(first.ticket_request.as_ref(), resuming.is_some());
@@ -370,9 +401,9 @@ mod client_hello {
             (chosen_share, first.kx_group),
             resuming.as_ref(),
             &hello.proof,
-            &st.config,
+            &cx.config,
         )?;
-        if !retried && !st.protocol.is_quic() {
+        if !retried && !cx.protocol.is_quic() {
             emit_fake_ccs(output)?;
         }
 
@@ -392,7 +423,7 @@ mod client_hello {
             early_exporter,
             first.extensions.common.alpn_protocol(),
             suite.suite(),
-            &st.config,
+            &cx.config,
         );
 
         let retryable = Tls13RetryableExtensions {
@@ -402,7 +433,7 @@ mod client_hello {
                 .ticket_request
                 .is_some()
                 .then(|| ServerTicketRequestHint {
-                    expected_count: Ord::min(st.send_tickets, u8::MAX as usize) as u8,
+                    expected_count: Ord::min(send_tickets, u8::MAX as usize) as u8,
                 }),
         };
 
@@ -430,12 +461,12 @@ mod client_hello {
         );
 
         let doing_client_auth = if full_handshake {
-            let client_auth = emit_certificate_req_tls13(&mut flight, &st.config)?;
+            let client_auth = emit_certificate_req_tls13(&mut flight, &cx.config)?;
 
             if let Some(compressor) = first.cert_compressor {
                 emit_compressed_certificate_tls13(
                     &mut flight,
-                    &st.config,
+                    &cx.config,
                     &credentials,
                     ocsp_response,
                     compressor,
@@ -467,7 +498,7 @@ mod client_hello {
                     "Client requested early_data, but not accepted: switching to handshake keys with trial decryption"
                 );
                 key_schedule.set_handshake_decrypter(
-                    Some(max_early_data_size(st.config.max_early_data_size)),
+                    Some(max_early_data_size(cx.config.max_early_data_size)),
                     output.receive(),
                     &hello.proof,
                 );
@@ -487,11 +518,11 @@ mod client_hello {
             &first.randoms,
             output,
             key_schedule,
-            &st.config,
+            &cx.config,
             &hello.proof,
         )?;
 
-        if !doing_client_auth && st.config.send_half_rtt_data {
+        if !doing_client_auth && cx.config.send_half_rtt_data {
             // Application data can be sent immediately after Finished, in one
             // flight.  However, if client auth is enabled, we don't want to send
             // application data to an unauthenticated peer.
@@ -499,13 +530,13 @@ mod client_hello {
         }
 
         let hs = HandshakeState {
-            config: st.config,
+            config: cx.config,
             transcript,
             suite: suite.suite(),
             alpn_protocol,
-            sni: st.sni,
-            resumption_data: st.resumption_data,
-            send_tickets: st.send_tickets,
+            sni: cx.sni,
+            resumption_data: cx.resumption_data,
+            send_tickets,
         };
 
         if doing_client_auth {
@@ -524,7 +555,7 @@ mod client_hello {
                 })
                 .into())
             }
-        } else if let (Some(max_length), false) = (early_data_max_length, st.protocol.is_quic()) {
+        } else if let (Some(max_length), false) = (early_data_max_length, cx.protocol.is_quic()) {
             // Not used for QUIC: RFC 9001 §8.3: Clients MUST NOT send the EndOfEarlyData
             // message. A server MUST treat receipt of a CRYPTO frame in a 0-RTT packet as a
             // connection error of type PROTOCOL_VIOLATION.
@@ -1009,14 +1040,14 @@ mod client_hello {
 
 struct ExpectAndSkipRejectedEarlyData {
     skip_data_left: usize,
-    next: Box<ExpectClientHello>,
+    next: Box<client_hello::ExpectRetriedClientHello>,
 }
 
 impl State<ServerSide> for ExpectAndSkipRejectedEarlyData {
-    fn handle(
+    fn handle<'m>(
         mut self: Box<Self>,
-        input: Input<'_>,
-        output: &mut dyn Output<'_>,
+        input: Input<'m>,
+        output: &mut dyn Output<'m>,
     ) -> Result<ServerState, Error> {
         /* "The server then ignores early data by skipping all records with an external
          *  content type of "application_data" (indicating that they are encrypted),

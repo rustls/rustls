@@ -7,18 +7,16 @@ use core::fmt;
 use pki_types::DnsName;
 
 use super::config::{CipherSuiteSelector, OfferedKxGroup, VersionSuiteSelector};
-use super::tls13::{FirstClientHello, handle_retried_client_hello};
 use super::{ClientHello, ServerConfig};
 use crate::SupportedCipherSuite;
 use crate::common_state::{Event, Output, OutputEvent, Protocol};
 use crate::conn::{ConnectionRandoms, Input, State, VerifySidePeerIdentity};
 use crate::crypto::cipher::Payload;
-use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme};
 use crate::enums::{ApplicationProtocol, CertificateType, HandshakeType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
-use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
+use crate::hash_hs::HandshakeHashBuffer;
 use crate::kernel::KernelState;
 use crate::msgs::{
     ClientHelloPayload, Compression, EncryptedExtensions, HandshakeAlignedProof,
@@ -553,13 +551,11 @@ pub(crate) struct ExpectClientHello {
     pub(super) config: Arc<ServerConfig>,
     pub(super) protocol: Protocol,
     pub(super) extra_exts: ServerExtensionsInput,
-    pub(super) transcript: HandshakeHashOrBuffer,
+    pub(super) transcript: HandshakeHashBuffer,
     pub(super) session_id: SessionId,
     pub(super) sni: Option<DnsName<'static>>,
     pub(super) resumption_data: Vec<u8>,
     pub(super) using_ems: bool,
-    pub(super) previous_hello: Option<Box<FirstClientHello>>,
-    pub(super) send_tickets: usize,
 }
 
 impl ExpectClientHello {
@@ -579,13 +575,11 @@ impl ExpectClientHello {
             config,
             protocol,
             extra_exts,
-            transcript: HandshakeHashOrBuffer::Buffer(transcript_buffer),
+            transcript: transcript_buffer,
             session_id: SessionId::empty(),
             sni: None,
             resumption_data,
             using_ems: false,
-            previous_hello: None,
-            send_tickets: 0,
         }
     }
 
@@ -827,15 +821,11 @@ impl ExpectClientHello {
 
 impl ExpectClientHello {
     pub(crate) fn handle<'m>(
-        mut self,
+        self,
         input: Input<'m>,
         output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
-        let input = ClientHelloInput::from_input(&input)?;
-        match self.previous_hello.take() {
-            Some(retry) => handle_retried_client_hello(*retry, input, self, output),
-            None => self.with_input(input, output),
-        }
+        self.with_input(ClientHelloInput::from_input(&input)?, output)
     }
 
     fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
@@ -906,20 +896,5 @@ impl<'a> ClientHelloInput<'a> {
             sig_schemes,
             proof,
         })
-    }
-}
-
-pub(crate) enum HandshakeHashOrBuffer {
-    Buffer(HandshakeHashBuffer),
-    Hash(HandshakeHash),
-}
-
-impl HandshakeHashOrBuffer {
-    pub(super) fn start(self, hash: &'static dyn Hash) -> Result<HandshakeHash, Error> {
-        match self {
-            Self::Buffer(inner) => Ok(inner.start_hash(hash)),
-            Self::Hash(inner) if inner.algorithm() == hash.algorithm() => Ok(inner),
-            _ => Err(PeerMisbehaved::HandshakeHashVariedAfterRetry.into()),
-        }
     }
 }
