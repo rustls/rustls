@@ -286,22 +286,23 @@ impl<'a> ExtensionProcessing<'a> {
 
         // ALPN
         let our_protocols = &config.alpn_protocols;
-        let chosen_protocol = if let Some(their_protocols) = &hello.protocols {
-            if let Some(selected_protocol) = our_protocols.iter().find(|ours| {
-                their_protocols
+        let chosen_protocol = match (&hello.protocols, our_protocols.as_slice()) {
+            (Some(their_protocols), [_, ..]) => {
+                let selected_protocol = our_protocols
                     .iter()
-                    .any(|theirs| theirs.as_ref() == ours.as_ref())
-            }) {
+                    .find(|ours| {
+                        their_protocols
+                            .iter()
+                            .any(|theirs| theirs.as_ref() == ours.as_ref())
+                    })
+                    .ok_or(Error::NoApplicationProtocol)?;
                 debug!("Chosen ALPN protocol {selected_protocol:?}");
 
                 AlpnDecision::Selected(SingleProtocolName::new(selected_protocol.to_owned()))
-            } else if !our_protocols.is_empty() {
-                return Err(Error::NoApplicationProtocol);
-            } else {
-                AlpnDecision::NoServerOffer
             }
-        } else {
-            AlpnDecision::NoClientOffer
+            (None, []) => AlpnDecision::Disabled,
+            (_, []) => AlpnDecision::NoServerOffer,
+            (None, _) => AlpnDecision::NoClientOffer,
         };
 
         // Enact ALPN selection by telling peer and high-level API.
@@ -311,16 +312,12 @@ impl<'a> ExtensionProcessing<'a> {
         }
 
         if let Some(quic) = output.quic() {
-            // QUIC has strict ALPN, unlike TLS's more backwards-compatible behavior. RFC 9001
-            // says: "The server MUST treat the inability to select a compatible application
-            // protocol as a connection error of type 0x0178". We judge that ALPN was desired
-            // (rather than some out-of-band protocol negotiation mechanism) if and only if any ALPN
-            // protocols were configured locally or offered by the client. This helps prevent
-            // successful establishment of connections between peers that can't understand
-            // each other.
-            if !matches!(chosen_protocol, AlpnDecision::Selected(_))
-                && (!our_protocols.is_empty() || hello.protocols.is_some())
-            {
+            // RFC9001: "When using ALPN, endpoints MUST immediately close a connection
+            // (...) if an application protocol is not negotiated."
+            if !matches!(
+                chosen_protocol,
+                AlpnDecision::Selected(_) | AlpnDecision::Disabled
+            ) {
                 return Err(Error::NoApplicationProtocol);
             }
 
@@ -369,6 +366,7 @@ struct CommonExtensions {
 }
 
 enum AlpnDecision {
+    Disabled,
     Selected(SingleProtocolName),
     NoServerOffer,
     NoClientOffer,
