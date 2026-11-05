@@ -132,8 +132,8 @@ impl Tls12Extensions {
         config: &ServerConfig,
     ) -> Result<(Self, Box<ServerExtensions<'static>>), Error> {
         let ep = ExtensionProcessing::new(hello, config);
-        let (alpn_protocol, common) =
-            ep.process_common(extra_exts, output, ocsp_response, resumedata)?;
+        let common = ep.process_common(extra_exts, output, ocsp_response, resumedata)?;
+        let alpn_protocol = common.alpn_protocol();
 
         let mut extensions = Box::new(ServerExtensions {
             server_name_ack: common.server_name_ack,
@@ -208,8 +208,7 @@ impl Tls13Extensions {
         config: &ServerConfig,
     ) -> Result<(Self, Box<EncryptedExtensions<'static>>), Error> {
         let ep = ExtensionProcessing::new(hello, config);
-        let (alpn_protocol, common) =
-            ep.process_common(extra_exts, output, ocsp_response, resumedata)?;
+        let common = ep.process_common(extra_exts, output, ocsp_response, resumedata)?;
 
         if let Some(quic) = output.quic() {
             // RFC9001: "When using ALPN, endpoints MUST immediately close a connection
@@ -228,6 +227,8 @@ impl Tls13Extensions {
                 }
             }
         }
+
+        let alpn_protocol = common.alpn_protocol();
 
         let mut extensions = Box::new(EncryptedExtensions {
             server_name_ack: common.server_name_ack,
@@ -291,7 +292,7 @@ impl<'a> ExtensionProcessing<'a> {
         output: &mut dyn Output<'_>,
         ocsp_response: &mut Option<&[u8]>,
         resumedata: Option<&CommonServerSessionValue<'_>>,
-    ) -> Result<(Option<ApplicationProtocol<'static>>, CommonExtensions), Error> {
+    ) -> Result<CommonExtensions, Error> {
         let Self { config, hello } = self;
         let mut extensions = CommonExtensions::default();
 
@@ -345,12 +346,7 @@ impl<'a> ExtensionProcessing<'a> {
             ocsp_response.take();
         }
 
-        let alpn_protocol = match &extensions.selected_protocol {
-            AlpnDecision::Selected(protocol) => Some(protocol.as_ref().clone()),
-            _ => None,
-        };
-
-        Ok((alpn_protocol, extensions))
+        Ok(extensions)
     }
 }
 
@@ -363,6 +359,15 @@ struct CommonExtensions {
     server_name_ack: Option<()>,
     selected_protocol: AlpnDecision,
     transport_parameters: Option<Payload<'static>>,
+}
+
+impl CommonExtensions {
+    fn alpn_protocol(&self) -> Option<ApplicationProtocol<'static>> {
+        match &self.selected_protocol {
+            AlpnDecision::Selected(p) => Some(p.as_ref().clone()),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Default)]
