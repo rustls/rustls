@@ -137,7 +137,7 @@ impl Tls12Extensions {
 
         let mut extensions = Box::new(ServerExtensions {
             server_name_ack: common.server_name_ack,
-            selected_protocol: common.selected_protocol,
+            selected_protocol: common.selected_protocol.into(),
             transport_parameters: common.transport_parameters,
             ..ServerExtensions::default()
         });
@@ -211,9 +211,27 @@ impl Tls13Extensions {
         let (alpn_protocol, common) =
             ep.process_common(extra_exts, output, ocsp_response, resumedata)?;
 
+        if let Some(quic) = output.quic() {
+            // RFC9001: "When using ALPN, endpoints MUST immediately close a connection
+            // (...) if an application protocol is not negotiated."
+            if !matches!(
+                common.selected_protocol,
+                AlpnDecision::Selected(_) | AlpnDecision::Disabled
+            ) {
+                return Err(Error::NoApplicationProtocol);
+            }
+
+            match hello.transport_parameters.as_ref() {
+                Some(params) => quic.transport_parameters(params.to_owned().into_vec()),
+                None => {
+                    return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
+                }
+            }
+        }
+
         let mut extensions = Box::new(EncryptedExtensions {
             server_name_ack: common.server_name_ack,
-            selected_protocol: common.selected_protocol,
+            selected_protocol: common.selected_protocol.into(),
             transport_parameters: common.transport_parameters,
             ..EncryptedExtensions::default()
         });
@@ -305,29 +323,11 @@ impl<'a> ExtensionProcessing<'a> {
             (None, _) => AlpnDecision::NoClientOffer,
         };
 
-        // Enact ALPN selection by telling peer and high-level API.
+        // Enact ALPN selection by telling high-level API.
         if let AlpnDecision::Selected(protocol) = &chosen_protocol {
-            extensions.selected_protocol = Some(protocol.clone());
             output.output(OutputEvent::ApplicationProtocol(protocol.as_ref().clone()));
         }
-
-        if let Some(quic) = output.quic() {
-            // RFC9001: "When using ALPN, endpoints MUST immediately close a connection
-            // (...) if an application protocol is not negotiated."
-            if !matches!(
-                chosen_protocol,
-                AlpnDecision::Selected(_) | AlpnDecision::Disabled
-            ) {
-                return Err(Error::NoApplicationProtocol);
-            }
-
-            match hello.transport_parameters.as_ref() {
-                Some(params) => quic.transport_parameters(params.to_owned().into_vec()),
-                None => {
-                    return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
-                }
-            }
-        }
+        extensions.selected_protocol = chosen_protocol;
 
         let for_resume = resumedata.is_some();
         // SNI
@@ -345,7 +345,7 @@ impl<'a> ExtensionProcessing<'a> {
             ocsp_response.take();
         }
 
-        let alpn_protocol = match chosen_protocol {
+        let alpn_protocol = match &extensions.selected_protocol {
             AlpnDecision::Selected(protocol) => Some(protocol.as_ref().clone()),
             _ => None,
         };
@@ -361,15 +361,26 @@ impl<'a> ExtensionProcessing<'a> {
 #[derive(Default)]
 struct CommonExtensions {
     server_name_ack: Option<()>,
-    selected_protocol: Option<SingleProtocolName>,
+    selected_protocol: AlpnDecision,
     transport_parameters: Option<Payload<'static>>,
 }
 
+#[derive(Default)]
 enum AlpnDecision {
+    #[default]
     Disabled,
     Selected(SingleProtocolName),
     NoServerOffer,
     NoClientOffer,
+}
+
+impl From<AlpnDecision> for Option<SingleProtocolName> {
+    fn from(value: AlpnDecision) -> Self {
+        match value {
+            AlpnDecision::Selected(protocol) => Some(protocol),
+            _ => None,
+        }
+    }
 }
 
 fn select_cert_type(
