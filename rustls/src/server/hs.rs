@@ -294,20 +294,20 @@ impl<'a> ExtensionProcessing<'a> {
             }) {
                 debug!("Chosen ALPN protocol {selected_protocol:?}");
 
-                Some(selected_protocol)
+                AlpnDecision::Selected(SingleProtocolName::new(selected_protocol.to_owned()))
             } else if !our_protocols.is_empty() {
                 return Err(Error::NoApplicationProtocol);
             } else {
-                None
+                AlpnDecision::NoServerOffer
             }
         } else {
-            None
+            AlpnDecision::NoClientOffer
         };
 
         // Enact ALPN selection by telling peer and high-level API.
-        if let Some(protocol) = &chosen_protocol {
-            extensions.selected_protocol = Some(SingleProtocolName::new((*protocol).to_owned()));
-            output.output(OutputEvent::ApplicationProtocol((*protocol).to_owned()));
+        if let AlpnDecision::Selected(protocol) = &chosen_protocol {
+            extensions.selected_protocol = Some(protocol.clone());
+            output.output(OutputEvent::ApplicationProtocol(protocol.as_ref().clone()));
         }
 
         if let Some(quic) = output.quic() {
@@ -318,7 +318,8 @@ impl<'a> ExtensionProcessing<'a> {
             // protocols were configured locally or offered by the client. This helps prevent
             // successful establishment of connections between peers that can't understand
             // each other.
-            if chosen_protocol.is_none() && (!our_protocols.is_empty() || hello.protocols.is_some())
+            if !matches!(chosen_protocol, AlpnDecision::Selected(_))
+                && (!our_protocols.is_empty() || hello.protocols.is_some())
             {
                 return Err(Error::NoApplicationProtocol);
             }
@@ -347,7 +348,12 @@ impl<'a> ExtensionProcessing<'a> {
             ocsp_response.take();
         }
 
-        Ok((chosen_protocol.map(|p| p.to_owned()), extensions))
+        let alpn_protocol = match chosen_protocol {
+            AlpnDecision::Selected(protocol) => Some(protocol.as_ref().clone()),
+            _ => None,
+        };
+
+        Ok((alpn_protocol, extensions))
     }
 }
 
@@ -360,6 +366,12 @@ struct CommonExtensions {
     server_name_ack: Option<()>,
     selected_protocol: Option<SingleProtocolName>,
     transport_parameters: Option<Payload<'static>>,
+}
+
+enum AlpnDecision {
+    Selected(SingleProtocolName),
+    NoServerOffer,
+    NoClientOffer,
 }
 
 fn select_cert_type(
