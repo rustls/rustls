@@ -239,6 +239,44 @@ fn test_server_rejects_non_empty_renegotiation_info_in_initial_handshake() {
 }
 
 #[test]
+fn server_rejects_oversized_plaintext_record() {
+    let config = ServerConfig::builder(TEST_PROVIDER.into())
+        .with_no_client_auth()
+        .with_single_cert(server_identity(), server_key())
+        .unwrap();
+    let mut conn = Connection::new(config.into()).unwrap();
+    let mut input = VecInput::default();
+
+    // pad the ClientHello with a key share for an unknown group, so that
+    // the whole message is sent in one unprotected record over 2^14 bytes
+    let mut ch = minimal_client_hello();
+    ch.extensions
+        .key_shares
+        .as_mut()
+        .unwrap()
+        .push(KeyShareEntry {
+            group: NamedGroup::from(0xfe01),
+            payload: vec![0; 16_384].into(),
+        });
+    let ch = Message {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
+            ch,
+        ))),
+    };
+    let bytes = ch.into_wire_bytes();
+    let mut rd = bytes.as_slice();
+    while !rd.is_empty() {
+        input.read(&mut rd).unwrap();
+    }
+
+    assert_eq!(
+        process(&mut input, &mut conn).unwrap_err(),
+        Error::PeerSentOversizedRecord
+    );
+}
+
+#[test]
 fn server_picks_ffdhe_group_when_clienthello_has_no_ffdhe_group_in_groups_ext() {
     let config = ServerConfig::builder(Arc::new(CryptoProvider {
         tls13_cipher_suites: Cow::default(),

@@ -19,7 +19,7 @@ use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::msgs::{
     AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, Delocator,
-    HandshakeAlignedProof, Locator, Message, MessagePayload,
+    HandshakeAlignedProof, Locator, MAX_FRAGMENT_LEN, Message, MessagePayload,
 };
 use crate::quic::QuicOutput;
 use crate::tracing::{trace, warn};
@@ -566,6 +566,14 @@ impl DecryptionState {
         encr: Record<InboundOpaque<'a>>,
     ) -> Result<Option<Decrypted<'a>>, Error> {
         let Some(decrypter) = &mut self.record_decrypter else {
+            // Plaintext is limited to 2^14 bytes (RFC 9846 section 5.1). Unprotected
+            // application_data here is rejected early data skipped after an HRR (ciphertext).
+            if encr.typ != ContentType::ApplicationData
+                && encr.payload.len() > MAX_FRAGMENT_LEN.get()
+            {
+                return Err(Error::PeerSentOversizedRecord);
+            }
+
             return Ok(Some(Decrypted {
                 want_close_before_decrypt: false,
                 plaintext: encr.into_plain_record(),
@@ -584,6 +592,9 @@ impl DecryptionState {
 
         let encrypted_len = encr.payload.len();
         match decrypter.decrypt(encr, self.read_seq) {
+            Ok(plaintext) if plaintext.payload.len() > MAX_FRAGMENT_LEN.get() => {
+                Err(Error::PeerSentOversizedRecord)
+            }
             Ok(plaintext) => {
                 self.read_seq += 1;
                 if !self.has_decrypted {

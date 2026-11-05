@@ -17,8 +17,6 @@ use rustls::version::TLS12_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls12CipherSuite};
 use zeroize::Zeroizing;
 
-use crate::MAX_FRAGMENT_LEN;
-
 /// The TLS1.2 cipher suite configuration that an application should use by default.
 ///
 /// This will be [`ALL_TLS12_CIPHER_SUITES`] sans any supported cipher suites that
@@ -315,10 +313,6 @@ impl RecordDecrypter for GcmRecordDecrypter {
             .map_err(|_| Error::DecryptError)?
             .len();
 
-        if plain_len > MAX_FRAGMENT_LEN {
-            return Err(Error::PeerSentOversizedRecord);
-        }
-
         Ok(record
             .into_plain_record_range(GCM_EXPLICIT_NONCE_LEN..GCM_EXPLICIT_NONCE_LEN + plain_len))
     }
@@ -424,10 +418,6 @@ impl RecordDecrypter for ChaCha20Poly1305RecordDecrypter {
             .open_in_place(nonce, aad, payload)
             .map_err(|_| Error::DecryptError)?
             .len();
-
-        if plain_len > MAX_FRAGMENT_LEN {
-            return Err(Error::PeerSentOversizedRecord);
-        }
 
         payload.truncate(plain_len);
         Ok(record.into_plain_record())
