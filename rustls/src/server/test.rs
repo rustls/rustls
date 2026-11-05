@@ -24,7 +24,7 @@ use crate::crypto::{
     CertificateIdentity, CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme,
     SingleCredential, TEST_PROVIDER, TLS13_TEST_SUITE, tls12, tls12_only,
 };
-use crate::enums::{CertificateType, ProtocolVersion};
+use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::{
     ClientExtensions, ClientHelloPayload, Codec, Compression, HEADER_SIZE, HandshakeMessagePayload,
@@ -441,6 +441,44 @@ fn second_client_hello_cannot_change_cipher_suite() {
         process(&mut input, &mut conn).unwrap_err(),
         PeerMisbehaved::CipherSuiteDifferedOnRetry.into(),
     );
+}
+
+/// RFC 9846 section 4.2.2 does not allow the second `ClientHello` to change its ALPN
+/// offer, so the server negotiates ALPN from the first `ClientHello` and ignores the second.
+#[test]
+fn second_client_hello_cannot_change_alpn() {
+    let mut config = ServerConfig::builder(TEST_PROVIDER.clone().into())
+        .with_no_client_auth()
+        .with_single_cert(server_identity(), server_key())
+        .unwrap();
+    config.alpn_protocols = vec![ApplicationProtocol::from(b"h2".to_vec())];
+    let mut conn = Connection::new(config.into()).unwrap();
+    let mut input = VecInput::default();
+
+    let encode = |hello| {
+        Message {
+            version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ClientHello(hello),
+            )),
+        }
+        .into_wire_bytes()
+    };
+
+    let mut first = minimal_client_hello();
+    first.extensions.protocols = Some(vec![ApplicationProtocol::from(b"h2".to_vec())]);
+    first.extensions.key_shares = Some(vec![]);
+    input
+        .read(&mut encode(first).as_slice())
+        .unwrap();
+    process(&mut input, &mut conn).unwrap();
+
+    let mut second = minimal_client_hello();
+    second.extensions.protocols = Some(vec![ApplicationProtocol::from(b"http/1.1".to_vec())]);
+    input
+        .read(&mut encode(second).as_slice())
+        .unwrap();
+    process(&mut input, &mut conn).unwrap();
 }
 
 #[test]
