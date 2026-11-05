@@ -94,22 +94,6 @@ mod client_hello {
         ) -> Result<ServerState, Error> {
             let randoms = st.randoms(&input)?;
 
-            if input
-                .client_hello
-                .compression_methods
-                .len()
-                != 1
-            {
-                return Err(PeerMisbehaved::OfferedIncorrectCompressions.into());
-            }
-
-            if input
-                .client_hello
-                .has_certificate_compression_extension_with_duplicates()
-            {
-                return Err(PeerMisbehaved::OfferedDuplicateCertificateCompressions.into());
-            }
-
             let cert_compressor = input
                 .client_hello
                 .certificate_compression_algorithms
@@ -198,6 +182,14 @@ mod client_hello {
     impl<'a> RetryableClientHello<'a> {
         fn new(input: ClientHelloInput<'a>) -> Result<Self, Error> {
             let hello = input.client_hello;
+
+            if hello.compression_methods.len() != 1 {
+                return Err(PeerMisbehaved::OfferedIncorrectCompressions.into());
+            }
+
+            if hello.has_certificate_compression_extension_with_duplicates() {
+                return Err(PeerMisbehaved::OfferedDuplicateCertificateCompressions.into());
+            }
 
             let key_shares = hello
                 .key_shares
