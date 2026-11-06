@@ -8,7 +8,9 @@ use core::time::Duration;
 use std::fmt;
 use std::sync::Arc;
 
-use rustls::client::{ClientCredentialResolver, CredentialRequest, Resumption, TicketRequest};
+use rustls::client::{
+    ClientCredentialResolver, CredentialRequest, Resumption, TicketRequest, Tls12Resumption,
+};
 use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{CertificateIdentity, Identity, SelectedCredential, TicketProducer};
 use rustls::enums::{CertificateType, ProtocolVersion};
@@ -101,6 +103,27 @@ impl ClientCredentialResolver for ForwardingResolver {
 
     fn hash_config(&self, h: &mut dyn Hasher) {
         self.0.hash_config(h)
+    }
+}
+
+#[test]
+fn tls12_resumption_disabled() {
+    for (provider, second) in [
+        (provider::DEFAULT_TLS12_PROVIDER, HandshakeKind::Full),
+        (provider::DEFAULT_TLS13_PROVIDER, HandshakeKind::Resumed),
+    ] {
+        let mut client_config = make_client_config(KeyType::default(), &provider);
+        client_config.resumption =
+            Resumption::default().tls12_resumption(Tls12Resumption::Disabled);
+        let client_config = Arc::new(client_config);
+        let server_config = Arc::new(make_server_config(KeyType::default(), &provider));
+        for expected in [HandshakeKind::Full, second] {
+            let (mut client, mut server, mut buf) =
+                make_pair_for_arc_configs(&client_config, &server_config);
+            buf.handshake(&mut client, &mut server);
+            assert_eq!(client.handshake_kind(), Some(expected));
+            assert_eq!(server.handshake_kind(), Some(expected));
+        }
     }
 }
 
