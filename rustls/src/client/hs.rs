@@ -1132,6 +1132,9 @@ impl ClientSessionValue {
             .take_tls13_ticket(key)
             .map(ClientSessionValue::Tls13)
             .or_else(|| {
+                if config.resumption.tls12_resumption == Tls12Resumption::Disabled {
+                    return None;
+                }
                 config
                     .resumption
                     .store
