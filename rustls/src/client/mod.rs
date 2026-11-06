@@ -37,7 +37,8 @@ mod connection;
 pub use connection::{ClientConnectionBuilder, ClientHandshake, ClientSide, WriteEarlyData};
 
 mod ech;
-pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
+use ech::EchMode;
+pub use ech::EchStatus;
 
 mod handy;
 #[cfg(feature = "std")]
@@ -428,10 +429,15 @@ struct ClientHelloDetails {
     offered_cert_compression: bool,
     offered_cipher_suites: Vec<CipherSuite>,
     offered_key_shares: Vec<NamedGroup>,
+    ech_mode: Option<EchMode>,
 }
 
 impl ClientHelloDetails {
-    fn new(alpn_protocols: Vec<ApplicationProtocol<'static>>, extension_order_seed: u16) -> Self {
+    fn new(
+        alpn_protocols: Vec<ApplicationProtocol<'static>>,
+        extension_order_seed: u16,
+        ech_mode: Option<EchMode>,
+    ) -> Self {
         Self {
             alpn_protocols,
             sent_extensions: Vec::new(),
@@ -439,6 +445,7 @@ impl ClientHelloDetails {
             offered_cert_compression: false,
             offered_cipher_suites: Vec::new(),
             offered_key_shares: Vec::new(),
+            ech_mode,
         }
     }
 
