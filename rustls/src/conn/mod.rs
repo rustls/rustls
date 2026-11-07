@@ -458,7 +458,7 @@ impl<'a, 'm> MessageHandler<'a, 'm, ServerSide> {
     /// [`next_payload()`][MessageHandler::next_payload] and
     /// [`handle_all()`][MessageHandler::handle_all], so it can be ignored here.
     ///
-    /// [RFC 8446 appendix E.5]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5
+    /// [RFC 8446 appendix E.5]: https://www.rfc-editor.org/info/rfc8446#appendix-E.5
     pub fn next_early_data(&mut self) -> Option<Result<Payload<'_>, Error>> {
         if self.done {
             return None;
@@ -597,7 +597,7 @@ impl KeyingMaterialExporter {
     /// This function is not meaningful if `output.len()` is zero and will
     /// return an error in that case.
     ///
-    /// [RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
+    /// [RFC 5705]: https://www.rfc-editor.org/info/rfc5705
     pub fn derive<T: AsMut<[u8]>>(
         &self,
         label: &[u8],
@@ -623,7 +623,7 @@ impl fmt::Debug for KeyingMaterialExporter {
 
 /// This trait is for any object that can export keying material.
 ///
-/// The terminology comes from [RFC 5705](https://datatracker.ietf.org/doc/html/rfc5705)
+/// The terminology comes from [RFC 5705](https://www.rfc-editor.org/info/rfc5705)
 /// but doesn't really involve "exporting" key material (in the usual meaning of "export"
 /// -- of moving an artifact from one domain to another) but is best thought of as key
 /// diversification using an existing secret.  That secret is implicit in this interface,

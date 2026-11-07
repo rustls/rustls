@@ -10,4 +10,4 @@ This function will error:
   [`CommonState::is_handshaking`][crate::CommonState::is_handshaking] first).
 - if called more than once per connection.
 
-[RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
+[RFC 5705]: https://www.rfc-editor.org/info/rfc5705

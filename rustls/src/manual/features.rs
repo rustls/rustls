@@ -34,7 +34,7 @@ and are dependent on the provider used.
 * [RFC 8879](https://www.rfc-editor.org/info/rfc8879) certificate compression by clients
   and servers `*`
 * Client-side Encrypted client hello (ECH)
-   ([RFC 9849](https://datatracker.ietf.org/doc/html/rfc9849)).
+   ([RFC 9849](https://www.rfc-editor.org/info/rfc9849)).
 
 [^1]: Note that, at the time of writing, Ed25519 does not have wide support
       in browsers.  It is also not supported by the WebPKI, because the

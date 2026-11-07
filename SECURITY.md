@@ -132,7 +132,7 @@ Mitigations:
   cryptography implementations).
 - We have [studied and explained](https://rustls.dev/docs/rustls/manual/_01_impl_vulnerabilities/index.html#a-review-of-tls-implementation-vulnerabilities)
   issues encountered in other TLS implementations and discuss further mitigations there.
-- We implement the TLS 1.3 downgrade sentinel (a [standard and required protocol feature](https://datatracker.ietf.org/doc/html/rfc9846#section-4.2.3-8)
+- We implement the TLS 1.3 downgrade sentinel (a [standard and required protocol feature](https://www.rfc-editor.org/info/rfc9846#section-4.2.3-8)
   which limits downgrade from TLS 1.3).
 
 ### Boundary: cryptography provider

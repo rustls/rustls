@@ -1,5 +1,5 @@
 //! This module contains parameters for FFDHE named groups as defined
-//! in [RFC 7919 Appendix A](https://datatracker.ietf.org/doc/html/rfc7919#appendix-A).
+//! in [RFC 7919 Appendix A](https://www.rfc-editor.org/info/rfc7919#appendix-A).
 
 /// Parameters of an FFDHE group, with Big-endian byte order
 #[expect(missing_docs, clippy::exhaustive_structs)]
@@ -30,7 +30,7 @@ impl<'a> FfdheGroup<'a> {
 
 /// FFDHE2048 group defined in [RFC 7919 Appendix A.1]
 ///
-/// [RFC 7919 Appendix A.1]: https://datatracker.ietf.org/doc/html/rfc7919#appendix-A.1
+/// [RFC 7919 Appendix A.1]: https://www.rfc-editor.org/info/rfc7919#appendix-A.1
 pub const FFDHE2048: FfdheGroup<'static> = FfdheGroup {
     p: &[
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xad, 0xf8, 0x54, 0x58, 0xa2, 0xbb, 0x4a,
@@ -57,7 +57,7 @@ pub const FFDHE2048: FfdheGroup<'static> = FfdheGroup {
 
 /// FFDHE3072 group defined in [RFC 7919 Appendix A.2]
 ///
-/// [RFC 7919 Appendix A.2]: https://datatracker.ietf.org/doc/html/rfc7919#appendix-A.2
+/// [RFC 7919 Appendix A.2]: https://www.rfc-editor.org/info/rfc7919#appendix-A.2
 pub const FFDHE3072: FfdheGroup<'static> = FfdheGroup {
     p: &[
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xad, 0xf8, 0x54, 0x58, 0xa2, 0xbb, 0x4a,
@@ -92,7 +92,7 @@ pub const FFDHE3072: FfdheGroup<'static> = FfdheGroup {
 
 /// FFDHE4096 group defined in [RFC 7919 Appendix A.3]
 ///
-/// [RFC 7919 Appendix A.3]: https://datatracker.ietf.org/doc/html/rfc7919#appendix-A.3
+/// [RFC 7919 Appendix A.3]: https://www.rfc-editor.org/info/rfc7919#appendix-A.3
 pub const FFDHE4096: FfdheGroup<'static> = FfdheGroup {
     p: &[
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xad, 0xf8, 0x54, 0x58, 0xa2, 0xbb, 0x4a,
@@ -136,7 +136,7 @@ pub const FFDHE4096: FfdheGroup<'static> = FfdheGroup {
 
 /// FFDHE6144 group defined in [RFC 7919 Appendix A.4]
 ///
-/// [RFC 7919 Appendix A.4]: https://datatracker.ietf.org/doc/html/rfc7919#appendix-A.4
+/// [RFC 7919 Appendix A.4]: https://www.rfc-editor.org/info/rfc7919#appendix-A.4
 pub const FFDHE6144: FfdheGroup<'static> = FfdheGroup {
     p: &[
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xad, 0xf8, 0x54, 0x58, 0xa2, 0xbb, 0x4a,
@@ -197,7 +197,7 @@ pub const FFDHE6144: FfdheGroup<'static> = FfdheGroup {
 
 /// FFDHE8192 group defined in [RFC 7919 Appendix A.5]
 ///
-/// [RFC 7919 Appendix A.5]: https://datatracker.ietf.org/doc/html/rfc7919#appendix-A.5
+/// [RFC 7919 Appendix A.5]: https://www.rfc-editor.org/info/rfc7919#appendix-A.5
 pub const FFDHE8192: FfdheGroup<'static> = FfdheGroup {
     p: &[
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xad, 0xf8, 0x54, 0x58, 0xa2, 0xbb, 0x4a,

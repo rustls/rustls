@@ -905,46 +905,46 @@ enum_builder! {
 
         /// The server is unable to obtain certificate sent as an URL by the client.
         ///
-        /// <https://datatracker.ietf.org/doc/html/rfc6066>
+        /// <https://www.rfc-editor.org/info/rfc6066>
         CertificateUnobtainable => 0x6f,
 
         /// The server does not recognize SNI sent by the client.
         ///
-        /// <https://datatracker.ietf.org/doc/html/rfc6066>
+        /// <https://www.rfc-editor.org/info/rfc6066>
         UnrecognizedName => 0x70,
 
-        /// <https://datatracker.ietf.org/doc/html/rfc6066>
+        /// <https://www.rfc-editor.org/info/rfc6066>
         BadCertificateStatusResponse => 0x71,
 
         /// Reserved. Used in TLS versions prior to 1.3.
         ///
-        /// <https://datatracker.ietf.org/doc/html/rfc6066>
+        /// <https://www.rfc-editor.org/info/rfc6066>
         BadCertificateHashValue => 0x72,
 
         /// The server does not recognize PSK identity.
         ///
-        /// <https://datatracker.ietf.org/doc/html/rfc4279>
+        /// <https://www.rfc-editor.org/info/rfc4279>
         UnknownPskIdentity => 0x73,
 
         /// A client certificate is desired but none was provided by the client.
         ///
-        /// <https://datatracker.ietf.org/doc/html/rfc9846#section-6.2-4.48.1>
+        /// <https://www.rfc-editor.org/info/rfc9846#section-6.2-4.48.1>
         CertificateRequired => 0x74,
 
         /// An error condition in cases when either no more specific error is available
         /// or the sender wishes to conceal the specific error code.
         ///
-        /// <https://datatracker.ietf.org/doc/html/rfc9846#section-6.2-4.49>
+        /// <https://www.rfc-editor.org/info/rfc9846#section-6.2-4.49>
         GeneralError => 0x75,
 
         /// A client ALPN extension advertises only protocols that the server does not support.
         ///
-        /// <https://datatracker.ietf.org/doc/html/rfc9846#section-6.2-4.52.1>
+        /// <https://www.rfc-editor.org/info/rfc9846#section-6.2-4.52.1>
         NoApplicationProtocol => 0x78,
 
         /// Use of Encrypted Client Hello is required.
         ///
-        /// <https://datatracker.ietf.org/doc/html/rfc9849#section-11.2>
+        /// <https://www.rfc-editor.org/info/rfc9849#section-11.2>
         EncryptedClientHelloRequired => 0x79,
     }
 }
@@ -1076,7 +1076,7 @@ impl fmt::Display for AlertDescription {
             ),
 
             // ECH requirement by clients, see
-            // <https://datatracker.ietf.org/doc/html/rfc9849#name-update-of-the-tls-alert-reg>
+            // <https://www.rfc-editor.org/info/rfc9849#name-update-of-the-tls-alert-reg>
             AlertDescriptionName::EncryptedClientHelloRequired => {
                 write!(f, "required use of encrypted client hello")
             }

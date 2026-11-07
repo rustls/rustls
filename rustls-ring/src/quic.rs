@@ -21,7 +21,7 @@ impl HeaderProtectionKey {
         masked: bool,
     ) -> Result<(), Error> {
         // This implements "Header Protection Application" almost verbatim.
-        // <https://datatracker.ietf.org/doc/html/rfc9001#section-5.4.1>
+        // <https://www.rfc-editor.org/info/rfc9001#section-5.4.1>
 
         let mask = self
             .0

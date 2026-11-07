@@ -414,7 +414,7 @@ impl SignatureScheme {
     /// This prevents (eg) RSA_PKCS1_SHA256 being offered or accepted, even if our
     /// verifier supports it for other protocol versions.
     ///
-    /// See RFC 9846 s4.3.3: <https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.3>
+    /// See RFC 9846 s4.3.3: <https://www.rfc-editor.org/info/rfc9846#section-4.3.3>
     ///
     /// This is a denylist so that newly-allocated `SignatureScheme`s values are
     /// allowed in TLS1.3 by default.

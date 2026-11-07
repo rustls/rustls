@@ -919,7 +919,7 @@ fn emit_client_hello_for_retry(
 
     let ch = Message {
         version: match retryreq {
-            // <https://datatracker.ietf.org/doc/html/rfc9846#section-5.1>:
+            // <https://www.rfc-editor.org/info/rfc9846#section-5.1>:
             // "This value MUST be set to 0x0303 for all records generated
             //  by a TLS 1.3 implementation ..."
             Some(_) => EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),

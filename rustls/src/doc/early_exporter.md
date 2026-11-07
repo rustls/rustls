@@ -13,7 +13,7 @@ if called more than once per connection.
 If you are looking for the normal exporter, this is available from
 [`Connection::exporter()`].
 
-[RFC 5705]: https://datatracker.ietf.org/doc/html/rfc5705
-[RFC 9846 S7.5]: https://datatracker.ietf.org/doc/html/rfc9846#section-7.5
-[RFC 9846 appendix F.5.1]: https://datatracker.ietf.org/doc/html/rfc9846#appendix-F.5.1
+[RFC 5705]: https://www.rfc-editor.org/info/rfc5705
+[RFC 9846 S7.5]: https://www.rfc-editor.org/info/rfc9846#section-7.5
+[RFC 9846 appendix F.5.1]: https://www.rfc-editor.org/info/rfc9846#appendix-F.5.1
 [`Connection::exporter()`]: crate::conn::Connection::exporter()

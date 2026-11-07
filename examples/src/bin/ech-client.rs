@@ -247,7 +247,7 @@ async fn lookup_ech_configs(
     port: u16,
 ) -> Result<Vec<EchConfigListBytes<'static>>, NetError> {
     // For non-standard ports, lookup the ECHConfig using port-prefix naming
-    // See: https://datatracker.ietf.org/doc/html/rfc9460#section-9.1
+    // See: https://www.rfc-editor.org/info/rfc9460#section-9.1
     let qname_to_lookup = match port {
         443 => domain.to_owned(),
         port => format!("_{port}._https.{domain}"),

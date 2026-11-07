@@ -42,9 +42,9 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: &Tls13CipherSuite = &Tls13CipherSuite
     quic: Some(&super::quic::KeyBuilder {
         packet_alg: &aead::CHACHA20_POLY1305,
         header_alg: &aead::quic::CHACHA20,
-        // ref: <https://datatracker.ietf.org/doc/html/rfc9001#section-6.6>
+        // ref: <https://www.rfc-editor.org/info/rfc9001#section-6.6>
         confidentiality_limit: u64::MAX,
-        // ref: <https://datatracker.ietf.org/doc/html/rfc9001#section-6.6>
+        // ref: <https://www.rfc-editor.org/info/rfc9001#section-6.6>
         integrity_limit: 1 << 36,
     }),
 };
@@ -62,9 +62,9 @@ pub static TLS13_AES_256_GCM_SHA384: &Tls13CipherSuite = &Tls13CipherSuite {
     quic: Some(&super::quic::KeyBuilder {
         packet_alg: &aead::AES_256_GCM,
         header_alg: &aead::quic::AES_256,
-        // ref: <https://datatracker.ietf.org/doc/html/rfc9001#section-b.1.1>
+        // ref: <https://www.rfc-editor.org/info/rfc9001#section-b.1.1>
         confidentiality_limit: 1 << 23,
-        // ref: <https://datatracker.ietf.org/doc/html/rfc9001#section-b.1.2>
+        // ref: <https://www.rfc-editor.org/info/rfc9001#section-b.1.2>
         integrity_limit: 1 << 52,
     }),
 };
@@ -82,9 +82,9 @@ pub static TLS13_AES_128_GCM_SHA256: &Tls13CipherSuite = &Tls13CipherSuite {
     quic: Some(&super::quic::KeyBuilder {
         packet_alg: &aead::AES_128_GCM,
         header_alg: &aead::quic::AES_128,
-        // ref: <https://datatracker.ietf.org/doc/html/rfc9001#section-b.1.1>
+        // ref: <https://www.rfc-editor.org/info/rfc9001#section-b.1.1>
         confidentiality_limit: 1 << 23,
-        // ref: <https://datatracker.ietf.org/doc/html/rfc9001#section-b.1.2>
+        // ref: <https://www.rfc-editor.org/info/rfc9001#section-b.1.2>
         integrity_limit: 1 << 52,
     }),
 };

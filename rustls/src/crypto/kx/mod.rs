@@ -658,7 +658,7 @@ impl From<Vec<u8>> for SharedSecret {
 pub enum KeyExchangeAlgorithm {
     /// Diffie-Hellman Key exchange (with only known parameters as defined in [RFC 7919]).
     ///
-    /// [RFC 7919]: https://datatracker.ietf.org/doc/html/rfc7919
+    /// [RFC 7919]: https://www.rfc-editor.org/info/rfc7919
     DHE,
     /// Key exchange performed via elliptic curve Diffie-Hellman.
     ECDHE,

@@ -208,8 +208,8 @@ enum_builder! {
     /// The `CertificateType` enum sent in the cert_type extensions.
     /// Values in this enum are taken from the various RFCs covering TLS, and are listed by IANA.
     ///
-    /// [RFC 6091 Section 5]: <https://datatracker.ietf.org/doc/html/rfc6091#section-5>
-    /// [RFC 7250 Section 7]: <https://datatracker.ietf.org/doc/html/rfc7250#section-7>
+    /// [RFC 6091 Section 5]: <https://www.rfc-editor.org/info/rfc6091#section-5>
+    /// [RFC 7250 Section 7]: <https://www.rfc-editor.org/info/rfc7250#section-7>
     pub struct CertificateType(pub u8);
 
     enum CertificateTypeName {
@@ -229,7 +229,7 @@ enum_builder! {
     ///
     /// Specified in [RFC 9849 Section 5].
     ///
-    /// [RFC 9849 Section 5]: <https://datatracker.ietf.org/doc/html/rfc9849#section-5>
+    /// [RFC 9849 Section 5]: <https://www.rfc-editor.org/info/rfc9849#section-5>
     pub struct EchClientHelloType(pub u8);
 
     enum EchClientHelloTypeName {
