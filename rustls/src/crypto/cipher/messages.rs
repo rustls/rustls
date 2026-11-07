@@ -104,7 +104,7 @@ impl<'a> Record<InboundOpaque<'a>> {
         // > An implementation which receives any other change_cipher_spec value or
         // > which receives a protected change_cipher_spec record MUST abort the
         // > handshake with an "unexpected_message" alert.
-        // <https://www.rfc-editor.org/rfc/rfc9846#section-5>
+        // <https://www.rfc-editor.org/info/rfc9846#section-5>
         if self.typ == ContentType::ChangeCipherSpec {
             return Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into());
         }

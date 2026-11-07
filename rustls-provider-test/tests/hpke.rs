@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 /// Confirm open/seal operations work using the test vectors from [RFC 9180 Appendix A].
 ///
-/// [RFC 9180 Appendix A]: https://www.rfc-editor.org/rfc/rfc9180#TestVectors
+/// [RFC 9180 Appendix A]: https://www.rfc-editor.org/info/rfc9180#TestVectors
 #[test]
 fn check_test_vectors() {
     for (idx, vec) in test_vectors().into_iter().enumerate() {

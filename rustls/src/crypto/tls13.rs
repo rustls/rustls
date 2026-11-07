@@ -129,7 +129,7 @@ pub trait HkdfExpander: Send + Sync {
 
 /// The `HkdfLabel` structure used as the `info` input to [HKDF-Expand-Label].
 ///
-/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc9846#section-7.1>
+/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/info/rfc9846#section-7.1>
 pub(crate) struct HkdfLabel<'a> {
     output_len: [u8; 2],
     label_len: [u8; 1],

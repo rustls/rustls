@@ -424,7 +424,7 @@ pub trait ServerCredentialResolver: Debug + Send + Sync {
     /// Returning an empty slice will result in an error. The default implementation signals
     /// support for X.509 certificates. Implementations should return the same value every time.
     ///
-    /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
+    /// See [RFC 7250](https://www.rfc-editor.org/info/rfc7250) for more information.
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         &[CertificateType::X509]
     }
@@ -674,7 +674,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// things like SNI hostname.
     ///
     /// Note that the end-entity certificate must have the
-    /// [Subject Alternative Name](https://tools.ietf.org/html/rfc6125#section-4.1)
+    /// [Subject Alternative Name](https://www.rfc-editor.org/info/rfc6125#section-4.1)
     /// extension to describe, e.g., the valid DNS name. The `commonName` field is
     /// disregarded.
     ///
@@ -700,7 +700,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// things like SNI hostname.
     ///
     /// Note that the end-entity certificate must have the
-    /// [Subject Alternative Name](https://tools.ietf.org/html/rfc6125#section-4.1)
+    /// [Subject Alternative Name](https://www.rfc-editor.org/info/rfc6125#section-4.1)
     /// extension to describe, e.g., the valid DNS name. The `commonName` field is
     /// disregarded.
     ///

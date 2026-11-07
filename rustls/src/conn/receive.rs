@@ -293,7 +293,7 @@ impl ReceivePath {
                 // "Handshake messages MUST NOT be interleaved with other record
                 // types.  That is, if a handshake message is split over two or more
                 // records, there MUST NOT be any other records between them."
-                // https://www.rfc-editor.org/rfc/rfc9846#section-5.1
+                // https://www.rfc-editor.org/info/rfc9846#section-5.1
                 return Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
             }
 

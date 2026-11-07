@@ -396,7 +396,7 @@ fn select_cert_type(
         return Err(ApiMisuse::NoSupportedCertificateTypes.into());
     }
 
-    // https://www.rfc-editor.org/rfc/rfc7250#section-4.1
+    // https://www.rfc-editor.org/info/rfc7250#section-4.1
     // If the client has no remaining certificate types to send in
     // the client hello, other than the default X.509 type, it MUST omit the
     // client_certificate_type extension in the client hello.

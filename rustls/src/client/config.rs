@@ -408,7 +408,7 @@ pub trait ClientCredentialResolver: fmt::Debug + Send + Sync + Any {
     /// Return `None` to continue the handshake without any client authentication.  The server
     /// may reject the handshake later if it requires authentication.
     ///
-    /// [RFC 5280 A.1]: https://www.rfc-editor.org/rfc/rfc5280#appendix-A.1
+    /// [RFC 5280 A.1]: https://www.rfc-editor.org/info/rfc5280#appendix-A.1
     ///
     /// [`Credentials`]: crate::crypto::Credentials
     /// [`Credentials::signer()`]: crate::crypto::Credentials::signer
@@ -420,7 +420,7 @@ pub trait ClientCredentialResolver: fmt::Debug + Send + Sync + Any {
     /// Should return the empty slice if the resolver does not have any credentials to send.
     /// Implementations should return the same value every time.
     ///
-    /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
+    /// See [RFC 7250](https://www.rfc-editor.org/info/rfc7250) for more information.
     fn supported_certificate_types(&self) -> &'static [CertificateType];
 
     /// Instance configuration should be input to `h`.
@@ -458,7 +458,7 @@ impl CredentialRequest<'_> {
     ///
     /// If the server does not support [RFC 7250], this will be [`CertificateType::X509`].
     ///
-    /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
+    /// [RFC 7250]: https://www.rfc-editor.org/info/rfc7250
     pub fn negotiated_type(&self) -> CertificateType {
         self.negotiated_type
     }

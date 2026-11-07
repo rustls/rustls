@@ -194,7 +194,7 @@ enum_builder! {
     /// The "TLS Certificate Compression Algorithm IDs" TLS protocol enum.
     /// Values in this enum are taken from [RFC 8879].
     ///
-    /// [RFC 8879]: https://www.rfc-editor.org/rfc/rfc8879.html#section-7.3
+    /// [RFC 8879]: https://www.rfc-editor.org/info/rfc8879#section-7.3
     pub struct CertificateCompressionAlgorithm(pub u16);
 
     enum CertificateCompressionAlgorithmName {

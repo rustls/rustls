@@ -936,12 +936,12 @@ impl Version {
     fn initial_salt(self) -> &'static [u8; 20] {
         match self {
             Self::V1 => &[
-                // https://www.rfc-editor.org/rfc/rfc9001.html#name-initial-secrets
+                // https://www.rfc-editor.org/info/rfc9001#name-initial-secrets
                 0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17, 0x9a, 0xe6, 0xa4, 0xc8,
                 0x0c, 0xad, 0xcc, 0xbb, 0x7f, 0x0a,
             ],
             Self::V2 => &[
-                // https://tools.ietf.org/html/rfc9369.html#name-initial-salt
+                // https://www.rfc-editor.org/info/rfc9369#name-initial-salt
                 0x0d, 0xed, 0xe3, 0xde, 0xf7, 0x00, 0xa6, 0xdb, 0x81, 0x93, 0x81, 0xbe, 0x6e, 0x26,
                 0x9d, 0xcb, 0xf9, 0xbd, 0x2e, 0xd9,
             ],

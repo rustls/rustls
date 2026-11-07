@@ -2502,7 +2502,7 @@ pub mod encoding {
 
     /// Return an `ECHConfigList` containing a single `ECHConfig` for `public_name`
     ///
-    /// See <https://www.rfc-editor.org/rfc/rfc9849#section-4>.
+    /// See <https://www.rfc-editor.org/info/rfc9849#section-4>.
     pub fn ech_config_list(
         suite: HpkeSuite,
         public_key: &[u8],

@@ -88,7 +88,7 @@ pub trait ServerVerifier: Debug + Send + Sync + Any {
     /// Returning an empty slice will result in an error. The default implementation signals
     /// support for X.509 certificates. Implementations should return the same value every time.
     ///
-    /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
+    /// See [RFC 7250](https://www.rfc-editor.org/info/rfc7250) for more information.
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         &[CertificateType::X509]
     }
@@ -204,7 +204,7 @@ pub trait ClientVerifier: Debug + Send + Sync {
     /// to the subjects from the root cert store.
     ///
     /// [subjects]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6
-    /// [RFC 5280 A.1]: https://www.rfc-editor.org/rfc/rfc5280#appendix-A.1
+    /// [RFC 5280 A.1]: https://www.rfc-editor.org/info/rfc5280#appendix-A.1
     /// [`CertificateRequest`]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.4.2
     /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.4
     fn root_hint_subjects(&self) -> Arc<[DistinguishedName]>;
@@ -233,7 +233,7 @@ pub trait ClientVerifier: Debug + Send + Sync {
     /// Returning an empty slice will result in an error. The default implementation signals
     /// support for X.509 certificates. Implementations should return the same value every time.
     ///
-    /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
+    /// See [RFC 7250](https://www.rfc-editor.org/info/rfc7250) for more information.
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         &[CertificateType::X509]
     }
@@ -271,7 +271,7 @@ pub struct SignatureVerificationInput<'a> {
 pub enum SignerPublicKey<'a> {
     /// An X.509 certificate for the signing peer.
     X509(&'a CertificateDer<'a>),
-    /// A raw public key, as defined in [RFC 7250](https://tools.ietf.org/html/rfc7250).
+    /// A raw public key, as defined in [RFC 7250](https://www.rfc-editor.org/info/rfc7250).
     RawPublicKey(&'a SubjectPublicKeyInfoDer<'a>),
 }
 

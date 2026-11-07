@@ -353,7 +353,7 @@ pub trait ActiveKeyExchange: Send + Sync {
     /// in a small order subgroup).
     ///
     /// If the key exchange algorithm is FFDHE, the result must be left-padded with zeros,
-    /// as required by [RFC 9846](https://www.rfc-editor.org/rfc/rfc9846#section-7.4.1)
+    /// as required by [RFC 9846](https://www.rfc-editor.org/info/rfc9846#section-7.4.1)
     /// (see [`complete_for_tls_version()`](Self::complete_for_tls_version) for more details).
     ///
     /// The shared secret is returned as a [`SharedSecret`] which can be constructed
@@ -368,10 +368,10 @@ pub trait ActiveKeyExchange: Send + Sync {
     /// shared secret in TLS 1.2 and TLS 1.3 (ECDHE key exchange is the same in TLS 1.2 and TLS 1.3):
     ///
     /// In TLS 1.2, the calculated secret is required to be stripped of leading zeros
-    /// [(RFC 5246)](https://www.rfc-editor.org/rfc/rfc5246#section-8.1.2).
+    /// [(RFC 5246)](https://www.rfc-editor.org/info/rfc5246#section-8.1.2).
     ///
     /// In TLS 1.3, the calculated secret is required to be padded with leading zeros to be the same
-    /// byte-length as the group modulus [(RFC 9846)](https://www.rfc-editor.org/rfc/rfc9846#section-7.4.1).
+    /// byte-length as the group modulus [(RFC 9846)](https://www.rfc-editor.org/info/rfc9846#section-7.4.1).
     ///
     /// The default implementation of this method delegates to [`complete()`](Self::complete) assuming it is
     /// implemented for TLS 1.3 (i.e., for FFDHE KX, removes padding as needed). Implementers of this trait
@@ -406,10 +406,10 @@ pub trait ActiveKeyExchange: Send + Sync {
     /// Return the public key being used.
     ///
     /// For ECDHE, the encoding required is defined in
-    /// [RFC 9846 section 4.3.8.2](https://www.rfc-editor.org/rfc/rfc9846#section-4.3.8.2).
+    /// [RFC 9846 section 4.3.8.2](https://www.rfc-editor.org/info/rfc9846#section-4.3.8.2).
     ///
     /// For FFDHE, the encoding required is defined in
-    /// [RFC 9846 section 4.3.8.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.3.8.1).
+    /// [RFC 9846 section 4.3.8.1](https://www.rfc-editor.org/info/rfc9846#section-4.3.8.1).
     fn pub_key(&self) -> &[u8];
 
     /// FFDHE group the `ActiveKeyExchange` is operating in.

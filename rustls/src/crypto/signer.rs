@@ -91,7 +91,7 @@ impl ServerCredentialResolver for SingleCredential {
 /// when the client/server is configured to use raw public keys instead of
 /// certificates.
 ///
-/// [RFC 7250]: https://tools.ietf.org/html/rfc7250
+/// [RFC 7250]: https://www.rfc-editor.org/info/rfc7250
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct Credentials {
@@ -218,7 +218,7 @@ pub enum Identity<'a> {
     ///
     /// This is the most common case.
     X509(CertificateIdentity<'a>),
-    /// A raw public key, as defined in [RFC 7250](https://tools.ietf.org/html/rfc7250).
+    /// A raw public key, as defined in [RFC 7250](https://www.rfc-editor.org/info/rfc7250).
     RawPublicKey(SubjectPublicKeyInfoDer<'a>),
 }
 

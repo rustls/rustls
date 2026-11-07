@@ -1160,7 +1160,7 @@ fn packet_key_api() {
     use provider::cipher_suite::TLS13_AES_128_GCM_SHA256;
     use rustls::quic::{Keys, Version};
 
-    // Test vectors: https://www.rfc-editor.org/rfc/rfc9001.html#name-client-initial
+    // Test vectors: https://www.rfc-editor.org/info/rfc9001#name-client-initial
     const CONNECTION_ID: &[u8] = &[0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
     const PACKET_NUMBER: u64 = 2;
     const PLAIN_HEADER: &[u8] = &[
