@@ -105,6 +105,11 @@ mod client_hello {
                 return Err(PeerMisbehaved::OfferedIncorrectCompressions.into());
             }
 
+            // RFC 9001 section 8.4: QUIC servers should reject a non-empty legacy_session_id
+            if st.protocol.is_quic() && !input.client_hello.session_id.is_empty() {
+                return Err(PeerMisbehaved::NonEmptySessionIdInQuic.into());
+            }
+
             let shares_ext = input
                 .client_hello
                 .key_shares

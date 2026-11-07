@@ -908,6 +908,37 @@ fn test_quic_server_rejects_tls12_hello() {
 }
 
 #[test]
+fn test_quic_server_rejects_non_empty_session_id() {
+    let mut server = Connection::new_quic(
+        Arc::new(make_server_config(
+            KeyType::EcdsaP256,
+            &provider::DEFAULT_PROVIDER,
+        )),
+        quic::Version::V2,
+        vec![],
+    )
+    .unwrap();
+    assert_eq!(
+        server
+            .read_hs(&mut SliceInput::new(&mut encoding::client_hello(
+                ProtocolVersion::TLSv1_2,
+                &[0x12; 32],
+                &[0x01, 0xaa],
+                vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
+                vec![
+                    encoding::Extension::new_sig_algs(),
+                    encoding::Extension::new_versions(),
+                    encoding::Extension::new_dummy_key_share(),
+                    encoding::Extension::new_kx_groups(),
+                    encoding::Extension::new_quic_transport_params(b"blurgh"),
+                ],
+            )))
+            .err(),
+        Some(PeerMisbehaved::NonEmptySessionIdInQuic.into())
+    );
+}
+
+#[test]
 fn test_quic_client_rejects_tls12_server() {
     let mut client = Arc::new(make_client_config(
         KeyType::EcdsaP256,
