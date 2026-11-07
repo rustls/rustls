@@ -142,7 +142,7 @@ impl EchConfig {
 
     /// Compute the HPKE `SetupBaseS` `info` parameter for this ECH configuration.
     ///
-    /// See <https://datatracker.ietf.org/doc/html/rfc9849#section-6.1>.
+    /// See <https://www.rfc-editor.org/info/rfc9849#section-6.1>.
     pub(crate) fn hpke_info(&self) -> Vec<u8> {
         let mut info = Vec::with_capacity(128);
         // "tls ech" || 0x00 || ECHConfig
@@ -223,7 +223,7 @@ impl EchGreaseConfig {
 
     /// Build a GREASE ECH extension based on the placeholder configuration.
     ///
-    /// See <https://datatracker.ietf.org/doc/html/rfc9849#name-grease-ech> for
+    /// See <https://www.rfc-editor.org/info/rfc9849#name-grease-ech> for
     /// more information.
     pub(crate) fn grease_ext(
         &self,
@@ -604,7 +604,7 @@ impl EchState {
         self.inner_hello_transcript = inner_transcript_buffer;
     }
 
-    // See https://datatracker.ietf.org/doc/html/rfc9849#name-grease-psk
+    // See https://www.rfc-editor.org/info/rfc9849#name-grease-psk
     pub(super) fn grease_psk(&mut self, psk_offer: &mut PresharedKeyOffer) -> Result<(), Error> {
         match &self.grease_psk_identities {
             // This is a retry hello: re-offer the identities and ages from the first hello,
@@ -792,7 +792,7 @@ impl EchState {
         // Construct the inner hello message that will be used for the transcript.
         let inner_hello_msg = Message {
             version: match retryreq {
-                // <https://datatracker.ietf.org/doc/html/rfc9846#section-5.1>:
+                // <https://www.rfc-editor.org/info/rfc9846#section-5.1>:
                 // "This value MUST be set to 0x0303 for all records generated
                 //  by a TLS 1.3 implementation ..."
                 Some(_) => EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),

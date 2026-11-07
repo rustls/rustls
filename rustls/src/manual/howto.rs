@@ -80,7 +80,7 @@ When an EOF is received from the network using `TlsInputBuffer::read()`, rustls 
 that no message is in flight. This could be the case if the connection has been idle or
 if application messages are framed with their length.
 
-[^2]: <https://datatracker.ietf.org/doc/html/rfc9846#section-6.1>
+[^2]: <https://www.rfc-editor.org/info/rfc9846#section-6.1>
 
 # Debugging
 

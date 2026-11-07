@@ -90,7 +90,7 @@ mod client_hello {
             // "RFC 4492 specified that if this extension is missing,
             // it means that only the uncompressed point format is
             // supported"
-            // - <https://datatracker.ietf.org/doc/html/rfc8422#section-5.1.2>
+            // - <https://www.rfc-editor.org/info/rfc8422#section-5.1.2>
             let supported_ec_point_formats = input
                 .client_hello
                 .ec_point_formats

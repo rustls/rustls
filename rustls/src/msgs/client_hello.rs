@@ -432,7 +432,7 @@ impl<'a> Codec<'a> for ClientExtensions<'a> {
 /// Representation of the `ECHClientHello` client extension specified in
 /// [RFC 9849 Section 5].
 ///
-/// [RFC 9849 Section 5]: <https://datatracker.ietf.org/doc/html/rfc9849#section-5>
+/// [RFC 9849 Section 5]: <https://www.rfc-editor.org/info/rfc9849#section-5>
 #[derive(Clone, Debug)]
 pub(crate) enum EncryptedClientHello {
     /// A `ECHClientHello` with type [EchClientHelloType::ClientHelloOuter].
@@ -471,7 +471,7 @@ impl Codec<'_> for EncryptedClientHello {
 /// Representation of the ECHClientHello extension with type outer specified in
 /// [RFC 9849 Section 5].
 ///
-/// [RFC 9849 Section 5]: <https://datatracker.ietf.org/doc/html/rfc9849#section-5>
+/// [RFC 9849 Section 5]: <https://www.rfc-editor.org/info/rfc9849#section-5>
 #[derive(Clone, Debug)]
 pub(crate) struct EncryptedClientHelloOuter {
     /// The cipher suite used to encrypt ClientHelloInner. Must match a value from

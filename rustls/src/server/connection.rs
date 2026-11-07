@@ -208,7 +208,7 @@ impl fmt::Debug for ServerSide {
 /// The data is received in arbitrary-sized pieces.  Avoid writing your application to be
 /// sensitive to the boundaries.
 ///
-/// [RFC 9846 appendix F.5]: https://datatracker.ietf.org/doc/html/rfc9846#appendix-F.5
+/// [RFC 9846 appendix F.5]: https://www.rfc-editor.org/info/rfc9846#appendix-F.5
 pub struct ReceivedEarlyData {
     data: Vec<u8>,
     conn: Connection<ServerSide, Tcp>,

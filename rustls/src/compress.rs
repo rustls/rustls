@@ -26,7 +26,7 @@
 //! | *Client* | [`ClientConfig::cert_compressors`][cc_cc] | [`ClientConfig::cert_decompressors`][cc_cd] |
 //! | *Server* | [`ServerConfig::cert_decompressors`][sc_cd] | [`ServerConfig::cert_compressors`][sc_cc] |
 //!
-//! [rfc8879]: https://datatracker.ietf.org/doc/html/rfc8879
+//! [rfc8879]: https://www.rfc-editor.org/info/rfc8879
 //! [cc_cc]: crate::ClientConfig::cert_compressors
 //! [sc_cc]: crate::ServerConfig::cert_compressors
 //! [cc_cd]: crate::ClientConfig::cert_decompressors

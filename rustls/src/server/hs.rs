@@ -695,7 +695,7 @@ impl ExpectClientHello {
         }
 
         let first_supported_dhe_kxg = if T::VERSION == ProtocolVersion::TLSv1_2 {
-            // https://datatracker.ietf.org/doc/html/rfc7919#section-4 (paragraph 2)
+            // https://www.rfc-editor.org/info/rfc7919#section-4 (paragraph 2)
             let first_supported_dhe_kxg = self
                 .config
                 .provider
@@ -713,7 +713,7 @@ impl ExpectClientHello {
             return Err(PeerIncompatible::NoKxGroupsInCommon.into());
         }
 
-        // RFC 7919 (https://datatracker.ietf.org/doc/html/rfc7919#section-4) requires us to send
+        // RFC 7919 (https://www.rfc-editor.org/info/rfc7919#section-4) requires us to send
         // the InsufficientSecurity alert in case we don't recognize client's FFDHE groups (i.e.,
         // `suitable_suites` becomes empty). But that does not make a lot of sense (e.g., client
         // proposes FFDHE4096 and we only support FFDHE2048), so we ignore that requirement here,

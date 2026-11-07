@@ -530,7 +530,7 @@ impl HelloRetryRequest {
             // must have its payload replaced by 8 zero bytes.
             //
             // See RFC 9849 7.2.1:
-            // <https://datatracker.ietf.org/doc/html/rfc9849#name-sending-helloretryrequest>
+            // <https://www.rfc-editor.org/info/rfc9849#name-sending-helloretryrequest>
             Encoding::EchConfirmation
                 if self
                     .extensions

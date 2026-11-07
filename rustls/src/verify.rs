@@ -33,7 +33,7 @@ pub trait ServerVerifier: Debug + Send + Sync + Any {
     /// the implementer to handle invalid data. It is recommended that the implementer returns
     /// [`Error::InvalidCertificate`] containing [`CertificateError::BadEncoding`] when these cases are encountered.
     ///
-    /// [Certificate]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.5.1
+    /// [Certificate]: https://www.rfc-editor.org/info/rfc9846#section-4.5.1
     /// [`CertificateError::BadEncoding`]: crate::error::CertificateError::BadEncoding
     fn verify_identity<'a>(
         &self,
@@ -98,7 +98,7 @@ pub trait ServerVerifier: Debug + Send + Sync + Any {
     /// If specified, will be sent as the [`certificate_authorities`] extension in ClientHello.
     /// Note that this is only applicable to TLS 1.3.
     ///
-    /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.4
+    /// [`certificate_authorities`]: https://www.rfc-editor.org/info/rfc9846#section-4.3.4
     fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
         None
     }
@@ -203,10 +203,10 @@ pub trait ClientVerifier: Debug + Send + Sync {
     /// should customize the hints list to include the subject of the cross-signed issuer in addition
     /// to the subjects from the root cert store.
     ///
-    /// [subjects]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6
+    /// [subjects]: https://www.rfc-editor.org/info/rfc5280#section-4.1.2.6
     /// [RFC 5280 A.1]: https://www.rfc-editor.org/info/rfc5280#appendix-A.1
-    /// [`CertificateRequest`]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.4.2
-    /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc9846#section-4.3.4
+    /// [`CertificateRequest`]: https://www.rfc-editor.org/info/rfc9846#section-4.4.2
+    /// [`certificate_authorities`]: https://www.rfc-editor.org/info/rfc9846#section-4.3.4
     fn root_hint_subjects(&self) -> Arc<[DistinguishedName]>;
 
     /// Return `true` to require a client certificate and `false` to make
@@ -359,8 +359,8 @@ impl Codec<'_> for DigitallySignedStruct {
 wrapped_payload!(
     /// A `DistinguishedName` is a `Vec<u8>` wrapped in internal types.
     ///
-    /// It contains the DER or BER encoded [`Subject` field from RFC 5280](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6)
-    /// for a single certificate. The Subject field is [encoded as an RFC 5280 `Name`](https://datatracker.ietf.org/doc/html/rfc5280#page-116).
+    /// It contains the DER or BER encoded [`Subject` field from RFC 5280](https://www.rfc-editor.org/info/rfc5280#section-4.1.2.6)
+    /// for a single certificate. The Subject field is [encoded as an RFC 5280 `Name`](https://www.rfc-editor.org/info/rfc5280#page-116).
     /// It can be decoded using [x509-parser's FromDer trait](https://docs.rs/x509-parser/latest/x509_parser/prelude/trait.FromDer.html).
     ///
     /// ```ignore

@@ -171,7 +171,7 @@ enum_builder! {
     /// The Key Encapsulation Mechanism (`Kem`) type for HPKE operations.
     /// Listed by IANA, as specified in [RFC 9180 Section 7.1]
     ///
-    /// [RFC 9180 Section 7.1]: <https://datatracker.ietf.org/doc/html/rfc9180#kemid-values>
+    /// [RFC 9180 Section 7.1]: <https://www.rfc-editor.org/info/rfc9180#kemid-values>
     pub struct HpkeKem(pub u16);
 
     enum HpkeKemName {
@@ -187,7 +187,7 @@ enum_builder! {
     /// The Key Derivation Function (`Kdf`) type for HPKE operations.
     /// Listed by IANA, as specified in [RFC 9180 Section 7.2]
     ///
-    /// [RFC 9180 Section 7.2]: <https://datatracker.ietf.org/doc/html/rfc9180#name-key-derivation-functions-kd>
+    /// [RFC 9180 Section 7.2]: <https://www.rfc-editor.org/info/rfc9180#name-key-derivation-functions-kd>
     pub struct HpkeKdf(pub u16);
 
     enum HpkeKdfName {
@@ -208,7 +208,7 @@ enum_builder! {
     /// The Authenticated Encryption with Associated Data (`Aead`) type for HPKE operations.
     /// Listed by IANA, as specified in [RFC 9180 Section 7.3]
     ///
-    /// [RFC 9180 Section 7.3]: <https://datatracker.ietf.org/doc/html/rfc9180#name-authenticated-encryption-wi>
+    /// [RFC 9180 Section 7.3]: <https://www.rfc-editor.org/info/rfc9180#name-authenticated-encryption-wi>
     pub struct HpkeAead(pub u16);
 
     enum HpkeAeadName {

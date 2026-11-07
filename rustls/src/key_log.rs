@@ -13,7 +13,7 @@ use core::fmt::Debug;
 /// For the standard `SSLKEYLOGFILE` environment variable behavior,
 /// see the `KeyLogFile` implementation provided in the rustls-util crate.
 ///
-/// See <https://datatracker.ietf.org/doc/html/rfc9850> for more background
+/// See <https://www.rfc-editor.org/info/rfc9850> for more background
 /// information.
 pub trait KeyLog: Debug + Send + Sync {
     /// Log the given `secret`.  `client_random` is provided for

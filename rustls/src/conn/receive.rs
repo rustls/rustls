@@ -132,7 +132,7 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
             } else if record.payload.is_empty()
                 && matches!(record.typ, ContentType::Handshake | ContentType::Alert)
             {
-                // <https://datatracker.ietf.org/doc/html/rfc9846#section-5.4>
+                // <https://www.rfc-editor.org/info/rfc9846#section-5.4>
                 let _ = output.other.send.send_alert(
                     AlertLevel::Fatal,
                     AlertDescription::UnexpectedMessage,
@@ -177,7 +177,7 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
 
             if self.recv.has_received_close_notify {
                 // "Any data received after a closure alert has been received MUST be ignored."
-                // -- <https://datatracker.ietf.org/doc/html/rfc9846#section-6.1>
+                // -- <https://www.rfc-editor.org/info/rfc9846#section-6.1>
 
                 // First, discard actually-processed bytes.
                 self.input

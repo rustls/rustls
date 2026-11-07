@@ -111,7 +111,7 @@ pub struct ClientConfig {
     /// Setting this value to a little less than the TCP MSS may improve latency
     /// for stream-y workloads.
     ///
-    /// [TLS maximum]: https://datatracker.ietf.org/doc/html/rfc9846#section-5.1
+    /// [TLS maximum]: https://www.rfc-editor.org/info/rfc9846#section-5.1
     pub max_fragment_size: Option<usize>,
 
     /// Whether to send the Server Name Indication (SNI) extension
@@ -124,7 +124,7 @@ pub struct ClientConfig {
     ///
     /// The default does nothing.
     ///
-    /// See [RFC 9850](https://datatracker.ietf.org/doc/html/rfc9850) for background.
+    /// See [RFC 9850](https://www.rfc-editor.org/info/rfc9850) for background.
     pub key_log: Arc<dyn KeyLog>,
 
     /// Allows traffic secrets to be extracted after the handshake,
@@ -147,7 +147,7 @@ pub struct ClientConfig {
     /// **D.Q Transition of the TLS 1.2 KDF to Support the Extended Master
     /// Secret** from [FIPS 140-3 IG.pdf].
     ///
-    /// [RFC 7627]: https://datatracker.ietf.org/doc/html/rfc7627
+    /// [RFC 7627]: https://www.rfc-editor.org/info/rfc7627
     /// [FIPS 140-3 IG.pdf]: https://csrc.nist.gov/csrc/media/Projects/cryptographic-module-validation-program/documents/fips%20140-3/FIPS%20140-3%20IG.pdf
     pub require_ems: bool,
 
@@ -155,7 +155,7 @@ pub struct ClientConfig {
     ///
     /// Set to `None` to disable sending the extension (the default).
     ///
-    /// [RFC 9149]: https://datatracker.ietf.org/doc/html/rfc9149
+    /// [RFC 9149]: https://www.rfc-editor.org/info/rfc9149
     pub send_ticket_request: Option<TicketRequest>,
 
     /// Items that affect the fundamental security properties of a connection.
@@ -630,7 +630,7 @@ pub enum Tls12Resumption {
 /// Number of TLS 1.3 session tickets to request via the [RFC 9149]
 /// `ticket_request` extension.
 ///
-/// [RFC 9149]: https://datatracker.ietf.org/doc/html/rfc9149
+/// [RFC 9149]: https://www.rfc-editor.org/info/rfc9149
 #[expect(clippy::exhaustive_structs)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TicketRequest {

@@ -147,7 +147,7 @@ impl SignatureVerificationAlgorithm for AwsLcRsVerificationAlgorithm {
             //  by 0x04 and the compressed form is indicated by either 0x02 or
             //  0x03 (see 2.3.3 in [SEC1]).  The public key MUST be rejected if
             //  any other value is included in the first octet."
-            // -- <https://datatracker.ietf.org/doc/html/rfc5480#section-2.2>
+            // -- <https://www.rfc-editor.org/info/rfc5480#section-2.2>
             match public_key.first() {
                 Some(0x04) | Some(0x02) | Some(0x03) => {}
                 _ => return Err(InvalidSignature),

@@ -612,9 +612,9 @@ pub trait HeaderProtectionKey: Send + Sync {
     ///
     /// Otherwise, `first` and `packet_number` will have the header protection added.
     ///
-    /// [Header Protection Application]: https://datatracker.ietf.org/doc/html/rfc9001#section-5.4.1
-    /// [Header Protection Sample]: https://datatracker.ietf.org/doc/html/rfc9001#section-5.4.2
-    /// [Packet Number Encoding and Decoding]: https://datatracker.ietf.org/doc/html/rfc9000#section-17.1
+    /// [Header Protection Application]: https://www.rfc-editor.org/info/rfc9001#section-5.4.1
+    /// [Header Protection Sample]: https://www.rfc-editor.org/info/rfc9001#section-5.4.2
+    /// [Packet Number Encoding and Decoding]: https://www.rfc-editor.org/info/rfc9000#section-17.1
     fn encrypt_in_place(
         &self,
         sample: &[u8],
@@ -640,9 +640,9 @@ pub trait HeaderProtectionKey: Send + Sync {
     ///
     /// Otherwise, `first` and `packet_number` will have the header protection removed.
     ///
-    /// [Header Protection Application]: https://datatracker.ietf.org/doc/html/rfc9001#section-5.4.1
-    /// [Header Protection Sample]: https://datatracker.ietf.org/doc/html/rfc9001#section-5.4.2
-    /// [Packet Number Encoding and Decoding]: https://datatracker.ietf.org/doc/html/rfc9000#section-17.1
+    /// [Header Protection Application]: https://www.rfc-editor.org/info/rfc9001#section-5.4.1
+    /// [Header Protection Sample]: https://www.rfc-editor.org/info/rfc9001#section-5.4.2
+    /// [Packet Number Encoding and Decoding]: https://www.rfc-editor.org/info/rfc9000#section-17.1
     fn decrypt_in_place(
         &self,
         sample: &[u8],
