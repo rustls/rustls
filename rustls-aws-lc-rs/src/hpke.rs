@@ -252,7 +252,7 @@ pub struct HpkeAwsLcRs<const KEY_SIZE: usize, const KDF_SIZE: usize> {
 impl<const KEY_SIZE: usize, const KDF_SIZE: usize> HpkeAwsLcRs<KEY_SIZE, KDF_SIZE> {
     /// See [RFC 9180 §5.1 "Creating the Encryption Context"][0].
     ///
-    /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-5.1
+    /// [0]: https://www.rfc-editor.org/info/rfc9180#section-5.1
     fn key_schedule(
         &self,
         shared_secret: KemSharedSecret<KDF_SIZE>,
@@ -400,7 +400,7 @@ struct Sealer<const KEY_SIZE: usize, const KDF_SIZE: usize> {
 impl<const KEY_SIZE: usize, const KDF_SIZE: usize> Sealer<KEY_SIZE, KDF_SIZE> {
     /// See [RFC 9180 §5.1.1 "Encryption to a Public Key"][0].
     ///
-    /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-5.1.1
+    /// [0]: https://www.rfc-editor.org/info/rfc9180#section-5.1.1
     fn new(
         suite: &HpkeAwsLcRs<KEY_SIZE, KDF_SIZE>,
         info: &[u8],
@@ -473,7 +473,7 @@ struct Opener<const KEY_SIZE: usize, const KDF_SIZE: usize> {
 impl<const KEY_SIZE: usize, const KDF_SIZE: usize> Opener<KEY_SIZE, KDF_SIZE> {
     /// See [RFC 9180 §5.1.1 "Encryption to a Public Key"][0].
     ///
-    /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-5.1.1
+    /// [0]: https://www.rfc-editor.org/info/rfc9180#section-5.1.1
     fn new(
         suite: &HpkeAwsLcRs<KEY_SIZE, KDF_SIZE>,
         enc: &EncapsulatedSecret,
@@ -530,7 +530,7 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> Debug for Opener<KEY_SIZE, KD
 ///
 /// See [RFC 9180 §4.1 "DH-Based KEM (DHKEM)"][0].
 ///
-/// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-4.1
+/// [0]: https://www.rfc-editor.org/info/rfc9180#section-4.1
 struct DhKem<const KDF_SIZE: usize> {
     id: HpkeKem,
     agreement_algorithm: &'static agreement::Algorithm,
@@ -542,7 +542,7 @@ struct DhKem<const KDF_SIZE: usize> {
 impl<const KDF_SIZE: usize> DhKem<KDF_SIZE> {
     /// See [RFC 9180 §4.1 "DH-Based KEM (DHKEM)"][0].
     ///
-    /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-4.1
+    /// [0]: https://www.rfc-editor.org/info/rfc9180#section-4.1
     fn encap(
         &self,
         recipient: &HpkePublicKey,
@@ -604,7 +604,7 @@ impl<const KDF_SIZE: usize> DhKem<KDF_SIZE> {
 
     /// See [RFC 9180 §4.1 "DH-Based KEM (DHKEM)"][0].
     ///
-    /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-4.1
+    /// [0]: https://www.rfc-editor.org/info/rfc9180#section-4.1
     fn decap(
         &self,
         enc: &EncapsulatedSecret,
@@ -641,7 +641,7 @@ impl<const KDF_SIZE: usize> DhKem<KDF_SIZE> {
 
     /// See [RFC 9180 §4.1 "DH-Based KEM (DHKEM)"][0].
     ///
-    /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-4.1
+    /// [0]: https://www.rfc-editor.org/info/rfc9180#section-4.1
     fn extract_and_expand(&self, dh: &[u8], kem_context: &[u8]) -> [u8; KDF_SIZE] {
         // def ExtractAndExpand(dh, kem_context):
         //   eae_prk = LabeledExtract("", "eae_prk", dh)
@@ -753,7 +753,7 @@ struct KeySchedule<const KEY_SIZE: usize> {
 impl<const KEY_SIZE: usize> KeySchedule<KEY_SIZE> {
     /// See [RFC 9180 §5.2 "Encryption and Decryption"][0].
     ///
-    /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-5.2
+    /// [0]: https://www.rfc-editor.org/info/rfc9180#section-5.2
     fn compute_nonce(&self) -> Nonce {
         // def Context<ROLE>.ComputeNonce(seq):
         //   seq_bytes = I2OSP(seq, Nn)
@@ -772,7 +772,7 @@ impl<const KEY_SIZE: usize> KeySchedule<KEY_SIZE> {
 
     /// See [RFC 9180 §5.2 "Encryption and Decryption"][0].
     ///
-    /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-5.2
+    /// [0]: https://www.rfc-editor.org/info/rfc9180#section-5.2
     fn increment_seq_num(&mut self) -> Result<(), aws_lc_rs::error::Unspecified> {
         // def Context<ROLE>.IncrementSeq():
         //   if self.seq >= (1 << (8*Nn)) - 1:
@@ -794,7 +794,7 @@ impl<const KEY_SIZE: usize> KeySchedule<KEY_SIZE> {
 
 /// See [RFC 9180 §4 "Cryptographic Dependencies"][0].
 ///
-/// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-4
+/// [0]: https://www.rfc-editor.org/info/rfc9180#section-4
 fn labeled_extract_for_expand(
     hkdf: &'static dyn HkdfPrkExtract,
     suite_id: LabeledSuiteId,
@@ -812,7 +812,7 @@ fn labeled_extract_for_expand(
 
 /// See [RFC 9180 §4 "Cryptographic Dependencies"][0].
 ///
-/// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-4
+/// [0]: https://www.rfc-editor.org/info/rfc9180#section-4
 fn labeled_extract_for_prk(
     hkdf: &'static dyn HkdfPrkExtract,
     suite_id: LabeledSuiteId,
@@ -830,7 +830,7 @@ fn labeled_extract_for_prk(
 
 /// See [RFC 9180 §4 "Cryptographic Dependencies"][0].
 ///
-/// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-4
+/// [0]: https://www.rfc-editor.org/info/rfc9180#section-4
 fn labeled_expand<const L: usize>(
     suite_id: LabeledSuiteId,
     expander: Box<dyn HkdfExpander>,
@@ -893,7 +893,7 @@ impl LabeledSuiteId {
     /// we use a "HPKE" prefix and encode the entire ciphersuite. In the KEM context we use a
     /// "KEM" prefix and only encode the KEM ID.
     ///
-    /// See the bottom of [RFC 9180 §4](https://www.rfc-editor.org/rfc/rfc9180.html#section-4)
+    /// See the bottom of [RFC 9180 §4](https://www.rfc-editor.org/info/rfc9180#section-4)
     /// for more information.
     fn encoded(&self) -> Vec<u8> {
         match self {
@@ -1133,7 +1133,7 @@ mod rfc_tests {
 
     /// Confirm open/seal operations work using the test vectors from [RFC 9180 Appendix A].
     ///
-    /// [RFC 9180 Appendix A]: https://www.rfc-editor.org/rfc/rfc9180#TestVectors
+    /// [RFC 9180 Appendix A]: https://www.rfc-editor.org/info/rfc9180#TestVectors
     #[test]
     fn check_test_vectors() {
         for (idx, vec) in test_vectors().into_iter().enumerate() {

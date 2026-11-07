@@ -229,7 +229,7 @@ impl ExpectServerHello {
         // > A client which receives a TLS 1.3 Server Hello with a
         // > legacy_version value not equal to 0x0303 MUST abort the handshake
         // > with a "protocol_version" alert.
-        // <https://www.rfc-editor.org/rfc/rfc9846#section-4.2.3>
+        // <https://www.rfc-editor.org/info/rfc9846#section-4.2.3>
         let server_version = if server_hello.legacy_version == ProtocolVersion::TLSv1_2 {
             server_hello
                 .selected_version
@@ -333,14 +333,14 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // > the HelloRetryRequest has the same format as a ServerHello message,
         // > and the legacy_version, legacy_session_id_echo, cipher_suite, and
         // > legacy_compression_method fields have the same meaning
-        // <https://www.rfc-editor.org/rfc/rfc9846#section-4.2.4>
+        // <https://www.rfc-editor.org/info/rfc9846#section-4.2.4>
         //
         // and
         //
         // > A client which receives a legacy_session_id_echo field that does not
         // > match what it sent in the ClientHello MUST abort the handshake with an
         // > "illegal_parameter" alert.
-        // <https://www.rfc-editor.org/rfc/rfc9846#section-4.2.3>
+        // <https://www.rfc-editor.org/info/rfc9846#section-4.2.3>
         if hrr.session_id != self.next.input.session_id {
             return Err(PeerMisbehaved::IllegalHelloRetryRequestWithWrongSessionId.into());
         }
@@ -348,7 +348,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // Or carries a `legacy_version` other than TLS1.2, which (given the
         // shared meaning above) requires the same "protocol_version" abort as
         // for a ServerHello.
-        // <https://www.rfc-editor.org/rfc/rfc9846#section-4.2.3>
+        // <https://www.rfc-editor.org/info/rfc9846#section-4.2.3>
         if hrr.legacy_version != ProtocolVersion::TLSv1_2 {
             return Err(PeerMisbehaved::IllegalHelloRetryRequestWithWrongLegacyVersion.into());
         }
@@ -515,8 +515,8 @@ impl ClientHelloInput {
             }
         };
 
-        // https://tools.ietf.org/html/rfc9846#appendix-E.4
-        // https://tools.ietf.org/html/rfc9001#section-8.4
+        // https://www.rfc-editor.org/info/rfc9846#appendix-E.4
+        // https://www.rfc-editor.org/info/rfc9001#section-8.4
         let session_id = match session_id {
             Some(session_id) => session_id,
             None if output.quic().is_some() => SessionId::empty(),

@@ -1045,7 +1045,7 @@ impl KeyScheduleSuite {
 
 /// [HKDF-Expand-Label] where the output is an AEAD key.
 ///
-/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc9846#section-7.1>
+/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/info/rfc9846#section-7.1>
 pub(crate) fn derive_traffic_key(
     expander: &dyn HkdfExpander,
     aead_alg: &dyn Tls13AeadAlgorithm,
@@ -1055,7 +1055,7 @@ pub(crate) fn derive_traffic_key(
 
 /// [HKDF-Expand-Label] where the output is an IV with a specified length.
 ///
-/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc9846#section-7.1>
+/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/info/rfc9846#section-7.1>
 pub(crate) fn derive_traffic_iv(expander: &dyn HkdfExpander, iv_len: usize) -> Iv {
     hkdf_expand_label_iv(expander, b"iv", &[], iv_len)
 }
@@ -1063,7 +1063,7 @@ pub(crate) fn derive_traffic_iv(expander: &dyn HkdfExpander, iv_len: usize) -> I
 /// [HKDF-Expand-Label] where the output length is a compile-time constant, and therefore
 /// it is infallible.
 ///
-/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc9846#section-7.1>
+/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/info/rfc9846#section-7.1>
 pub(crate) fn hkdf_expand_label<T: From<[u8; N]>, const N: usize>(
     expander: &dyn HkdfExpander,
     label: &[u8],

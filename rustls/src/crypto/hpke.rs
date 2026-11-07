@@ -232,7 +232,7 @@ impl HpkeAead {
         match *self {
             // See RFC 9180 Section 7.3, column `Nt`, the length in bytes of the authentication tag
             // for the algorithm.
-            // https://www.rfc-editor.org/rfc/rfc9180.html#section-7.3
+            // https://www.rfc-editor.org/info/rfc9180#section-7.3
             Self::AES_128_GCM | Self::AES_256_GCM | Self::CHACHA20_POLY_1305 => Some(16),
             _ => None,
         }

@@ -25,7 +25,7 @@ gives a flavour of the kind of complexity required to remove the side channel.
 rustls does not implement CBC MAC-then-encrypt ciphersuites for these reasons.  TLSv1.3 removed support for these
 ciphersuites in 2018.
 
-There are some further rejected options worth mentioning: [RFC 7366](https://tools.ietf.org/html/rfc7366) defines
+There are some further rejected options worth mentioning: [RFC 7366](https://www.rfc-editor.org/info/rfc7366) defines
 Encrypt-then-MAC for TLS, but unfortunately cannot be negotiated without also supporting MAC-then-encrypt
 (clients cannot express "I offer CBC, but only EtM and not MtE").
 
@@ -121,11 +121,11 @@ downgraded to SSLv3 after failed handshakes for later versions.
 
 rustls does not support CBC mode ciphersuites, or SSLv3.  Note that rustls does not need to implement `TLS_FALLBACK_SCSV`
 introduced as a countermeasure because it contains no ability to downgrade from TLS 1.2 to earlier protocol versions,
-and TLS 1.3 has protocol-level downgrade protection based on the [ServerHello server random value](https://www.rfc-editor.org/rfc/rfc9846#section-4.2.3).
+and TLS 1.3 has protocol-level downgrade protection based on the [ServerHello server random value](https://www.rfc-editor.org/info/rfc9846#section-4.2.3).
 
 ## GCM nonces
 
-[RFC 5288](https://tools.ietf.org/html/rfc5288) introduced GCM-based ciphersuites for use in TLS.  Unfortunately
+[RFC 5288](https://www.rfc-editor.org/info/rfc5288) introduced GCM-based ciphersuites for use in TLS.  Unfortunately
 the design was poor; it reused design for an unrelated security setting proposed in RFC 5116.
 
 GCM is a typical nonce-based AEAD: it requires a unique (but not necessarily unpredictable) 96-bit nonce for each encryption

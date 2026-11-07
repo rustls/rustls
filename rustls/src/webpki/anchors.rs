@@ -83,7 +83,7 @@ impl RootCertStore {
     /// Each [`DistinguishedName`] will be a DER-encoded X.500 distinguished name, per
     /// [RFC 5280 A.1], including the outer `SEQUENCE`.
     ///
-    /// [RFC 5280 A.1]: https://www.rfc-editor.org/rfc/rfc5280#appendix-A.1
+    /// [RFC 5280 A.1]: https://www.rfc-editor.org/info/rfc5280#appendix-A.1
     pub fn subjects(&self) -> Vec<DistinguishedName> {
         self.roots
             .iter()

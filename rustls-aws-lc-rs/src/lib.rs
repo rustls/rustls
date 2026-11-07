@@ -194,7 +194,7 @@ impl TicketerFactory for AwsLcRs {
     /// The `Ticketer` uses the [RFC 5077 §4] "Recommended Ticket Construction",
     /// using AES 256 for encryption and HMAC-SHA256 for ciphertext authentication.
     ///
-    /// [RFC 5077 §4]: https://www.rfc-editor.org/rfc/rfc5077#section-4
+    /// [RFC 5077 §4]: https://www.rfc-editor.org/info/rfc5077#section-4
     fn ticketer(&self) -> Result<Arc<dyn TicketProducer>, Error> {
         #[cfg(feature = "std")]
         {

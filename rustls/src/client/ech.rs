@@ -43,7 +43,7 @@ pub enum EchMode {
     /// No ECH configuration is available but the client should act as though it were.
     ///
     /// This is an anti-ossification measure, sometimes referred to as "GREASE"[^0].
-    /// [^0]: <https://www.rfc-editor.org/rfc/rfc8701>
+    /// [^0]: <https://www.rfc-editor.org/info/rfc8701>
     Grease(EchGreaseConfig),
 }
 
@@ -213,7 +213,7 @@ impl EchGreaseConfig {
     /// but doesn't have a real ECH configuration to use for the remote server. In this case
     /// a placeholder or "GREASE"[^0] extension is used.
     ///
-    /// [^0]: <https://www.rfc-editor.org/rfc/rfc8701>
+    /// [^0]: <https://www.rfc-editor.org/info/rfc8701>
     pub fn new(suite: &'static dyn Hpke, placeholder_key: HpkePublicKey) -> Self {
         Self {
             suite,
