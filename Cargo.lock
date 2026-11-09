@@ -498,9 +498,9 @@ dependencies = [
 
 [[package]]
 name = "crabgrind"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3f4bc9b199b6cfdf87ef7960ac7be99306a1ad4d6c442b1c3701cddb22ea47d"
+checksum = "0e4dbe352d7240a1ef7b2f5d7d283cefa9405835974f7aabc59838b9d1a6acc6"
 dependencies = [
  "bindgen",
  "cc",
