@@ -46,11 +46,8 @@ pub mod tls13;
 /// Hybrid public key encryption (RFC 9180).
 pub mod hpke;
 
-#[cfg(any(doc, test))]
+#[cfg(test)]
 pub(crate) mod test_provider;
-#[cfg(doc)]
-#[doc(hidden)]
-pub use test_provider::TEST_PROVIDER;
 #[cfg(test)]
 pub(crate) use test_provider::{TEST_PROVIDER, TLS13_TEST_SUITE};
 

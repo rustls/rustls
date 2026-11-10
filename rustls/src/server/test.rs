@@ -18,7 +18,7 @@ use crate::crypto::kx::{
     SupportedKxGroup,
 };
 use crate::crypto::test_provider::{
-    FAKE_HASH, FAKE_HMAC, KEY_EXCHANGE_GROUP, TLS_TEST_SUITE, TLS13_TEST_SUITE_ALT,
+    HMAC_SHA256, KEY_EXCHANGE_GROUP, SHA256, TLS_TEST_SUITE, TLS13_TEST_SUITE_ALT,
 };
 use crate::crypto::{
     CertificateIdentity, CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme,
@@ -691,12 +691,12 @@ impl ActiveKeyExchange for ActiveFakeFfdhe {
 static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: Tls12CipherSuite = Tls12CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-        hash_provider: FAKE_HASH,
+        hash_provider: SHA256,
         confidentiality_limit: 1,
     },
     kx: KeyExchangeAlgorithm::DHE,
     protocol_version: TLS12_VERSION,
-    prf_provider: &tls12::PrfUsingHmac(FAKE_HMAC),
+    prf_provider: &tls12::PrfUsingHmac(HMAC_SHA256),
     sign: &[SignatureScheme::ECDSA_NISTP256_SHA256],
     aead_alg: &FakeAead,
 };
@@ -704,12 +704,12 @@ static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: Tls12CipherSuite = Tls12CipherSuite 
 static TLS_DHE_RSA_WITH_AES_256_GCM_SHA384: Tls12CipherSuite = Tls12CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
-        hash_provider: FAKE_HASH,
+        hash_provider: SHA256,
         confidentiality_limit: 0,
     },
     kx: KeyExchangeAlgorithm::DHE,
     protocol_version: TLS12_VERSION,
-    prf_provider: &tls12::PrfUsingHmac(FAKE_HMAC),
+    prf_provider: &tls12::PrfUsingHmac(HMAC_SHA256),
     sign: &[SignatureScheme::ECDSA_NISTP256_SHA256],
     aead_alg: &FakeAead,
 };

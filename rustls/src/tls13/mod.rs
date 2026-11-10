@@ -202,7 +202,7 @@ const MAX_VERIFY_MSG: usize = 64 + CLIENT_CONSTANT.len() + hash::Output::MAX_LEN
 mod tests {
     use std::boxed::Box;
 
-    use crate::crypto::test_provider::FAKE_HASH;
+    use crate::crypto::test_provider::SHA256;
     use crate::crypto::{HashAlgorithm, TLS13_TEST_SUITE, hash};
     use crate::{CipherSuiteCommon, Tls13CipherSuite};
 
@@ -234,17 +234,17 @@ mod tests {
     impl hash::Hash for OtherHash {
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn start(&self) -> Box<dyn hash::Context> {
-            FAKE_HASH.start()
+            SHA256.start()
         }
 
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn hash(&self, data: &[u8]) -> hash::Output {
-            FAKE_HASH.hash(data)
+            SHA256.hash(data)
         }
 
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn output_len(&self) -> usize {
-            FAKE_HASH.output_len()
+            SHA256.output_len()
         }
 
         fn algorithm(&self) -> HashAlgorithm {

@@ -62,7 +62,7 @@ byteorder = "1.4.3"
 clap = { version = "4.3.21", features = ["derive", "env"] }
 crabgrind = "0.5"
 criterion = "0.8"
-graviola = "0.4"
+graviola = "0.4.5"
 hex = "0.4"
 hickory-resolver = { version = "0.26", features = ["https-aws-lc-rs", "webpki-roots"] }
 itertools = "0.15"
