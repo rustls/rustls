@@ -33,13 +33,11 @@ zlib-rs = { workspace = true, optional = true }
 
 [dev-dependencies]
 bencher = { workspace = true }
+graviola = { workspace = true }
 rcgen = { workspace = true }
 rustls-test = { workspace = true, default-features = false }
 time = { workspace = true }
 webpki-roots = { workspace = true }
-
-[target.'cfg(any(target_arch = "aarch64", target_arch = "x86_64"))'.dev-dependencies]
-graviola = { workspace = true }
 
 [[example]]
 name = "test_ca"

@@ -4,6 +4,9 @@ use alloc::vec::Vec;
 use core::time::Duration;
 use std::borrow::Cow;
 
+use graviola::hashing::sha2::Sha256Context;
+use graviola::hashing::{Hash as _, HashContext as _};
+
 use crate::crypto::cipher::{
     AeadKey, InboundOpaque, Iv, KeyBlockShape, OutboundPlain, Record, RecordDecrypter,
     RecordEncrypter, Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError,
@@ -72,11 +75,11 @@ impl crypto::TicketerFactory for Provider {
 pub(crate) const TLS13_TEST_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite(0xff13),
-        hash_provider: FAKE_HASH,
+        hash_provider: SHA256,
         confidentiality_limit: u64::MAX,
     },
     protocol_version: crate::version::TLS13_VERSION,
-    hkdf_provider: &tls13::HkdfUsingHmac(FAKE_HMAC),
+    hkdf_provider: &tls13::HkdfUsingHmac(HMAC_SHA256),
     aead_alg: &Aead,
     quic: None,
 };
@@ -85,11 +88,11 @@ pub(crate) const TLS13_TEST_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {
 pub(crate) const TLS13_TEST_SUITE_ALT: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite(0xff14),
-        hash_provider: FAKE_HASH,
+        hash_provider: SHA256,
         confidentiality_limit: u64::MAX,
     },
     protocol_version: crate::version::TLS13_VERSION,
-    hkdf_provider: &tls13::HkdfUsingHmac(FAKE_HMAC),
+    hkdf_provider: &tls13::HkdfUsingHmac(HMAC_SHA256),
     aead_alg: &Aead,
     quic: None,
 };
@@ -97,13 +100,13 @@ pub(crate) const TLS13_TEST_SUITE_ALT: &Tls13CipherSuite = &Tls13CipherSuite {
 pub(crate) const TLS_TEST_SUITE: &Tls12CipherSuite = &Tls12CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite(0xff12),
-        hash_provider: FAKE_HASH,
+        hash_provider: SHA256,
         confidentiality_limit: u64::MAX,
     },
     protocol_version: crate::version::TLS12_VERSION,
     kx: KeyExchangeAlgorithm::ECDHE,
     sign: &[SIGNATURE_SCHEME],
-    prf_provider: &tls12::PrfUsingHmac(FAKE_HMAC),
+    prf_provider: &tls12::PrfUsingHmac(HMAC_SHA256),
     aead_alg: &Aead,
 };
 
@@ -124,166 +127,78 @@ impl TicketProducer for Ticketer {
     }
 }
 
-#[cfg(all(not(doc), any(target_arch = "aarch64", target_arch = "x86_64")))]
-pub(crate) use hash_impl::SHA256;
-pub(crate) use hash_impl::{FAKE_HASH, FAKE_HMAC};
+pub(crate) const SHA256: &'static dyn hash::Hash = &graviola::hashing::Sha256;
 
-#[cfg(all(not(doc), any(target_arch = "aarch64", target_arch = "x86_64")))]
-mod hash_impl {
-    use graviola::hashing::sha2::Sha256Context;
-    use graviola::hashing::{Hash as _, HashContext as _};
-
-    use super::*;
-
-    pub(crate) const FAKE_HASH: &dyn hash::Hash = SHA256;
-    pub(crate) const SHA256: &'static dyn hash::Hash = &graviola::hashing::Sha256;
-
-    impl hash::Hash for graviola::hashing::Sha256 {
-        fn start(&self) -> Box<dyn hash::Context> {
-            Box::new(Sha256Context::new())
-        }
-
-        fn hash(&self, data: &[u8]) -> hash::Output {
-            let mut cx = Self::new();
-            cx.update(data);
-            hash::Output::new(cx.finish().as_ref())
-        }
-
-        fn output_len(&self) -> usize {
-            Sha256Context::OUTPUT_SZ
-        }
-
-        fn algorithm(&self) -> HashAlgorithm {
-            HashAlgorithm::SHA256
-        }
+impl hash::Hash for graviola::hashing::Sha256 {
+    fn start(&self) -> Box<dyn hash::Context> {
+        Box::new(Sha256Context::new())
     }
 
-    impl hash::Context for Sha256Context {
-        fn fork_finish(&self) -> hash::Output {
-            hash::Output::new(self.clone().finish().as_ref())
-        }
-
-        fn fork(&self) -> Box<dyn hash::Context> {
-            Box::new(self.clone())
-        }
-
-        fn finish(self: Box<Self>) -> hash::Output {
-            hash::Output::new((*self).finish().as_ref())
-        }
-
-        fn update(&mut self, data: &[u8]) {
-            self.update(data);
-        }
+    fn hash(&self, data: &[u8]) -> hash::Output {
+        let mut cx = Self::new();
+        cx.update(data);
+        hash::Output::new(cx.finish().as_ref())
     }
 
-    pub(crate) const FAKE_HMAC: &dyn hmac::Hmac = &Sha256Hmac;
-
-    pub(super) struct Sha256Hmac;
-
-    impl hmac::Hmac for Sha256Hmac {
-        fn with_key(&self, key: &[u8]) -> Box<dyn hmac::Key> {
-            Box::new(Sha256HmacKey(graviola::hashing::hmac::Hmac::<
-                graviola::hashing::Sha256,
-            >::new(key)))
-        }
-
-        fn hash_output_len(&self) -> usize {
-            Sha256Context::OUTPUT_SZ
-        }
+    fn output_len(&self) -> usize {
+        Sha256Context::OUTPUT_SZ
     }
 
-    struct Sha256HmacKey(graviola::hashing::hmac::Hmac<graviola::hashing::Sha256>);
-
-    impl hmac::Key for Sha256HmacKey {
-        fn sign_concat(&self, first: &[u8], middle: &[&[u8]], last: &[u8]) -> hmac::Tag {
-            let mut ctx = self.0.clone();
-            ctx.update(first);
-            for m in middle {
-                ctx.update(m);
-            }
-            ctx.update(last);
-            hmac::Tag::new(ctx.finish().as_ref())
-        }
-
-        fn tag_len(&self) -> usize {
-            Sha256Context::OUTPUT_SZ
-        }
+    fn algorithm(&self) -> HashAlgorithm {
+        HashAlgorithm::SHA256
     }
 }
 
-#[cfg(any(doc, not(any(target_arch = "aarch64", target_arch = "x86_64"))))]
-mod hash_impl {
-    use super::*;
-
-    pub(crate) const FAKE_HASH: &dyn hash::Hash = &Hash;
-
-    pub(super) struct Hash;
-
-    impl hash::Hash for Hash {
-        fn start(&self) -> Box<dyn hash::Context> {
-            Box::new(HashContext)
-        }
-
-        fn hash(&self, _data: &[u8]) -> hash::Output {
-            hash::Output::new(HASH_OUTPUT)
-        }
-
-        fn algorithm(&self) -> HashAlgorithm {
-            HashAlgorithm::from(0xff)
-        }
-
-        fn output_len(&self) -> usize {
-            32
-        }
+impl hash::Context for Sha256Context {
+    fn fork_finish(&self) -> hash::Output {
+        hash::Output::new(self.clone().finish().as_ref())
     }
 
-    struct HashContext;
-
-    impl hash::Context for HashContext {
-        fn fork_finish(&self) -> hash::Output {
-            self.fork().finish()
-        }
-
-        fn fork(&self) -> Box<dyn hash::Context> {
-            Box::new(Self)
-        }
-
-        fn finish(self: Box<Self>) -> hash::Output {
-            hash::Output::new(HASH_OUTPUT)
-        }
-
-        fn update(&mut self, _data: &[u8]) {}
+    fn fork(&self) -> Box<dyn hash::Context> {
+        Box::new(self.clone())
     }
 
-    const HASH_OUTPUT: &[u8] = b"HashHashHashHashHashHashHashHash";
-
-    pub(crate) const FAKE_HMAC: &dyn hmac::Hmac = &Hmac;
-
-    pub(super) struct Hmac;
-
-    impl hmac::Hmac for Hmac {
-        fn with_key(&self, _key: &[u8]) -> Box<dyn hmac::Key> {
-            Box::new(HmacKey)
-        }
-
-        fn hash_output_len(&self) -> usize {
-            HASH_OUTPUT.len()
-        }
+    fn finish(self: Box<Self>) -> hash::Output {
+        hash::Output::new((*self).finish().as_ref())
     }
 
-    struct HmacKey;
+    fn update(&mut self, data: &[u8]) {
+        self.update(data);
+    }
+}
 
-    impl hmac::Key for HmacKey {
-        fn sign_concat(&self, _first: &[u8], _middle: &[&[u8]], _last: &[u8]) -> hmac::Tag {
-            hmac::Tag::new(HMAC_OUTPUT)
-        }
+pub(crate) const HMAC_SHA256: &dyn hmac::Hmac = &Sha256Hmac;
 
-        fn tag_len(&self) -> usize {
-            HMAC_OUTPUT.len()
-        }
+pub(super) struct Sha256Hmac;
+
+impl hmac::Hmac for Sha256Hmac {
+    fn with_key(&self, key: &[u8]) -> Box<dyn hmac::Key> {
+        Box::new(Sha256HmacKey(graviola::hashing::hmac::Hmac::<
+            graviola::hashing::Sha256,
+        >::new(key)))
     }
 
-    const HMAC_OUTPUT: &[u8] = b"HmacHmacHmacHmacHmacHmacHmacHmac";
+    fn hash_output_len(&self) -> usize {
+        Sha256Context::OUTPUT_SZ
+    }
+}
+
+struct Sha256HmacKey(graviola::hashing::hmac::Hmac<graviola::hashing::Sha256>);
+
+impl hmac::Key for Sha256HmacKey {
+    fn sign_concat(&self, first: &[u8], middle: &[&[u8]], last: &[u8]) -> hmac::Tag {
+        let mut ctx = self.0.clone();
+        ctx.update(first);
+        for m in middle {
+            ctx.update(m);
+        }
+        ctx.update(last);
+        hmac::Tag::new(ctx.finish().as_ref())
+    }
+
+    fn tag_len(&self) -> usize {
+        Sha256Context::OUTPUT_SZ
+    }
 }
 
 struct ActiveKeyExchange(NamedGroup);
