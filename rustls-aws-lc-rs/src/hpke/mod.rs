@@ -574,6 +574,15 @@ impl<const KDF_SIZE: usize> DhKem<KDF_SIZE> {
         recipient: &HpkePublicKey,
         sk_e: agreement::PrivateKey,
     ) -> Result<(KemSharedSecret<KDF_SIZE>, EncapsulatedSecret), Error> {
+        // RFC 7748 decoders mask the high bit of an X25519 public key and reduce its
+        // u-coordinate mod p, so a key has several encodings. The encoding we are given is
+        // hashed into the KEM context as-is below, whereas the recipient uses the canonical
+        // encoding of its own key, so a message sealed to a non-canonical encoding can never
+        // be opened. Reject such encodings rather than produce undecryptable output.
+        if self.id == HpkeKem::DHKEM_X25519_HKDF_SHA256 && x25519_is_non_canonical(&recipient.0) {
+            return Err(Error::General("non-canonical X25519 public key".into()));
+        }
+
         // def Encap(pkR):
         //   skE, pkE = GenerateKeyPair()
         //   dh = DH(skE, pkR)
@@ -753,6 +762,23 @@ fn generate_key_pair(
             .to_vec(),
     );
     Ok((public_key, private_key))
+}
+
+/// Whether `encoding` is a well-formed but non-canonical X25519 public key.
+///
+/// A 32 byte encoding is non-canonical when its little-endian value is at least
+/// p = 2^255 - 19, which includes any with the high bit set. Encodings of other lengths are
+/// left to the agreement to reject.
+fn x25519_is_non_canonical(encoding: &[u8]) -> bool {
+    // p = 2^255 - 19 in little-endian.
+    const P: [u8; 32] = {
+        let mut p = [0xff; 32];
+        p[0] = 0xed;
+        p[31] = 0x7f;
+        p
+    };
+
+    encoding.len() == P.len() && encoding.iter().rev().ge(P.iter().rev())
 }
 
 /// KeySchedule holds the derived AEAD key, base nonce, and seq number

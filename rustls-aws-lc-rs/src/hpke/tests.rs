@@ -183,6 +183,64 @@ fn open_at_the_sequence_limit_fails_without_advancing() {
     assert_eq!(opener.key_schedule.seq_num, max_seq_num);
 }
 
+#[test]
+fn x25519_non_canonical_encodings() {
+    // p - 1 is the largest canonical u-coordinate.
+    let mut p_minus_one = [0xff; 32];
+    p_minus_one[0] = 0xec;
+    p_minus_one[31] = 0x7f;
+    assert!(!x25519_is_non_canonical(&p_minus_one));
+
+    // p, 2^255 - 1 and 2^255 are not canonical.
+    let mut p = p_minus_one;
+    p[0] = 0xed;
+    assert!(x25519_is_non_canonical(&p));
+    let mut below_high_bit = [0xff; 32];
+    below_high_bit[31] = 0x7f;
+    assert!(x25519_is_non_canonical(&below_high_bit));
+    let mut high_bit = [0; 32];
+    high_bit[31] = 0x80;
+    assert!(x25519_is_non_canonical(&high_bit));
+
+    // Encodings of the wrong length are left to the agreement to reject.
+    assert!(!x25519_is_non_canonical(&[0xff; 31]));
+    assert!(!x25519_is_non_canonical(&[0xff; 33]));
+}
+
+#[cfg(not(feature = "fips"))]
+#[test]
+fn x25519_sender_rejects_non_canonical_recipient_key() {
+    // The base point u = 9 is a valid recipient public key of large order. Adding p, or
+    // setting the high bit, gives encodings that decode to the same point but which the
+    // recipient would never produce for its own key.
+    let mut canonical = [0; 32];
+    canonical[0] = 9;
+    let mut plus_p = [0xff; 32];
+    plus_p[0] = 9 + 0xed;
+    plus_p[31] = 0x7f;
+    let mut high_bit = canonical;
+    high_bit[31] |= 0x80;
+
+    let suites: &[&dyn Hpke] = &[
+        DH_KEM_X25519_HKDF_SHA256_AES_128,
+        DH_KEM_X25519_HKDF_SHA256_AES_256,
+        DH_KEM_X25519_HKDF_SHA256_CHACHA20_POLY1305,
+    ];
+    for suite in suites {
+        assert!(
+            suite
+                .setup_sealer(b"info", &HpkePublicKey(canonical.to_vec()))
+                .is_ok()
+        );
+        for encoding in [plus_p, high_bit] {
+            let err = suite
+                .setup_sealer(b"info", &HpkePublicKey(encoding.to_vec()))
+                .unwrap_err();
+            assert!(matches!(err, Error::General(_)), "{err:?}");
+        }
+    }
+}
+
 /// Confirm open/seal operations work using the test vectors from [RFC 9180 Appendix A].
 ///
 /// [RFC 9180 Appendix A]: https://www.rfc-editor.org/info/rfc9180#TestVectors
@@ -710,15 +768,11 @@ impl Deref for HexBytes {
 
 /// Flags of `acceptable` vectors that the implementation accepts rather than rejects.
 ///
-/// RFC 9180 leaves these to the implementation. aws-lc-rs follows RFC 7748 literally,
-/// masking the high bit of a non-canonical X25519 key and computing with points on the
-/// twist, and no length limit is applied to `info`.
-const ACCEPTED_FLAGS: &[&str] = &[
-    "LongInfo",
-    "NonCanonicalEncLargeOrder",
-    "NonCanonicalPkRmLargeOrder",
-    "Twist",
-];
+/// RFC 9180 leaves these to the implementation. When receiving, aws-lc-rs follows RFC 7748
+/// literally, masking the high bit of a non-canonical `enc` and computing with points on
+/// the twist, and no length limit is applied to `info`. When sending, a non-canonical
+/// recipient public key (`NonCanonicalPkRmLargeOrder`) is rejected.
+const ACCEPTED_FLAGS: &[&str] = &["LongInfo", "NonCanonicalEncLargeOrder", "Twist"];
 
 /// Flags of vectors whose `enc` is not `Nenc` bytes long.
 ///
