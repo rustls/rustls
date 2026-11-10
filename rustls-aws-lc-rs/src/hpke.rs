@@ -1129,6 +1129,7 @@ mod rfc_tests {
 
     use serde::Deserialize;
 
+    use super::test_suites::{TestHpke, lookup_suite};
     use super::*;
 
     /// Confirm open/seal operations work using the test vectors from [RFC 9180 Appendix A].
@@ -1172,48 +1173,6 @@ mod rfc_tests {
         }
     }
 
-    trait TestHpke: Hpke {
-        fn setup_test_sealer(
-            &self,
-            info: &[u8],
-            pub_key: &HpkePublicKey,
-            sk_em: &[u8],
-        ) -> Result<(EncapsulatedSecret, Box<dyn HpkeSealer + 'static>), Error>;
-    }
-
-    impl<const KEY_SIZE: usize, const KDF_SIZE: usize> TestHpke for HpkeAwsLcRs<KEY_SIZE, KDF_SIZE> {
-        fn setup_test_sealer(
-            &self,
-            info: &[u8],
-            pub_key: &HpkePublicKey,
-            sk_em: &[u8],
-        ) -> Result<(EncapsulatedSecret, Box<dyn HpkeSealer + 'static>), Error> {
-            let (encap, sealer) = Sealer::test_only_new(self, info, pub_key, sk_em)?;
-            Ok((encap, Box::new(sealer)))
-        }
-    }
-
-    static TEST_SUITES: &[&dyn TestHpke] = &[
-        DH_KEM_P256_HKDF_SHA256_AES_128,
-        DH_KEM_P256_HKDF_SHA256_AES_256,
-        #[cfg(not(feature = "fips"))]
-        DH_KEM_P256_HKDF_SHA256_CHACHA20_POLY1305,
-        DH_KEM_P384_HKDF_SHA384_AES_128,
-        DH_KEM_P384_HKDF_SHA384_AES_256,
-        #[cfg(not(feature = "fips"))]
-        DH_KEM_P384_HKDF_SHA384_CHACHA20_POLY1305,
-        DH_KEM_P521_HKDF_SHA512_AES_128,
-        DH_KEM_P521_HKDF_SHA512_AES_256,
-        #[cfg(not(feature = "fips"))]
-        DH_KEM_P521_HKDF_SHA512_CHACHA20_POLY1305,
-        #[cfg(not(feature = "fips"))]
-        DH_KEM_X25519_HKDF_SHA256_AES_128,
-        #[cfg(not(feature = "fips"))]
-        DH_KEM_X25519_HKDF_SHA256_AES_256,
-        #[cfg(not(feature = "fips"))]
-        DH_KEM_X25519_HKDF_SHA256_CHACHA20_POLY1305,
-    ];
-
     #[derive(Deserialize, Debug)]
     struct TestVector {
         mode: u8,
@@ -1255,17 +1214,7 @@ mod rfc_tests {
                 return None;
             }
 
-            Self::lookup_suite(self.suite(), TEST_SUITES)
-        }
-
-        fn lookup_suite(
-            suite: HpkeSuite,
-            supported: &[&'static dyn TestHpke],
-        ) -> Option<&'static dyn TestHpke> {
-            supported
-                .iter()
-                .find(|s| s.suite() == suite)
-                .copied()
+            lookup_suite(self.suite())
         }
     }
 
@@ -1276,4 +1225,60 @@ mod rfc_tests {
         )
         .expect("failed to deserialize test vectors")
     }
+}
+
+/// Supported suites extended with test-only operations that take fixed key material.
+#[cfg(test)]
+mod test_suites {
+    use super::*;
+
+    /// Find the supported suite matching `suite`, if any.
+    pub(super) fn lookup_suite(suite: HpkeSuite) -> Option<&'static dyn TestHpke> {
+        TEST_SUITES
+            .iter()
+            .find(|s| s.suite() == suite)
+            .copied()
+    }
+
+    pub(super) trait TestHpke: Hpke {
+        fn setup_test_sealer(
+            &self,
+            info: &[u8],
+            pub_key: &HpkePublicKey,
+            sk_em: &[u8],
+        ) -> Result<(EncapsulatedSecret, Box<dyn HpkeSealer + 'static>), Error>;
+    }
+
+    impl<const KEY_SIZE: usize, const KDF_SIZE: usize> TestHpke for HpkeAwsLcRs<KEY_SIZE, KDF_SIZE> {
+        fn setup_test_sealer(
+            &self,
+            info: &[u8],
+            pub_key: &HpkePublicKey,
+            sk_em: &[u8],
+        ) -> Result<(EncapsulatedSecret, Box<dyn HpkeSealer + 'static>), Error> {
+            let (encap, sealer) = Sealer::test_only_new(self, info, pub_key, sk_em)?;
+            Ok((encap, Box::new(sealer)))
+        }
+    }
+
+    static TEST_SUITES: &[&dyn TestHpke] = &[
+        DH_KEM_P256_HKDF_SHA256_AES_128,
+        DH_KEM_P256_HKDF_SHA256_AES_256,
+        #[cfg(not(feature = "fips"))]
+        DH_KEM_P256_HKDF_SHA256_CHACHA20_POLY1305,
+        DH_KEM_P384_HKDF_SHA384_AES_128,
+        DH_KEM_P384_HKDF_SHA384_AES_256,
+        #[cfg(not(feature = "fips"))]
+        DH_KEM_P384_HKDF_SHA384_CHACHA20_POLY1305,
+        DH_KEM_P521_HKDF_SHA512_AES_128,
+        DH_KEM_P521_HKDF_SHA512_AES_256,
+        #[cfg(not(feature = "fips"))]
+        DH_KEM_P521_HKDF_SHA512_CHACHA20_POLY1305,
+        #[cfg(not(feature = "fips"))]
+        DH_KEM_X25519_HKDF_SHA256_AES_128,
+        #[cfg(not(feature = "fips"))]
+        DH_KEM_X25519_HKDF_SHA256_AES_256,
+        #[cfg(not(feature = "fips"))]
+        DH_KEM_X25519_HKDF_SHA256_CHACHA20_POLY1305,
+    ];
 }
