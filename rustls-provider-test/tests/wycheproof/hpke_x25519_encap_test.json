@@ -1,0 +1,402 @@
+{
+  "algorithm": "HPKE",
+  "schema": "hpke_encap_test_schema.json",
+  "numberOfTests": 19,
+  "header": [
+    "HPKE (RFC 9180) base-mode encapsulation-key validation (SetupBaseS) with DHKEM(X25519, HKDF-SHA256). Every case carries ikmE (and the derived skEm) as the encapsulation randomness; its presence does not mean the case is valid. See doc/hpke.md."
+  ],
+  "notes": {
+    "LowOrderPublic": {
+      "bugType": "DEFINED",
+      "description": "The encapsulation key is a low-order point on the curve or its twist."
+    },
+    "NonCanonicalPkRmLargeOrder": {
+      "bugType": "EDGE_CASE",
+      "description": "pkRm is the valid Pseudorandom encapsulation key with bit 255 set. RFC 7748 Section 5 masks bit 255, so the Diffie-Hellman output equals that for the canonical key. SerializePublicKey and DeserializePublicKey are the identity for X25519 (RFC 9180 Section 7.1.1), so an RFC-literal sender hashes the pkRm bytes as given into kem_context = enc || pkRm (Section 4.1 Encap); enc and ct are what such a sender produces from ikmE. An implementation may instead reject the key as non-canonical. A sender that canonicalizes pkRm before building kem_context produces a different ct, which deviates from RFC 9180. The holder of the matching private key builds kem_context from the canonical SerializePublicKey(pk(skR)) in Decap, so it cannot open this ct; for that reason no skRm is given.",
+      "links": [
+        "RFC 7748, Section 5",
+        "RFC 9180, Section 4.1",
+        "RFC 9180, Section 7.1.1"
+      ]
+    },
+    "NonCanonicalPublic": {
+      "bugType": "DEFINED",
+      "description": "The encapsulation key is a non-canonical encoding: its u-coordinate is >= p, or bit 255 is set, or both. RFC 7748 Section 5 masks bit 255 and reduces u mod p."
+    },
+    "Pseudorandom": {
+      "bugType": "BASIC",
+      "description": "A well-formed encapsulation key; SetupBaseS must succeed."
+    },
+    "SmallPublicKey": {
+      "bugType": "DEFINED",
+      "description": "The encapsulation key is a small-order point whose u-coordinate is 0 or 1 (mod p); it does not belong to a valid private key."
+    },
+    "WrongLengthPublicKey": {
+      "bugType": "MODIFIED_PARAMETER",
+      "description": "The encapsulation key is not 32 bytes (empty, short, or long) and must be rejected."
+    },
+    "ZeroSharedSecret": {
+      "bugType": "CONFIDENTIALITY",
+      "description": "The encapsulation key is a small-order point whose X25519 Diffie-Hellman output is all-zero for every ephemeral key, so SetupBaseS MUST fail. RFC 9180 Section 7.1.4 states \"For X25519 and X448, public keys and Diffie-Hellman outputs MUST be validated as described in [RFC7748]\". That sentence is not limited to the recipient, and the validation RFC 7748 Section 6.1 describes is the all-zero check; the next sentence additionally requires recipients to check for the all-zero value and abort. Section 8.2 likewise notes that DHKEM Encap() fails when given an invalid recipient public key. (Plain X25519, RFC 7748 Section 6.1, leaves the all-zero check optional, which is why x25519_test.json labels such keys acceptable.) RUSTSEC-2026-0072 and wolfSSL before 5.9.2, where the check existed but was off by default, accepted the all-zero output.",
+      "effect": "The sender's message is encrypted under a key that anyone can compute: the shared secret depends only on the public values enc and pkRm.",
+      "links": [
+        "RFC 9180, Section 7.1.4",
+        "https://rustsec.org/advisories/RUSTSEC-2026-0072.html",
+        "https://github.com/wolfSSL/wolfssl/commit/2aacc18788f8633ea937efca257ea676128e4e0f"
+      ]
+    }
+  },
+  "testGroups": [
+    {
+      "type": "HpkeEncapTest",
+      "source": {
+        "name": "github/C2SP/wycheproof/pull/273",
+        "version": "0.1"
+      },
+      "kem": "DHKEM(X25519, HKDF-SHA256)",
+      "kemId": 32,
+      "kdf": "HKDF-SHA256",
+      "kdfId": 1,
+      "aead": "AES-128-GCM",
+      "aeadId": 1,
+      "tests": [
+        {
+          "tcId": 1,
+          "comment": "valid encapsulation key",
+          "pkRm": "34244fcfe68b99aeb02ecc64b033170a2973f43fc14c36d6a92562b1c9045f10",
+          "ikmE": "5c2179753439e19a85fc894a91fbcca45a95ee8ad57733b34c660205f691b8d7",
+          "skEm": "0b437bd4474efdcf983c3d9a1e17fc012621a752825ab8eba097ba8ddd212c3c",
+          "skRm": "d0d58da87c32bed247e359b2b7abf0f5ca8fa324e29fe73ae63f38ec84ac4cb7",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "426561757479206973207472757468",
+          "enc": "25848f4f85bb10244115b28d536ea6b99df989a5a6c2f554442f4c67f3e3d714",
+          "ct": "9c7bcaf6a5c55fd7fe75ddb18ca8fc27b27b106f1a320aa4f90cdc2a33e542",
+          "result": "valid",
+          "flags": [
+            "Pseudorandom"
+          ]
+        },
+        {
+          "tcId": 2,
+          "comment": "small-order encapsulation key 0000000000000000000000000000000000000000000000000000000000000000 with an all-zero shared secret",
+          "pkRm": "0000000000000000000000000000000000000000000000000000000000000000",
+          "ikmE": "4505ce785f1449837166ccc439baf7bebc117c6ef95c191e3803463e79da956d",
+          "skEm": "b739284f2d08e01f67111cc634d3e2686ea8fb154e5adbae6a35de873efe27d5",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "ZeroSharedSecret",
+            "LowOrderPublic",
+            "SmallPublicKey"
+          ]
+        },
+        {
+          "tcId": 3,
+          "comment": "small-order encapsulation key 0100000000000000000000000000000000000000000000000000000000000000 with an all-zero shared secret",
+          "pkRm": "0100000000000000000000000000000000000000000000000000000000000000",
+          "ikmE": "059bdde59de1cd864947f22b21a39c517549d76c89a45a6957985d8746f5090e",
+          "skEm": "c1b593cf3aa19c6e85964eb9dba7bf634e335edcb63254669ece04a88023b28a",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "ZeroSharedSecret",
+            "LowOrderPublic",
+            "SmallPublicKey"
+          ]
+        },
+        {
+          "tcId": 4,
+          "comment": "small-order encapsulation key e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800 with an all-zero shared secret",
+          "pkRm": "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800",
+          "ikmE": "5cfc35d372f88346e51785b2a2ea63b80864ab467c81f55eb59446a64ddfaea5",
+          "skEm": "1528bfe48ae20da5d290edf0c411d1aa9fdd2e0a1f3e93d6df875839f5931faa",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "ZeroSharedSecret",
+            "LowOrderPublic"
+          ]
+        },
+        {
+          "tcId": 5,
+          "comment": "small-order encapsulation key 5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157 with an all-zero shared secret",
+          "pkRm": "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157",
+          "ikmE": "5e595dc6746c4d7e77f61e35f071bbf7c837348fc34cfcb0657ca096a00ff963",
+          "skEm": "c982ff8dc20acb2b26a96d5329f9f21381b81d7752e0ef13f739ae1bd452a626",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "ZeroSharedSecret",
+            "LowOrderPublic"
+          ]
+        },
+        {
+          "tcId": 6,
+          "comment": "small-order encapsulation key ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f with an all-zero shared secret",
+          "pkRm": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+          "ikmE": "0258aeb384072344413c121133e19243f9f87dc0446788f88d72dfe3ebb64ce4",
+          "skEm": "e1301b9def1e4a2e9065d42376fa36698b8a595854e8f27d94ae2a1fa587a834",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "ZeroSharedSecret",
+            "LowOrderPublic"
+          ]
+        },
+        {
+          "tcId": 7,
+          "comment": "small-order encapsulation key edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f (non-canonical) with an all-zero shared secret",
+          "pkRm": "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+          "ikmE": "cac446a6b63e729dbdfe94e1410ff224616c8474e46ecb1367959c90cc9c4fa2",
+          "skEm": "89492ff3f5fb21d70bd55e21fa1f81d6d172a60c9593ec199ef2d4206ab3c2da",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "ZeroSharedSecret",
+            "LowOrderPublic",
+            "SmallPublicKey",
+            "NonCanonicalPublic"
+          ]
+        },
+        {
+          "tcId": 8,
+          "comment": "small-order encapsulation key eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f (non-canonical) with an all-zero shared secret",
+          "pkRm": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+          "ikmE": "d08a97da17473ba67266a1e561a6b543f1d172e7247ab8369f7972ae9e750add",
+          "skEm": "5a28329e1865beef86a58d7d7ad6c0b60e1f30c4282462eac6d8d3b8e04a6389",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "ZeroSharedSecret",
+            "LowOrderPublic",
+            "SmallPublicKey",
+            "NonCanonicalPublic"
+          ]
+        },
+        {
+          "tcId": 9,
+          "comment": "small-order encapsulation key 0000000000000000000000000000000000000000000000000000000000000080 (non-canonical, bit 255 set) with an all-zero shared secret",
+          "pkRm": "0000000000000000000000000000000000000000000000000000000000000080",
+          "ikmE": "acd1beee83c2c25d2520530d17a35cddf7a90232c563447b7eb166b6fa0aa11a",
+          "skEm": "44af97652b82d518ac94396f7ed5d6c4443206beef684fd162eadc56e9f67be4",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "ZeroSharedSecret",
+            "LowOrderPublic",
+            "SmallPublicKey",
+            "NonCanonicalPublic"
+          ]
+        },
+        {
+          "tcId": 10,
+          "comment": "small-order encapsulation key 0100000000000000000000000000000000000000000000000000000000000080 (non-canonical, bit 255 set) with an all-zero shared secret",
+          "pkRm": "0100000000000000000000000000000000000000000000000000000000000080",
+          "ikmE": "95f5ea4b0ba3fce1d14bf12826fc80387332b0e511646b38bcf3af30b96759a5",
+          "skEm": "4a85db06379df7405d92af5aa23f12b0eaaf770eaeabd07474ddc81d7c407943",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "ZeroSharedSecret",
+            "LowOrderPublic",
+            "SmallPublicKey",
+            "NonCanonicalPublic"
+          ]
+        },
+        {
+          "tcId": 11,
+          "comment": "small-order encapsulation key e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b880 (non-canonical, bit 255 set) with an all-zero shared secret",
+          "pkRm": "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b880",
+          "ikmE": "4fc69f27747141d5e6367c383e153719444920cd00c0b68215acc6e4ba430a63",
+          "skEm": "4306fd3f577bf11876da3c5f8b17e83b162c1e63d173b7d75daf1284d4b62adb",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "ZeroSharedSecret",
+            "LowOrderPublic",
+            "NonCanonicalPublic"
+          ]
+        },
+        {
+          "tcId": 12,
+          "comment": "small-order encapsulation key 5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f11d7 (non-canonical, bit 255 set) with an all-zero shared secret",
+          "pkRm": "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f11d7",
+          "ikmE": "2b2879f5673f7fc9771b0b3dd5e586e2ebeb8666dd6009a912d91d7d61bdb146",
+          "skEm": "17e0e9082d075776e701afc5a6011459ec23b82c2e24fe88b1548ea2b66e659c",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "ZeroSharedSecret",
+            "LowOrderPublic",
+            "NonCanonicalPublic"
+          ]
+        },
+        {
+          "tcId": 13,
+          "comment": "small-order encapsulation key ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff (non-canonical, bit 255 set) with an all-zero shared secret",
+          "pkRm": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "ikmE": "1c802f34a290ef6970801d5d5efd940c4cf11d8e61f415d9d9a09752834303d1",
+          "skEm": "c276d63df2107d454d2ba477099c985324203f3bc8dcc8c4a9c21350657da954",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "ZeroSharedSecret",
+            "LowOrderPublic",
+            "NonCanonicalPublic"
+          ]
+        },
+        {
+          "tcId": 14,
+          "comment": "small-order encapsulation key edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff (non-canonical, bit 255 set) with an all-zero shared secret",
+          "pkRm": "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "ikmE": "cc2528c57e112fe272e6070b376e041db1d44dc694107fe457822125f85f4b2c",
+          "skEm": "0b0076b55ab4d585f01a839022f80722aa957d8c3d99b5fc33e4de6029ad5e29",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "ZeroSharedSecret",
+            "LowOrderPublic",
+            "SmallPublicKey",
+            "NonCanonicalPublic"
+          ]
+        },
+        {
+          "tcId": 15,
+          "comment": "small-order encapsulation key eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff (non-canonical, bit 255 set) with an all-zero shared secret",
+          "pkRm": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "ikmE": "3a2b0d22145f1cba88f3da6e1da4967eeec172a4b1ae112ed3dd32789a9f9e6c",
+          "skEm": "a1d31938c2821f6fc09bbecd1e62d8671e90c847f1004b07ab4e6db70ccbfd5a",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "ZeroSharedSecret",
+            "LowOrderPublic",
+            "SmallPublicKey",
+            "NonCanonicalPublic"
+          ]
+        },
+        {
+          "tcId": 16,
+          "comment": "empty encapsulation key",
+          "pkRm": "",
+          "ikmE": "2f5a87f8a72a53f21a90ddaf62ff6ea21c81ad5f31e8a8fb2308a8d378c9ccc2",
+          "skEm": "ea17d7c1f0125135b1c7fc6195882f1f9699177d7a7864d3d4619812cfe00f30",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "WrongLengthPublicKey"
+          ]
+        },
+        {
+          "tcId": 17,
+          "comment": "encapsulation key one byte short",
+          "pkRm": "34244fcfe68b99aeb02ecc64b033170a2973f43fc14c36d6a92562b1c9045f",
+          "ikmE": "0bc9d35e293a9691d7b0a181649265e51df138199614ea9ef2bad1571f326080",
+          "skEm": "297d687fe5db1dad195d6baba4b07a5830cf1f53e1af546a49e5c545e33eb89a",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "WrongLengthPublicKey"
+          ]
+        },
+        {
+          "tcId": 18,
+          "comment": "encapsulation key one byte long",
+          "pkRm": "34244fcfe68b99aeb02ecc64b033170a2973f43fc14c36d6a92562b1c9045f1000",
+          "ikmE": "2a2144bb3cfcef14d2bbe6b132059f8215bfe7a7e6b592912098f87cbc7a0139",
+          "skEm": "86630b1e18e5f203d1406885a46d0d9977c88509e8e583857b1f5c7f263eecac",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "",
+          "enc": "",
+          "ct": "",
+          "result": "invalid",
+          "flags": [
+            "WrongLengthPublicKey"
+          ]
+        },
+        {
+          "tcId": 19,
+          "comment": "valid encapsulation key with bit 255 set; enc and ct are what an RFC-literal sender produces (kem_context uses pkRm as given)",
+          "pkRm": "34244fcfe68b99aeb02ecc64b033170a2973f43fc14c36d6a92562b1c9045f90",
+          "ikmE": "13d89d3ee6b89bcaaccaa5f3f18137e4e9904f41ca7799ec034278305061e881",
+          "skEm": "60847849988350f60c0acb05941804e65b3e7e4f6c7b432cf53c00d2a10a441a",
+          "info": "777963686570726f6f662068706b6520696e666f",
+          "aad": "777963686570726f6f6620616164",
+          "pt": "426561757479206973207472757468",
+          "enc": "08217884851dc6f8514517581f96ab8c4ef2c0c6ec300e3dd663d9654d220c7c",
+          "ct": "a2283f6a2058507e3931500f8002f84955ce7aec70a0cb27d49c21f066b4f6",
+          "result": "acceptable",
+          "flags": [
+            "NonCanonicalPkRmLargeOrder"
+          ]
+        }
+      ]
+    }
+  ]
+}

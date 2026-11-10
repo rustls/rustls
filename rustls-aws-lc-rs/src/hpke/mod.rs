@@ -639,6 +639,20 @@ impl<const KDF_SIZE: usize> DhKem<KDF_SIZE> {
         Ok(KemSharedSecret(shared_secret))
     }
 
+    /// A test-only operation computing the public key corresponding to `recipient`.
+    #[cfg(test)]
+    fn test_only_public_key(&self, recipient: &HpkePrivateKey) -> Result<HpkePublicKey, Error> {
+        let sk_r = agreement::PrivateKey::from_private_key(
+            self.agreement_algorithm,
+            recipient.secret_bytes(),
+        )
+        .map_err(key_rejected_err)?;
+        let pk_rm = sk_r
+            .compute_public_key()
+            .map_err(unspecified_err)?;
+        Ok(HpkePublicKey(pk_rm.as_ref().to_vec()))
+    }
+
     /// See [RFC 9180 §4.1 "DH-Based KEM (DHKEM)"][0].
     ///
     /// [0]: https://www.rfc-editor.org/info/rfc9180#section-4.1
