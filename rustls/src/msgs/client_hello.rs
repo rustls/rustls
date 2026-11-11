@@ -616,22 +616,7 @@ impl<'a> Codec<'a> for ServerNamePayload<'a> {
 
 impl<'a> From<&DnsName<'a>> for ServerNamePayload<'static> {
     fn from(value: &DnsName<'a>) -> Self {
-        Self::SingleDnsName(trim_hostname_trailing_dot_for_sni(value))
-    }
-}
-
-fn trim_hostname_trailing_dot_for_sni(dns_name: &DnsName<'_>) -> DnsName<'static> {
-    let dns_name_str = dns_name.as_ref();
-
-    // RFC 6066: "The hostname is represented as a byte string using
-    // ASCII encoding without a trailing dot"
-    if dns_name_str.ends_with('.') {
-        let trimmed = &dns_name_str[0..dns_name_str.len() - 1];
-        DnsName::try_from(trimmed)
-            .unwrap()
-            .to_owned()
-    } else {
-        dns_name.to_owned()
+        Self::SingleDnsName(value.to_owned())
     }
 }
 
