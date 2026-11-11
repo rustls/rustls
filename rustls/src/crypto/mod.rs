@@ -631,3 +631,64 @@ pub(crate) fn tls12_only(provider: CryptoProvider) -> CryptoProvider {
         ..provider
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use alloc::{format, vec};
+
+    use super::*;
+
+    #[test]
+    fn webpkisupportedalgorithms_construction() {
+        assert_eq!(
+            WebPkiSupportedAlgorithms::new(&[], &[]).err(),
+            Some(ApiMisuse::NoSignatureVerificationAlgorithms)
+        );
+        assert_eq!(
+            WebPkiSupportedAlgorithms::new(
+                &[&DummySigVer],
+                &[(SignatureScheme::ECDSA_NISTP256_SHA256, &[])]
+            )
+            .err(),
+            Some(ApiMisuse::NoSignatureVerificationAlgorithms)
+        );
+
+        let v = WebPkiSupportedAlgorithms::new(
+            &[&DummySigVer],
+            &[(SignatureScheme::ECDSA_NISTP256_SHA256, &[&DummySigVer])],
+        )
+        .unwrap();
+        assert_eq!(
+            format!("{v:?}"),
+            "WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP256_SHA256] }"
+        );
+        assert_eq!(
+            v.supported_schemes(),
+            vec![SignatureScheme::ECDSA_NISTP256_SHA256]
+        );
+        assert_eq!(v.mapping().len(), 1);
+    }
+
+    #[derive(Debug)]
+    struct DummySigVer;
+
+    impl SignatureVerificationAlgorithm for DummySigVer {
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn verify_signature(
+            &self,
+            _public_key: &[u8],
+            _message: &[u8],
+            _signature: &[u8],
+        ) -> Result<(), pki_types::InvalidSignature> {
+            todo!()
+        }
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn public_key_alg_id(&self) -> pki_types::AlgorithmIdentifier {
+            todo!()
+        }
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn signature_alg_id(&self) -> pki_types::AlgorithmIdentifier {
+            todo!()
+        }
+    }
+}
