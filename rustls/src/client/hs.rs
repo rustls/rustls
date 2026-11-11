@@ -691,12 +691,12 @@ fn emit_client_hello_for_retry(
         // as the SNI domain name. This happens unconditionally so we ignore the
         // `enable_sni` value. That will be used later to decide what to do for
         // the protected inner hello's SNI.
-        (Some(ech_state), _) => Some(ServerNamePayload::from(&ech_state.outer_name)),
+        (Some(ech_state), _) => Some(ServerNamePayload::from(ech_state.outer_name.clone())),
 
         // If we have no ECH state, and SNI is enabled, try to use the input server_name
         // for the SNI domain name.
         (None, true) => match &input.session_key.server_name {
-            ServerName::DnsName(dns_name) => Some(ServerNamePayload::from(dns_name)),
+            ServerName::DnsName(dns_name) => Some(ServerNamePayload::from(dns_name.clone())),
             _ => None,
         },
 
