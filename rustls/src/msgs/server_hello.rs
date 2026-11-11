@@ -480,7 +480,7 @@ impl Codec<'_> for EchConfigContents {
             public_name: {
                 DnsName::try_from(SizedPayload::<u8, MaybeEmpty>::read(r)?.bytes())
                     .map_err(|_| InvalidMessage::InvalidServerName)?
-                    .to_owned()
+                    .into_owned()
             },
             extensions: Vec::read(r)?,
         })
