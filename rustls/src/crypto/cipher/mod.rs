@@ -431,18 +431,22 @@ pub(crate) struct FakeAead;
 
 #[cfg(test)]
 impl Tls12AeadAlgorithm for FakeAead {
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn encrypter(&self, _: AeadKey, _: &[u8], _: &[u8]) -> Box<dyn RecordEncrypter> {
         todo!()
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn decrypter(&self, _: AeadKey, _: &[u8]) -> Box<dyn RecordDecrypter> {
         todo!()
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn key_block_shape(&self) -> KeyBlockShape {
         todo!()
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn extract_keys(
         &self,
         _: AeadKey,
