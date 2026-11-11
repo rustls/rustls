@@ -116,7 +116,7 @@ impl<'a> CommonServerSessionValue<'a> {
     fn into_owned(self) -> CommonServerSessionValue<'static> {
         CommonServerSessionValue {
             creation_time_sec: self.creation_time_sec,
-            sni: self.sni.map(|s| s.to_owned()),
+            sni: self.sni.map(|s| s.into_owned()),
             cipher_suite: self.cipher_suite,
             peer_identity: self
                 .peer_identity
@@ -181,7 +181,7 @@ impl Codec<'_> for CommonServerSessionValue<'_> {
             1 => {
                 let dns_name = SizedPayload::<u8, MaybeEmpty>::read(r)?;
                 let dns_name = match DnsName::try_from(dns_name.bytes()) {
-                    Ok(dns_name) => dns_name.to_owned(),
+                    Ok(dns_name) => dns_name.into_owned(),
                     Err(_) => return Err(InvalidMessage::InvalidServerName),
                 };
 

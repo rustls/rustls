@@ -247,7 +247,7 @@ mod sni_resolver {
         fn test_server_name_resolver_handles_unknown_name() {
             let server_name = DnsName::try_from("hello.com")
                 .unwrap()
-                .to_owned();
+                .into_owned();
             let mut ch = ClientHello::empty();
             ch.server_name = Some(Cow::Borrowed(&server_name));
 

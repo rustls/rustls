@@ -519,7 +519,7 @@ pub(crate) enum ServerNamePayload<'a> {
 impl ServerNamePayload<'_> {
     pub(super) fn into_owned(self) -> ServerNamePayload<'static> {
         match self {
-            Self::SingleDnsName(d) => ServerNamePayload::SingleDnsName(d.to_owned()),
+            Self::SingleDnsName(d) => ServerNamePayload::SingleDnsName(d.into_owned()),
             Self::IpAddress => ServerNamePayload::IpAddress,
             Self::Invalid => ServerNamePayload::Invalid,
         }
@@ -592,7 +592,7 @@ impl<'a> Codec<'a> for ServerNamePayload<'a> {
 
             found = match payload {
                 HostNamePayload::HostName(dns_name) => {
-                    Some(Self::SingleDnsName(dns_name.to_owned()))
+                    Some(Self::SingleDnsName(dns_name.into_owned()))
                 }
 
                 HostNamePayload::IpAddress(_invalid) => {
@@ -633,7 +633,7 @@ impl HostNamePayload {
         let raw = SizedPayload::<u16, NonEmpty>::read(r)?;
 
         match ServerName::try_from(raw.bytes()) {
-            Ok(ServerName::DnsName(d)) => Ok(Self::HostName(d.to_owned())),
+            Ok(ServerName::DnsName(d)) => Ok(Self::HostName(d.into_owned())),
             Ok(ServerName::IpAddress(_)) => Ok(Self::IpAddress(raw.into_owned())),
             Ok(_) | Err(_) => Ok(Self::Invalid(raw.into_owned())),
         }
