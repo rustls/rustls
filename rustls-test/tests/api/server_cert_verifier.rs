@@ -807,7 +807,7 @@ fn client_check_server_valid_purpose() {
     assert_eq!(
         format!("{error}"),
         "invalid peer certificate: certificate does not allow extended key usage for \
-         server authentication, allows client authentication"
+         server authentication; it allows client authentication"
     );
 }
 

@@ -711,8 +711,11 @@ impl fmt::Display for CertificateError {
             } => {
                 write!(
                     f,
-                    "certificate does not allow extended key usage for {required}, allows "
+                    "certificate does not allow extended key usage for {required}; it allows "
                 )?;
+                if presented.is_empty() {
+                    write!(f, "nothing")?;
+                }
                 for (i, eku) in presented.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
@@ -1406,7 +1409,7 @@ impl fmt::Display for ExtendedKeyPurpose {
             Self::Other(values) => {
                 for (i, value) in values.iter().enumerate() {
                     if i > 0 {
-                        write!(f, ", ")?;
+                        write!(f, ".")?;
                     }
                     write!(f, "{value}")?;
                 }
