@@ -718,7 +718,7 @@ impl EchState {
             if ext == ExtensionType::ServerName {
                 // We may want to replace the outer hello SNI with our own inner hello specific SNI.
                 if let Some(sni_value) = inner_sni {
-                    inner_hello.server_name = Some(ServerNamePayload::from(sni_value));
+                    inner_hello.server_name = Some(ServerNamePayload::from(sni_value.clone()));
                 }
                 // We don't want to add, or compress, the SNI from the outer hello.
                 continue;
@@ -1370,7 +1370,7 @@ mod tests {
             ],
             compression_methods: vec![Compression::Null],
             extensions: Box::new(ClientExtensions {
-                server_name: Some(ServerNamePayload::from(&public_name())),
+                server_name: Some(ServerNamePayload::from(public_name())),
                 supported_versions: Some(SupportedProtocolVersions {
                     tls13: true,
                     tls12: false,
@@ -1506,7 +1506,7 @@ mod tests {
                 cipher_suites: vec![],
                 compression_methods: vec![Compression::Null],
                 extensions: Box::new(ClientExtensions {
-                    server_name: Some(ServerNamePayload::from(&name)),
+                    server_name: Some(ServerNamePayload::from(name)),
                     ..Default::default()
                 }),
             },

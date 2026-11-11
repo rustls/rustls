@@ -1140,9 +1140,7 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
         cipher_suites: vec![CipherSuite::TLS_PSK_WITH_AES_128_CCM],
         compression_methods: vec![Compression::Null],
         extensions: Box::new(ClientExtensions {
-            server_name: Some(ServerNamePayload::from(
-                &DnsName::try_from("hello").unwrap(),
-            )),
+            server_name: Some(ServerNamePayload::from(DnsName::try_from("hello").unwrap())),
             cookie: Some(SizedPayload::<u16, _>::from(vec![1, 2, 3])),
             signature_schemes: Some(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
             session_ticket: Some(ClientSessionTicket::Request),

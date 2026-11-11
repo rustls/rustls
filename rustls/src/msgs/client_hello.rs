@@ -614,9 +614,9 @@ impl<'a> Codec<'a> for ServerNamePayload<'a> {
     }
 }
 
-impl<'a> From<&DnsName<'a>> for ServerNamePayload<'static> {
-    fn from(value: &DnsName<'a>) -> Self {
-        Self::SingleDnsName(value.to_owned())
+impl<'a> From<DnsName<'a>> for ServerNamePayload<'static> {
+    fn from(value: DnsName<'a>) -> Self {
+        Self::SingleDnsName(value.into_owned())
     }
 }
 
