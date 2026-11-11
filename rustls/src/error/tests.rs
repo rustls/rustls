@@ -271,6 +271,91 @@ fn smoke() {
     }
 }
 
+#[test]
+fn error_display() {
+    use super::{
+        ApiMisuse, CertificateError, EncryptedClientHelloError, ExtendedKeyPurpose, RejectedEch,
+    };
+
+    let cases: &[(Error, &str)] = &[
+        (
+            Error::UnsupportedNameType,
+            "presented server name type wasn't supported",
+        ),
+        (
+            Error::InvalidEncryptedClientHello(EncryptedClientHelloError::NoCompatibleConfig),
+            "encrypted client hello failure: NoCompatibleConfig",
+        ),
+        (Error::EncryptError, "cannot encrypt message"),
+        (
+            Error::NoSuitableCertificate,
+            "no suitable certificate found",
+        ),
+        (
+            Error::RejectedEch(RejectedEch {
+                retry_configs: Some(vec![]),
+            }),
+            "server rejected encrypted client hello (ECH) with retry configs",
+        ),
+        (
+            Error::RejectedEch(RejectedEch {
+                retry_configs: None,
+            }),
+            "server rejected encrypted client hello (ECH) without retry configs",
+        ),
+        (
+            CertificateError::NotValidForNameContext {
+                expected: ServerName::try_from("example.com")
+                    .unwrap()
+                    .to_owned(),
+                presented: vec![
+                    "DnsName(\"a.com\")".into(),
+                    "DnsName(\"b.com\")".into(),
+                    "DnsName(\"c.com\")".into(),
+                ],
+            }
+            .into(),
+            "invalid peer certificate: certificate not valid for name \"example.com\"; \
+             certificate is only valid for DnsName(\"a.com\"), DnsName(\"b.com\") \
+             or DnsName(\"c.com\")",
+        ),
+        (
+            CertificateError::InvalidPurposeContext {
+                required: ExtendedKeyPurpose::ServerAuth,
+                presented: vec![
+                    ExtendedKeyPurpose::ClientAuth,
+                    ExtendedKeyPurpose::Other(vec![1, 3, 6, 1, 5, 5, 7, 3, 3]),
+                ],
+            }
+            .into(),
+            "invalid peer certificate: certificate does not allow extended key usage for \
+             server authentication; it allows client authentication, 1.3.6.1.5.5.7.3.3",
+        ),
+        (
+            CertificateError::InvalidPurposeContext {
+                required: ExtendedKeyPurpose::ServerAuth,
+                presented: vec![],
+            }
+            .into(),
+            "invalid peer certificate: certificate does not allow extended key usage for \
+             server authentication; it allows nothing",
+        ),
+        (
+            CertificateError::Other(OtherError::new(TestError)).into(),
+            "invalid peer certificate: test error",
+        ),
+    ];
+
+    for (err, expected) in cases {
+        assert_eq!(err.to_string(), *expected);
+    }
+
+    assert_eq!(
+        ApiMisuse::ExporterNotAvailable.to_string(),
+        "ExporterNotAvailable"
+    );
+}
+
 #[derive(Debug)]
 struct TestError;
 
