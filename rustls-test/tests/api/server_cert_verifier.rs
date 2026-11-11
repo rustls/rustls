@@ -3,6 +3,7 @@
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
 use core::hash::Hasher;
+use core::time::Duration;
 use std::sync::Arc;
 
 use pki_types::UnixTime;
@@ -727,6 +728,48 @@ fn client_check_server_certificate_helper_api() {
             .unwrap_err(),
             Error::InvalidCertificate(CertificateError::UnknownIssuer)
         );
+    }
+}
+
+#[test]
+fn client_check_server_certificate_validity_period() {
+    let not_before = UnixTime::since_unix_epoch(Duration::from_secs(157_766_400));
+    let not_after = UnixTime::since_unix_epoch(Duration::from_secs(67_090_118_400));
+    let too_early = UnixTime::since_unix_epoch(Duration::from_secs(157_766_399));
+    let too_late = UnixTime::since_unix_epoch(Duration::from_secs(67_090_118_401));
+
+    for kt in KeyType::all_for_provider(&provider::DEFAULT_PROVIDER) {
+        let verifier =
+            webpki_server_verifier_builder(kt.client_root_store(), &provider::DEFAULT_PROVIDER)
+                .build()
+                .unwrap();
+        let identity = kt.identity();
+        let server_name = server_name("localhost");
+
+        assert_eq!(
+            verifier
+                .verify_identity(&ServerIdentity::new(&identity, &server_name, too_early))
+                .unwrap_err(),
+            Error::InvalidCertificate(CertificateError::NotValidYetContext {
+                time: too_early,
+                not_before,
+            }),
+        );
+        assert_eq!(
+            verifier
+                .verify_identity(&ServerIdentity::new(&identity, &server_name, too_late))
+                .unwrap_err(),
+            Error::InvalidCertificate(CertificateError::ExpiredContext {
+                time: too_late,
+                not_after,
+            }),
+        );
+
+        for now in [not_before, not_after] {
+            verifier
+                .verify_identity(&ServerIdentity::new(&identity, &server_name, now))
+                .unwrap();
+        }
     }
 }
 

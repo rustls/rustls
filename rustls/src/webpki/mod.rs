@@ -164,6 +164,9 @@ fn parse_crls(
 #[cfg(test)]
 mod tests {
     use alloc::vec;
+    use core::time::Duration;
+
+    use pki_types::UnixTime;
 
     use super::*;
 
@@ -180,6 +183,55 @@ mod tests {
         assert_eq!(
             pki_error(webpki::Error::KeyUsageMissingDigitalSignature),
             Error::InvalidCertificate(CertificateError::KeyUsageMissingDigitalSignature),
+        );
+
+        let time = UnixTime::since_unix_epoch(Duration::from_secs(2_000));
+        let boundary = UnixTime::since_unix_epoch(Duration::from_secs(1_000));
+        assert_eq!(
+            pki_error(webpki::Error::CertNotValidYet {
+                time: boundary,
+                not_before: time,
+            }),
+            Error::InvalidCertificate(CertificateError::NotValidYetContext {
+                time: boundary,
+                not_before: time,
+            }),
+        );
+        assert_eq!(
+            pki_error(webpki::Error::CertExpired {
+                time,
+                not_after: boundary,
+            }),
+            Error::InvalidCertificate(CertificateError::ExpiredContext {
+                time,
+                not_after: boundary,
+            }),
+        );
+        assert_eq!(
+            pki_error(webpki::Error::InvalidCertValidity),
+            Error::InvalidCertificate(CertificateError::Expired),
+        );
+        assert_eq!(
+            pki_error(webpki::Error::UnsupportedSignatureAlgorithm(
+                webpki::UnsupportedSignatureAlgorithmContext {
+                    signature_algorithm_id: vec![1, 2],
+                    supported_algorithms: vec![],
+                }
+            )),
+            Error::InvalidCertificate(CertificateError::UnsupportedSignatureAlgorithm {
+                signature_algorithm_id: vec![1, 2],
+                supported_algorithms: vec![],
+            }),
+        );
+
+        let Error::InvalidCertificate(CertificateError::Other(other)) =
+            pki_error(webpki::Error::NameConstraintViolation)
+        else {
+            panic!("unmapped webpki errors should become CertificateError::Other");
+        };
+        assert_eq!(
+            core::error::Error::source(&other).and_then(|e| e.downcast_ref::<webpki::Error>()),
+            Some(&webpki::Error::NameConstraintViolation),
         );
     }
 
