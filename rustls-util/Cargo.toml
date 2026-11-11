@@ -1,6 +1,6 @@
 [package]
 name = "rustls-util"
-version = "0.24.0-dev.2"
+version = "0.24.0-dev.3"
 edition.workspace = true
 license = "Apache-2.0 OR ISC OR MIT"
 description = "Utilities for use with rustls"
@@ -11,7 +11,7 @@ default = ["tracing"]
 tracing = ["dep:tracing", "rustls/tracing"]
 
 [dependencies]
-rustls = { path = "../rustls", version = "0.24.0-dev.2", default-features = false, features = ["std"] }
+rustls = { path = "../rustls", version = "0.24.0-dev.3", default-features = false, features = ["std"] }
 tracing = { workspace = true, optional = true }
 
 [lints]
