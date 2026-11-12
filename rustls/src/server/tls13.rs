@@ -331,12 +331,10 @@ mod client_hello {
             },
             mut extensions,
         ) = Tls13Extensions::new(
+            input.client_hello,
             st.extra_exts,
             &mut ocsp_response,
-            resuming
-                .as_ref()
-                .map(|r| &r.session.common),
-            input.client_hello,
+            resuming.is_some(),
             output,
             &st.config,
         )?;
@@ -650,8 +648,8 @@ mod client_hello {
                 .client_early_traffic_secret(&client_hello_hash, &*config.key_log, &randoms.client);
 
             if let Some(quic) = output.quic() {
-                // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
-                // before the application can see.
+                // If 0-RTT should be rejected, this will be clobbered by
+                // `decide_if_early_data_allowed` before the application can see.
                 quic.early_secret(Some(secret));
             }
 
