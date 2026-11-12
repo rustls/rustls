@@ -59,9 +59,10 @@ mod client_hello {
     use crate::enums::ApplicationProtocol;
     use crate::msgs::{
         CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
-        ChangeCipherSpecPayload, Compression, EncryptedExtensions, HandshakeAlignedProof,
-        HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, PresharedKeyOffer,
-        PskKeyExchangeModes, Random, ServerExtensions, ServerHelloPayload, SessionId, SizedPayload,
+        ChangeCipherSpecPayload, ClientHelloPayload, Compression, EncryptedExtensions,
+        HandshakeAlignedProof, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry,
+        PresharedKeyOffer, PskKeyExchangeModes, Random, ServerExtensions, ServerHelloPayload,
+        SessionId, SizedPayload,
     };
     use crate::quic;
     use crate::sealed::Sealed;
@@ -134,7 +135,8 @@ mod client_hello {
                 credential,
                 randoms,
                 cert_compressor,
-                input,
+                input.client_hello,
+                RetryableClientHello::new(input)?,
                 st,
                 output,
             )
@@ -143,13 +145,48 @@ mod client_hello {
 
     impl Sealed for Handler {}
 
+    /// The parts of a `ClientHello` that RFC 9846 section 4.2.2 allows to vary
+    /// in response to a HelloRetryRequest.
+    struct RetryableClientHello<'a> {
+        key_shares: &'a [KeyShareEntry],
+        preshared_key_offer: Option<&'a PresharedKeyOffer>,
+        early_data_requested: bool,
+
+        message: &'a Message<'a>,
+        proof: HandshakeAlignedProof,
+    }
+
+    impl<'a> RetryableClientHello<'a> {
+        fn new(input: ClientHelloInput<'a>) -> Result<Self, Error> {
+            let hello = input.client_hello;
+
+            let key_shares = hello
+                .key_shares
+                .as_deref()
+                .ok_or(PeerIncompatible::KeyShareExtensionRequired)?;
+
+            if hello.has_keyshare_extension_with_duplicates() {
+                return Err(PeerMisbehaved::OfferedDuplicateKeyShares.into());
+            }
+
+            Ok(Self {
+                key_shares,
+                preshared_key_offer: hello.preshared_key_offer.as_ref(),
+                early_data_requested: hello.early_data_request.is_some(),
+                message: input.message,
+                proof: input.proof,
+            })
+        }
+    }
+
     fn continue_client_hello(
         suite: &'static Tls13CipherSuite,
         kx_group: &'static dyn SupportedKxGroup,
         credential: SelectedCredential,
         randoms: ConnectionRandoms,
         cert_compressor: Option<&'static dyn CertCompressor>,
-        input: ClientHelloInput<'_>,
+        client_hello: &ClientHelloPayload,
+        hello: RetryableClientHello<'_>,
         mut st: ExpectClientHello,
         output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
@@ -157,51 +194,29 @@ mod client_hello {
             .transcript
             .start(suite.common.hash_provider)?;
 
-        let shares_ext = input
-            .client_hello
-            .key_shares
-            .as_ref()
-            .ok_or(PeerIncompatible::KeyShareExtensionRequired)?;
-
-        if input
-            .client_hello
-            .has_keyshare_extension_with_duplicates()
-        {
-            return Err(PeerMisbehaved::OfferedDuplicateKeyShares.into());
-        }
-
-        let early_data_requested = input
-            .client_hello
-            .early_data_request
-            .is_some();
-
         if let Some(prior) = &st.previous_hello {
             // EarlyData extension is illegal in second ClientHello
-            if early_data_requested {
+            if hello.early_data_requested {
                 return Err(PeerMisbehaved::EarlyDataAttemptedInSecondClientHello.into());
             }
 
             // RFC 9846 section 4.2.2 allows the second ClientHello to update a PreSharedKey
             // offer (binders, incompatible PSKs), but not to withdraw it altogether
-            if prior.offered_psk
-                && input
-                    .client_hello
-                    .preshared_key_offer
-                    .is_none()
-            {
+            if prior.offered_psk && hello.preshared_key_offer.is_none() {
                 return Err(PeerMisbehaved::MissingPskExtensionInSecondClientHello.into());
             }
         }
 
         // See if there is a KeyShare for the selected kx group.
-        let chosen_share_and_kxg = shares_ext
+        let chosen_share_and_kxg = hello
+            .key_shares
             .iter()
             .find_map(|share| (share.group == kx_group.name()).then_some((share, kx_group)));
 
         let Some(chosen_share_and_kxg) = chosen_share_and_kxg else {
             // We don't have a suitable key share.  Send a HelloRetryRequest
             // for the mutually_preferred_group.
-            transcript.add_message(input.message);
+            transcript.add_message(hello.message);
 
             if st.previous_hello.is_some() {
                 return Err(PeerMisbehaved::RefusedToFollowHelloRetryRequest.into());
@@ -210,7 +225,7 @@ mod client_hello {
             emit_hello_retry_request(
                 &mut transcript,
                 suite,
-                input.client_hello.session_id,
+                client_hello.session_id,
                 output,
                 kx_group.name(),
             )?;
@@ -225,16 +240,13 @@ mod client_hello {
                 session_id: SessionId::empty(),
                 using_ems: false,
                 previous_hello: Some(PreviousClientHello {
-                    offered_psk: input
-                        .client_hello
-                        .preshared_key_offer
-                        .is_some(),
+                    offered_psk: hello.preshared_key_offer.is_some(),
                     suite: suite.common.suite,
                     group: kx_group.name(),
                 }),
                 ..st
             });
-            return if early_data_requested {
+            return if hello.early_data_requested {
                 Ok(Box::new(ExpectAndSkipRejectedEarlyData {
                     skip_data_left: skip_early_data,
                     next,
@@ -256,20 +268,16 @@ mod client_hello {
         };
 
         let mut resuming = handle_psk_offer(
-            input
-                .client_hello
-                .preshared_key_offer
-                .as_ref(),
-            input.client_hello.preshared_key_modes,
-            input.message,
+            hello.preshared_key_offer,
+            client_hello.preshared_key_modes,
+            hello.message,
             &transcript,
             st.sni.as_ref(),
             suite,
             &st.config,
         )?;
 
-        if !input
-            .client_hello
+        if !client_hello
             .preshared_key_modes
             .as_ref()
             .map(|offer| offer.psk_dhe)
@@ -279,13 +287,10 @@ mod client_hello {
             st.send_tickets = 0;
             resuming = None;
         } else {
-            st.send_tickets = st.config.send_tls13_tickets.resolve(
-                input
-                    .client_hello
-                    .ticket_request
-                    .as_ref(),
-                resuming.is_some(),
-            );
+            st.send_tickets = st
+                .config
+                .send_tls13_tickets
+                .resolve(client_hello.ticket_request.as_ref(), resuming.is_some());
         }
 
         if let Some(PskAcceptance { session, .. }) = &resuming {
@@ -299,16 +304,16 @@ mod client_hello {
         }
 
         let full_handshake = resuming.is_none();
-        transcript.add_message(input.message);
+        transcript.add_message(hello.message);
         let (key_schedule, early_exporter) = emit_server_hello(
             &mut transcript,
             &randoms,
             suite,
             output,
-            &input.client_hello.session_id,
+            &client_hello.session_id,
             chosen_share_and_kxg,
             resuming.as_ref(),
-            &input.proof,
+            &hello.proof,
             &st.config,
         )?;
         if !st.previous_hello.is_some() && !st.protocol.is_quic() {
@@ -324,15 +329,11 @@ mod client_hello {
             },
         ));
 
-        let extensions =
-            Tls13Extensions::new(input.client_hello, st.extra_exts, output, &st.config)?;
+        let extensions = Tls13Extensions::new(client_hello, st.extra_exts, output, &st.config)?;
 
         let doing_early_data = decide_if_early_data_allowed(
             output,
-            input
-                .client_hello
-                .early_data_request
-                .is_some(),
+            hello.early_data_requested,
             resuming.as_ref(),
             early_exporter,
             extensions.common.alpn_protocol(),
@@ -343,8 +344,7 @@ mod client_hello {
         let retryable = Tls13RetryableExtensions {
             resuming: !full_handshake,
             early_data_ack: matches!(doing_early_data, EarlyDataDecision::Accepted { .. }),
-            ticket_request: input
-                .client_hello
+            ticket_request: client_hello
                 .ticket_request
                 .is_some()
                 .then(|| ServerTicketRequestHint {
@@ -395,7 +395,7 @@ mod client_hello {
         // are encrypted with the handshake keys.
         let early_data_max_length = match doing_early_data {
             EarlyDataDecision::Disabled => {
-                key_schedule.set_handshake_decrypter(None, output.receive(), &input.proof);
+                key_schedule.set_handshake_decrypter(None, output.receive(), &hello.proof);
                 None
             }
             EarlyDataDecision::RequestedButRejected => {
@@ -405,7 +405,7 @@ mod client_hello {
                 key_schedule.set_handshake_decrypter(
                     Some(max_early_data_size(st.config.max_early_data_size)),
                     output.receive(),
-                    &input.proof,
+                    &hello.proof,
                 );
                 None
             }
@@ -424,7 +424,7 @@ mod client_hello {
             output,
             key_schedule,
             &st.config,
-            &input.proof,
+            &hello.proof,
         )?;
 
         if !doing_client_auth && st.config.send_half_rtt_data {
