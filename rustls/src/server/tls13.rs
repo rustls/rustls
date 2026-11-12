@@ -68,6 +68,7 @@ mod client_hello {
     use crate::server::Tls13ServerSessionValue;
     use crate::server::hs::{
         ClientHelloInput, ExpectClientHello, PreviousClientHello, ServerHandler, Tls13Extensions,
+        Tls13RetryableExtensions,
     };
     use crate::tls13::Tls13ProtocolSuite;
     use crate::tls13::key_schedule::{
@@ -323,31 +324,8 @@ mod client_hello {
             },
         ));
 
-        let mut ocsp_response = signer.ocsp.as_deref();
-        let (
-            Tls13Extensions {
-                certificate_types,
-                alpn_protocol,
-            },
-            mut extensions,
-        ) = Tls13Extensions::new(
-            input.client_hello,
-            st.extra_exts,
-            &mut ocsp_response,
-            resuming.is_some(),
-            output,
-            &st.config,
-        )?;
-
-        if input
-            .client_hello
-            .ticket_request
-            .is_some()
-        {
-            extensions.ticket_request = Some(ServerTicketRequestHint {
-                expected_count: Ord::min(st.send_tickets, u8::MAX as usize) as u8,
-            });
-        }
+        let extensions =
+            Tls13Extensions::new(input.client_hello, st.extra_exts, output, &st.config)?;
 
         let doing_early_data = decide_if_early_data_allowed(
             output,
@@ -357,16 +335,35 @@ mod client_hello {
                 .is_some(),
             resuming.as_ref(),
             early_exporter,
-            alpn_protocol.as_ref(),
+            extensions.common.alpn_protocol(),
             suite.suite(),
             &st.config,
         );
-        if let EarlyDataDecision::Accepted { .. } = doing_early_data {
-            extensions.early_data_ack = Some(());
-        }
+
+        let retryable = Tls13RetryableExtensions {
+            resuming: !full_handshake,
+            early_data_ack: matches!(doing_early_data, EarlyDataDecision::Accepted { .. }),
+            ticket_request: input
+                .client_hello
+                .ticket_request
+                .is_some()
+                .then(|| ServerTicketRequestHint {
+                    expected_count: Ord::min(st.send_tickets, u8::MAX as usize) as u8,
+                }),
+        };
+
+        let alpn_protocol = extensions
+            .common
+            .alpn_protocol()
+            .cloned();
+        let expected_certificate_type = extensions.certificate_types.client;
+        let ocsp_response = signer
+            .ocsp
+            .as_deref()
+            .filter(|_| extensions.common.ocsp_requested);
 
         let mut flight = HandshakeFlightTls13::new(&mut transcript);
-        emit_encrypted_extensions(&mut flight, extensions);
+        emit_encrypted_extensions(&mut flight, extensions.into_response(retryable, output));
 
         let doing_client_auth = if full_handshake {
             let client_auth = emit_certificate_req_tls13(&mut flight, &st.config)?;
@@ -449,14 +446,14 @@ mod client_hello {
                 Ok(Box::new(ExpectCertificate {
                     hs,
                     key_schedule: key_schedule_traffic,
-                    expected_certificate_type: certificate_types.client,
+                    expected_certificate_type,
                 })
                 .into())
             } else {
                 Ok(Box::new(ExpectCertificateOrCompressedCertificate {
                     hs,
                     key_schedule: key_schedule_traffic,
-                    expected_certificate_type: certificate_types.client,
+                    expected_certificate_type,
                 })
                 .into())
             }
