@@ -498,12 +498,12 @@ dependencies = [
 
 [[package]]
 name = "crabgrind"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e4dbe352d7240a1ef7b2f5d7d283cefa9405835974f7aabc59838b9d1a6acc6"
+checksum = "54036bb8d52f1ad7f0a1e89d234073355e9d91d03b09ba59136a1e06e8cbbb34"
 dependencies = [
- "bindgen",
  "cc",
+ "object",
  "pkg-config",
  "rustversion",
 ]
@@ -1343,6 +1343,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "object"
+version = "0.39.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e5a6c098c7a3b6547378093f5cc30bc54fd361ce711e05293a5cc589562739b"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
