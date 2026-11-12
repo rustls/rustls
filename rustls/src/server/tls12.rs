@@ -152,22 +152,26 @@ mod client_hello {
 
             let mut flight = HandshakeFlightTls12::new(&mut transcript);
 
-            let (
-                Tls12Extensions {
-                    alpn_protocol,
-                    send_ticket,
-                },
-                extensions,
-            ) = Tls12Extensions::new(
+            let extensions = Tls12Extensions::new(
                 input.client_hello,
                 st.extra_exts,
                 &mut ocsp_response,
                 false,
-                output,
                 st.using_ems,
                 &st.config,
             )?;
-            emit_server_hello(&mut flight, st.session_id, suite, &randoms, extensions);
+            let alpn_protocol = extensions
+                .common
+                .alpn_protocol()
+                .cloned();
+            let send_ticket = extensions.send_ticket();
+            emit_server_hello(
+                &mut flight,
+                st.session_id,
+                suite,
+                &randoms,
+                extensions.into_response(output),
+            );
             emit_certificate(&mut flight, &credentials);
             match ocsp_response {
                 None | Some([]) => {}
@@ -307,22 +311,26 @@ mod client_hello {
 
         let session_id = input.client_hello.session_id;
         let mut flight = HandshakeFlightTls12::new(&mut transcript);
-        let (
-            Tls12Extensions {
-                alpn_protocol,
-                send_ticket,
-            },
-            extensions,
-        ) = Tls12Extensions::new(
+        let extensions = Tls12Extensions::new(
             input.client_hello,
             extra_exts,
             &mut None,
             true,
-            output,
             using_ems,
             &config,
         )?;
-        emit_server_hello(&mut flight, session_id, suite, &randoms, extensions);
+        let alpn_protocol = extensions
+            .common
+            .alpn_protocol()
+            .cloned();
+        let send_ticket = extensions.send_ticket();
+        emit_server_hello(
+            &mut flight,
+            session_id,
+            suite,
+            &randoms,
+            extensions.into_response(output),
+        );
         flight.finish(output)?;
 
         let mut hs = HandshakeState {
