@@ -7,7 +7,7 @@ use core::fmt;
 use pki_types::DnsName;
 
 use super::config::{CipherSuiteSelector, OfferedKxGroup, VersionSuiteSelector};
-use super::{ClientHello, CommonServerSessionValue, ServerConfig};
+use super::{ClientHello, ServerConfig};
 use crate::SupportedCipherSuite;
 use crate::common_state::{Event, Output, OutputEvent, Protocol};
 use crate::conn::{ConnectionRandoms, Input, State, VerifySidePeerIdentity};
@@ -123,21 +123,26 @@ pub(super) struct Tls12Extensions {
 
 impl Tls12Extensions {
     pub(super) fn new(
+        hello: &ClientHelloPayload,
         extra_exts: ServerExtensionsInput,
         ocsp_response: &mut Option<&[u8]>,
-        resumedata: Option<&CommonServerSessionValue<'_>>,
-        hello: &ClientHelloPayload,
+        resuming: bool,
         output: &mut dyn Output<'_>,
         using_ems: bool,
         config: &ServerConfig,
     ) -> Result<(Self, Box<ServerExtensions<'static>>), Error> {
-        let ep = ExtensionProcessing::new(hello, config);
-        let common = ep.process_common(extra_exts, output, ocsp_response, resumedata)?;
-        let alpn_protocol = common.alpn_protocol();
+        let common = CommonExtensions::new(hello, extra_exts, output, config)?;
+        let alpn_protocol = common.alpn_protocol().cloned();
 
+        // Discard OCSP response if it is not necessary.
+        if resuming || !common.ocsp_requested {
+            ocsp_response.take();
+        }
+
+        let common = common.into_response(resuming);
         let mut extensions = Box::new(ServerExtensions {
             server_name_ack: common.server_name_ack,
-            selected_protocol: common.selected_protocol.into(),
+            selected_protocol: common.selected_protocol,
             transport_parameters: common.transport_parameters,
             ..ServerExtensions::default()
         });
@@ -200,21 +205,25 @@ pub(super) struct Tls13Extensions {
 
 impl Tls13Extensions {
     pub(super) fn new(
+        hello: &ClientHelloPayload,
         extra_exts: ServerExtensionsInput,
         ocsp_response: &mut Option<&[u8]>,
-        resumedata: Option<&CommonServerSessionValue<'_>>,
-        hello: &ClientHelloPayload,
+        resuming: bool,
         output: &mut dyn Output<'_>,
         config: &ServerConfig,
     ) -> Result<(Self, Box<EncryptedExtensions<'static>>), Error> {
-        let ep = ExtensionProcessing::new(hello, config);
-        let common = ep.process_common(extra_exts, output, ocsp_response, resumedata)?;
+        let common = CommonExtensions::new(hello, extra_exts, output, config)?;
+
+        // Discard OCSP response if it is not necessary.
+        if resuming || !common.ocsp_requested {
+            ocsp_response.take();
+        }
 
         if let Some(quic) = output.quic() {
             // RFC9001: "When using ALPN, endpoints MUST immediately close a connection
             // (...) if an application protocol is not negotiated."
             if !matches!(
-                common.selected_protocol,
+                common.alpn,
                 AlpnDecision::Selected(_) | AlpnDecision::Disabled
             ) {
                 return Err(Error::NoApplicationProtocol);
@@ -228,11 +237,12 @@ impl Tls13Extensions {
             }
         }
 
-        let alpn_protocol = common.alpn_protocol();
+        let alpn_protocol = common.alpn_protocol().cloned();
 
+        let common = common.into_response(resuming);
         let mut extensions = Box::new(EncryptedExtensions {
             server_name_ack: common.server_name_ack,
-            selected_protocol: common.selected_protocol.into(),
+            selected_protocol: common.selected_protocol,
             transport_parameters: common.transport_parameters,
             ..EncryptedExtensions::default()
         });
@@ -273,39 +283,24 @@ impl Tls13Extensions {
     }
 }
 
-struct ExtensionProcessing<'a> {
-    config: &'a ServerConfig,
-    hello: &'a ClientHelloPayload,
+/// Extension decisions common to TLS 1.2 and TLS 1.3, taken from one `ClientHello`.
+struct CommonExtensions {
+    alpn: AlpnDecision,
+    sni_offered: bool,
+    ocsp_requested: bool,
+    transport_parameters: Option<Payload<'static>>,
 }
 
-impl<'a> ExtensionProcessing<'a> {
-    fn new(client_hello: &'a ClientHelloPayload, config: &'a ServerConfig) -> Self {
-        Self {
-            config,
-            hello: client_hello,
-        }
-    }
-
-    fn process_common(
-        self,
+impl CommonExtensions {
+    fn new(
+        hello: &ClientHelloPayload,
         extra_exts: ServerExtensionsInput,
         output: &mut dyn Output<'_>,
-        ocsp_response: &mut Option<&[u8]>,
-        resumedata: Option<&CommonServerSessionValue<'_>>,
-    ) -> Result<CommonExtensions, Error> {
-        let Self { config, hello } = self;
-        let mut extensions = CommonExtensions::default();
-
-        let ServerExtensionsInput {
-            transport_parameters,
-        } = extra_exts;
-        if let Some(TransportParameters::Quic(v)) = transport_parameters {
-            extensions.transport_parameters = Some(v);
-        }
-
+        config: &ServerConfig,
+    ) -> Result<Self, Error> {
         // ALPN
         let our_protocols = &config.alpn_protocols;
-        let chosen_protocol = match (&hello.protocols, our_protocols.as_slice()) {
+        let alpn = match (&hello.protocols, our_protocols.as_slice()) {
             (Some(their_protocols), [_, ..]) => {
                 let selected_protocol = our_protocols
                     .iter()
@@ -325,47 +320,44 @@ impl<'a> ExtensionProcessing<'a> {
         };
 
         // Enact ALPN selection by telling high-level API.
-        if let AlpnDecision::Selected(protocol) = &chosen_protocol {
+        if let AlpnDecision::Selected(protocol) = &alpn {
             output.output(OutputEvent::ApplicationProtocol(protocol.as_ref().clone()));
         }
-        extensions.selected_protocol = chosen_protocol;
 
-        let for_resume = resumedata.is_some();
-        // SNI
-        if let (false, Some(ServerNamePayload::SingleDnsName(_))) = (for_resume, &hello.server_name)
-        {
-            extensions.server_name_ack = Some(());
-        }
+        let ServerExtensionsInput {
+            transport_parameters,
+        } = extra_exts;
 
-        // Discard OCSP response if it is not necessary.
-        if for_resume
-            || hello
+        Ok(Self {
+            alpn,
+            sni_offered: matches!(hello.server_name, Some(ServerNamePayload::SingleDnsName(_))),
+            ocsp_requested: hello
                 .certificate_status_request
-                .is_none()
-        {
-            ocsp_response.take();
-        }
-
-        Ok(extensions)
+                .is_some(),
+            transport_parameters: transport_parameters.map(|TransportParameters::Quic(v)| v),
+        })
     }
-}
 
-/// Extension values common to both TLS 1.2 ServerHello & TLS 1.3 EncryptedExtensions.
-///
-/// These are negotiated identically for both protocols prior to placement in the
-/// right message.
-#[derive(Default)]
-struct CommonExtensions {
-    server_name_ack: Option<()>,
-    selected_protocol: AlpnDecision,
-    transport_parameters: Option<Payload<'static>>,
-}
+    fn alpn_protocol(&self) -> Option<&ApplicationProtocol<'static>> {
+        let AlpnDecision::Selected(protocol) = &self.alpn else {
+            return None;
+        };
 
-impl CommonExtensions {
-    fn alpn_protocol(&self) -> Option<ApplicationProtocol<'static>> {
-        match &self.selected_protocol {
-            AlpnDecision::Selected(p) => Some(p.as_ref().clone()),
-            _ => None,
+        Some(protocol.as_ref())
+    }
+
+    fn into_response(self, resuming: bool) -> CommonResponse {
+        let Self {
+            alpn,
+            sni_offered,
+            ocsp_requested: _,
+            transport_parameters,
+        } = self;
+
+        CommonResponse {
+            server_name_ack: (sni_offered && !resuming).then_some(()),
+            selected_protocol: alpn.into(),
+            transport_parameters,
         }
     }
 }
@@ -386,6 +378,13 @@ impl From<AlpnDecision> for Option<SingleProtocolName> {
             _ => None,
         }
     }
+}
+
+/// Extension values common to both TLS 1.2 ServerHello & TLS 1.3 EncryptedExtensions.
+struct CommonResponse {
+    server_name_ack: Option<()>,
+    selected_protocol: Option<SingleProtocolName>,
+    transport_parameters: Option<Payload<'static>>,
 }
 
 fn select_cert_type(
