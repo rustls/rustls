@@ -87,7 +87,7 @@ mod client_hello {
             &self,
             suite: &'static Tls13CipherSuite,
             kx_group: &'static dyn SupportedKxGroup,
-            signer: SelectedCredential,
+            credential: SelectedCredential,
             input: ClientHelloInput<'_>,
             st: ExpectClientHello,
             output: &mut dyn Output<'_>,
@@ -131,7 +131,7 @@ mod client_hello {
             continue_client_hello(
                 suite,
                 kx_group,
-                signer,
+                credential,
                 randoms,
                 cert_compressor,
                 input,
@@ -146,7 +146,7 @@ mod client_hello {
     fn continue_client_hello(
         suite: &'static Tls13CipherSuite,
         kx_group: &'static dyn SupportedKxGroup,
-        signer: SelectedCredential,
+        credential: SelectedCredential,
         randoms: ConnectionRandoms,
         cert_compressor: Option<&'static dyn CertCompressor>,
         input: ClientHelloInput<'_>,
@@ -357,7 +357,7 @@ mod client_hello {
             .alpn_protocol()
             .cloned();
         let expected_certificate_type = extensions.certificate_types.client;
-        let ocsp_response = signer
+        let ocsp_response = credential
             .ocsp
             .as_deref()
             .filter(|_| extensions.common.ocsp_requested);
@@ -372,17 +372,20 @@ mod client_hello {
                 emit_compressed_certificate_tls13(
                     &mut flight,
                     &st.config,
-                    &signer,
+                    &credential,
                     ocsp_response,
                     compressor,
                 );
             } else {
                 emit_certificate_tls13(
                     &mut flight,
-                    CertificatePayloadTls13::new(signer.identity.as_certificates(), ocsp_response),
+                    CertificatePayloadTls13::new(
+                        credential.identity.as_certificates(),
+                        ocsp_response,
+                    ),
                 );
             }
-            emit_certificate_verify_tls13(&mut flight, signer.signer)?;
+            emit_certificate_verify_tls13(&mut flight, credential.signer)?;
             client_auth
         } else {
             false
