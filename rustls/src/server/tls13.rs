@@ -60,8 +60,9 @@ mod client_hello {
     use crate::msgs::{
         CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
         ChangeCipherSpecPayload, ClientHelloPayload, Compression, HandshakeAlignedProof,
-        HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random, ServerExtensions,
-        ServerExtensionsInput, ServerHelloPayload, SessionId, SizedPayload,
+        HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, PresharedKeyOffer,
+        PskKeyExchangeModes, Random, ServerExtensions, ServerExtensionsInput, ServerHelloPayload,
+        SessionId, SizedPayload,
     };
     use crate::quic;
     use crate::sealed::Sealed;
@@ -254,8 +255,18 @@ mod client_hello {
             }),
         };
 
-        let mut resuming =
-            handle_psk_offer(&input, &transcript, st.sni.as_ref(), suite, &st.config)?;
+        let mut resuming = handle_psk_offer(
+            input
+                .client_hello
+                .preshared_key_offer
+                .as_ref(),
+            input.client_hello.preshared_key_modes,
+            input.message,
+            &transcript,
+            st.sni.as_ref(),
+            suite,
+            &st.config,
+        )?;
 
         if !input
             .client_hello
@@ -477,13 +488,15 @@ mod client_hello {
     }
 
     fn handle_psk_offer(
-        input: &ClientHelloInput<'_>,
+        psk_offer: Option<&PresharedKeyOffer>,
+        psk_modes: Option<PskKeyExchangeModes>,
+        client_hello: &Message<'_>,
         transcript: &HandshakeHash,
         sni: Option<&DnsName<'_>>,
         suite: Tls13ProtocolSuite,
         config: &ServerConfig,
     ) -> Result<Option<PskAcceptance>, Error> {
-        let Some(psk_offer) = &input.client_hello.preshared_key_offer else {
+        let Some(psk_offer) = psk_offer else {
             return Ok(None);
         };
 
@@ -491,11 +504,7 @@ mod client_hello {
         //  offers a "pre_shared_key" extension. If clients offer
         //  "pre_shared_key" without a "psk_key_exchange_modes" extension,
         //  servers MUST abort the handshake." - RFC 9846 section 4.3.9
-        if input
-            .client_hello
-            .preshared_key_modes
-            .is_none()
-        {
+        if psk_modes.is_none() {
             return Err(PeerMisbehaved::MissingPskModesExtension.into());
         }
 
@@ -525,7 +534,7 @@ mod client_hello {
             if !check_binder(
                 transcript,
                 &KeyScheduleEarlyServer::new(suite, session.secret.bytes())?,
-                input.message,
+                client_hello,
                 psk_offer.binders[index].as_ref(),
             ) {
                 return Err(PeerMisbehaved::IncorrectBinder.into());
@@ -703,16 +712,13 @@ mod client_hello {
 
     fn decide_if_early_data_allowed(
         output: &mut dyn Output<'_>,
-        client_hello: &ClientHelloPayload,
+        early_data_requested: bool,
         resuming: Option<&PskAcceptance>,
         early_exporter: Option<Box<dyn Exporter>>,
         chosen_alpn_protocol: Option<&ApplicationProtocol<'_>>,
         suite: &'static Tls13CipherSuite,
         config: &ServerConfig,
     ) -> EarlyDataDecision {
-        let early_data_requested = client_hello
-            .early_data_request
-            .is_some();
         let rejected_or_disabled = match early_data_requested {
             true => EarlyDataDecision::RequestedButRejected,
             false => EarlyDataDecision::Disabled,
@@ -799,7 +805,7 @@ mod client_hello {
 
         let early_data = decide_if_early_data_allowed(
             output,
-            hello,
+            hello.early_data_request.is_some(),
             resuming,
             early_exporter,
             out.alpn_protocol.as_ref(),
