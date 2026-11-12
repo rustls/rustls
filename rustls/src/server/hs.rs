@@ -7,6 +7,7 @@ use core::fmt;
 use pki_types::DnsName;
 
 use super::config::{CipherSuiteSelector, OfferedKxGroup, VersionSuiteSelector};
+use super::tls13::{FirstClientHello, handle_retried_client_hello};
 use super::{ClientHello, ServerConfig};
 use crate::SupportedCipherSuite;
 use crate::common_state::{Event, Output, OutputEvent, Protocol};
@@ -557,7 +558,7 @@ pub(crate) struct ExpectClientHello {
     pub(super) sni: Option<DnsName<'static>>,
     pub(super) resumption_data: Vec<u8>,
     pub(super) using_ems: bool,
-    pub(super) previous_hello: Option<PreviousClientHello>,
+    pub(super) previous_hello: Option<Box<FirstClientHello>>,
     pub(super) send_tickets: usize,
 }
 
@@ -599,8 +600,7 @@ impl ExpectClientHello {
             .supports_version(ProtocolVersion::TLSv1_3, self.protocol);
         let tls12_enabled = self
             .config
-            .supports_version(ProtocolVersion::TLSv1_2, self.protocol)
-            && !self.previous_hello.is_some();
+            .supports_version(ProtocolVersion::TLSv1_2, self.protocol);
 
         // Are we doing TLS1.3?
         if let Some(versions) = &input.client_hello.supported_versions {
@@ -643,17 +643,6 @@ impl ExpectClientHello {
             .accept(input.client_hello.server_name.as_ref())?;
         output.emit(Event::ReceivedServerName(sni.clone()));
 
-        if self.previous_hello.is_some() {
-            let ch_sni = input
-                .client_hello
-                .server_name
-                .as_ref()
-                .and_then(ServerNamePayload::to_dns_name_normalized);
-            if self.sni != ch_sni {
-                return Err(PeerMisbehaved::ServerNameDifferedOnRetry.into());
-            }
-        }
-
         // We communicate to the upper layer what kind of key they should choose
         // via the sigschemes value.  Clients tend to treat this extension
         // orthogonally to offered ciphersuites (even though, in TLS1.2 it is not).
@@ -691,18 +680,6 @@ impl ExpectClientHello {
                 .unwrap_or_default(),
             &input.client_hello.cipher_suites,
         )?;
-
-        // RFC 9846 section 4.2.4: the server must negotiate the same cipher suite it
-        // named in its HelloRetryRequest
-        if let Some(PreviousClientHello {
-            suite: before_retry,
-            ..
-        }) = self.previous_hello
-        {
-            if before_retry != suite.suite() {
-                return Err(PeerMisbehaved::CipherSuiteDifferedOnRetry.into());
-            }
-        }
 
         debug!("decided upon suite {suite:?}");
         output.output(OutputEvent::CipherSuite(suite.into()));
@@ -818,19 +795,11 @@ impl ExpectClientHello {
                 })
         };
 
-        let selected = match &self.previous_hello {
-            Some(PreviousClientHello { group, .. }) => Some(
-                offered()
-                    .find(|offer| offer.group.name() == *group)
-                    .ok_or(PeerMisbehaved::RefusedToFollowHelloRetryRequest)?
-                    .group,
-            ),
-            None => self
-                .config
-                .kx_selector
-                .select_key_exchange(&mut offered(), &self.config.provider.kx_groups)
-                .filter(|chosen| offered().any(|offer| offer.group.name() == chosen.name())),
-        };
+        let selected = self
+            .config
+            .kx_selector
+            .select_key_exchange(&mut offered(), &self.config.provider.kx_groups)
+            .filter(|chosen| offered().any(|offer| offer.group.name() == chosen.name()));
 
         match selected {
             Some(skxg) => Ok((suite, skxg)),
@@ -858,12 +827,15 @@ impl ExpectClientHello {
 
 impl ExpectClientHello {
     pub(crate) fn handle<'m>(
-        self,
+        mut self,
         input: Input<'m>,
         output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         let input = ClientHelloInput::from_input(&input)?;
-        self.with_input(input, output)
+        match self.previous_hello.take() {
+            Some(retry) => handle_retried_client_hello(*retry, input, self, output),
+            None => self.with_input(input, output),
+        }
     }
 
     fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
@@ -876,12 +848,6 @@ impl From<Box<ExpectClientHello>> for ServerState {
     fn from(value: Box<ExpectClientHello>) -> Self {
         Self::ClientHello(value)
     }
-}
-
-pub(crate) struct PreviousClientHello {
-    pub(super) offered_psk: bool,
-    pub(super) suite: CipherSuite,
-    pub(super) group: NamedGroup,
 }
 
 pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
