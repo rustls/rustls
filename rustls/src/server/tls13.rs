@@ -59,10 +59,9 @@ mod client_hello {
     use crate::enums::ApplicationProtocol;
     use crate::msgs::{
         CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
-        ChangeCipherSpecPayload, ClientHelloPayload, Compression, HandshakeAlignedProof,
+        ChangeCipherSpecPayload, Compression, EncryptedExtensions, HandshakeAlignedProof,
         HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, PresharedKeyOffer,
-        PskKeyExchangeModes, Random, ServerExtensions, ServerExtensionsInput, ServerHelloPayload,
-        SessionId, SizedPayload,
+        PskKeyExchangeModes, Random, ServerExtensions, ServerHelloPayload, SessionId, SizedPayload,
     };
     use crate::quic;
     use crate::sealed::Sealed;
@@ -325,25 +324,51 @@ mod client_hello {
         ));
 
         let mut ocsp_response = signer.ocsp.as_deref();
-        let mut flight = HandshakeFlightTls13::new(&mut transcript);
         let (
             Tls13Extensions {
                 certificate_types,
                 alpn_protocol,
             },
-            doing_early_data,
-        ) = emit_encrypted_extensions(
-            &mut flight,
-            suite.suite(),
-            output,
+            mut extensions,
+        ) = Tls13Extensions::new(
+            st.extra_exts,
             &mut ocsp_response,
+            resuming
+                .as_ref()
+                .map(|r| &r.session.common),
             input.client_hello,
+            output,
+            &st.config,
+        )?;
+
+        if input
+            .client_hello
+            .ticket_request
+            .is_some()
+        {
+            extensions.ticket_request = Some(ServerTicketRequestHint {
+                expected_count: Ord::min(st.send_tickets, u8::MAX as usize) as u8,
+            });
+        }
+
+        let doing_early_data = decide_if_early_data_allowed(
+            output,
+            input
+                .client_hello
+                .early_data_request
+                .is_some(),
             resuming.as_ref(),
             early_exporter,
-            st.extra_exts,
+            alpn_protocol.as_ref(),
+            suite.suite(),
             &st.config,
-            st.send_tickets,
-        )?;
+        );
+        if let EarlyDataDecision::Accepted { .. } = doing_early_data {
+            extensions.early_data_ack = Some(());
+        }
+
+        let mut flight = HandshakeFlightTls13::new(&mut transcript);
+        emit_encrypted_extensions(&mut flight, extensions);
 
         let doing_client_auth = if full_handshake {
             let client_auth = emit_certificate_req_tls13(&mut flight, &st.config)?;
@@ -778,49 +803,12 @@ mod client_hello {
 
     fn emit_encrypted_extensions(
         flight: &mut HandshakeFlightTls13<'_>,
-        suite: &'static Tls13CipherSuite,
-        output: &mut dyn Output<'_>,
-        ocsp_response: &mut Option<&[u8]>,
-        hello: &ClientHelloPayload,
-        resuming: Option<&PskAcceptance>,
-        early_exporter: Option<Box<dyn Exporter>>,
-        extra_exts: ServerExtensionsInput,
-        config: &ServerConfig,
-        send_tickets: usize,
-    ) -> Result<(Tls13Extensions, EarlyDataDecision), Error> {
-        let (out, mut extensions) = Tls13Extensions::new(
-            extra_exts,
-            ocsp_response,
-            resuming.map(|r| &r.session.common),
-            hello,
-            output,
-            config,
-        )?;
-
-        if hello.ticket_request.is_some() {
-            extensions.ticket_request = Some(ServerTicketRequestHint {
-                expected_count: Ord::min(send_tickets, u8::MAX as usize) as u8,
-            });
-        }
-
-        let early_data = decide_if_early_data_allowed(
-            output,
-            hello.early_data_request.is_some(),
-            resuming,
-            early_exporter,
-            out.alpn_protocol.as_ref(),
-            suite,
-            config,
-        );
-        if let EarlyDataDecision::Accepted { .. } = early_data {
-            extensions.early_data_ack = Some(());
-        }
-
+        extensions: Box<EncryptedExtensions<'static>>,
+    ) {
         let ee = HandshakeMessagePayload(HandshakePayload::EncryptedExtensions(extensions));
 
         trace!("sending encrypted extensions {ee:?}");
         flight.add(ee);
-        Ok((out, early_data))
     }
 
     fn emit_certificate_req_tls13(
