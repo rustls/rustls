@@ -5,27 +5,24 @@ use std::sync::Arc;
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerIdentity, ServerVerifier};
 use rustls::client::{
-    self, ClientSessionKey, CredentialRequest, EchConfig, EchGreaseConfig, EchMode, Resumption,
-    Tls12Resumption, Tls13Session, WebPkiServerVerifier,
+    self, ClientSessionKey, CredentialRequest, Resumption, Tls12Resumption, Tls13Session,
+    WebPkiServerVerifier,
 };
-use rustls::crypto::hpke::HpkePublicKey;
 use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{
     Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme, Signer, SigningKey,
     VerifiedIdentity,
 };
 use rustls::enums::{ApplicationProtocol, CertificateType};
-use rustls::error::{ApiMisuse, CertificateError, EncryptedClientHelloError};
+use rustls::error::{ApiMisuse, CertificateError};
 use rustls::pki_types::{ServerName, SubjectPublicKeyInfoDer};
 use rustls::server::danger::SignatureVerificationInput;
 use rustls::{ClientConfig, DistinguishedName, Error};
 
 use super::compress::{CompressionAlgs, ExpandingAlgorithm, RandomAlgorithm, ShrinkingAlgorithm};
 use super::opts::Options;
-use super::{
-    ALL_HPKE_SUITES, Credential, GREASE_25519_PUBKEY, GREASE_HPKE_SUITE, KeyLogMemo,
-    load_root_certs, lookup_scheme, quit,
-};
+use super::{ALL_HPKE_SUITES, Credential, KeyLogMemo, load_root_certs, lookup_scheme, quit};
+use crate::GREASE_HPKE_SUITE;
 
 pub(crate) fn config(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfig> {
     let provider = Arc::new(opts.provider());
@@ -40,26 +37,17 @@ pub(crate) fn config(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientCon
             .into(),
         );
 
-        if let Some(ech_config_list) = &opts.ech_config_list {
-            let ech_mode = match EchConfig::new(ech_config_list.clone(), ALL_HPKE_SUITES) {
-                Ok(ech_config) => EchMode::from(ech_config),
-                Err(Error::InvalidEncryptedClientHello(
-                    EncryptedClientHelloError::NoCompatibleConfig,
-                )) if opts.reject_unusable_ech_config => quit(":UNUSABLE_ECH_CONFIG_LIST:"),
-                Err(_) => quit(":INVALID_ECH_CONFIG_LIST:"),
-            };
-
-            ech_cfg.with_ech(ech_mode)
+        if opts.ech_config_list.is_some() {
+            ech_cfg
+                .with_ech_hpke_suites(ALL_HPKE_SUITES)
+                .unwrap()
         } else if opts.reject_unusable_ech_config {
             // no ech_config_list is a trivial rejection (boringssl has a more complex API that is tested here)
             quit(":UNUSABLE_ECH_CONFIG_LIST:");
         } else if opts.enable_ech_grease {
-            let ech_mode = EchMode::Grease(EchGreaseConfig::new(
-                GREASE_HPKE_SUITE,
-                HpkePublicKey(GREASE_25519_PUBKEY.to_vec()),
-            ));
-
-            ech_cfg.with_ech(ech_mode)
+            ech_cfg
+                .with_ech_hpke_suites(&[GREASE_HPKE_SUITE])
+                .unwrap()
         } else {
             cfg
         }
