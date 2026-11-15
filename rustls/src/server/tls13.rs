@@ -496,10 +496,11 @@ mod client_hello {
             };
 
             session.set_freshness(psk_id.obfuscated_ticket_age, now);
-            if !session
-                .common
-                .can_resume(suite.suite().common.suite, sni)
-            {
+            if !session.common.can_resume(
+                suite.suite().common.suite,
+                sni,
+                config.verifier.client_auth_mandatory(),
+            ) {
                 continue;
             }
 
