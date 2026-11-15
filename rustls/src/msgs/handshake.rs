@@ -1282,7 +1282,7 @@ pub(crate) struct NewSessionTicketPayloadTls13 {
 impl NewSessionTicketPayloadTls13 {
     pub(crate) fn new(lifetime: Duration, age_add: u32, nonce: [u8; 32], ticket: Vec<u8>) -> Self {
         Self {
-            lifetime,
+            lifetime: Ord::min(lifetime, MAX_TICKET_LIFETIME),
             age_add,
             nonce: nonce.to_vec().into(),
             ticket: Arc::new(SizedPayload::from(Payload::new(ticket))),

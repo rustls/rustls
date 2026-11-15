@@ -585,6 +585,9 @@ pub trait TicketProducer: Debug + Send + Sync {
     ///
     /// The objective is to limit damage to forward secrecy caused
     /// by tickets, not just limiting their lifetime.
+    ///
+    /// TLS 1.3 requires lifetimes to not exceed seven days.  Longer
+    /// lifetimes are clamped to that value.
     fn lifetime(&self) -> Duration;
 }
 

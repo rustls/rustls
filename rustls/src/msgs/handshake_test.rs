@@ -307,6 +307,25 @@ fn accepts_new_session_ticket_ext_with_unrecognized_extension() {
     );
 }
 
+/// A TLS 1.3 ticket is never given a lifetime longer than seven days.
+#[test]
+fn new_session_ticket_tls13_lifetime_is_at_most_seven_days() {
+    let week = Duration::from_secs(604_800);
+    for (requested, expected) in [
+        (Duration::from_secs(3600), Duration::from_secs(3600)),
+        (week, week),
+        (week + Duration::from_secs(1), week),
+        (Duration::MAX, week),
+    ] {
+        let payload = NewSessionTicketPayloadTls13::new(requested, 0, [0u8; 32], vec![1]);
+        assert_eq!(payload.lifetime, expected);
+        assert_eq!(
+            payload.encoding()[..4],
+            (expected.as_secs() as u32).to_be_bytes()
+        );
+    }
+}
+
 #[test]
 fn refuses_or_permits_every_recognized_extension_type_per_message() {
     for typ in recognized_extension_types() {
