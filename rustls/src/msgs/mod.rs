@@ -79,10 +79,10 @@ pub(crate) use handshake::{
     CertificateRequestExtensions, CertificateRequestPayload, CertificateRequestPayloadTls13,
     CertificateStatus, ClientDhParams, ClientEcdhParams, ClientExtensionsInput,
     ClientKeyExchangeParams, CompressedCertificatePayload, Encoding, HelloRetryRequest,
-    HelloRetryRequestExtensions, KeyShareEntry, KxDecode, NewSessionTicketPayload,
-    NewSessionTicketPayloadTls13, Random, ServerExtensionsInput, ServerKeyExchange,
-    ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId, SingleProtocolName,
-    SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters,
+    HelloRetryRequestExtensions, KeyShareEntry, KxDecode, MAX_TICKET_LIFETIME,
+    NewSessionTicketPayload, NewSessionTicketPayloadTls13, Random, ServerExtensionsInput,
+    ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId,
+    SingleProtocolName, SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters,
 };
 #[cfg(test)]
 pub(crate) use handshake::{EcParameters, NewSessionTicketExtensions, ServerEcdhParams};

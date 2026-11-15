@@ -13,8 +13,8 @@ use crate::crypto::{CipherSuite, CryptoProvider, Identity, SelectedCredential, S
 use crate::enums::{ApplicationProtocol, CertificateType};
 use crate::error::{ApiMisuse, Error, InvalidMessage};
 use crate::msgs::{
-    CertificateChain, Codec, ExtensionType, MaybeEmpty, NewSessionTicketPayloadTls13, Reader,
-    SessionId, SizedPayload,
+    CertificateChain, Codec, ExtensionType, MAX_TICKET_LIFETIME, MaybeEmpty,
+    NewSessionTicketPayloadTls13, Reader, SessionId, SizedPayload,
 };
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
@@ -498,8 +498,6 @@ impl ClientAuthDetails {
         Self::Empty { auth_context_tls13 }
     }
 }
-
-static MAX_TICKET_LIFETIME: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 #[cfg(test)]
 mod tests {
