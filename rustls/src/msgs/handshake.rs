@@ -1265,6 +1265,11 @@ impl Codec<'_> for NewSessionTicketExtensions {
     }
 }
 
+/// The longest lifetime a session ticket may have.
+///
+/// See [RFC 9846 section 4.7.1](https://www.rfc-editor.org/info/rfc9846#section-4.7.1).
+pub(crate) const MAX_TICKET_LIFETIME: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
 #[derive(Debug)]
 pub(crate) struct NewSessionTicketPayloadTls13 {
     pub(crate) lifetime: Duration,
