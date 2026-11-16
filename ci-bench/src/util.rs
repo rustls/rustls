@@ -365,7 +365,7 @@ pub(crate) mod transport {
 
     use std::io::Cursor;
 
-    use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+    use byteorder::{BigEndian, ReadBytesExt};
     use rustls::{ClientSide, Connection, ServerSide, SideData, SliceInput, Tcp};
 
     use super::async_io::{AsyncRead, AsyncWrite};
@@ -386,9 +386,9 @@ pub(crate) mod transport {
         }
 
         // Write the whole buffer in one go, preceded by its length
-        let mut length_buf = Vec::with_capacity(4);
-        length_buf.write_u32::<BigEndian>(output.len() as u32)?;
-        writer.write_all(&length_buf).await?;
+        writer
+            .write_all(&(output.len() as u32).to_be_bytes())
+            .await?;
         writer.write_all(output).await?;
         writer.flush().await?;
         output.clear();
