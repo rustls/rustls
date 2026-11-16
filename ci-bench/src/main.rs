@@ -24,7 +24,7 @@ use rustls::enums::ProtocolVersion;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     ClientConfig, ClientSide, Connection, HandshakeKind, RootCertStore, ServerConfig, ServerSide,
-    Tcp, VecInput,
+    Tcp,
 };
 use rustls_test::KeyType;
 
@@ -246,7 +246,6 @@ fn main() -> anyhow::Result<()> {
                                     &bench.params,
                                     resumption_kind,
                                 ),
-                                input: VecInput::default(),
                                 output: Vec::new(),
                             },
                             bench.kind,
@@ -263,7 +262,6 @@ fn main() -> anyhow::Result<()> {
                                     &bench.params,
                                     resumption_kind,
                                 ),
-                                input: VecInput::default(),
                                 output: Vec::new(),
                             },
                             bench.kind,
@@ -309,7 +307,6 @@ fn main() -> anyhow::Result<()> {
                                     handshake_buf,
                                 },
                                 config: ServerSideStepper::make_config(params, resumption_kind),
-                                input: VecInput::default(),
                                 output: Vec::new(),
                             },
                             bench.kind,
@@ -329,7 +326,6 @@ fn main() -> anyhow::Result<()> {
                                 },
                                 resumption_kind,
                                 config: ClientSideStepper::make_config(params, resumption_kind),
-                                input: VecInput::default(),
                                 output: Vec::new(),
                             },
                             bench.kind,
@@ -703,7 +699,6 @@ struct ClientSideStepper<'a> {
     io: StepperIo<'a>,
     resumption_kind: ResumptionKind,
     config: Arc<ClientConfig>,
-    input: VecInput,
     output: Vec<u8>,
 }
 
@@ -758,7 +753,6 @@ impl BenchStepper for ClientSideStepper<'_> {
                 break;
             }
             read_handshake_message(
-                &mut self.input,
                 &mut self.output,
                 &mut client,
                 self.io.reader,
@@ -773,7 +767,6 @@ impl BenchStepper for ClientSideStepper<'_> {
             && client.protocol_version().unwrap() == ProtocolVersion::TLSv1_3
         {
             read_handshake_message(
-                &mut self.input,
                 &mut self.output,
                 &mut client,
                 self.io.reader,
@@ -810,7 +803,6 @@ impl BenchStepper for ClientSideStepper<'_> {
 struct ServerSideStepper<'a> {
     io: StepperIo<'a>,
     config: Arc<ServerConfig>,
-    input: VecInput,
     output: Vec<u8>,
 }
 
@@ -851,7 +843,6 @@ impl BenchStepper for ServerSideStepper<'_> {
 
         while server.is_handshaking() {
             read_handshake_message(
-                &mut self.input,
                 &mut self.output,
                 &mut server,
                 self.io.reader,

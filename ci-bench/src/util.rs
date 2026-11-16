@@ -366,7 +366,7 @@ pub(crate) mod transport {
     use std::io::Cursor;
 
     use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-    use rustls::{ClientSide, Connection, ServerSide, SideData, SliceInput, Tcp, VecInput};
+    use rustls::{ClientSide, Connection, ServerSide, SideData, SliceInput, Tcp};
 
     use super::async_io::{AsyncRead, AsyncWrite};
 
@@ -401,7 +401,6 @@ pub(crate) mod transport {
     /// Used in combination with [`send_handshake_message`] (see that function's documentation for
     /// more details).
     pub(crate) async fn read_handshake_message(
-        input: &mut VecInput,
         output: &mut Vec<u8>,
         conn: &mut Connection<impl SideData, Tcp>,
         reader: &mut dyn AsyncRead,
@@ -427,12 +426,18 @@ pub(crate) mod transport {
             .await?;
 
         // Feed the data to rustls
-        let in_memory_reader = &mut &buf[..length];
-        while input.read(in_memory_reader)? != 0 {
-            let mut iter = conn.read_tls(input, output);
-            while let Some(result) = iter.next_payload() {
-                result?;
-            }
+        let mut input = SliceInput::new(&mut buf[..length]);
+        let mut iter = conn.read_tls(&mut input, output);
+        while let Some(result) = iter.next_payload() {
+            result?;
+        }
+        drop(iter);
+
+        let used = input.into_used();
+        if used != length {
+            anyhow::bail!(
+                "handshake message contained a partial record ({used} of {length} bytes used)"
+            );
         }
 
         Ok(length)
