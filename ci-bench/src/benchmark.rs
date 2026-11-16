@@ -1,8 +1,8 @@
 use core::borrow::Borrow;
 use core::cmp;
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use rustc_hash::FxHashMap;
 use rustls::crypto::{CryptoProvider, TicketProducer};
 use rustls_test::KeyType;
 
@@ -12,7 +12,7 @@ use crate::valgrind::InstructionCounts;
 /// Get the reported instruction counts for the provided benchmark
 pub(crate) fn get_reported_instr_count(
     bench: &Benchmark,
-    results: &FxHashMap<&str, InstructionCounts>,
+    results: &HashMap<&str, InstructionCounts>,
 ) -> InstructionCounts {
     results[&bench.name()]
 }

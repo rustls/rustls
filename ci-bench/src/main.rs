@@ -16,7 +16,6 @@ use clap::{Parser, Subcommand, ValueEnum};
 use itertools::Itertools;
 use rayon::iter::Either;
 use rayon::prelude::*;
-use rustc_hash::FxHashMap;
 use rustls::client::Resumption;
 use rustls::crypto::{CipherSuite, CryptoProvider, GetRandomFailed, SecureRandom, TicketProducer};
 use rustls::enums::ProtocolVersion;
@@ -611,7 +610,7 @@ fn run_all(
         .collect();
 
     // Report possible errors
-    let (errors, cg_results): (Vec<_>, FxHashMap<_, _>) =
+    let (errors, cg_results): (Vec<_>, HashMap<_, _>) =
         cg_results
             .into_iter()
             .partition_map(|(bench, result)| match result {
@@ -624,7 +623,7 @@ fn run_all(
         // crashing
         anyhow::bail!("One or more benchmarks crashed");
     }
-    let (errors, dh_results): (Vec<_>, FxHashMap<_, _>) =
+    let (errors, dh_results): (Vec<_>, HashMap<_, _>) =
         dh_results
             .into_iter()
             .partition_map(|(bench, result)| match result {
