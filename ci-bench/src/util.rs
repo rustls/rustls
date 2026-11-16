@@ -12,8 +12,6 @@ pub(crate) mod async_io {
     use std::io;
     use std::rc::Rc;
 
-    use async_trait::async_trait;
-
     /// Block on a future that should complete in a single poll.
     ///
     /// Safe to use when the underlying futures are blocking (e.g. waiting for an IO operation to
@@ -100,21 +98,18 @@ pub(crate) mod async_io {
     }
 
     /// Read bytes asynchronously
-    #[async_trait(?Send)]
     pub(crate) trait AsyncRead {
         async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
         async fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()>;
     }
 
     /// Write bytes asynchronously
-    #[async_trait(?Send)]
     pub(crate) trait AsyncWrite {
         async fn write_all(&mut self, buf: &[u8]) -> io::Result<()>;
         async fn flush(&mut self) -> io::Result<()>;
     }
 
     // Blocking implementation of AsyncRead for files (used to read from stdin)
-    #[async_trait(?Send)]
     impl AsyncRead for File {
         async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             io::Read::read(self, buf)
@@ -126,7 +121,6 @@ pub(crate) mod async_io {
     }
 
     // Blocking implementation of AsyncWrite for files (used to write to stdout)
-    #[async_trait(?Send)]
     impl AsyncWrite for File {
         async fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
             io::Write::write_all(self, buf)
@@ -176,7 +170,6 @@ pub(crate) mod async_io {
         }
     }
 
-    #[async_trait(?Send)]
     impl AsyncRead for AsyncReceiver {
         async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             AsyncPipeReadFuture {
@@ -196,7 +189,6 @@ pub(crate) mod async_io {
         }
     }
 
-    #[async_trait(?Send)]
     impl AsyncWrite for AsyncSender {
         async fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
             AsyncPipeWriteFuture {
@@ -376,7 +368,7 @@ pub(crate) mod transport {
     /// The receiving end should use [`read_handshake_message`] to process the transmission.
     pub(crate) async fn send_handshake_message(
         output: &mut Vec<u8>,
-        writer: &mut dyn AsyncWrite,
+        writer: &mut impl AsyncWrite,
     ) -> anyhow::Result<()> {
         if output.is_empty() {
             return Ok(());
@@ -400,7 +392,7 @@ pub(crate) mod transport {
     pub(crate) async fn read_handshake_message(
         output: &mut Vec<u8>,
         conn: &mut Connection<impl SideData, Tcp>,
-        reader: &mut dyn AsyncRead,
+        reader: &mut impl AsyncRead,
         buf: &mut [u8],
     ) -> anyhow::Result<usize> {
         // Read the length of the message to an intermediate buffer and parse it
@@ -446,7 +438,7 @@ pub(crate) mod transport {
     pub(crate) async fn read_plaintext_to_end_bounded(
         output: &mut Vec<u8>,
         client: &mut Connection<ClientSide, Tcp>,
-        reader: &mut dyn AsyncRead,
+        reader: &mut impl AsyncRead,
     ) -> anyhow::Result<usize> {
         let mut chunk_buf = [0u8; 262_144];
         let mut filled = 0;
@@ -489,7 +481,7 @@ pub(crate) mod transport {
     pub(crate) async fn write_all_plaintext_bounded(
         server: &mut Connection<ServerSide, Tcp>,
         output: &mut Vec<u8>,
-        writer: &mut dyn AsyncWrite,
+        writer: &mut impl AsyncWrite,
         plaintext_size: usize,
     ) -> anyhow::Result<()> {
         let send_buf = [0u8; 262_144];

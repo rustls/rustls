@@ -12,7 +12,6 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Context;
-use async_trait::async_trait;
 use clap::{Parser, Subcommand, ValueEnum};
 use itertools::Itertools;
 use rayon::iter::Either;
@@ -242,10 +241,7 @@ fn main() -> anyhow::Result<()> {
                         run_bench(
                             ServerSideStepper {
                                 io,
-                                config: ServerSideStepper::make_config(
-                                    &bench.params,
-                                    resumption_kind,
-                                ),
+                                config: server_config(&bench.params, resumption_kind),
                                 output: Vec::new(),
                             },
                             bench.kind,
@@ -258,10 +254,7 @@ fn main() -> anyhow::Result<()> {
                             ClientSideStepper {
                                 io,
                                 resumption_kind,
-                                config: ClientSideStepper::make_config(
-                                    &bench.params,
-                                    resumption_kind,
-                                ),
+                                config: client_config(&bench.params, resumption_kind),
                                 output: Vec::new(),
                             },
                             bench.kind,
@@ -306,7 +299,7 @@ fn main() -> anyhow::Result<()> {
                                     writer: &mut server_writer,
                                     handshake_buf,
                                 },
-                                config: ServerSideStepper::make_config(params, resumption_kind),
+                                config: server_config(params, resumption_kind),
                                 output: Vec::new(),
                             },
                             bench.kind,
@@ -325,7 +318,7 @@ fn main() -> anyhow::Result<()> {
                                     handshake_buf,
                                 },
                                 resumption_kind,
-                                config: ClientSideStepper::make_config(params, resumption_kind),
+                                config: client_config(params, resumption_kind),
                                 output: Vec::new(),
                             },
                             bench.kind,
@@ -677,7 +670,6 @@ pub struct CombinedMeasurement {
 /// Drives the different steps in a benchmark.
 ///
 /// See [`run_bench`] for specific details on how it is used.
-#[async_trait(?Send)]
 trait BenchStepper {
     type Endpoint;
 
@@ -688,55 +680,52 @@ trait BenchStepper {
 }
 
 /// Stepper fields necessary for IO
-struct StepperIo<'a> {
-    reader: &'a mut dyn AsyncRead,
-    writer: &'a mut dyn AsyncWrite,
+struct StepperIo<'a, R, W> {
+    reader: &'a mut R,
+    writer: &'a mut W,
     handshake_buf: &'a mut [u8],
 }
 
 /// A benchmark stepper for the client-side of the connection
-struct ClientSideStepper<'a> {
-    io: StepperIo<'a>,
+struct ClientSideStepper<'a, R, W> {
+    io: StepperIo<'a, R, W>,
     resumption_kind: ResumptionKind,
     config: Arc<ClientConfig>,
     output: Vec<u8>,
 }
 
-impl ClientSideStepper<'_> {
-    fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ClientConfig> {
-        let cfg = ClientConfig::builder(params.provider.clone());
+fn client_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ClientConfig> {
+    let cfg = ClientConfig::builder(params.provider.clone());
 
-        let mut cfg = match params.auth_key {
-            AuthKeySource::KeyType(key_type) => {
-                let mut root_store = RootCertStore::empty();
-                root_store
-                    .add(key_type.ca_cert())
-                    .unwrap();
+    let mut cfg = match params.auth_key {
+        AuthKeySource::KeyType(key_type) => {
+            let mut root_store = RootCertStore::empty();
+            root_store
+                .add(key_type.ca_cert())
+                .unwrap();
 
-                cfg.with_root_certificates(root_store)
-                    .with_no_client_auth()
-                    .unwrap()
-            }
-
-            AuthKeySource::FuzzingProvider => cfg
-                .dangerous()
-                .with_custom_certificate_verifier(rustls_fuzzing_provider::server_verifier())
+            cfg.with_root_certificates(root_store)
                 .with_no_client_auth()
-                .unwrap(),
-        };
-
-        if resume != ResumptionKind::No {
-            cfg.resumption = Resumption::in_memory_sessions(128);
-        } else {
-            cfg.resumption = Resumption::disabled();
+                .unwrap()
         }
 
-        Arc::new(cfg)
+        AuthKeySource::FuzzingProvider => cfg
+            .dangerous()
+            .with_custom_certificate_verifier(rustls_fuzzing_provider::server_verifier())
+            .with_no_client_auth()
+            .unwrap(),
+    };
+
+    if resume != ResumptionKind::No {
+        cfg.resumption = Resumption::in_memory_sessions(128);
+    } else {
+        cfg.resumption = Resumption::disabled();
     }
+
+    Arc::new(cfg)
 }
 
-#[async_trait(?Send)]
-impl BenchStepper for ClientSideStepper<'_> {
+impl<R: AsyncRead, W: AsyncWrite> BenchStepper for ClientSideStepper<'_, R, W> {
     type Endpoint = Connection<ClientSide, Tcp>;
 
     async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
@@ -800,42 +789,39 @@ impl BenchStepper for ClientSideStepper<'_> {
 }
 
 /// A benchmark stepper for the server-side of the connection
-struct ServerSideStepper<'a> {
-    io: StepperIo<'a>,
+struct ServerSideStepper<'a, R, W> {
+    io: StepperIo<'a, R, W>,
     config: Arc<ServerConfig>,
     output: Vec<u8>,
 }
 
-impl ServerSideStepper<'_> {
-    fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ServerConfig> {
-        let cfg = ServerConfig::builder(params.provider.clone());
+fn server_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ServerConfig> {
+    let cfg = ServerConfig::builder(params.provider.clone());
 
-        let mut cfg = match params.auth_key {
-            AuthKeySource::KeyType(key_type) => cfg
-                .with_client_cert_verifier(WebPkiClientVerifier::no_client_auth())
-                .with_single_cert(key_type.identity(), key_type.key())
-                .expect("bad certs/private key?"),
+    let mut cfg = match params.auth_key {
+        AuthKeySource::KeyType(key_type) => cfg
+            .with_client_cert_verifier(WebPkiClientVerifier::no_client_auth())
+            .with_single_cert(key_type.identity(), key_type.key())
+            .expect("bad certs/private key?"),
 
-            AuthKeySource::FuzzingProvider => cfg
-                .with_client_cert_verifier(WebPkiClientVerifier::no_client_auth())
-                .with_server_credential_resolver(rustls_fuzzing_provider::server_cert_resolver())
-                .unwrap(),
-        };
+        AuthKeySource::FuzzingProvider => cfg
+            .with_client_cert_verifier(WebPkiClientVerifier::no_client_auth())
+            .with_server_credential_resolver(rustls_fuzzing_provider::server_cert_resolver())
+            .unwrap(),
+    };
 
-        if resume == ResumptionKind::SessionId {
-            cfg.session_storage = ServerSessionMemoryCache::new(128);
-        } else if resume == ResumptionKind::Tickets {
-            cfg.ticketer = Some((params.ticketer)());
-        } else {
-            cfg.session_storage = Arc::new(NoServerSessionStorage {});
-        }
-
-        Arc::new(cfg)
+    if resume == ResumptionKind::SessionId {
+        cfg.session_storage = ServerSessionMemoryCache::new(128);
+    } else if resume == ResumptionKind::Tickets {
+        cfg.ticketer = Some((params.ticketer)());
+    } else {
+        cfg.session_storage = Arc::new(NoServerSessionStorage {});
     }
+
+    Arc::new(cfg)
 }
 
-#[async_trait(?Send)]
-impl BenchStepper for ServerSideStepper<'_> {
+impl<R: AsyncRead, W: AsyncWrite> BenchStepper for ServerSideStepper<'_, R, W> {
     type Endpoint = Connection<ServerSide, Tcp>;
 
     async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {

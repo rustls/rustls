@@ -1774,7 +1774,6 @@ name = "rustls-ci-bench"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "async-trait",
  "clap",
  "crabgrind",
  "itertools 0.15.0",
