@@ -795,13 +795,8 @@ impl BenchStepper for ClientSideStepper<'_> {
     }
 
     async fn transmit_data(&mut self, endpoint: &mut Self::Endpoint) -> anyhow::Result<()> {
-        let total_plaintext_read = read_plaintext_to_end_bounded(
-            &mut self.input,
-            &mut self.output,
-            endpoint,
-            self.io.reader,
-        )
-        .await?;
+        let total_plaintext_read =
+            read_plaintext_to_end_bounded(&mut self.output, endpoint, self.io.reader).await?;
         assert_eq!(total_plaintext_read, TRANSFER_PLAINTEXT_SIZE);
         Ok(())
     }

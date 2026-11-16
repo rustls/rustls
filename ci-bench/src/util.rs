@@ -366,7 +366,7 @@ pub(crate) mod transport {
     use std::io::Cursor;
 
     use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-    use rustls::{ClientSide, Connection, ServerSide, SideData, Tcp, VecInput};
+    use rustls::{ClientSide, Connection, ServerSide, SideData, SliceInput, Tcp, VecInput};
 
     use super::async_io::{AsyncRead, AsyncWrite};
 
@@ -442,46 +442,42 @@ pub(crate) mod transport {
     ///
     /// Returns the amount of plaintext bytes received.
     pub(crate) async fn read_plaintext_to_end_bounded(
-        input: &mut VecInput,
         output: &mut Vec<u8>,
         client: &mut Connection<ClientSide, Tcp>,
         reader: &mut dyn AsyncRead,
     ) -> anyhow::Result<usize> {
         let mut chunk_buf = [0u8; 262_144];
+        let mut filled = 0;
         let mut total_plaintext_bytes_read = 0;
 
         loop {
-            // Read until the whole chunk is received
-            let mut chunk_buf_end = 0;
-            while chunk_buf_end != chunk_buf.len() {
+            let start = filled;
+            while filled != chunk_buf.len() {
                 let read = reader
-                    .read(&mut chunk_buf[chunk_buf_end..])
+                    .read(&mut chunk_buf[filled..])
                     .await?;
                 if read == 0 {
                     // Stream closed
                     break;
                 }
-
-                chunk_buf_end += read;
+                filled += read;
             }
 
-            if chunk_buf_end == 0 {
+            if filled == start {
                 // Stream closed
                 break;
             }
 
-            // Load the buffer's bytes into rustls
-            let mut chunk_buf_offset = 0;
-            while chunk_buf_offset < chunk_buf_end {
-                let read = input.read(&mut &chunk_buf[chunk_buf_offset..chunk_buf_end])?;
-                chunk_buf_offset += read;
-
-                // Process packets to free space in the message buffer
-                let mut iter = client.read_tls(input, output);
-                while let Some(result) = iter.next_payload() {
-                    total_plaintext_bytes_read += result?.bytes().len();
-                }
+            let mut input = SliceInput::new(&mut chunk_buf[..filled]);
+            let mut iter = client.read_tls(&mut input, output);
+            while let Some(result) = iter.next_payload() {
+                total_plaintext_bytes_read += result?.bytes().len();
             }
+            drop(iter);
+
+            let used = input.into_used();
+            chunk_buf.copy_within(used..filled, 0);
+            filled -= used;
         }
 
         Ok(total_plaintext_bytes_read)
