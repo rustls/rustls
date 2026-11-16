@@ -12,10 +12,12 @@ use std::thread;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, ValueEnum};
-use rustls::client::Resumption;
+use rustls::client::{ClientHandshake, Resumption};
 use rustls::crypto::{CipherSuite, CryptoProvider, Identity};
 use rustls::enums::ProtocolVersion;
-use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
+use rustls::server::{
+    NoServerSessionStorage, ServerHandshake, ServerSessionMemoryCache, WebPkiClientVerifier,
+};
 use rustls::{
     ClientConfig, ClientSide, Connection, HandshakeKind, RootCertStore, ServerConfig, ServerSide,
     SideData, SliceInput, Tcp,
@@ -205,6 +207,9 @@ impl Api {
     fn use_connection(&self) -> bool {
         matches!(*self, Self::Both | Self::Connection)
     }
+    fn use_states(&self) -> bool {
+        matches!(*self, Self::Both | Self::States)
+    }
 }
 
 fn all_tests(args: &Args) {
@@ -271,7 +276,20 @@ fn bench_handshake(params: &Parameters) {
             },
         );
 
-        report_handshake_result("handshakes", params, rounds, results);
+        report_handshake_result("handshakes(Connection)", params, rounds, results);
+    }
+
+    if params.api.use_states() {
+        let results = multithreaded(
+            params.threads,
+            &client_config,
+            &server_config,
+            move |client_config, server_config| {
+                bench_handshake_states(rounds, params.resume, client_config, server_config, params)
+            },
+        );
+
+        report_handshake_result("handshakes(States)", params, rounds, results);
     }
 }
 
@@ -340,6 +358,150 @@ fn bench_handshake_connection(
         }
     }
 
+    timings
+}
+
+fn bench_handshake_states(
+    mut rounds: u64,
+    resume: ResumptionParam,
+    client_config: Arc<ClientConfig>,
+    server_config: Arc<ServerConfig>,
+    params: &Parameters,
+) -> Timings {
+    let mut timings = Timings::default();
+    let mut client_buffer = Vec::with_capacity(0xffff);
+    let mut server_buffer = Vec::with_capacity(0xffff);
+    let mut client_latency = params.open_latency_file("client");
+    let mut server_latency = params.open_latency_file("server");
+
+    while rounds > 0 {
+        let mut client_time = 0f64;
+        let mut server_time = 0f64;
+
+        client_buffer.clear();
+        server_buffer.clear();
+
+        let mut client = time(&mut client_time, || {
+            let server_name = "localhost".try_into().unwrap();
+
+            ClientHandshake::NeedsInput(
+                client_config
+                    .connect(server_name)
+                    .start_handshake(&mut client_buffer)
+                    .unwrap(),
+            )
+        });
+        let mut server = time(&mut server_time, || {
+            ServerHandshake::NeedsInput(ServerHandshake::start())
+        });
+
+        let (client, server) = loop {
+            if !client_buffer.is_empty() {
+                server = time(&mut server_time, || {
+                    let mut client_input = SliceInput::new(client_buffer.as_mut_slice());
+
+                    let ServerHandshake::NeedsInput(needs_input) = server else {
+                        return server;
+                    };
+
+                    let next = match needs_input
+                        .process(&mut client_input, &mut server_buffer)
+                        .unwrap()
+                    {
+                        ServerHandshake::NeedsInput(needs_input) => {
+                            ServerHandshake::NeedsInput(needs_input)
+                        }
+                        ServerHandshake::Accepted(accepted) => accepted
+                            .choose_config(server_config.clone(), &mut server_buffer)
+                            .unwrap(),
+                        ServerHandshake::VerifyClientIdentity(verify_peer_identity) => {
+                            verify_peer_identity
+                                .with_config(&mut server_buffer)
+                                .unwrap()
+                        }
+                        ServerHandshake::EarlyData(received_early_data) => {
+                            ServerHandshake::NeedsInput(received_early_data.into_next().1)
+                        }
+                        ServerHandshake::Complete(connection) => {
+                            ServerHandshake::Complete(connection)
+                        }
+                        _ => todo!(),
+                    };
+                    let used = client_input.into_used();
+                    client_buffer.drain(..used);
+                    next
+                });
+            }
+
+            if !server_buffer.is_empty() {
+                client = time(&mut client_time, || {
+                    let mut server_input = SliceInput::new(server_buffer.as_mut_slice());
+
+                    let ClientHandshake::NeedsInput(needs_input) = client else {
+                        return client;
+                    };
+
+                    let next = match needs_input
+                        .process(&mut server_input, &mut client_buffer)
+                        .unwrap()
+                    {
+                        ClientHandshake::NeedsInput(needs_input) => {
+                            ClientHandshake::NeedsInput(needs_input)
+                        }
+                        ClientHandshake::VerifyServerIdentity(verify_peer_identity) => {
+                            verify_peer_identity
+                                .with_config(&mut client_buffer)
+                                .unwrap()
+                        }
+                        ClientHandshake::Complete(connection) => {
+                            ClientHandshake::Complete(connection)
+                        }
+                        _ => todo!(),
+                    };
+                    let used = server_input.into_used();
+                    server_buffer.drain(..used);
+                    next
+                });
+            }
+
+            if let (ClientHandshake::Complete(_), ServerHandshake::Complete(_)) = (&client, &server)
+            {
+                let ClientHandshake::Complete(client) = client else {
+                    unreachable!()
+                };
+                let ServerHandshake::Complete(server) = server else {
+                    unreachable!()
+                };
+                break (client, server);
+            }
+        };
+
+        // feed in any remaining post-handshake data
+        let (mut client, mut server) = (client, server);
+        time(&mut client_time, || {
+            transfer(&mut server_buffer, &mut client_buffer, &mut client, None);
+        });
+        time(&mut server_time, || {
+            transfer(&mut client_buffer, &mut server_buffer, &mut server, None);
+        });
+        assert!(client_buffer.is_empty() && server_buffer.is_empty());
+
+        // if we achieved the desired handshake shape, count this handshake.
+        if client.handshake_kind() == Some(resume.as_handshake_kind())
+            && server.handshake_kind() == Some(resume.as_handshake_kind())
+        {
+            client_latency.sample(client_time);
+            server_latency.sample(server_time);
+            timings.client += client_time;
+            timings.server += server_time;
+            rounds -= 1;
+        } else {
+            // otherwise, this handshake is ignored against the quota for this thread,
+            // and serves just to refresh the session cache.  that is mainly
+            // necessary for TLS1.3, where tickets are single-use and limited to
+            // 8 per server.
+        }
+    }
     timings
 }
 
@@ -967,9 +1129,9 @@ fn do_handshake(
     while do_handshake_step(client_buffer, client, server_buffer, server) {}
 }
 
-fn time<F, T>(time_out: &mut f64, mut f: F) -> T
+fn time<F, T>(time_out: &mut f64, f: F) -> T
 where
-    F: FnMut() -> T,
+    F: FnOnce() -> T,
 {
     let start = Instant::now();
     let r = f();
