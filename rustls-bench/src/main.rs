@@ -123,7 +123,7 @@ struct Args {
     #[arg(long, default_value = "1", help = "Number of threads to use")]
     threads: NonZeroUsize,
 
-    #[arg(long, value_enum, default_value_t = Api::Both, help = "Choose buffered or unbuffered API")]
+    #[arg(long, value_enum, default_value_t = Api::Both, help = "Choose `Connection` or `States` API")]
     api: Api,
 
     #[command(subcommand)]
@@ -197,13 +197,13 @@ enum Command {
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum Api {
     Both,
-    Buffered,
-    Unbuffered,
+    Connection,
+    States,
 }
 
 impl Api {
-    fn use_buffered(&self) -> bool {
-        matches!(*self, Self::Both | Self::Buffered)
+    fn use_connection(&self) -> bool {
+        matches!(*self, Self::Both | Self::Connection)
     }
 }
 
@@ -247,7 +247,7 @@ fn bench_handshake(params: &Parameters) {
     });
 
     // warm up, and prime session cache for resumptions
-    bench_handshake_buffered(
+    bench_handshake_connection(
         1,
         ResumptionParam::No,
         client_config.clone(),
@@ -255,13 +255,13 @@ fn bench_handshake(params: &Parameters) {
         &params.without_latency_measurement(),
     );
 
-    if params.api.use_buffered() {
+    if params.api.use_connection() {
         let results = multithreaded(
             params.threads,
             &client_config,
             &server_config,
             move |client_config, server_config| {
-                bench_handshake_buffered(
+                bench_handshake_connection(
                     rounds,
                     params.resume,
                     client_config,
@@ -275,7 +275,7 @@ fn bench_handshake(params: &Parameters) {
     }
 }
 
-fn bench_handshake_buffered(
+fn bench_handshake_connection(
     mut rounds: u64,
     resume: ResumptionParam,
     client_config: Arc<ClientConfig>,
@@ -443,13 +443,13 @@ fn bench_bulk(params: &Parameters) {
     );
     let rounds = total_data / params.plaintext_size;
 
-    if params.api.use_buffered() {
+    if params.api.use_connection() {
         let results = multithreaded(
             params.threads,
             &client_config,
             &server_config,
             move |client_config, server_config| {
-                bench_bulk_buffered(client_config, server_config, params.plaintext_size, rounds)
+                bench_bulk_one(client_config, server_config, params.plaintext_size, rounds)
             },
         );
 
@@ -457,7 +457,7 @@ fn bench_bulk(params: &Parameters) {
     }
 }
 
-fn bench_bulk_buffered(
+fn bench_bulk_one(
     client_config: Arc<ClientConfig>,
     server_config: Arc<ServerConfig>,
     plaintext_size: u64,
