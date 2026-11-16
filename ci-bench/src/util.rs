@@ -448,7 +448,6 @@ pub(crate) mod transport {
         reader: &mut dyn AsyncRead,
     ) -> anyhow::Result<usize> {
         let mut chunk_buf = [0u8; 262_144];
-        let mut plaintext_buf = [0u8; 262_144];
         let mut total_plaintext_bytes_read = 0;
 
         loop {
@@ -479,14 +478,9 @@ pub(crate) mod transport {
 
                 // Process packets to free space in the message buffer
                 let mut iter = client.read_tls(input, output);
-                let mut plaintext_bytes_read = 0;
                 while let Some(result) = iter.next_payload() {
-                    let payload = result?;
-                    plaintext_bytes_read += payload.bytes().len();
-                    plaintext_buf[..payload.bytes().len()].copy_from_slice(payload.bytes());
+                    total_plaintext_bytes_read += result?.bytes().len();
                 }
-
-                total_plaintext_bytes_read += plaintext_bytes_read;
             }
         }
 
