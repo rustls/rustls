@@ -363,9 +363,6 @@ pub(crate) mod transport {
     //! but that doesn't matter (we are measuring performance differences, and overhead is automatically
     //! ignored as long as it remains constant).
 
-    use std::io::Cursor;
-
-    use byteorder::{BigEndian, ReadBytesExt};
     use rustls::{ClientSide, Connection, ServerSide, SideData, SliceInput, Tcp};
 
     use super::async_io::{AsyncRead, AsyncWrite};
@@ -411,7 +408,7 @@ pub(crate) mod transport {
         reader
             .read_exact(&mut length_buf)
             .await?;
-        let length = Cursor::new(length_buf).read_u32::<BigEndian>()? as usize;
+        let length = u32::from_be_bytes(length_buf) as usize;
 
         // Read the rest of the message to an intermediate buffer
         if length >= buf.len() {
