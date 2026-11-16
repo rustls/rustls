@@ -1778,7 +1778,6 @@ dependencies = [
  "crabgrind",
  "itertools 0.15.0",
  "rayon",
- "rustc-hash",
  "rustls 0.24.0-dev.3",
  "rustls-aws-lc-rs",
  "rustls-fuzzing-provider",

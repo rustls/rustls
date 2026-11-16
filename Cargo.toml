@@ -73,7 +73,6 @@ rayon = "1.7"
 rcgen = { version = "0.14.10", features = ["pem", "aws_lc_rs"], default-features = false }
 regex = "1"
 ring = "0.17"
-rustc-hash = "2"
 rustls-fuzzing-provider = { path = "rustls-fuzzing-provider/" }
 rustls-graviola = { version = "0.4" }
 rustls-test = { path = "rustls-test/", default-features = false }
