@@ -9,7 +9,6 @@ publish = false
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-byteorder = { workspace = true }
 clap = { workspace = true }
 itertools = { workspace = true }
 rayon = { workspace = true }
