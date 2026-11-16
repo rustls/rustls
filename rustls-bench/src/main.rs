@@ -7,7 +7,7 @@ use core::num::NonZeroUsize;
 use core::time::Duration;
 use std::fs::File;
 use std::io::Write;
-use std::sync::Arc;
+use std::sync::{Arc, Barrier};
 use std::thread;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -18,6 +18,7 @@ use rustls::enums::ProtocolVersion;
 use rustls::server::{
     NoServerSessionStorage, ServerHandshake, ServerSessionMemoryCache, WebPkiClientVerifier,
 };
+use rustls::split::{ReceiveTraffic, ReceiveTrafficState, SendTraffic};
 use rustls::{
     ClientConfig, ClientSide, Connection, HandshakeKind, RootCertStore, ServerConfig, ServerSide,
     SideData, SliceInput, Tcp,
@@ -41,6 +42,20 @@ pub fn main() {
                     &Parameters::new(bench, &args)
                         .with_plaintext_size(*plaintext_size)
                         .with_max_fragment(*max_fragment_size),
+                );
+            }
+        }
+
+        Command::BulkSplit {
+            cipher_suite,
+            plaintext_size,
+        } => {
+            let provider = args
+                .provider
+                .unwrap_or_else(Provider::choose_default);
+            for bench in lookup_matching_benches(cipher_suite, args.key_type, &provider).iter() {
+                bench_bulk_split(
+                    &Parameters::new(bench, &args).with_plaintext_size(*plaintext_size),
                 );
             }
         }
@@ -152,6 +167,20 @@ enum Command {
 
         #[arg(help = "Maximum TLS fragment size")]
         max_fragment_size: Option<usize>,
+    },
+
+    #[command(
+        about = "Runs bulk data benchmarks in both directions at once, using split connections",
+        long_about = "This splits a client and server connection into their send and receive halves.\n\
+                      One thread sends client-to-server, while another sends server-to-client, so\n\
+                      each connection is sending and receiving at the same time."
+    )]
+    BulkSplit {
+        #[arg(help = "Which cipher suite to use; see `list-suites` for possible values.")]
+        cipher_suite: String,
+
+        #[arg(default_value_t = 1048576, help = "The size of each data write")]
+        plaintext_size: u64,
     },
 
     #[command(about = "Runs full handshake speed benchmarks")]
@@ -509,12 +538,12 @@ fn bench_handshake_states(
 /// by each thread.
 ///
 /// `client_config` and `server_config` are cloned into each thread fn.
-fn multithreaded(
+fn multithreaded<R: Send>(
     count: NonZeroUsize,
     client_config: &Arc<ClientConfig>,
     server_config: &Arc<ServerConfig>,
-    f: impl Fn(Arc<ClientConfig>, Arc<ServerConfig>) -> Timings + Send + Sync,
-) -> Vec<Timings> {
+    f: impl Fn(Arc<ClientConfig>, Arc<ServerConfig>) -> R + Send + Sync,
+) -> Vec<R> {
     thread::scope(|s| {
         let threads = (0..count.into())
             .map(|_| {
@@ -527,7 +556,7 @@ fn multithreaded(
         threads
             .into_iter()
             .map(|thread| thread.join().unwrap())
-            .collect::<Vec<Timings>>()
+            .collect::<Vec<R>>()
     })
 }
 
@@ -555,15 +584,15 @@ fn report_handshake_result(variant: &str, params: &Parameters, rounds: u64, timi
     report_timings("handshakes/s", &timings, rounds as f64, |t| t.server);
 }
 
-fn report_timings(
+fn report_timings<T>(
     units: &str,
-    thread_timings: &[Timings],
+    thread_timings: &[T],
     work_per_thread: f64,
-    which: impl Fn(&Timings) -> f64,
+    which: impl Fn(&T) -> f64,
 ) {
     // maintain old output for --threads=1
-    if let &[timing] = thread_timings {
-        println!("{:.2}\t{}", work_per_thread / which(&timing), units);
+    if let [timing] = thread_timings {
+        println!("{:.2}\t{}", work_per_thread / which(timing), units);
         return;
     }
 
@@ -614,7 +643,7 @@ fn bench_bulk_one(
     server_config: Arc<ServerConfig>,
     plaintext_size: u64,
     rounds: u64,
-) -> Timings {
+) -> BulkTimings {
     let server_name = "localhost".try_into().unwrap();
     let mut client_buffer = Vec::with_capacity(1024 * 1024);
     let mut client = client_config
@@ -624,7 +653,7 @@ fn bench_bulk_one(
     let mut server = Connection::new(server_config).unwrap();
     let mut server_buffer = Vec::with_capacity(1024 * 1024);
 
-    let mut timings = Timings::default();
+    let mut timings = BulkTimings::default();
     do_handshake(
         &mut client_buffer,
         &mut client,
@@ -634,13 +663,13 @@ fn bench_bulk_one(
 
     let buf = vec![0; plaintext_size as usize];
     for _ in 0..rounds {
-        time(&mut timings.server, || {
+        time(&mut timings.send, || {
             server
                 .write((&buf).into(), &mut server_buffer)
                 .unwrap();
         });
 
-        timings.client += transfer(
+        timings.recv += transfer(
             &mut server_buffer,
             &mut client_buffer,
             &mut client,
@@ -651,7 +680,132 @@ fn bench_bulk_one(
     timings
 }
 
-fn report_bulk_result(variant: &str, params: &Parameters, timings: Vec<Timings>, rounds: u64) {
+fn bench_bulk_split(params: &Parameters) {
+    let client_config = params.client_config();
+    let server_config = params.server_config();
+    let rounds = params.bulk_rounds();
+
+    let results = multithreaded(
+        params.threads,
+        &client_config,
+        &server_config,
+        move |client_config, server_config| {
+            bench_bulk_split_one(client_config, server_config, params.plaintext_size, rounds)
+        },
+    );
+
+    let (client_to_server, server_to_client): (Vec<_>, Vec<_>) = results.into_iter().unzip();
+    report_bulk_result("bulk-split(c2s)", params, client_to_server, rounds);
+    report_bulk_result("bulk-split(s2c)", params, server_to_client, rounds);
+}
+
+/// Returns the timings for the client-to-server and server-to-client directions.
+fn bench_bulk_split_one(
+    client_config: Arc<ClientConfig>,
+    server_config: Arc<ServerConfig>,
+    plaintext_size: u64,
+    rounds: u64,
+) -> (BulkTimings, BulkTimings) {
+    let server_name = "localhost".try_into().unwrap();
+    let mut client_buffer = Vec::with_capacity(64 * 1024);
+    let mut client = client_config
+        .connect(server_name)
+        .build(&mut client_buffer)
+        .unwrap();
+    let mut server = Connection::new(server_config).unwrap();
+    let mut server_buffer = Vec::with_capacity(64 * 1024);
+
+    do_handshake(
+        &mut client_buffer,
+        &mut client,
+        &mut server_buffer,
+        &mut server,
+    );
+    assert!(client_buffer.is_empty() && server_buffer.is_empty());
+
+    let client = client.split().unwrap();
+    let server = server.split().unwrap();
+    let start = Barrier::new(2);
+
+    thread::scope(|s| {
+        let client_to_server = s.spawn(|| {
+            bulk_split_direction(client.send, server.receive, plaintext_size, rounds, &start)
+        });
+        let server_to_client = s.spawn(|| {
+            bulk_split_direction(server.send, client.receive, plaintext_size, rounds, &start)
+        });
+
+        (
+            client_to_server.join().unwrap(),
+            server_to_client.join().unwrap(),
+        )
+    })
+}
+
+fn bulk_split_direction<Side: SideData>(
+    mut send: SendTraffic,
+    mut receive: ReceiveTraffic<Side>,
+    plaintext_size: u64,
+    rounds: u64,
+    start: &Barrier,
+) -> BulkTimings {
+    let mut timings = BulkTimings::default();
+    let buf = vec![0; plaintext_size as usize];
+    let mut wire = Vec::with_capacity(buf.len() + buf.len() / 64 + 0xffff);
+
+    start.wait();
+    for _ in 0..rounds {
+        time(&mut timings.send, || {
+            send.write((&buf).into(), &mut wire)
+                .unwrap();
+        });
+
+        receive = time(&mut timings.recv, || {
+            receive_split(receive, &mut wire, buf.len())
+        });
+    }
+
+    timings
+}
+
+fn receive_split<Side: SideData>(
+    mut receive: ReceiveTraffic<Side>,
+    wire: &mut Vec<u8>,
+    expect_data: usize,
+) -> ReceiveTraffic<Side> {
+    let mut input = SliceInput::new(wire);
+    let mut received = 0;
+
+    loop {
+        match receive.read(&mut input).unwrap() {
+            ReceiveTrafficState::Available(mut data) => {
+                received += data.data().len();
+                receive = expect_read_more(data.into_next());
+            }
+            state => {
+                receive = expect_read_more(state);
+                break;
+            }
+        }
+    }
+
+    let used = input.into_used();
+    assert_eq!(used, wire.len());
+    assert_eq!(received, expect_data);
+    wire.clear();
+    receive
+}
+
+fn expect_read_more<Side: SideData>(state: ReceiveTrafficState<'_, Side>) -> ReceiveTraffic<Side> {
+    match state {
+        ReceiveTrafficState::ReadMore(receive) => receive,
+        ReceiveTrafficState::FlushSender(flush) => expect_read_more(flush.into_next()),
+        ReceiveTrafficState::Available(_) => panic!("unexpected application data"),
+        ReceiveTrafficState::CloseNotify => panic!("unexpected close_notify"),
+    }
+}
+
+fn report_bulk_result(variant: &str, params: &Parameters, timings: Vec<BulkTimings>, rounds: u64) {
     let mfs_str = format!(
         "max_fragment_size:{}",
         params
@@ -664,13 +818,19 @@ fn report_bulk_result(variant: &str, params: &Parameters, timings: Vec<Timings>,
         "{}\t{:?}\t{:?}\t{}\tsend\t",
         variant, params.proto.version, params.proto.ciphersuite, mfs_str,
     );
-    report_timings("MB/s", &timings, total_mbs, |t| t.server);
+    report_timings("MB/s", &timings, total_mbs, |t| t.send);
 
     print!(
         "{}\t{:?}\t{:?}\t{}\trecv\t",
         variant, params.proto.version, params.proto.ciphersuite, mfs_str,
     );
-    report_timings("MB/s", &timings, total_mbs, |t| t.client);
+    report_timings("MB/s", &timings, total_mbs, |t| t.recv);
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct BulkTimings {
+    send: f64,
+    recv: f64,
 }
 
 fn bench_memory(
