@@ -49,13 +49,22 @@ pub fn main() {
         Command::BulkSplit {
             cipher_suite,
             plaintext_size,
+            key_update,
         } => {
             let provider = args
                 .provider
                 .unwrap_or_else(Provider::choose_default);
             for bench in lookup_matching_benches(cipher_suite, args.key_type, &provider).iter() {
+                if *key_update && bench.version == ProtocolVersion::TLSv1_2 {
+                    eprintln!(
+                        "skipping {:?} with key type {:?}: TLS1.2 has no key updates",
+                        bench.ciphersuite, bench.key_type
+                    );
+                    continue;
+                }
                 bench_bulk_split(
                     &Parameters::new(bench, &args).with_plaintext_size(*plaintext_size),
+                    *key_update,
                 );
             }
         }
@@ -181,6 +190,12 @@ enum Command {
 
         #[arg(default_value_t = 1048576, help = "The size of each data write")]
         plaintext_size: u64,
+
+        #[arg(
+            long,
+            help = "Each peer sends a TLS1.3 key update after every megabyte it sends"
+        )]
+        key_update: bool,
     },
 
     #[command(about = "Runs full handshake speed benchmarks")]
@@ -686,7 +701,7 @@ fn bench_bulk_one(
     timings
 }
 
-fn bench_bulk_split(params: &Parameters) {
+fn bench_bulk_split(params: &Parameters, key_update: bool) {
     let client_config = params.client_config();
     let server_config = params.server_config();
     let rounds = params.bulk_rounds();
@@ -696,13 +711,23 @@ fn bench_bulk_split(params: &Parameters) {
         &client_config,
         &server_config,
         move |client_config, server_config| {
-            bench_bulk_split_one(client_config, server_config, params.plaintext_size, rounds)
+            bench_bulk_split_one(
+                client_config,
+                server_config,
+                params.plaintext_size,
+                rounds,
+                key_update,
+            )
         },
     );
 
     let (client_to_server, server_to_client): (Vec<_>, Vec<_>) = results.into_iter().unzip();
-    report_bulk_result("bulk-split(c2s)", params, client_to_server, rounds);
-    report_bulk_result("bulk-split(s2c)", params, server_to_client, rounds);
+    let (c2s, s2c) = match key_update {
+        true => ("bulk-split(c2s,key-update)", "bulk-split(s2c,key-update)"),
+        false => ("bulk-split(c2s)", "bulk-split(s2c)"),
+    };
+    report_bulk_result(c2s, params, client_to_server, rounds);
+    report_bulk_result(s2c, params, server_to_client, rounds);
 }
 
 /// Returns the timings for the client-to-server and server-to-client directions.
@@ -711,6 +736,7 @@ fn bench_bulk_split_one(
     server_config: Arc<ServerConfig>,
     plaintext_size: u64,
     rounds: u64,
+    key_update: bool,
 ) -> (BulkTimings, BulkTimings) {
     let server_name = "localhost".try_into().unwrap();
     let mut client_buffer = Vec::with_capacity(0xffff);
@@ -735,10 +761,24 @@ fn bench_bulk_split_one(
 
     thread::scope(|s| {
         let client_to_server = s.spawn(|| {
-            bulk_split_direction(client.send, server.receive, plaintext_size, rounds, &start)
+            bulk_split_direction(
+                client.send,
+                server.receive,
+                plaintext_size,
+                rounds,
+                key_update,
+                &start,
+            )
         });
         let server_to_client = s.spawn(|| {
-            bulk_split_direction(server.send, client.receive, plaintext_size, rounds, &start)
+            bulk_split_direction(
+                server.send,
+                client.receive,
+                plaintext_size,
+                rounds,
+                key_update,
+                &start,
+            )
         });
 
         (
@@ -753,17 +793,26 @@ fn bulk_split_direction<Side: SideData>(
     mut receive: ReceiveTraffic<Side>,
     plaintext_size: u64,
     rounds: u64,
+    key_update: bool,
     start: &Barrier,
 ) -> BulkTimings {
     let mut timings = BulkTimings::default();
     let buf = vec![0; plaintext_size as usize];
     let mut wire = Vec::with_capacity(buf.len() + buf.len() / 64 + 0xffff);
+    let mut sent_since_key_update = 0;
 
     start.wait();
     for _ in 0..rounds {
         time(&mut timings.send, || {
             send.write((&buf).into(), &mut wire)
                 .unwrap();
+
+            sent_since_key_update += buf.len();
+            if key_update && sent_since_key_update >= KEY_UPDATE_INTERVAL {
+                sent_since_key_update -= KEY_UPDATE_INTERVAL;
+                send.refresh_traffic_keys(&mut wire)
+                    .unwrap();
+            }
         });
 
         receive = time(&mut timings.recv, || {
@@ -773,6 +822,8 @@ fn bulk_split_direction<Side: SideData>(
 
     timings
 }
+
+const KEY_UPDATE_INTERVAL: usize = 1024 * 1024;
 
 fn receive_split<Side: SideData>(
     mut receive: ReceiveTraffic<Side>,
