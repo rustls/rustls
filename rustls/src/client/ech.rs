@@ -169,6 +169,14 @@ impl EchConfig {
                 continue; // Unsupported, or malformed extensions.
             }
 
+            if !is_valid_public_name(&contents.public_name) {
+                warn!(
+                    "ECH config has invalid public_name: {:?}",
+                    contents.public_name
+                );
+                continue;
+            }
+
             let key_config = &contents.key_config;
             for cipher_suite in &key_config.symmetric_cipher_suites {
                 if cipher_suite.aead_id.tag_len().is_none() {
@@ -196,6 +204,25 @@ impl EchConfig {
         }
 
         Err(EncryptedClientHelloError::NoCompatibleConfig.into())
+    }
+}
+
+/// RFC 9849 section 6.1.7: reject a trailing dot, and a final label that a URL
+/// parser reads as an IPv4 literal. `DnsName` already rejects all-numeric labels.
+fn is_valid_public_name(name: &DnsName<'_>) -> bool {
+    let name: &str = name.as_ref();
+    if name.ends_with('.') {
+        return false;
+    }
+
+    match name
+        .rsplit('.')
+        .next()
+        .unwrap_or_default()
+        .as_bytes()
+    {
+        [b'0', b'x' | b'X', hex @ ..] => !hex.iter().all(u8::is_ascii_hexdigit),
+        _ => true,
     }
 }
 
