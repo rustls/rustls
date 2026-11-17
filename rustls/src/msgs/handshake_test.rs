@@ -996,7 +996,7 @@ fn test_decode_config_list() {
     fn assert_config(contents: &EchConfigContents, public_name: impl AsRef<[u8]>, max_len: u8) {
         assert_eq!(contents.maximum_name_length, max_len);
         assert_eq!(
-            contents.public_name,
+            contents.public_name().unwrap(),
             DnsName::try_from(public_name.as_ref()).unwrap()
         );
         assert!(contents.extensions.is_empty());

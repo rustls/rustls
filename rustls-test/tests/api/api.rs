@@ -2024,6 +2024,7 @@ fn test_client_ignores_ech_config_with_invalid_public_name() {
     // or a final label that a URL parser reads as an IPv4 literal.
     for public_name in [
         "testserver.com.",
+        "example.123",
         "0x7f000001",
         "example.0X1f",
         "example.0x",
