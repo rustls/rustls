@@ -22,8 +22,8 @@ use rustls::{
     ClientConfig, ClientSide, Connection, HandshakeKind, ServerConfig, ServerSide, Tcp, VecInput,
 };
 use rustls_test::{
-    ClientStorage, ClientStorageOp, ErrorFromPeer, HandshakeBuffers, KeyType, MultiTest,
-    ServerConfigExt, make_client_config, make_client_config_with_kx_groups, make_pair,
+    ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, HandshakeBuffers, KeyType,
+    MultiTest, ServerConfigExt, make_client_config, make_client_config_with_kx_groups, make_pair,
     make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
     make_server_config_with_kx_groups, transfer, webpki_server_verifier_builder,
 };
@@ -1424,6 +1424,35 @@ fn tls12_server_rejects_expired_stateful_session() {
     assert_eq!(storage.gets(), 1);
     assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
     assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+}
+
+#[test]
+fn tls12_client_expires_session_without_lifetime() {
+    let provider = provider::DEFAULT_TLS12_PROVIDER;
+    let clock = Arc::new(AdjustableClock::new());
+    let client_config = Arc::new(
+        ClientConfig::builder_with_details(provider.clone().into(), clock.clone())
+            .finish(KeyType::default()),
+    );
+    let server_config = Arc::new(make_server_config(KeyType::default(), &provider));
+
+    // full handshake: a session id but no ticket, so the client has no lifetime for it
+    let (mut client, mut server, mut buf) =
+        make_pair_for_arc_configs(&client_config, &server_config);
+    buf.handshake(&mut client, &mut server);
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+
+    let (mut client, mut server, mut buf) =
+        make_pair_for_arc_configs(&client_config, &server_config);
+    buf.handshake(&mut client, &mut server);
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+
+    // 8 days later (by the client's clock) the client no longer offers it
+    clock.advance(Duration::from_secs(8 * 24 * 60 * 60));
+    let (mut client, mut server, mut buf) =
+        make_pair_for_arc_configs(&client_config, &server_config);
+    buf.handshake(&mut client, &mut server);
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
 }
 
 /// A `TimeProvider` that starts at the current time and only moves when told to.
