@@ -439,6 +439,8 @@ jobs:
           components: clippy
       # Do not deny warnings, as nightly clippy sometimes has false negatives.
       - run: ./admin/clippy
+        env:
+          RUSTFLAGS: ""
 
   check-external-types:
     name: Validate external types appearing in public API
