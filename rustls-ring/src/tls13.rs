@@ -365,7 +365,6 @@ mod tests {
     }
 
     /// Test cases from appendix A in the RFC, minus cases requiring SHA1.
-
     #[test]
     fn test_case_1() {
         let hkdf = HkdfUsingHmac(&hmac::HMAC_SHA256);
