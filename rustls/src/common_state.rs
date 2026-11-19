@@ -10,7 +10,7 @@ use crate::conn::{DataKind, Exporter, KeyingMaterialExporter, ReceivePath, SendO
 use crate::crypto::cipher::{EncodableVersion, Payload};
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ApplicationProtocol, ProtocolVersion};
-use crate::error::{AlertDescription, ApiMisuse, Error};
+use crate::error::{AlertDescription, ApiMisuse, Error, PeerIncompatible};
 use crate::hash_hs::HandshakeHash;
 use crate::msgs::{
     AlertLevel, Codec, Delocator, HandshakeMessagePayload, Locator, Message, MessagePayload,
@@ -191,6 +191,12 @@ impl ConnectionOutputs {
 
     #[doc = include_str!("doc/exporter.md")]
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        // RFC 7627 section 5.4: a TLS 1.2 connection without the extended
+        // main secret MUST NOT export keying material.
+        if self.extended_main_secret == Some(false) {
+            return Err(PeerIncompatible::ExtendedMainSecretExtensionRequired.into());
+        }
+
         match self.exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None => Err(ApiMisuse::ExporterNotAvailable.into()),
@@ -473,3 +479,36 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
 
 pub(crate) type HandshakeFlightTls12<'a> = HandshakeFlight<'a, false>;
 pub(crate) type HandshakeFlightTls13<'a> = HandshakeFlight<'a, true>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exporter_requires_extended_main_secret() {
+        struct FakeExporter;
+
+        impl Exporter for FakeExporter {
+            fn derive(&self, _: &[u8], _: Option<&[u8]>, _: &mut [u8]) -> Result<(), Error> {
+                Ok(())
+            }
+        }
+
+        // `None` is TLS 1.3, where the extension does not apply.
+        for ems in [None, Some(true), Some(false)] {
+            let mut outputs = ConnectionOutputs::new(FipsStatus::Unvalidated);
+            if let Some(ems) = ems {
+                outputs.handle(OutputEvent::ExtendedMainSecret(ems));
+            }
+            outputs.handle(OutputEvent::Exporter(Box::new(FakeExporter)));
+
+            match ems {
+                Some(false) => assert_eq!(
+                    outputs.exporter().err(),
+                    Some(PeerIncompatible::ExtendedMainSecretExtensionRequired.into())
+                ),
+                _ => assert!(outputs.exporter().is_ok()),
+            }
+        }
+    }
+}
