@@ -292,8 +292,10 @@ impl ServerConfig {
     /// Check that this configuration can be used for QUIC connections.
     ///
     /// QUIC requires TLS 1.3 with at least one QUIC-compatible cipher suite, and a
-    /// [`ServerConfig::max_early_data_size`] of either 0 or 2^32-1. These are the same
-    /// checks made when creating a QUIC server connection.
+    /// [`ServerConfig::max_early_data_size`] of either 0 or 2^32-1. It also requires a
+    /// QUIC-compatible `TLS13_AES_128_GCM_SHA256` to protect initial packets
+    /// (<https://www.rfc-editor.org/info/rfc9001#name-initial-secrets>). These are the
+    /// same checks made when creating a QUIC server connection.
     pub fn check_quic(&self) -> Result<(), Error> {
         let suites = &self.provider.tls13_cipher_suites;
         if suites.is_empty() {
@@ -305,6 +307,12 @@ impl ServerConfig {
             .any(|scs| scs.quic.is_some())
         {
             return Err(ApiMisuse::NoQuicCompatibleCipherSuites.into());
+        }
+
+        if !suites.iter().any(|scs| {
+            scs.common.suite == CipherSuite::TLS13_AES_128_GCM_SHA256 && scs.quic.is_some()
+        }) {
+            return Err(ApiMisuse::NoQuicInitialCipherSuite.into());
         }
 
         if self.max_early_data_size != 0 && self.max_early_data_size != 0xffff_ffff {
