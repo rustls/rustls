@@ -33,7 +33,7 @@ impl Connection<ServerSide, Quic> {
         version: Version,
         params: Vec<u8>,
     ) -> Result<Self, Error> {
-        check_server_config(&config)?;
+        config.check_quic()?;
         let exts = ServerExtensionsInput {
             transport_parameters: Some(match version {
                 Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
@@ -163,7 +163,7 @@ impl Accepted<Quic> {
         params: Vec<u8>,
         output: &mut Vec<QuicEvent>,
     ) -> Result<ServerHandshake, Error> {
-        check_server_config(&config)?;
+        config.check_quic()?;
 
         let exts = ServerExtensionsInput {
             transport_parameters: Some(match self.conn.transport.version {
@@ -265,26 +265,6 @@ impl<Side: SideData> fmt::Debug for NeedsInput<Side> {
         f.debug_struct("quic::NeedsInput")
             .finish_non_exhaustive()
     }
-}
-
-fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
-    let suites = &config.provider.tls13_cipher_suites;
-    if suites.is_empty() {
-        return Err(ApiMisuse::QuicRequiresTls13Support.into());
-    }
-
-    if !suites
-        .iter()
-        .any(|scs| scs.quic.is_some())
-    {
-        return Err(ApiMisuse::NoQuicCompatibleCipherSuites.into());
-    }
-
-    if config.max_early_data_size != 0 && config.max_early_data_size != 0xffff_ffff {
-        return Err(ApiMisuse::QuicRestrictsMaxEarlyDataSize.into());
-    }
-
-    Ok(())
 }
 
 /// QUIC events that should be handled by the caller.

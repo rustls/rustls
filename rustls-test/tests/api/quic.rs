@@ -807,6 +807,45 @@ fn test_quic_invalid_early_data_size() {
 }
 
 #[test]
+fn test_quic_server_config_check() {
+    let kt = KeyType::default();
+    assert_eq!(
+        make_server_config(kt, &provider::DEFAULT_TLS13_PROVIDER).check_quic(),
+        Ok(())
+    );
+
+    assert_eq!(
+        make_server_config(kt, &provider::DEFAULT_TLS12_PROVIDER).check_quic(),
+        Err(ApiMisuse::QuicRequiresTls13Support.into())
+    );
+
+    let provider = CryptoProvider {
+        tls13_cipher_suites: Cow::Owned(vec![TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC]),
+        ..provider::DEFAULT_PROVIDER
+    };
+    assert_eq!(
+        make_server_config(kt, &provider).check_quic(),
+        Err(ApiMisuse::NoQuicCompatibleCipherSuites.into())
+    );
+
+    let provider = CryptoProvider {
+        tls13_cipher_suites: Cow::Owned(vec![provider::cipher_suite::TLS13_AES_256_GCM_SHA384]),
+        ..provider::DEFAULT_PROVIDER
+    };
+    assert_eq!(
+        make_server_config(kt, &provider).check_quic(),
+        Err(ApiMisuse::NoQuicInitialCipherSuite.into())
+    );
+
+    let mut server_config = make_server_config(kt, &provider::DEFAULT_TLS13_PROVIDER);
+    server_config.max_early_data_size = 5;
+    assert_eq!(
+        server_config.check_quic(),
+        Err(ApiMisuse::QuicRestrictsMaxEarlyDataSize.into())
+    );
+}
+
+#[test]
 fn test_quic_read_deframer_failure() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let server_config = make_server_config(KeyType::default(), &provider);
@@ -1504,8 +1543,8 @@ fn client_rejects_server_choosing_non_quic_suite() {
 fn server_rejects_client_choosing_non_quic_suite() {
     let provider = CryptoProvider {
         tls13_cipher_suites: Cow::Owned(vec![
-            TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC,
-            provider::cipher_suite::TLS13_AES_256_GCM_SHA384,
+            provider::cipher_suite::TLS13_AES_128_GCM_SHA256,
+            TLS13_AES_256_GCM_SHA384_WITHOUT_QUIC,
         ]),
         kx_groups: Cow::Owned(vec![provider::kx_group::SECP256R1]),
         ..provider::DEFAULT_PROVIDER
@@ -1522,7 +1561,7 @@ fn server_rejects_client_choosing_non_quic_suite() {
                 ProtocolVersion::TLSv1_2,
                 &[0x12; 32],
                 &[0x00],
-                vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
+                vec![CipherSuite::TLS13_AES_256_GCM_SHA384],
                 vec![
                     encoding::Extension::new_sig_algs(),
                     encoding::Extension::new_versions(),
@@ -1580,7 +1619,10 @@ fn quic_client_ignores_stored_session_with_non_quic_suite() {
         .build_quic(quic::Version::V2, vec![])
         .unwrap();
     let mut server = Connection::new_quic(
-        Arc::new(make_server_config(KeyType::EcdsaP256, &quic_provider)),
+        Arc::new(make_server_config(
+            KeyType::EcdsaP256,
+            &provider::DEFAULT_TLS13_PROVIDER,
+        )),
         quic::Version::V2,
         vec![],
     )
@@ -1609,5 +1651,26 @@ const TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC: &Tls13CipherSuite = &Tls13CipherSui
     protocol_version: provider::cipher_suite::TLS13_AES_128_GCM_SHA256.protocol_version,
     hkdf_provider: provider::cipher_suite::TLS13_AES_128_GCM_SHA256.hkdf_provider,
     aead_alg: provider::cipher_suite::TLS13_AES_128_GCM_SHA256.aead_alg,
+    quic: None,
+};
+
+/// TLS13_AES_256_GCM_SHA384 which doesn't support QUIC.
+///
+/// Once `clone` is const this can be more directly written.
+const TLS13_AES_256_GCM_SHA384_WITHOUT_QUIC: &Tls13CipherSuite = &Tls13CipherSuite {
+    common: CipherSuiteCommon {
+        suite: provider::cipher_suite::TLS13_AES_256_GCM_SHA384
+            .common
+            .suite,
+        hash_provider: provider::cipher_suite::TLS13_AES_256_GCM_SHA384
+            .common
+            .hash_provider,
+        confidentiality_limit: provider::cipher_suite::TLS13_AES_256_GCM_SHA384
+            .common
+            .confidentiality_limit,
+    },
+    protocol_version: provider::cipher_suite::TLS13_AES_256_GCM_SHA384.protocol_version,
+    hkdf_provider: provider::cipher_suite::TLS13_AES_256_GCM_SHA384.hkdf_provider,
+    aead_alg: provider::cipher_suite::TLS13_AES_256_GCM_SHA384.aead_alg,
     quic: None,
 };
