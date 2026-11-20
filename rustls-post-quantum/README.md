@@ -8,7 +8,7 @@ Rustls is a modern TLS library written in Rust.
 
 # rustls-post-quantum
 
-This crate provide a `CryptoProvider` built on the default aws-lc-rs default provider.
+This crate provides a `CryptoProvider` built on the default aws-lc-rs default provider.
 
 Features:
 
@@ -20,6 +20,6 @@ Before rustls 0.23.22, this crate additionally provided support for the ML-KEM k
 In rustls 0.23.22 and later, you can use rustls' `prefer-post-quantum` feature to determine
 whether the ML-KEM key exchange is preferred over non-post-quantum key exchanges.
 
-This crate is release under the same licenses as the [main rustls crate][rustls].
+This crate is released under the same licenses as the [main rustls crate][rustls].
 
 [rustls]: https://crates.io/crates/rustls
