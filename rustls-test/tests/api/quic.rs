@@ -807,6 +807,36 @@ fn test_quic_invalid_early_data_size() {
 }
 
 #[test]
+fn test_quic_server_config_check() {
+    let kt = KeyType::default();
+    assert_eq!(
+        make_server_config(kt, &provider::DEFAULT_TLS13_PROVIDER).check_quic(),
+        Ok(())
+    );
+
+    assert_eq!(
+        make_server_config(kt, &provider::DEFAULT_TLS12_PROVIDER).check_quic(),
+        Err(ApiMisuse::QuicRequiresTls13Support.into())
+    );
+
+    let provider = CryptoProvider {
+        tls13_cipher_suites: Cow::Owned(vec![TLS13_AES_128_GCM_SHA256_WITHOUT_QUIC]),
+        ..provider::DEFAULT_PROVIDER
+    };
+    assert_eq!(
+        make_server_config(kt, &provider).check_quic(),
+        Err(ApiMisuse::NoQuicCompatibleCipherSuites.into())
+    );
+
+    let mut server_config = make_server_config(kt, &provider::DEFAULT_TLS13_PROVIDER);
+    server_config.max_early_data_size = 5;
+    assert_eq!(
+        server_config.check_quic(),
+        Err(ApiMisuse::QuicRestrictsMaxEarlyDataSize.into())
+    );
+}
+
+#[test]
 fn test_quic_read_deframer_failure() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let server_config = make_server_config(KeyType::default(), &provider);
