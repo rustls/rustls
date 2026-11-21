@@ -597,6 +597,9 @@ impl DecryptionState {
             }
             Ok(plaintext) => {
                 self.read_seq += 1;
+                // RFC 9846 section 4.3.10: the first record that deprotects starts the
+                // client's second flight, so later failures are fatal.
+                self.trial_decryption_len = None;
                 if !self.has_decrypted {
                     self.has_decrypted = true;
                 }
@@ -1209,6 +1212,56 @@ mod tests {
             .set_record_decrypter(Box::new(PassThroughDecrypter), &deframer.aligned().unwrap());
         assert_eq!(record_layer.read_seq, 0);
         assert!(record_layer.has_decrypted());
+    }
+
+    #[test]
+    fn trial_decryption_ends_at_first_decrypted_record() {
+        struct FirstByteDecrypter;
+        impl RecordDecrypter for FirstByteDecrypter {
+            fn decrypt<'a>(
+                &mut self,
+                record: Record<InboundOpaque<'a>>,
+                _: u64,
+            ) -> Result<Record<&'a [u8]>, Error> {
+                match record.payload.first() {
+                    Some(0x01) => Ok(record.into_plain_record()),
+                    _ => Err(Error::DecryptError),
+                }
+            }
+        }
+
+        fn record(payload: &mut [u8]) -> Record<InboundOpaque<'_>> {
+            Record::new(
+                ContentType::ApplicationData,
+                EncodableVersion::Legacy(ProtocolVersion::TLSv1_2),
+                InboundOpaque(payload),
+            )
+        }
+
+        let mut record_layer = DecryptionState::new();
+        let deframer = Deframer::default();
+        record_layer.set_record_decrypter_with_trial_decryption(
+            Box::new(FirstByteDecrypter),
+            1024,
+            &deframer.aligned().unwrap(),
+        );
+
+        // rejected early data is skipped
+        assert!(matches!(
+            record_layer.decrypt_incoming(record(&mut [0x00; 16])),
+            Ok(None)
+        ));
+
+        assert!(matches!(
+            record_layer.decrypt_incoming(record(&mut [0x01; 16])),
+            Ok(Some(_))
+        ));
+
+        // but not once a record has been deprotected
+        assert!(matches!(
+            record_layer.decrypt_incoming(record(&mut [0x00; 16])),
+            Err(Error::DecryptError)
+        ));
     }
 
     #[test]
