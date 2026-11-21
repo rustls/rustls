@@ -25,7 +25,8 @@ use rustls_test::{
     ClientStorage, ClientStorageOp, ErrorFromPeer, HandshakeBuffers, KeyType, MultiTest,
     ServerConfigExt, make_client_config, make_client_config_with_kx_groups, make_pair,
     make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
-    make_server_config_with_kx_groups, transfer, webpki_server_verifier_builder,
+    make_server_config_with_kx_groups, make_server_config_with_mandatory_client_auth, transfer,
+    webpki_server_verifier_builder,
 };
 
 use super::provider;
@@ -1424,6 +1425,41 @@ fn tls12_server_rejects_expired_stateful_session() {
     assert_eq!(storage.gets(), 1);
     assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
     assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+}
+
+#[test]
+fn server_does_not_resume_unauthenticated_session_with_mandatory_client_auth() {
+    for provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
+        let kt = KeyType::default();
+        let client_config = Arc::new(make_client_config(kt, &provider));
+
+        // two server configs sharing session storage, only one requiring client auth
+        let storage = Arc::new(ServerStorage::new());
+        let mut open_config = make_server_config(kt, &provider);
+        open_config.session_storage = storage.clone();
+        let mut mtls_config = make_server_config_with_mandatory_client_auth(kt, &provider);
+        mtls_config.session_storage = storage.clone();
+
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &Arc::new(open_config));
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+
+        // the session is found but not resumed, so the server asks for a certificate
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &Arc::new(mtls_config));
+        assert_eq!(
+            buf.handshake_until_error(&mut client, &mut server),
+            Err(ErrorFromPeer::Server(Error::PeerMisbehaved(
+                PeerMisbehaved::NoCertificatesPresented
+            )))
+        );
+        assert_eq!(storage.gets() + storage.takes(), 1);
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+    }
 }
 
 /// A `TimeProvider` that starts at the current time and only moves when told to.

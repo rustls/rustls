@@ -261,10 +261,11 @@ mod client_hello {
         };
 
         // Check that the session is compatible with the current connection
-        if !session
-            .common
-            .can_resume(suite.common.suite, sni)
-        {
+        if !session.common.can_resume(
+            suite.common.suite,
+            sni,
+            config.verifier.client_auth_mandatory(),
+        ) {
             return (ticket, None);
         }
 
