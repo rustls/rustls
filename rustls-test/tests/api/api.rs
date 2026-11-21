@@ -1649,7 +1649,7 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
         )
         .unwrap();
 
-        // A ECH client configuration should only be considered FIPS approved if the
+        // An ECH client configuration should only be considered FIPS approved if the
         // ECH HPKE suite is itself FIPS approved.
         let config = ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
             .with_ech(EchMode::Enable(ech_config));
