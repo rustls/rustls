@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem;
 
-use crate::crypto::{HashAlgorithm, hash};
+use crate::crypto::hash;
 use crate::msgs::{Codec, HandshakeAlignedProof, HandshakeMessagePayload, Message, MessagePayload};
 
 /// Early stage buffering of handshake payloads.
@@ -160,11 +160,6 @@ impl HandshakeHash {
     /// to empty.
     pub(crate) fn take_handshake_buf(&mut self) -> Option<Vec<u8>> {
         self.client_auth.take()
-    }
-
-    /// The hashing algorithm
-    pub(crate) fn algorithm(&self) -> HashAlgorithm {
-        self.provider.algorithm()
     }
 }
 

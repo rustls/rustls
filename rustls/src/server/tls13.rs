@@ -8,7 +8,7 @@ use subtle::ConstantTimeEq;
 use zeroize::Zeroizing;
 
 use super::config::ServerConfig;
-use super::hs::{HandshakeHashOrBuffer, ServerState};
+use super::hs::ServerState;
 use super::{
     CommonServerSessionValue, STATEFUL_SESSION_LIFETIME, ServerSessionKey, ServerSessionValue,
 };
@@ -32,7 +32,6 @@ use crate::msgs::{
     PresharedKeyIdentity, Reader, ServerTicketRequestHint, SizedPayload,
 };
 use crate::server::ServerSide;
-use crate::server::hs::ExpectClientHello;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::{
@@ -59,15 +58,17 @@ mod client_hello {
     use crate::enums::ApplicationProtocol;
     use crate::msgs::{
         CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
-        ChangeCipherSpecPayload, ClientHelloPayload, Compression, HandshakeAlignedProof,
-        HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random, ServerExtensions,
-        ServerExtensionsInput, ServerHelloPayload, SessionId, SizedPayload,
+        ChangeCipherSpecPayload, ClientTicketRequest, Compression, EncryptedExtensions,
+        HandshakeAlignedProof, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry,
+        PresharedKeyOffer, PskKeyExchangeModes, Random, ServerExtensions, ServerHelloPayload,
+        ServerNamePayload, SessionId, SizedPayload,
     };
     use crate::quic;
     use crate::sealed::Sealed;
     use crate::server::Tls13ServerSessionValue;
     use crate::server::hs::{
-        ClientHelloInput, ExpectClientHello, PreviousClientHello, ServerHandler, Tls13Extensions,
+        ClientHelloInput, ExpectClientHello, ServerHandler, Tls13Extensions,
+        Tls13RetryableExtensions,
     };
     use crate::tls13::Tls13ProtocolSuite;
     use crate::tls13::key_schedule::{
@@ -86,49 +87,12 @@ mod client_hello {
             &self,
             suite: &'static Tls13CipherSuite,
             kx_group: &'static dyn SupportedKxGroup,
-            signer: SelectedCredential,
+            credential: SelectedCredential,
             input: ClientHelloInput<'_>,
-            mut st: ExpectClientHello,
+            st: ExpectClientHello,
             output: &mut dyn Output<'_>,
         ) -> Result<ServerState, Error> {
             let randoms = st.randoms(&input)?;
-            let mut transcript = st
-                .transcript
-                .start(suite.common.hash_provider)?;
-
-            if input
-                .client_hello
-                .compression_methods
-                .len()
-                != 1
-            {
-                return Err(PeerMisbehaved::OfferedIncorrectCompressions.into());
-            }
-
-            // RFC 9001 section 8.4: QUIC servers should reject a non-empty legacy_session_id
-            if st.protocol.is_quic() && !input.client_hello.session_id.is_empty() {
-                return Err(PeerMisbehaved::NonEmptySessionIdInQuic.into());
-            }
-
-            let shares_ext = input
-                .client_hello
-                .key_shares
-                .as_ref()
-                .ok_or(PeerIncompatible::KeyShareExtensionRequired)?;
-
-            if input
-                .client_hello
-                .has_keyshare_extension_with_duplicates()
-            {
-                return Err(PeerMisbehaved::OfferedDuplicateKeyShares.into());
-            }
-
-            if input
-                .client_hello
-                .has_certificate_compression_extension_with_duplicates()
-            {
-                return Err(PeerMisbehaved::OfferedDuplicateCertificateCompressions.into());
-            }
 
             let cert_compressor = input
                 .client_hello
@@ -143,290 +107,471 @@ mod client_hello {
                         .find(|compressor| offered.contains(&compressor.algorithm()))
                         .copied());
 
-            let early_data_requested = input
-                .client_hello
-                .early_data_request
-                .is_some();
+            let extensions =
+                Tls13Extensions::new(input.client_hello, st.extra_exts, output, &st.config)?;
 
-            if let Some(prior) = &st.previous_hello {
-                // EarlyData extension is illegal in second ClientHello
-                if early_data_requested {
-                    return Err(PeerMisbehaved::EarlyDataAttemptedInSecondClientHello.into());
-                }
-
-                // RFC 9846 section 4.2.2 allows the second ClientHello to update a PreSharedKey
-                // offer (binders, incompatible PSKs), but not to withdraw it altogether
-                if prior.offered_psk
-                    && input
-                        .client_hello
-                        .preshared_key_offer
-                        .is_none()
-                {
-                    return Err(PeerMisbehaved::MissingPskExtensionInSecondClientHello.into());
-                }
-            }
-
-            // See if there is a KeyShare for the selected kx group.
-            let chosen_share_and_kxg = shares_ext
-                .iter()
-                .find_map(|share| (share.group == kx_group.name()).then_some((share, kx_group)));
-
-            let Some(chosen_share_and_kxg) = chosen_share_and_kxg else {
-                // We don't have a suitable key share.  Send a HelloRetryRequest
-                // for the mutually_preferred_group.
-                transcript.add_message(input.message);
-
-                if st.previous_hello.is_some() {
-                    return Err(PeerMisbehaved::RefusedToFollowHelloRetryRequest.into());
-                }
-
-                emit_hello_retry_request(
-                    &mut transcript,
-                    suite,
-                    input.client_hello.session_id,
-                    output,
-                    kx_group.name(),
-                )?;
-                if !st.protocol.is_quic() {
-                    emit_fake_ccs(output)?;
-                }
-
-                let skip_early_data = max_early_data_size(st.config.max_early_data_size);
-
-                let next = Box::new(ExpectClientHello {
-                    transcript: HandshakeHashOrBuffer::Hash(transcript),
-                    session_id: SessionId::empty(),
-                    using_ems: false,
-                    previous_hello: Some(PreviousClientHello {
-                        offered_psk: input
-                            .client_hello
-                            .preshared_key_offer
-                            .is_some(),
-                        suite: suite.common.suite,
-                        group: kx_group.name(),
-                    }),
-                    ..st
-                });
-                return if early_data_requested {
-                    Ok(Box::new(ExpectAndSkipRejectedEarlyData {
-                        skip_data_left: skip_early_data,
-                        next,
-                    })
-                    .into())
-                } else {
-                    Ok(next.into())
-                };
-            };
-
-            let suite = match st.protocol {
-                Protocol::Tcp => Tls13ProtocolSuite::Tcp(suite),
-                Protocol::Quic(_) => Tls13ProtocolSuite::Quic(quic::Suite {
-                    inner: suite,
-                    quic: suite
-                        .quic
-                        .ok_or_else(|| Error::from(ApiMisuse::NoQuicCompatibleCipherSuites))?,
-                }),
-            };
-
-            let mut resuming =
-                handle_psk_offer(&input, &transcript, st.sni.as_ref(), suite, &st.config)?;
-
-            if !input
-                .client_hello
-                .preshared_key_modes
-                .as_ref()
-                .map(|offer| offer.psk_dhe)
-                .unwrap_or_default()
-            {
-                debug!("Client unwilling to resume, PSK_DHE_KE not offered");
-                st.send_tickets = 0;
-                resuming = None;
-            } else {
-                st.send_tickets = st.config.send_tls13_tickets.resolve(
-                    input
-                        .client_hello
-                        .ticket_request
-                        .as_ref(),
-                    resuming.is_some(),
-                );
-            }
-
-            if let Some(PskAcceptance { session, .. }) = &resuming {
-                output.emit(Event::ResumptionData(
-                    session
-                        .common
-                        .application_data
-                        .bytes()
-                        .to_vec(),
-                ));
-            }
-
-            let full_handshake = resuming.is_none();
-            transcript.add_message(input.message);
-            let (key_schedule, early_exporter) = emit_server_hello(
-                &mut transcript,
-                &randoms,
+            let first = FirstClientHello {
                 suite,
-                output,
-                &input.client_hello.session_id,
-                chosen_share_and_kxg,
-                resuming.as_ref(),
-                &input.proof,
-                &st.config,
-            )?;
-            if !st.previous_hello.is_some() && !st.protocol.is_quic() {
-                emit_fake_ccs(output)?;
-            }
-
-            output.output(OutputEvent::HandshakeKind(
-                match (full_handshake, st.previous_hello.is_some()) {
-                    (true, true) => HandshakeKind::FullWithHelloRetryRequest,
-                    (true, false) => HandshakeKind::Full,
-                    (false, true) => HandshakeKind::ResumedWithHelloRetryRequest,
-                    (false, false) => HandshakeKind::Resumed,
-                },
-            ));
-
-            let mut ocsp_response = signer.ocsp.as_deref();
-            let mut flight = HandshakeFlightTls13::new(&mut transcript);
-            let (
-                Tls13Extensions {
-                    certificate_types,
-                    alpn_protocol,
-                },
-                doing_early_data,
-            ) = emit_encrypted_extensions(
-                &mut flight,
-                suite.suite(),
-                output,
-                &mut ocsp_response,
-                input.client_hello,
-                resuming.as_ref(),
-                early_exporter,
-                st.extra_exts,
-                &st.config,
-                st.send_tickets,
-            )?;
-
-            let doing_client_auth = if full_handshake {
-                let client_auth = emit_certificate_req_tls13(&mut flight, &st.config)?;
-
-                if let Some(compressor) = cert_compressor {
-                    emit_compressed_certificate_tls13(
-                        &mut flight,
-                        &st.config,
-                        &signer,
-                        ocsp_response,
-                        compressor,
-                    );
-                } else {
-                    emit_certificate_tls13(
-                        &mut flight,
-                        CertificatePayloadTls13::new(
-                            signer.identity.as_certificates(),
-                            ocsp_response,
-                        ),
-                    );
-                }
-                emit_certificate_verify_tls13(&mut flight, signer.signer)?;
-                client_auth
-            } else {
-                false
+                kx_group,
+                credential,
+                extensions,
+                cert_compressor,
+                psk_modes: input.client_hello.preshared_key_modes,
+                ticket_request: input.client_hello.ticket_request,
+                randoms,
+                session_id: input.client_hello.session_id,
+                offered_psk: input
+                    .client_hello
+                    .preshared_key_offer
+                    .is_some(),
             };
 
-            // If we're not doing early data, then the next messages we receive
-            // are encrypted with the handshake keys.
-            let early_data_max_length = match doing_early_data {
-                EarlyDataDecision::Disabled => {
-                    key_schedule.set_handshake_decrypter(None, output.receive(), &input.proof);
-                    None
-                }
-                EarlyDataDecision::RequestedButRejected => {
-                    debug!(
-                        "Client requested early_data, but not accepted: switching to handshake keys with trial decryption"
-                    );
-                    key_schedule.set_handshake_decrypter(
-                        Some(max_early_data_size(st.config.max_early_data_size)),
-                        output.receive(),
-                        &input.proof,
-                    );
-                    None
-                }
-                EarlyDataDecision::Accepted {
-                    max_length,
-                    early_exporter,
-                } => {
-                    output.output(OutputEvent::EarlyExporter(early_exporter));
-                    Some(max_length)
-                }
-            };
-
-            let key_schedule_traffic = emit_finished_tls13(
-                flight,
-                &randoms,
-                output,
-                key_schedule,
-                &st.config,
-                &input.proof,
-            )?;
-
-            if !doing_client_auth && st.config.send_half_rtt_data {
-                // Application data can be sent immediately after Finished, in one
-                // flight.  However, if client auth is enabled, we don't want to send
-                // application data to an unauthenticated peer.
-                output.send().start_traffic();
-            }
-
-            let hs = HandshakeState {
+            let transcript = st
+                .transcript
+                .start_hash(suite.common.hash_provider);
+            let context = ServerContext {
                 config: st.config,
-                transcript,
-                suite: suite.suite(),
-                alpn_protocol,
+                protocol: st.protocol,
                 sni: st.sni,
                 resumption_data: st.resumption_data,
-                send_tickets: st.send_tickets,
             };
 
-            if doing_client_auth {
-                if hs.config.cert_decompressors.is_empty() {
-                    Ok(Box::new(ExpectCertificate {
-                        hs,
-                        key_schedule: key_schedule_traffic,
-                        expected_certificate_type: certificate_types.client,
-                    })
-                    .into())
-                } else {
-                    Ok(Box::new(ExpectCertificateOrCompressedCertificate {
-                        hs,
-                        key_schedule: key_schedule_traffic,
-                        expected_certificate_type: certificate_types.client,
-                    })
-                    .into())
-                }
-            } else if let (Some(max_length), false) = (early_data_max_length, st.protocol.is_quic())
-            {
-                // Not used for QUIC: RFC 9001 §8.3: Clients MUST NOT send the EndOfEarlyData
-                // message. A server MUST treat receipt of a CRYPTO frame in a 0-RTT packet as a
-                // connection error of type PROTOCOL_VIOLATION.
-                Ok(Box::new(ExpectEarlyData {
-                    hs,
-                    key_schedule: key_schedule_traffic,
-                    peer_identity: resuming.and_then(|psk| psk.session.common.peer_identity),
-                    remaining_length: max_length as usize,
-                })
-                .into())
-            } else {
-                Ok(Box::new(ExpectFinished {
-                    hs,
-                    key_schedule: key_schedule_traffic,
-                    peer_identity: resuming.and_then(|psk| psk.session.common.peer_identity),
-                })
-                .into())
-            }
+            let hello = RetryableClientHello::new(input, context.protocol)?;
+            continue_client_hello(first, hello, transcript, context, false, output)
         }
     }
 
     impl Sealed for Handler {}
+
+    /// Server state carried over from [`ExpectClientHello`] into the TLS 1.3 handshake.
+    struct ServerContext {
+        config: Arc<ServerConfig>,
+        protocol: Protocol,
+        sni: Option<DnsName<'static>>,
+        resumption_data: Vec<u8>,
+    }
+
+    /// Everything the server decides from the first `ClientHello`.
+    ///
+    /// If a HelloRetryRequest is sent, this is retained in [`ExpectRetriedClientHello`]
+    /// and the second `ClientHello` only contributes a [`RetryableClientHello`].
+    struct FirstClientHello {
+        suite: &'static Tls13CipherSuite,
+        kx_group: &'static dyn SupportedKxGroup,
+        credential: SelectedCredential,
+        extensions: Tls13Extensions,
+        cert_compressor: Option<&'static dyn CertCompressor>,
+        psk_modes: Option<PskKeyExchangeModes>,
+        ticket_request: Option<ClientTicketRequest>,
+        randoms: ConnectionRandoms,
+        session_id: SessionId,
+        offered_psk: bool,
+    }
+
+    /// The parts of a `ClientHello` that RFC 9846 section 4.2.2 allows to vary
+    /// in response to a HelloRetryRequest.
+    struct RetryableClientHello<'a> {
+        key_shares: &'a [KeyShareEntry],
+        preshared_key_offer: Option<&'a PresharedKeyOffer>,
+        early_data_requested: bool,
+
+        message: &'a Message<'a>,
+        proof: HandshakeAlignedProof,
+    }
+
+    impl<'a> RetryableClientHello<'a> {
+        fn new(input: ClientHelloInput<'a>, protocol: Protocol) -> Result<Self, Error> {
+            let hello = input.client_hello;
+
+            if hello.compression_methods.len() != 1 {
+                return Err(PeerMisbehaved::OfferedIncorrectCompressions.into());
+            }
+
+            // RFC 9001 section 8.4: QUIC servers should reject a non-empty legacy_session_id
+            if protocol.is_quic() && !hello.session_id.is_empty() {
+                return Err(PeerMisbehaved::NonEmptySessionIdInQuic.into());
+            }
+
+            if hello.has_certificate_compression_extension_with_duplicates() {
+                return Err(PeerMisbehaved::OfferedDuplicateCertificateCompressions.into());
+            }
+
+            let key_shares = hello
+                .key_shares
+                .as_deref()
+                .ok_or(PeerIncompatible::KeyShareExtensionRequired)?;
+
+            if hello.has_keyshare_extension_with_duplicates() {
+                return Err(PeerMisbehaved::OfferedDuplicateKeyShares.into());
+            }
+
+            Ok(Self {
+                key_shares,
+                preshared_key_offer: hello.preshared_key_offer.as_ref(),
+                early_data_requested: hello.early_data_request.is_some(),
+                message: input.message,
+                proof: input.proof,
+            })
+        }
+    }
+
+    /// Awaiting the `ClientHello` sent in response to our HelloRetryRequest.
+    ///
+    /// Only the fields in [`RetryableClientHello`] are taken from it; everything
+    /// else was decided from the first `ClientHello`.
+    pub(super) struct ExpectRetriedClientHello {
+        first: FirstClientHello,
+        context: ServerContext,
+        transcript: HandshakeHash,
+    }
+
+    impl State<ServerSide> for ExpectRetriedClientHello {
+        fn handle<'m>(
+            self: Box<Self>,
+            input: Input<'m>,
+            output: &mut dyn Output<'m>,
+        ) -> Result<ServerState, Error> {
+            let Self {
+                first,
+                context,
+                transcript,
+            } = *self;
+            let input = ClientHelloInput::from_input(&input)?;
+
+            if !input
+                .client_hello
+                .supported_versions
+                .is_some_and(|versions| versions.tls13)
+            {
+                return Err(PeerIncompatible::SupportedVersionsExtensionRequired.into());
+            }
+
+            let sni = input
+                .client_hello
+                .server_name
+                .as_ref()
+                .and_then(ServerNamePayload::to_dns_name_normalized);
+            if context.sni != sni {
+                return Err(PeerMisbehaved::ServerNameDifferedOnRetry.into());
+            }
+
+            // RFC 9846 section 4.2.4: the server must negotiate the same cipher suite it
+            // named in its HelloRetryRequest
+            if !input
+                .client_hello
+                .cipher_suites
+                .contains(&first.suite.common.suite)
+            {
+                return Err(PeerMisbehaved::CipherSuiteDifferedOnRetry.into());
+            }
+
+            let retry = RetryableClientHello::new(input, context.protocol)?;
+
+            // EarlyData extension is illegal in second ClientHello
+            if retry.early_data_requested {
+                return Err(PeerMisbehaved::EarlyDataAttemptedInSecondClientHello.into());
+            }
+
+            // RFC 9846 section 4.2.2 allows the second ClientHello to update a PreSharedKey
+            // offer (binders, incompatible PSKs), but not to withdraw it altogether
+            if first.offered_psk && retry.preshared_key_offer.is_none() {
+                return Err(PeerMisbehaved::MissingPskExtensionInSecondClientHello.into());
+            }
+
+            continue_client_hello(first, retry, transcript, context, true, output)
+        }
+    }
+
+    impl From<Box<ExpectRetriedClientHello>> for ServerState {
+        fn from(value: Box<ExpectRetriedClientHello>) -> Self {
+            Self::Tls13(value)
+        }
+    }
+
+    fn continue_client_hello(
+        first: FirstClientHello,
+        hello: RetryableClientHello<'_>,
+        mut transcript: HandshakeHash,
+        cx: ServerContext,
+        retried: bool,
+        output: &mut dyn Output<'_>,
+    ) -> Result<ServerState, Error> {
+        // See if there is a KeyShare for the selected kx group.
+        let chosen_share = hello
+            .key_shares
+            .iter()
+            .find(|share| share.group == first.kx_group.name());
+
+        let Some(chosen_share) = chosen_share else {
+            // We don't have a suitable key share.  Send a HelloRetryRequest
+            // for the mutually_preferred_group.
+            transcript.add_message(hello.message);
+
+            if retried {
+                return Err(PeerMisbehaved::RefusedToFollowHelloRetryRequest.into());
+            }
+
+            emit_hello_retry_request(
+                &mut transcript,
+                first.suite,
+                first.session_id,
+                output,
+                first.kx_group.name(),
+            )?;
+            if !cx.protocol.is_quic() {
+                emit_fake_ccs(output)?;
+            }
+
+            let skip_early_data = max_early_data_size(cx.config.max_early_data_size);
+
+            let next = Box::new(ExpectRetriedClientHello {
+                first,
+                context: cx,
+                transcript,
+            });
+            return if hello.early_data_requested {
+                Ok(Box::new(ExpectAndSkipRejectedEarlyData {
+                    skip_data_left: skip_early_data,
+                    next,
+                })
+                .into())
+            } else {
+                Ok(next.into())
+            };
+        };
+
+        let suite = match cx.protocol {
+            Protocol::Tcp => Tls13ProtocolSuite::Tcp(first.suite),
+            Protocol::Quic(_) => Tls13ProtocolSuite::Quic(quic::Suite {
+                inner: first.suite,
+                quic: first
+                    .suite
+                    .quic
+                    .ok_or_else(|| Error::from(ApiMisuse::NoQuicCompatibleCipherSuites))?,
+            }),
+        };
+
+        let mut resuming = handle_psk_offer(
+            hello.preshared_key_offer,
+            first.psk_modes,
+            hello.message,
+            &transcript,
+            cx.sni.as_ref(),
+            suite,
+            &cx.config,
+        )?;
+
+        let send_tickets;
+        if !first
+            .psk_modes
+            .map(|offer| offer.psk_dhe)
+            .unwrap_or_default()
+        {
+            debug!("Client unwilling to resume, PSK_DHE_KE not offered");
+            send_tickets = 0;
+            resuming = None;
+        } else {
+            send_tickets = cx
+                .config
+                .send_tls13_tickets
+                .resolve(first.ticket_request.as_ref(), resuming.is_some());
+        }
+
+        if let Some(PskAcceptance { session, .. }) = &resuming {
+            output.emit(Event::ResumptionData(
+                session
+                    .common
+                    .application_data
+                    .bytes()
+                    .to_vec(),
+            ));
+        }
+
+        let full_handshake = resuming.is_none();
+        transcript.add_message(hello.message);
+        let (key_schedule, early_exporter) = emit_server_hello(
+            &mut transcript,
+            &first.randoms,
+            suite,
+            output,
+            &first.session_id,
+            (chosen_share, first.kx_group),
+            resuming.as_ref(),
+            &hello.proof,
+            &cx.config,
+        )?;
+        if !retried && !cx.protocol.is_quic() {
+            emit_fake_ccs(output)?;
+        }
+
+        output.output(OutputEvent::HandshakeKind(
+            match (full_handshake, retried) {
+                (true, true) => HandshakeKind::FullWithHelloRetryRequest,
+                (true, false) => HandshakeKind::Full,
+                (false, true) => HandshakeKind::ResumedWithHelloRetryRequest,
+                (false, false) => HandshakeKind::Resumed,
+            },
+        ));
+
+        let doing_early_data = decide_if_early_data_allowed(
+            output,
+            hello.early_data_requested,
+            resuming.as_ref(),
+            early_exporter,
+            first.extensions.common.alpn_protocol(),
+            suite.suite(),
+            &cx.config,
+        );
+
+        let retryable = Tls13RetryableExtensions {
+            resuming: !full_handshake,
+            early_data_ack: matches!(doing_early_data, EarlyDataDecision::Accepted { .. }),
+            ticket_request: first
+                .ticket_request
+                .is_some()
+                .then(|| ServerTicketRequestHint {
+                    expected_count: Ord::min(send_tickets, u8::MAX as usize) as u8,
+                }),
+        };
+
+        let alpn_protocol = first
+            .extensions
+            .common
+            .alpn_protocol()
+            .cloned();
+        let expected_certificate_type = first
+            .extensions
+            .certificate_types
+            .client;
+        let credential = first.credential;
+        let ocsp_response = credential
+            .ocsp
+            .as_deref()
+            .filter(|_| first.extensions.common.ocsp_requested);
+
+        let mut flight = HandshakeFlightTls13::new(&mut transcript);
+        emit_encrypted_extensions(
+            &mut flight,
+            first
+                .extensions
+                .into_response(retryable, output),
+        );
+
+        let doing_client_auth = if full_handshake {
+            let client_auth = emit_certificate_req_tls13(&mut flight, &cx.config)?;
+
+            if let Some(compressor) = first.cert_compressor {
+                emit_compressed_certificate_tls13(
+                    &mut flight,
+                    &cx.config,
+                    &credential,
+                    ocsp_response,
+                    compressor,
+                );
+            } else {
+                emit_certificate_tls13(
+                    &mut flight,
+                    CertificatePayloadTls13::new(
+                        credential.identity.as_certificates(),
+                        ocsp_response,
+                    ),
+                );
+            }
+            emit_certificate_verify_tls13(&mut flight, credential.signer)?;
+            client_auth
+        } else {
+            false
+        };
+
+        // If we're not doing early data, then the next messages we receive
+        // are encrypted with the handshake keys.
+        let early_data_max_length = match doing_early_data {
+            EarlyDataDecision::Disabled => {
+                key_schedule.set_handshake_decrypter(None, output.receive(), &hello.proof);
+                None
+            }
+            EarlyDataDecision::RequestedButRejected => {
+                debug!(
+                    "Client requested early_data, but not accepted: switching to handshake keys with trial decryption"
+                );
+                key_schedule.set_handshake_decrypter(
+                    Some(max_early_data_size(cx.config.max_early_data_size)),
+                    output.receive(),
+                    &hello.proof,
+                );
+                None
+            }
+            EarlyDataDecision::Accepted {
+                max_length,
+                early_exporter,
+            } => {
+                output.output(OutputEvent::EarlyExporter(early_exporter));
+                Some(max_length)
+            }
+        };
+
+        let key_schedule_traffic = emit_finished_tls13(
+            flight,
+            &first.randoms,
+            output,
+            key_schedule,
+            &cx.config,
+            &hello.proof,
+        )?;
+
+        if !doing_client_auth && cx.config.send_half_rtt_data {
+            // Application data can be sent immediately after Finished, in one
+            // flight.  However, if client auth is enabled, we don't want to send
+            // application data to an unauthenticated peer.
+            output.send().start_traffic();
+        }
+
+        let hs = HandshakeState {
+            config: cx.config,
+            transcript,
+            suite: suite.suite(),
+            alpn_protocol,
+            sni: cx.sni,
+            resumption_data: cx.resumption_data,
+            send_tickets,
+        };
+
+        if doing_client_auth {
+            if hs.config.cert_decompressors.is_empty() {
+                Ok(Box::new(ExpectCertificate {
+                    hs,
+                    key_schedule: key_schedule_traffic,
+                    expected_certificate_type,
+                })
+                .into())
+            } else {
+                Ok(Box::new(ExpectCertificateOrCompressedCertificate {
+                    hs,
+                    key_schedule: key_schedule_traffic,
+                    expected_certificate_type,
+                })
+                .into())
+            }
+        } else if let (Some(max_length), false) = (early_data_max_length, cx.protocol.is_quic()) {
+            // Not used for QUIC: RFC 9001 §8.3: Clients MUST NOT send the EndOfEarlyData
+            // message. A server MUST treat receipt of a CRYPTO frame in a 0-RTT packet as a
+            // connection error of type PROTOCOL_VIOLATION.
+            Ok(Box::new(ExpectEarlyData {
+                hs,
+                key_schedule: key_schedule_traffic,
+                peer_identity: resuming.and_then(|psk| psk.session.common.peer_identity),
+                remaining_length: max_length as usize,
+            })
+            .into())
+        } else {
+            Ok(Box::new(ExpectFinished {
+                hs,
+                key_schedule: key_schedule_traffic,
+                peer_identity: resuming.and_then(|psk| psk.session.common.peer_identity),
+            })
+            .into())
+        }
+    }
 
     pub(super) enum EarlyDataDecision {
         Disabled,
@@ -458,13 +603,15 @@ mod client_hello {
     }
 
     fn handle_psk_offer(
-        input: &ClientHelloInput<'_>,
+        psk_offer: Option<&PresharedKeyOffer>,
+        psk_modes: Option<PskKeyExchangeModes>,
+        client_hello: &Message<'_>,
         transcript: &HandshakeHash,
         sni: Option<&DnsName<'_>>,
         suite: Tls13ProtocolSuite,
         config: &ServerConfig,
     ) -> Result<Option<PskAcceptance>, Error> {
-        let Some(psk_offer) = &input.client_hello.preshared_key_offer else {
+        let Some(psk_offer) = psk_offer else {
             return Ok(None);
         };
 
@@ -472,11 +619,7 @@ mod client_hello {
         //  offers a "pre_shared_key" extension. If clients offer
         //  "pre_shared_key" without a "psk_key_exchange_modes" extension,
         //  servers MUST abort the handshake." - RFC 9846 section 4.3.9
-        if input
-            .client_hello
-            .preshared_key_modes
-            .is_none()
-        {
+        if psk_modes.is_none() {
             return Err(PeerMisbehaved::MissingPskModesExtension.into());
         }
 
@@ -506,7 +649,7 @@ mod client_hello {
             if !check_binder(
                 transcript,
                 &KeyScheduleEarlyServer::new(suite, session.secret.bytes())?,
-                input.message,
+                client_hello,
                 psk_offer.binders[index].as_ref(),
             ) {
                 return Err(PeerMisbehaved::IncorrectBinder.into());
@@ -597,8 +740,8 @@ mod client_hello {
                 .client_early_traffic_secret(&client_hello_hash, &*config.key_log, &randoms.client);
 
             if let Some(quic) = output.quic() {
-                // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
-                // before the application can see.
+                // If 0-RTT should be rejected, this will be clobbered by
+                // `decide_if_early_data_allowed` before the application can see.
                 quic.early_secret(Some(secret));
             }
 
@@ -684,16 +827,13 @@ mod client_hello {
 
     fn decide_if_early_data_allowed(
         output: &mut dyn Output<'_>,
-        client_hello: &ClientHelloPayload,
+        early_data_requested: bool,
         resuming: Option<&PskAcceptance>,
         early_exporter: Option<Box<dyn Exporter>>,
         chosen_alpn_protocol: Option<&ApplicationProtocol<'_>>,
         suite: &'static Tls13CipherSuite,
         config: &ServerConfig,
     ) -> EarlyDataDecision {
-        let early_data_requested = client_hello
-            .early_data_request
-            .is_some();
         let rejected_or_disabled = match early_data_requested {
             true => EarlyDataDecision::RequestedButRejected,
             false => EarlyDataDecision::Disabled,
@@ -753,49 +893,12 @@ mod client_hello {
 
     fn emit_encrypted_extensions(
         flight: &mut HandshakeFlightTls13<'_>,
-        suite: &'static Tls13CipherSuite,
-        output: &mut dyn Output<'_>,
-        ocsp_response: &mut Option<&[u8]>,
-        hello: &ClientHelloPayload,
-        resuming: Option<&PskAcceptance>,
-        early_exporter: Option<Box<dyn Exporter>>,
-        extra_exts: ServerExtensionsInput,
-        config: &ServerConfig,
-        send_tickets: usize,
-    ) -> Result<(Tls13Extensions, EarlyDataDecision), Error> {
-        let (out, mut extensions) = Tls13Extensions::new(
-            extra_exts,
-            ocsp_response,
-            resuming.map(|r| &r.session.common),
-            hello,
-            output,
-            config,
-        )?;
-
-        if hello.ticket_request.is_some() {
-            extensions.ticket_request = Some(ServerTicketRequestHint {
-                expected_count: Ord::min(send_tickets, u8::MAX as usize) as u8,
-            });
-        }
-
-        let early_data = decide_if_early_data_allowed(
-            output,
-            hello,
-            resuming,
-            early_exporter,
-            out.alpn_protocol.as_ref(),
-            suite,
-            config,
-        );
-        if let EarlyDataDecision::Accepted { .. } = early_data {
-            extensions.early_data_ack = Some(());
-        }
-
+        extensions: Box<EncryptedExtensions<'static>>,
+    ) {
         let ee = HandshakeMessagePayload(HandshakePayload::EncryptedExtensions(extensions));
 
         trace!("sending encrypted extensions {ee:?}");
         flight.add(ee);
-        Ok((out, early_data))
     }
 
     fn emit_certificate_req_tls13(
@@ -934,14 +1037,14 @@ mod client_hello {
 
 struct ExpectAndSkipRejectedEarlyData {
     skip_data_left: usize,
-    next: Box<ExpectClientHello>,
+    next: Box<client_hello::ExpectRetriedClientHello>,
 }
 
 impl State<ServerSide> for ExpectAndSkipRejectedEarlyData {
-    fn handle(
+    fn handle<'m>(
         mut self: Box<Self>,
-        input: Input<'_>,
-        output: &mut dyn Output<'_>,
+        input: Input<'m>,
+        output: &mut dyn Output<'m>,
     ) -> Result<ServerState, Error> {
         /* "The server then ignores early data by skipping all records with an external
          *  content type of "application_data" (indicating that they are encrypted),
