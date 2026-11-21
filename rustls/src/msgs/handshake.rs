@@ -1265,6 +1265,11 @@ impl Codec<'_> for NewSessionTicketExtensions {
     }
 }
 
+/// The longest lifetime a session ticket may have.
+///
+/// See [RFC 9846 section 4.7.1](https://www.rfc-editor.org/info/rfc9846#section-4.7.1).
+pub(crate) const MAX_TICKET_LIFETIME: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
 #[derive(Debug)]
 pub(crate) struct NewSessionTicketPayloadTls13 {
     pub(crate) lifetime: Duration,
@@ -1277,7 +1282,7 @@ pub(crate) struct NewSessionTicketPayloadTls13 {
 impl NewSessionTicketPayloadTls13 {
     pub(crate) fn new(lifetime: Duration, age_add: u32, nonce: [u8; 32], ticket: Vec<u8>) -> Self {
         Self {
-            lifetime,
+            lifetime: Ord::min(lifetime, MAX_TICKET_LIFETIME),
             age_add,
             nonce: nonce.to_vec().into(),
             ticket: Arc::new(SizedPayload::from(Payload::new(ticket))),
