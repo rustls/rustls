@@ -435,7 +435,7 @@ impl<'a> Codec<'a> for ClientExtensions<'a> {
 /// [RFC 9849 Section 5]: <https://www.rfc-editor.org/info/rfc9849#section-5>
 #[derive(Clone, Debug)]
 pub(crate) enum EncryptedClientHello {
-    /// A `ECHClientHello` with type [EchClientHelloType::ClientHelloOuter].
+    /// An `ECHClientHello` with type [EchClientHelloType::ClientHelloOuter].
     Outer(EncryptedClientHelloOuter),
     /// An empty `ECHClientHello` with type [EchClientHelloType::ClientHelloInner].
     ///
