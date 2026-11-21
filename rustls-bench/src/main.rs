@@ -7,18 +7,21 @@ use core::num::NonZeroUsize;
 use core::time::Duration;
 use std::fs::File;
 use std::io::Write;
-use std::sync::Arc;
+use std::sync::{Arc, Barrier};
 use std::thread;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, ValueEnum};
-use rustls::client::Resumption;
+use rustls::client::{ClientHandshake, Resumption};
 use rustls::crypto::{CipherSuite, CryptoProvider, Identity};
 use rustls::enums::ProtocolVersion;
-use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
+use rustls::server::{
+    NoServerSessionStorage, ServerHandshake, ServerSessionMemoryCache, WebPkiClientVerifier,
+};
+use rustls::split::{ReceiveTraffic, ReceiveTrafficState, SendTraffic};
 use rustls::{
     ClientConfig, ClientSide, Connection, HandshakeKind, RootCertStore, ServerConfig, ServerSide,
-    SideData, Tcp, VecInput,
+    SideData, SliceInput, Tcp,
 };
 use rustls_test::KeyType;
 
@@ -39,6 +42,29 @@ pub fn main() {
                     &Parameters::new(bench, &args)
                         .with_plaintext_size(*plaintext_size)
                         .with_max_fragment(*max_fragment_size),
+                );
+            }
+        }
+
+        Command::BulkSplit {
+            cipher_suite,
+            plaintext_size,
+            key_update,
+        } => {
+            let provider = args
+                .provider
+                .unwrap_or_else(Provider::choose_default);
+            for bench in lookup_matching_benches(cipher_suite, args.key_type, &provider).iter() {
+                if *key_update && bench.version == ProtocolVersion::TLSv1_2 {
+                    eprintln!(
+                        "skipping {:?} with key type {:?}: TLS1.2 has no key updates",
+                        bench.ciphersuite, bench.key_type
+                    );
+                    continue;
+                }
+                bench_bulk_split(
+                    &Parameters::new(bench, &args).with_plaintext_size(*plaintext_size),
+                    *key_update,
                 );
             }
         }
@@ -123,7 +149,7 @@ struct Args {
     #[arg(long, default_value = "1", help = "Number of threads to use")]
     threads: NonZeroUsize,
 
-    #[arg(long, value_enum, default_value_t = Api::Both, help = "Choose buffered or unbuffered API")]
+    #[arg(long, value_enum, default_value_t = Api::Both, help = "Choose `Connection` or `States` API")]
     api: Api,
 
     #[command(subcommand)]
@@ -150,6 +176,26 @@ enum Command {
 
         #[arg(help = "Maximum TLS fragment size")]
         max_fragment_size: Option<usize>,
+    },
+
+    #[command(
+        about = "Runs bulk data benchmarks in both directions at once, using split connections",
+        long_about = "This splits a client and server connection into their send and receive halves.\n\
+                      One thread sends client-to-server, while another sends server-to-client, so\n\
+                      each connection is sending and receiving at the same time."
+    )]
+    BulkSplit {
+        #[arg(help = "Which cipher suite to use; see `list-suites` for possible values.")]
+        cipher_suite: String,
+
+        #[arg(default_value_t = 1048576, help = "The size of each data write")]
+        plaintext_size: u64,
+
+        #[arg(
+            long,
+            help = "Each peer sends a TLS1.3 key update after every megabyte it sends"
+        )]
+        key_update: bool,
     },
 
     #[command(about = "Runs full handshake speed benchmarks")]
@@ -197,13 +243,16 @@ enum Command {
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum Api {
     Both,
-    Buffered,
-    Unbuffered,
+    Connection,
+    States,
 }
 
 impl Api {
-    fn use_buffered(&self) -> bool {
-        matches!(*self, Self::Both | Self::Buffered)
+    fn use_connection(&self) -> bool {
+        matches!(*self, Self::Both | Self::Connection)
+    }
+    fn use_states(&self) -> bool {
+        matches!(*self, Self::Both | Self::States)
     }
 }
 
@@ -247,7 +296,7 @@ fn bench_handshake(params: &Parameters) {
     });
 
     // warm up, and prime session cache for resumptions
-    bench_handshake_buffered(
+    bench_handshake_connection(
         1,
         ResumptionParam::No,
         client_config.clone(),
@@ -255,13 +304,13 @@ fn bench_handshake(params: &Parameters) {
         &params.without_latency_measurement(),
     );
 
-    if params.api.use_buffered() {
+    if params.api.use_connection() {
         let results = multithreaded(
             params.threads,
             &client_config,
             &server_config,
             move |client_config, server_config| {
-                bench_handshake_buffered(
+                bench_handshake_connection(
                     rounds,
                     params.resume,
                     client_config,
@@ -271,11 +320,24 @@ fn bench_handshake(params: &Parameters) {
             },
         );
 
-        report_handshake_result("handshakes", params, rounds, results);
+        report_handshake_result("handshakes(Connection)", params, rounds, results);
+    }
+
+    if params.api.use_states() {
+        let results = multithreaded(
+            params.threads,
+            &client_config,
+            &server_config,
+            move |client_config, server_config| {
+                bench_handshake_states(rounds, params.resume, client_config, server_config, params)
+            },
+        );
+
+        report_handshake_result("handshakes(States)", params, rounds, results);
     }
 }
 
-fn bench_handshake_buffered(
+fn bench_handshake_connection(
     mut rounds: u64,
     resume: ResumptionParam,
     client_config: Arc<ClientConfig>,
@@ -283,8 +345,8 @@ fn bench_handshake_buffered(
     params: &Parameters,
 ) -> Timings {
     let mut timings = Timings::default();
-    let mut client_buffers = TempBuffers::new();
-    let mut server_buffers = TempBuffers::new();
+    let mut client_buffer = Vec::with_capacity(0xffff);
+    let mut server_buffer = Vec::with_capacity(0xffff);
     let mut client_latency = params.open_latency_file("client");
     let mut server_latency = params.open_latency_file("server");
 
@@ -292,57 +354,31 @@ fn bench_handshake_buffered(
         let mut client_time = 0f64;
         let mut server_time = 0f64;
 
-        client_buffers.tls.clear();
-        server_buffers.tls.clear();
+        client_buffer.clear();
+        server_buffer.clear();
 
         let mut client = time(&mut client_time, || {
             let server_name = "localhost".try_into().unwrap();
             client_config
                 .connect(server_name)
-                .build(&mut client_buffers.tls)
+                .build(&mut client_buffer)
                 .unwrap()
         });
-        let mut client_input = VecInput::default();
         let mut server = time(&mut server_time, || {
             Connection::new(server_config.clone()).unwrap()
         });
-        let mut server_input = VecInput::default();
 
         time(&mut server_time, || {
-            transfer(
-                &mut client_buffers,
-                &mut server_input,
-                &mut server_buffers,
-                &mut server,
-                None,
-            );
+            transfer(&mut client_buffer, &mut server_buffer, &mut server, None);
         });
         time(&mut client_time, || {
-            transfer(
-                &mut server_buffers,
-                &mut client_input,
-                &mut client_buffers,
-                &mut client,
-                None,
-            );
+            transfer(&mut server_buffer, &mut client_buffer, &mut client, None);
         });
         time(&mut server_time, || {
-            transfer(
-                &mut client_buffers,
-                &mut server_input,
-                &mut server_buffers,
-                &mut server,
-                None,
-            );
+            transfer(&mut client_buffer, &mut server_buffer, &mut server, None);
         });
         time(&mut client_time, || {
-            transfer(
-                &mut server_buffers,
-                &mut client_input,
-                &mut client_buffers,
-                &mut client,
-                None,
-            );
+            transfer(&mut server_buffer, &mut client_buffer, &mut client, None);
         });
 
         // check we reached idle
@@ -369,16 +405,160 @@ fn bench_handshake_buffered(
     timings
 }
 
+fn bench_handshake_states(
+    mut rounds: u64,
+    resume: ResumptionParam,
+    client_config: Arc<ClientConfig>,
+    server_config: Arc<ServerConfig>,
+    params: &Parameters,
+) -> Timings {
+    let mut timings = Timings::default();
+    let mut client_buffer = Vec::with_capacity(0xffff);
+    let mut server_buffer = Vec::with_capacity(0xffff);
+    let mut client_latency = params.open_latency_file("client");
+    let mut server_latency = params.open_latency_file("server");
+
+    while rounds > 0 {
+        let mut client_time = 0f64;
+        let mut server_time = 0f64;
+
+        client_buffer.clear();
+        server_buffer.clear();
+
+        let mut client = time(&mut client_time, || {
+            let server_name = "localhost".try_into().unwrap();
+
+            ClientHandshake::NeedsInput(
+                client_config
+                    .connect(server_name)
+                    .start_handshake(&mut client_buffer)
+                    .unwrap(),
+            )
+        });
+        let mut server = time(&mut server_time, || {
+            ServerHandshake::NeedsInput(ServerHandshake::start())
+        });
+
+        let (client, server) = loop {
+            if !client_buffer.is_empty() {
+                server = time(&mut server_time, || {
+                    let mut client_input = SliceInput::new(client_buffer.as_mut_slice());
+
+                    let ServerHandshake::NeedsInput(needs_input) = server else {
+                        return server;
+                    };
+
+                    let next = match needs_input
+                        .process(&mut client_input, &mut server_buffer)
+                        .unwrap()
+                    {
+                        ServerHandshake::NeedsInput(needs_input) => {
+                            ServerHandshake::NeedsInput(needs_input)
+                        }
+                        ServerHandshake::Accepted(accepted) => accepted
+                            .choose_config(server_config.clone(), &mut server_buffer)
+                            .unwrap(),
+                        ServerHandshake::VerifyClientIdentity(verify_peer_identity) => {
+                            verify_peer_identity
+                                .with_config(&mut server_buffer)
+                                .unwrap()
+                        }
+                        ServerHandshake::EarlyData(received_early_data) => {
+                            ServerHandshake::NeedsInput(received_early_data.into_next().1)
+                        }
+                        ServerHandshake::Complete(connection) => {
+                            ServerHandshake::Complete(connection)
+                        }
+                        _ => todo!(),
+                    };
+                    let used = client_input.into_used();
+                    client_buffer.drain(..used);
+                    next
+                });
+            }
+
+            if !server_buffer.is_empty() {
+                client = time(&mut client_time, || {
+                    let mut server_input = SliceInput::new(server_buffer.as_mut_slice());
+
+                    let ClientHandshake::NeedsInput(needs_input) = client else {
+                        return client;
+                    };
+
+                    let next = match needs_input
+                        .process(&mut server_input, &mut client_buffer)
+                        .unwrap()
+                    {
+                        ClientHandshake::NeedsInput(needs_input) => {
+                            ClientHandshake::NeedsInput(needs_input)
+                        }
+                        ClientHandshake::VerifyServerIdentity(verify_peer_identity) => {
+                            verify_peer_identity
+                                .with_config(&mut client_buffer)
+                                .unwrap()
+                        }
+                        ClientHandshake::Complete(connection) => {
+                            ClientHandshake::Complete(connection)
+                        }
+                        _ => todo!(),
+                    };
+                    let used = server_input.into_used();
+                    server_buffer.drain(..used);
+                    next
+                });
+            }
+
+            if let (ClientHandshake::Complete(_), ServerHandshake::Complete(_)) = (&client, &server)
+            {
+                let ClientHandshake::Complete(client) = client else {
+                    unreachable!()
+                };
+                let ServerHandshake::Complete(server) = server else {
+                    unreachable!()
+                };
+                break (client, server);
+            }
+        };
+
+        // feed in any remaining post-handshake data
+        let (mut client, mut server) = (client, server);
+        time(&mut client_time, || {
+            transfer(&mut server_buffer, &mut client_buffer, &mut client, None);
+        });
+        time(&mut server_time, || {
+            transfer(&mut client_buffer, &mut server_buffer, &mut server, None);
+        });
+        assert!(client_buffer.is_empty() && server_buffer.is_empty());
+
+        // if we achieved the desired handshake shape, count this handshake.
+        if client.handshake_kind() == Some(resume.as_handshake_kind())
+            && server.handshake_kind() == Some(resume.as_handshake_kind())
+        {
+            client_latency.sample(client_time);
+            server_latency.sample(server_time);
+            timings.client += client_time;
+            timings.server += server_time;
+            rounds -= 1;
+        } else {
+            // otherwise, this handshake is ignored against the quota for this thread,
+            // and serves just to refresh the session cache.  that is mainly
+            // necessary for TLS1.3, where tickets are single-use and limited to
+            // 8 per server.
+        }
+    }
+    timings
+}
+
 /// Run `f` on `count` threads, and then return the timings produced
 /// by each thread.
 ///
 /// `client_config` and `server_config` are cloned into each thread fn.
-fn multithreaded(
+fn multithreaded<R: Send>(
     count: NonZeroUsize,
     client_config: &Arc<ClientConfig>,
     server_config: &Arc<ServerConfig>,
-    f: impl Fn(Arc<ClientConfig>, Arc<ServerConfig>) -> Timings + Send + Sync,
-) -> Vec<Timings> {
+    f: impl Fn(Arc<ClientConfig>, Arc<ServerConfig>) -> R + Send + Sync,
+) -> Vec<R> {
     thread::scope(|s| {
         let threads = (0..count.into())
             .map(|_| {
@@ -391,7 +571,7 @@ fn multithreaded(
         threads
             .into_iter()
             .map(|thread| thread.join().unwrap())
-            .collect::<Vec<Timings>>()
+            .collect::<Vec<R>>()
     })
 }
 
@@ -419,15 +599,15 @@ fn report_handshake_result(variant: &str, params: &Parameters, rounds: u64, timi
     report_timings("handshakes/s", &timings, rounds as f64, |t| t.server);
 }
 
-fn report_timings(
+fn report_timings<T>(
     units: &str,
-    thread_timings: &[Timings],
+    thread_timings: &[T],
     work_per_thread: f64,
-    which: impl Fn(&Timings) -> f64,
+    which: impl Fn(&T) -> f64,
 ) {
     // maintain old output for --threads=1
-    if let &[timing] = thread_timings {
-        println!("{:.2}\t{}", work_per_thread / which(&timing), units);
+    if let [timing] = thread_timings {
+        println!("{:.2}\t{}", work_per_thread / which(timing), units);
         return;
     }
 
@@ -454,28 +634,24 @@ struct Timings {
     server: f64,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct BulkTimings {
+    send: f64,
+    recv: f64,
+}
+
 fn bench_bulk(params: &Parameters) {
     let client_config = params.client_config();
     let server_config = params.server_config();
+    let rounds = params.bulk_rounds();
 
-    // for small plaintext_sizes and their associated slowness, send
-    // less total data
-    let total_data = params.apply_work_multiplier(
-        1024 * 1024
-            * match params.plaintext_size {
-                ..=8192 => 64,
-                _ => 1024,
-            },
-    );
-    let rounds = total_data / params.plaintext_size;
-
-    if params.api.use_buffered() {
+    if params.api.use_connection() {
         let results = multithreaded(
             params.threads,
             &client_config,
             &server_config,
             move |client_config, server_config| {
-                bench_bulk_buffered(client_config, server_config, params.plaintext_size, rounds)
+                bench_bulk_one(client_config, server_config, params.plaintext_size, rounds)
             },
         );
 
@@ -483,45 +659,40 @@ fn bench_bulk(params: &Parameters) {
     }
 }
 
-fn bench_bulk_buffered(
+fn bench_bulk_one(
     client_config: Arc<ClientConfig>,
     server_config: Arc<ServerConfig>,
     plaintext_size: u64,
     rounds: u64,
-) -> Timings {
+) -> BulkTimings {
     let server_name = "localhost".try_into().unwrap();
-    let mut client_buffers = TempBuffers::new();
+    let mut client_buffer = Vec::with_capacity(1024 * 1024);
     let mut client = client_config
         .connect(server_name)
-        .build(&mut client_buffers.tls)
+        .build(&mut client_buffer)
         .unwrap();
-    let mut client_input = VecInput::default();
     let mut server = Connection::new(server_config).unwrap();
-    let mut server_buffers = TempBuffers::new();
-    let mut server_input = VecInput::default();
+    let mut server_buffer = Vec::with_capacity(1024 * 1024);
 
-    let mut timings = Timings::default();
+    let mut timings = BulkTimings::default();
     do_handshake(
-        &mut client_input,
-        &mut client_buffers,
+        &mut client_buffer,
         &mut client,
-        &mut server_input,
-        &mut server_buffers,
+        &mut server_buffer,
         &mut server,
     );
 
     let buf = vec![0; plaintext_size as usize];
     for _ in 0..rounds {
-        time(&mut timings.server, || {
+        time(&mut timings.send, || {
             server
-                .write((&buf).into(), &mut server_buffers.tls)
+                .write((&buf).into(), &mut server_buffer)
                 .unwrap();
         });
 
-        timings.client += transfer(
-            &mut server_buffers,
-            &mut client_input,
-            &mut client_buffers,
+        timings.recv += transfer(
+            &mut server_buffer,
+            &mut client_buffer,
             &mut client,
             Some(buf.len()),
         );
@@ -530,7 +701,168 @@ fn bench_bulk_buffered(
     timings
 }
 
-fn report_bulk_result(variant: &str, params: &Parameters, timings: Vec<Timings>, rounds: u64) {
+fn bench_bulk_split(params: &Parameters, key_update: bool) {
+    let client_config = params.client_config();
+    let server_config = params.server_config();
+    let rounds = params.bulk_rounds();
+
+    let results = multithreaded(
+        params.threads,
+        &client_config,
+        &server_config,
+        move |client_config, server_config| {
+            bench_bulk_split_one(
+                client_config,
+                server_config,
+                params.plaintext_size,
+                rounds,
+                key_update,
+            )
+        },
+    );
+
+    let (client_to_server, server_to_client): (Vec<_>, Vec<_>) = results.into_iter().unzip();
+    let (c2s, s2c) = match key_update {
+        true => ("bulk-split(c2s,key-update)", "bulk-split(s2c,key-update)"),
+        false => ("bulk-split(c2s)", "bulk-split(s2c)"),
+    };
+    report_bulk_result(c2s, params, client_to_server, rounds);
+    report_bulk_result(s2c, params, server_to_client, rounds);
+}
+
+/// Returns the timings for the client-to-server and server-to-client directions.
+fn bench_bulk_split_one(
+    client_config: Arc<ClientConfig>,
+    server_config: Arc<ServerConfig>,
+    plaintext_size: u64,
+    rounds: u64,
+    key_update: bool,
+) -> (BulkTimings, BulkTimings) {
+    let server_name = "localhost".try_into().unwrap();
+    let mut client_buffer = Vec::with_capacity(0xffff);
+    let mut client = client_config
+        .connect(server_name)
+        .build(&mut client_buffer)
+        .unwrap();
+    let mut server = Connection::new(server_config).unwrap();
+    let mut server_buffer = Vec::with_capacity(0xffff);
+
+    do_handshake(
+        &mut client_buffer,
+        &mut client,
+        &mut server_buffer,
+        &mut server,
+    );
+    assert!(client_buffer.is_empty() && server_buffer.is_empty());
+
+    let client = client.split().unwrap();
+    let server = server.split().unwrap();
+    let start = Barrier::new(2);
+
+    thread::scope(|s| {
+        let client_to_server = s.spawn(|| {
+            bulk_split_direction(
+                client.send,
+                server.receive,
+                plaintext_size,
+                rounds,
+                key_update,
+                &start,
+            )
+        });
+        let server_to_client = s.spawn(|| {
+            bulk_split_direction(
+                server.send,
+                client.receive,
+                plaintext_size,
+                rounds,
+                key_update,
+                &start,
+            )
+        });
+
+        (
+            client_to_server.join().unwrap(),
+            server_to_client.join().unwrap(),
+        )
+    })
+}
+
+fn bulk_split_direction<Side: SideData>(
+    mut send: SendTraffic,
+    mut receive: ReceiveTraffic<Side>,
+    plaintext_size: u64,
+    rounds: u64,
+    key_update: bool,
+    start: &Barrier,
+) -> BulkTimings {
+    let mut timings = BulkTimings::default();
+    let buf = vec![0; plaintext_size as usize];
+    let mut wire = Vec::with_capacity(buf.len() + buf.len() / 64 + 0xffff);
+    let mut sent_since_key_update = 0;
+
+    start.wait();
+    for _ in 0..rounds {
+        time(&mut timings.send, || {
+            send.write((&buf).into(), &mut wire)
+                .unwrap();
+
+            sent_since_key_update += buf.len();
+            if key_update && sent_since_key_update >= KEY_UPDATE_INTERVAL {
+                sent_since_key_update -= KEY_UPDATE_INTERVAL;
+                send.refresh_traffic_keys(&mut wire)
+                    .unwrap();
+            }
+        });
+
+        receive = time(&mut timings.recv, || {
+            receive_split(receive, &mut wire, buf.len())
+        });
+    }
+
+    timings
+}
+
+const KEY_UPDATE_INTERVAL: usize = 1024 * 1024;
+
+fn receive_split<Side: SideData>(
+    mut receive: ReceiveTraffic<Side>,
+    wire: &mut Vec<u8>,
+    expect_data: usize,
+) -> ReceiveTraffic<Side> {
+    let mut input = SliceInput::new(wire);
+    let mut received = 0;
+
+    loop {
+        match receive.read(&mut input).unwrap() {
+            ReceiveTrafficState::Available(mut data) => {
+                received += data.data().len();
+                receive = expect_read_more(data.into_next());
+            }
+            state => {
+                receive = expect_read_more(state);
+                break;
+            }
+        }
+    }
+
+    let used = input.into_used();
+    assert_eq!(used, wire.len());
+    assert_eq!(received, expect_data);
+    wire.clear();
+    receive
+}
+
+fn expect_read_more<Side: SideData>(state: ReceiveTrafficState<'_, Side>) -> ReceiveTraffic<Side> {
+    match state {
+        ReceiveTrafficState::ReadMore(receive) => receive,
+        ReceiveTrafficState::FlushSender(flush) => expect_read_more(flush.into_next()),
+        ReceiveTrafficState::Available(_) => panic!("unexpected application data"),
+        ReceiveTrafficState::CloseNotify => panic!("unexpected close_notify"),
+    }
+}
+
+fn report_bulk_result(variant: &str, params: &Parameters, timings: Vec<BulkTimings>, rounds: u64) {
     let mfs_str = format!(
         "max_fragment_size:{}",
         params
@@ -543,13 +875,13 @@ fn report_bulk_result(variant: &str, params: &Parameters, timings: Vec<Timings>,
         "{}\t{:?}\t{:?}\t{}\tsend\t",
         variant, params.proto.version, params.proto.ciphersuite, mfs_str,
     );
-    report_timings("MB/s", &timings, total_mbs, |t| t.server);
+    report_timings("MB/s", &timings, total_mbs, |t| t.send);
 
     print!(
         "{}\t{:?}\t{:?}\t{}\trecv\t",
         variant, params.proto.version, params.proto.ciphersuite, mfs_str,
     );
-    report_timings("MB/s", &timings, total_mbs, |t| t.client);
+    report_timings("MB/s", &timings, total_mbs, |t| t.recv);
 }
 
 fn bench_memory(
@@ -564,18 +896,14 @@ fn bench_memory(
     let mut clients = Vec::with_capacity(conn_count);
 
     for _i in 0..conn_count {
-        servers.push((
-            VecInput::default(),
-            TempBuffers::new(),
-            Connection::new(server_config.clone()).unwrap(),
-        ));
+        servers.push((Vec::new(), Connection::new(server_config.clone()).unwrap()));
         let server_name = "localhost".try_into().unwrap();
-        let mut client_buffers = TempBuffers::new();
+        let mut client_buffer = Vec::new();
         let client = client_config
             .connect(server_name)
-            .build(&mut client_buffers.tls)
+            .build(&mut client_buffer)
             .unwrap();
-        clients.push((VecInput::default(), client_buffers, client));
+        clients.push((client_buffer, client));
     }
 
     for _step in 0..5 {
@@ -583,21 +911,14 @@ fn bench_memory(
             .iter_mut()
             .zip(servers.iter_mut())
         {
-            do_handshake_step(
-                &mut client.0,
-                &mut client.1,
-                &mut client.2,
-                &mut server.0,
-                &mut server.1,
-                &mut server.2,
-            );
+            do_handshake_step(&mut client.0, &mut client.1, &mut server.0, &mut server.1);
         }
     }
 
     for client in clients.iter_mut() {
         client
-            .2
-            .write((&[0u8; 1024]).into(), &mut client.1.tls)
+            .1
+            .write((&[0u8; 1024]).into(), &mut client.0)
             .unwrap();
     }
 
@@ -605,13 +926,7 @@ fn bench_memory(
         .iter_mut()
         .zip(servers.iter_mut())
     {
-        transfer(
-            &mut client.1,
-            &mut server.0,
-            &mut server.1,
-            &mut server.2,
-            Some(1024),
-        );
+        transfer(&mut client.0, &mut server.0, &mut server.1, Some(1024));
     }
 }
 
@@ -790,6 +1105,19 @@ impl Parameters {
         };
 
         Arc::new(cfg)
+    }
+
+    fn bulk_rounds(&self) -> u64 {
+        // for small plaintext_sizes and their associated slowness, send
+        // less total data
+        let total_data = self.apply_work_multiplier(
+            1024 * 1024
+                * match self.plaintext_size {
+                    ..=8192 => 64,
+                    _ => 1024,
+                },
+        );
+        total_data / self.plaintext_size
     }
 
     fn apply_work_multiplier(&self, work: u64) -> u64 {
@@ -992,16 +1320,14 @@ impl From<RequestedKeyType> for KeyType {
 }
 
 fn do_handshake_step(
-    client_input: &mut VecInput,
-    client_buffers: &mut TempBuffers,
+    client_buffer: &mut Vec<u8>,
     client: &mut Connection<ClientSide, Tcp>,
-    server_input: &mut VecInput,
-    server_buffers: &mut TempBuffers,
+    server_buffer: &mut Vec<u8>,
     server: &mut Connection<ServerSide, Tcp>,
 ) -> bool {
     if server.is_handshaking() || client.is_handshaking() {
-        transfer(client_buffers, server_input, server_buffers, server, None);
-        transfer(server_buffers, client_input, client_buffers, client, None);
+        transfer(client_buffer, server_buffer, server, None);
+        transfer(server_buffer, client_buffer, client, None);
         true
     } else {
         false
@@ -1009,26 +1335,17 @@ fn do_handshake_step(
 }
 
 fn do_handshake(
-    client_input: &mut VecInput,
-    client_buffers: &mut TempBuffers,
+    client_buffer: &mut Vec<u8>,
     client: &mut Connection<ClientSide, Tcp>,
-    server_input: &mut VecInput,
-    server_buffers: &mut TempBuffers,
+    server_buffer: &mut Vec<u8>,
     server: &mut Connection<ServerSide, Tcp>,
 ) {
-    while do_handshake_step(
-        client_input,
-        client_buffers,
-        client,
-        server_input,
-        server_buffers,
-        server,
-    ) {}
+    while do_handshake_step(client_buffer, client, server_buffer, server) {}
 }
 
-fn time<F, T>(time_out: &mut f64, mut f: F) -> T
+fn time<F, T>(time_out: &mut f64, f: F) -> T
 where
-    F: FnMut() -> T,
+    F: FnOnce() -> T,
 {
     let start = Instant::now();
     let r = f();
@@ -1038,61 +1355,32 @@ where
 }
 
 fn transfer(
-    left_buffers: &mut TempBuffers,
-    right_input: &mut VecInput,
-    right_buffers: &mut TempBuffers,
+    left_buffer: &mut Vec<u8>,
+    right_buffer: &mut Vec<u8>,
     right: &mut Connection<impl SideData, Tcp>,
     expect_data: Option<usize>,
 ) -> f64 {
-    let mut read_time = 0f64;
-    let mut data_left = expect_data;
-    let sz = left_buffers.tls.len();
-
-    if sz == 0 {
-        return read_time;
+    if left_buffer.is_empty() {
+        return 0.;
     }
 
-    let mut offs = 0;
-    loop {
-        let start = Instant::now();
-        match right_input.read(&mut left_buffers.tls[offs..sz].as_ref()) {
-            Ok(read) => offs += read,
-            Err(err) => panic!("error on transfer {offs}..{sz}: {err}"),
-        }
-
-        let mut iter = right.read_tls(right_input, &mut right_buffers.tls);
-        while let Some(result) = iter.next_payload() {
-            let chunk = result.unwrap();
-            if let Some(left) = &mut data_left {
-                *left -= chunk.bytes().len();
-                if *left == 0 {
-                    break;
-                }
-            }
-        }
-
-        let end = Instant::now();
-        read_time += duration_nanos(end.duration_since(start));
-        if sz == offs {
-            break;
-        }
+    let start = Instant::now();
+    let mut input = SliceInput::new(left_buffer);
+    let mut received = 0;
+    let mut handler = right.read_tls(&mut input, right_buffer);
+    while let Some(result) = handler.next_payload() {
+        received += result.unwrap().bytes().len();
     }
+    drop(handler);
+    let used = input.into_used();
+    let read_time = duration_nanos(start.elapsed());
 
-    left_buffers.tls.clear();
+    assert_eq!(used, left_buffer.len());
+    if let Some(expected) = expect_data {
+        assert_eq!(received, expected);
+    }
+    left_buffer.clear();
     read_time
-}
-
-/// Temporary buffers shared between calls.
-struct TempBuffers {
-    tls: Vec<u8>,
-}
-
-impl TempBuffers {
-    fn new() -> Self {
-        Self {
-            tls: Vec::with_capacity(262_144),
-        }
-    }
 }
 
 fn wall_time() -> f64 {
