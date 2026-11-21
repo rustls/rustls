@@ -251,7 +251,7 @@ struct Args {
     #[clap(long)]
     suite: Vec<String>,
 
-    /// Disable default key exchange list, and use KX instead. Maybe be used multiple times.
+    /// Disable default key exchange list, and use KX instead. May be used multiple times.
     #[clap(long)]
     key_exchange: Vec<String>,
 
