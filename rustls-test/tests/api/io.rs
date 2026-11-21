@@ -1651,7 +1651,7 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
         .unwrap();
     transfer(&mut buf.client_output, &mut server_input);
 
-    // when client auth is enabled, we don't sent 0.5-rtt data, as we'd be sending
+    // when client auth is enabled, we don't send 0.5-rtt data, as we'd be sending
     // it to an unauthenticated peer. so it happens here, after the server's second
     // flight (42 and 32 are lengths of appdata sent below).
     server
