@@ -6,7 +6,7 @@
 //!
 //! See https://github.com/rust-lang/rust/issues/90308; despite not being marked
 //! `unsafe`, `env::var::set_var` is an unsafe function. These tests are separated
-//! from the rest of the tests so that their use of `set_ver` is less likely to
+//! from the rest of the tests so that their use of `set_var` is less likely to
 //! affect them; as of the time these tests were moved to this file, Cargo will
 //! compile each test suite file to a separate executable, so these will be run
 //! in a completely separate process. This way, executing every test through
