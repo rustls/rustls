@@ -307,7 +307,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
 
     // 5 subsequent handshakes: all are resumptions
 
-    // Note: we don't do complete the handshakes, because that means
+    // Note: we don't complete the handshakes, because that means
     // we get five additional tickets per connection which is unhelpful
     // in this test.  It also acts to record a "Happy Eyeballs"-type use
     // case, where a client speculatively makes many connection attempts
