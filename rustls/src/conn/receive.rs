@@ -262,7 +262,7 @@ impl ReceivePath {
         let mut want_close_before_decrypt = false;
         loop {
             // before processing any more of `buffer`, return any extant records from `deframer`
-            if let Some(span) = self.deframer.complete_span() {
+            if let Some(span) = self.deframer.complete_span(buffer)? {
                 let plaintext = self.deframer.record(span, buffer);
 
                 // trial decryption finishes with the first handshake message after it started.
