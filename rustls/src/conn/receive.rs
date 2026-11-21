@@ -219,7 +219,7 @@ pub(crate) enum MessageIterMode {
 
     /// Handshake mode.
     ///
-    /// Stop iteration when when external input is needed to progress handshake, or the handshake ends.
+    /// Stop iteration when external input is needed to progress handshake, or the handshake ends.
     Handshake,
 }
 
