@@ -4,6 +4,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::time::Duration;
 
+use pki_types::UnixTime;
 pub(crate) use server_hello::TLS12_HANDLER;
 use subtle::ConstantTimeEq;
 
@@ -1070,7 +1071,7 @@ impl ExpectFinished {
     fn save_session(&mut self) {
         // Save a ticket.  If we got a new ticket, save that.  Otherwise, save the
         // original ticket again.
-        let (mut ticket, lifetime) = match self.ticket.take() {
+        let (mut ticket, mut lifetime) = match self.ticket.take() {
             Some(nst) => (nst.ticket, nst.lifetime_hint),
             None => (
                 Arc::new(SizedPayload::from(Payload::new(Vec::new()))),
@@ -1079,8 +1080,9 @@ impl ExpectFinished {
         };
 
         if ticket.is_empty() {
-            if let Some((resuming_session, _)) = &mut self.resuming {
+            if let Some((resuming_session, _)) = &self.resuming {
                 ticket = resuming_session.ticket.clone();
+                lifetime = resuming_session.lifetime;
             }
         }
 
@@ -1089,9 +1091,17 @@ impl ExpectFinished {
             return;
         }
 
-        let Ok(now) = self.hs.config.current_time() else {
-            debug!("Could not get current time");
-            return;
+        let epoch = match &self.resuming {
+            Some((resuming_session, _)) => {
+                UnixTime::since_unix_epoch(Duration::from_secs(resuming_session.epoch))
+            }
+            None => match self.hs.config.current_time() {
+                Ok(now) => now,
+                Err(_) => {
+                    debug!("Could not get current time");
+                    return;
+                }
+            },
         };
 
         let session_value = Tls12Session::new(
@@ -1100,7 +1110,7 @@ impl ExpectFinished {
             ticket,
             self.secrets.master_secret(),
             self.peer_identity.clone(),
-            now,
+            epoch,
             lifetime,
             self.hs.using_ems,
         );
