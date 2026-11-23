@@ -14,16 +14,6 @@ use crate::msgs::{Codec, ListLength, MaybeEmpty, NonEmpty, Reader, SizedPayload,
 use crate::sync::Arc;
 use crate::x509::wrap_in_sequence;
 
-// Marker types.  These are used to bind the fact some verification
-// (certificate chain or handshake signature) has taken place into
-// protocol states.  We use this to have the compiler check that there
-// are no 'goto fail'-style elisions of important checks before we
-// reach the traffic stage.
-//
-// These types are public, but cannot be directly constructed.  This
-// means their origins can be precisely determined by looking
-// for their `assertion` constructors.
-
 /// Something that can verify a server certificate chain, and verify
 /// signatures made by certificates.
 pub trait ServerVerifier: Debug + Send + Sync + Any {
@@ -400,6 +390,16 @@ impl PartialEq for DistinguishedName {
 impl TlsListElement for DistinguishedName {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
+
+// Marker types.  These are used to bind the fact some verification
+// (certificate chain or handshake signature) has taken place into
+// protocol states.  We use this to have the compiler check that there
+// are no 'goto fail'-style elisions of important checks before we
+// reach the traffic stage.
+//
+// These types are public, but cannot be directly constructed.  This
+// means their origins can be precisely determined by looking
+// for their `assertion` constructors.
 
 /// Zero-sized marker type representing verification of a signature.
 #[derive(Debug)]
