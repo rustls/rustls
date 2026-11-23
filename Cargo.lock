@@ -1885,11 +1885,9 @@ dependencies = [
 name = "rustls-ring"
 version = "0.24.0-dev.3"
 dependencies = [
- "bencher",
  "ring",
  "rustls 0.24.0-dev.3",
  "rustls-pki-types",
- "rustls-test",
  "subtle",
  "zeroize",
 ]
