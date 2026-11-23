@@ -133,7 +133,12 @@ impl<'a> CommonServerSessionValue<'a> {
             < now.as_secs()
     }
 
-    pub(crate) fn can_resume(&self, suite: CipherSuite, sni: Option<&DnsName<'_>>) -> bool {
+    pub(crate) fn can_resume(
+        &self,
+        suite: CipherSuite,
+        sni: Option<&DnsName<'_>>,
+        client_auth_mandatory: bool,
+    ) -> bool {
         // The RFCs underspecify what happens if we try to resume to
         // an unoffered/varying suite.  We merely don't resume in weird cases.
         //
@@ -144,7 +149,11 @@ impl<'a> CommonServerSessionValue<'a> {
         //
         // RFC 9846: "The server MUST ensure that it selects
         // a compatible PSK (if any) and cipher suite."
-        self.cipher_suite == suite && self.sni.as_ref() == sni
+        //
+        // A session without a client identity must not bypass mandatory client auth.
+        self.cipher_suite == suite
+            && self.sni.as_ref() == sni
+            && (self.peer_identity.is_some() || !client_auth_mandatory)
     }
 }
 
