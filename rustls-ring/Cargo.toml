@@ -20,14 +20,5 @@ ring = { workspace = true }
 subtle = { workspace = true }
 zeroize = { workspace = true }
 
-[dev-dependencies]
-bencher = { workspace = true }
-rustls-test = { workspace = true, default-features = false }
-
-[[bench]]
-name = "benchmarks"
-path = "benches/benchmarks.rs"
-harness = false
-
 [lints]
 workspace = true
