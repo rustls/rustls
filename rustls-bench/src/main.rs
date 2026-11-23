@@ -593,17 +593,7 @@ struct Timings {
 fn bench_bulk(params: &Parameters) {
     let client_config = params.client_config();
     let server_config = params.server_config();
-
-    // for small plaintext_sizes and their associated slowness, send
-    // less total data
-    let total_data = params.apply_work_multiplier(
-        1024 * 1024
-            * match params.plaintext_size {
-                ..=8192 => 64,
-                _ => 1024,
-            },
-    );
-    let rounds = total_data / params.plaintext_size;
+    let rounds = params.bulk_rounds();
 
     if params.api.use_connection() {
         let results = multithreaded(
@@ -904,6 +894,19 @@ impl Parameters {
         };
 
         Arc::new(cfg)
+    }
+
+    fn bulk_rounds(&self) -> u64 {
+        // for small plaintext_sizes and their associated slowness, send
+        // less total data
+        let total_data = self.apply_work_multiplier(
+            1024 * 1024
+                * match self.plaintext_size {
+                    ..=8192 => 64,
+                    _ => 1024,
+                },
+        );
+        total_data / self.plaintext_size
     }
 
     fn apply_work_multiplier(&self, work: u64) -> u64 {
