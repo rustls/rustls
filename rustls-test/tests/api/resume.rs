@@ -1455,6 +1455,34 @@ fn tls12_client_expires_session_without_lifetime() {
     assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
 }
 
+#[test]
+fn tls12_client_resumption_does_not_extend_session_lifetime() {
+    let provider = provider::DEFAULT_TLS12_PROVIDER;
+    let clock = Arc::new(AdjustableClock::new());
+    let client_config = Arc::new(
+        ClientConfig::builder_with_details(provider.clone().into(), clock.clone())
+            .finish(KeyType::default()),
+    );
+    let server_config = Arc::new(make_server_config(KeyType::default(), &provider));
+
+    let (mut client, mut server, mut buf) =
+        make_pair_for_arc_configs(&client_config, &server_config);
+    buf.handshake(&mut client, &mut server);
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+
+    clock.advance(Duration::from_secs(6 * 24 * 60 * 60));
+    let (mut client, mut server, mut buf) =
+        make_pair_for_arc_configs(&client_config, &server_config);
+    buf.handshake(&mut client, &mut server);
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+
+    clock.advance(Duration::from_secs(2 * 24 * 60 * 60));
+    let (mut client, mut server, mut buf) =
+        make_pair_for_arc_configs(&client_config, &server_config);
+    buf.handshake(&mut client, &mut server);
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+}
+
 /// A `TimeProvider` that starts at the current time and only moves when told to.
 #[derive(Debug)]
 struct AdjustableClock(AtomicU64);
