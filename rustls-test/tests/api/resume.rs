@@ -23,9 +23,10 @@ use rustls::{
 };
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, HandshakeBuffers, KeyType,
-    MultiTest, ServerConfigExt, make_client_config, make_client_config_with_kx_groups, make_pair,
-    make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
-    make_server_config_with_kx_groups, transfer, webpki_server_verifier_builder,
+    MultiTest, ServerConfigExt, make_client_config, make_client_config_with_auth,
+    make_client_config_with_kx_groups, make_pair, make_pair_for_arc_configs, make_pair_for_configs,
+    make_server_config, make_server_config_with_kx_groups,
+    make_server_config_with_mandatory_client_auth, transfer, webpki_server_verifier_builder,
 };
 
 use super::provider;
@@ -1581,6 +1582,61 @@ impl TicketProducer for LongLifetimeTicketer {
 
     fn lifetime(&self) -> Duration {
         Duration::from_secs(30 * 24 * 60 * 60)
+    }
+}
+
+#[test]
+fn server_sessions_do_not_outlive_client_certificate() {
+    for (provider, stateless) in [
+        (provider::DEFAULT_TLS12_PROVIDER, false),
+        (provider::DEFAULT_TLS12_PROVIDER, true),
+        (provider::DEFAULT_TLS13_PROVIDER, false),
+        (provider::DEFAULT_TLS13_PROVIDER, true),
+    ] {
+        let client_config = Arc::new(make_client_config_with_auth(KeyType::default(), &provider));
+
+        let clock = Arc::new(AdjustableClock::at(TEST_CERTS_NOT_AFTER - 60 * 60));
+        let mut server_config =
+            make_server_config_with_mandatory_client_auth(KeyType::default(), &provider);
+        server_config.time_provider = clock.clone();
+        if stateless {
+            server_config.ticketer = Some(
+                provider
+                    .ticketer_factory
+                    .ticketer()
+                    .unwrap(),
+            );
+        }
+        let server_config = Arc::new(server_config);
+
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+
+        clock.advance(Duration::from_secs(30 * 60));
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
+
+        clock.advance(Duration::from_secs(60 * 60));
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        assert_eq!(
+            buf.handshake_until_error(&mut client, &mut server),
+            Err(ErrorFromPeer::Server(Error::InvalidCertificate(
+                CertificateError::ExpiredContext {
+                    time: UnixTime::since_unix_epoch(Duration::from_secs(
+                        TEST_CERTS_NOT_AFTER + 30 * 60
+                    )),
+                    not_after: UnixTime::since_unix_epoch(Duration::from_secs(
+                        TEST_CERTS_NOT_AFTER
+                    )),
+                }
+            ))),
+        );
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
     }
 }
 

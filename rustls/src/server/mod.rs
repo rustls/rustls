@@ -106,9 +106,17 @@ impl<'a> CommonServerSessionValue<'a> {
         lifetime: Duration,
     ) -> Self {
         let creation_time_sec = creation_time.as_secs();
+        let mut expiry_sec = creation_time_sec.saturating_add(lifetime.as_secs());
+        if let Some(identity_expiry) = peer_identity
+            .as_ref()
+            .and_then(|identity| identity.expiry())
+        {
+            expiry_sec = Ord::min(expiry_sec, identity_expiry.as_secs());
+        }
+
         Self {
             creation_time_sec,
-            expiry_sec: creation_time_sec.saturating_add(lifetime.as_secs()),
+            expiry_sec,
             sni: sni.map(|s| s.to_owned()),
             cipher_suite,
             peer_identity,
