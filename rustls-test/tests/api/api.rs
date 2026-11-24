@@ -476,6 +476,21 @@ fn server_identity_expiry_is_chain_not_after() {
     }
 }
 
+#[test]
+fn client_identity_expiry_is_chain_not_after() {
+    let not_after = Some(UnixTime::since_unix_epoch(Duration::from_secs(
+        TEST_CERTS_NOT_AFTER,
+    )));
+    for (client_config, server_config, _) in
+        MultiTest::new(provider::DEFAULT_PROVIDER).require_client_auth()
+    {
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(server.peer_identity().unwrap().expiry(), not_after);
+    }
+}
+
 /// 4096-01-01T00:00:00Z, the `notAfter` of every certificate in `test-ca`.
 pub(super) const TEST_CERTS_NOT_AFTER: u64 = 67_090_118_400;
 
