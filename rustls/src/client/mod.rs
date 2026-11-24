@@ -101,15 +101,9 @@ impl Retrieved<&Tls13Session> {
 impl<T: Deref<Target = ClientSessionCommon>> Retrieved<T> {
     pub(crate) fn has_expired(&self) -> bool {
         let common = &*self.value;
-        // A TLS 1.2 session id, or a ticket with no lifetime hint, has no
-        // lifetime of its own: bound it like a ticket, see RFC 5246 appendix F.1.4.
-        let lifetime = match common.lifetime.is_zero() {
-            true => MAX_TICKET_LIFETIME,
-            false => common.lifetime,
-        };
         common
             .epoch
-            .saturating_add(lifetime.as_secs())
+            .saturating_add(common.lifetime.as_secs())
             < self.retrieved_at.as_secs()
     }
 }
@@ -376,10 +370,17 @@ impl ClientSessionCommon {
         lifetime: Duration,
         peer_identity: VerifiedIdentity<'static>,
     ) -> Self {
+        // A TLS 1.2 session id, or a ticket with no lifetime hint, has no
+        // lifetime of its own: bound it like a ticket, see RFC 5246 appendix F.1.4.
+        let lifetime = match lifetime.is_zero() {
+            true => MAX_TICKET_LIFETIME,
+            false => Ord::min(lifetime, MAX_TICKET_LIFETIME),
+        };
+
         Self {
             ticket,
             epoch: time_now.as_secs(),
-            lifetime: Ord::min(lifetime, MAX_TICKET_LIFETIME),
+            lifetime,
             peer_identity: Arc::new(peer_identity),
         }
     }
