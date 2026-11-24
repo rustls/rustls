@@ -9,7 +9,7 @@ use zeroize::Zeroizing;
 use crate::compress;
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::NamedGroup;
-use crate::crypto::{CipherSuite, CryptoProvider, Identity, SelectedCredential, SignatureScheme};
+use crate::crypto::{CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme};
 use crate::enums::{ApplicationProtocol, CertificateType};
 use crate::error::{ApiMisuse, Error, InvalidMessage};
 use crate::msgs::{
@@ -384,7 +384,7 @@ impl ClientSessionCommon {
         }
     }
 
-    pub(crate) fn peer_identity(&self) -> &Identity<'static> {
+    pub(crate) fn peer_identity(&self) -> &VerifiedIdentity<'static> {
         &self.peer_identity
     }
 
@@ -406,7 +406,7 @@ impl<'a> Codec<'a> for ClientSessionCommon {
             ticket: Arc::new(SizedPayload::read(r)?.into_owned()),
             epoch: u64::read(r)?,
             lifetime: Duration::from_secs(u64::read(r)?),
-            peer_identity: Arc::new(VerifiedIdentity::assertion(Identity::read(r)?.into_owned())),
+            peer_identity: Arc::new(VerifiedIdentity::read(r)?.into_owned()),
         })
     }
 }
@@ -511,7 +511,7 @@ mod tests {
     use pki_types::SubjectPublicKeyInfoDer;
 
     use super::*;
-    use crate::crypto::{TEST_PROVIDER, tls12_suite};
+    use crate::crypto::{Identity, TEST_PROVIDER, tls12_suite};
 
     #[test]
     fn debug_of_session_types() {
@@ -529,7 +529,7 @@ mod tests {
         );
         assert_eq!(
             format!("{tls12:?}"),
-            "Tls12Session { suite: Tls12CipherSuite { suite: 0xff12, .. }, session_id: , extended_ms: true, common: ClientSessionCommon { ticket: , epoch: 1, lifetime: 2s, peer_identity: VerifiedIdentity(RawPublicKey(SubjectPublicKeyInfoDer(0x73706b69))) }, .. }"
+            "Tls12Session { suite: Tls12CipherSuite { suite: 0xff12, .. }, session_id: , extended_ms: true, common: ClientSessionCommon { ticket: , epoch: 1, lifetime: 2s, peer_identity: VerifiedIdentity { identity: RawPublicKey(SubjectPublicKeyInfoDer(0x73706b69)), expiry: None } }, .. }"
         );
 
         let tls13 = Tls13Session::new(
@@ -552,7 +552,7 @@ mod tests {
         );
         assert_eq!(
             format!("{tls13:?}"),
-            "Tls13Session { suite: Tcp(Tls13CipherSuite { suite: 0xff13, .. }), age_add: 3, max_early_data_size: 0, common: ClientSessionCommon { ticket: 05, epoch: 1, lifetime: 2s, peer_identity: VerifiedIdentity(RawPublicKey(SubjectPublicKeyInfoDer(0x73706b69))) }, quic_params: , alpn: None, .. }"
+            "Tls13Session { suite: Tcp(Tls13CipherSuite { suite: 0xff13, .. }), age_add: 3, max_early_data_size: 0, common: ClientSessionCommon { ticket: 05, epoch: 1, lifetime: 2s, peer_identity: VerifiedIdentity { identity: RawPublicKey(SubjectPublicKeyInfoDer(0x73706b69)), expiry: None } }, quic_params: , alpn: None, .. }"
         );
     }
 }

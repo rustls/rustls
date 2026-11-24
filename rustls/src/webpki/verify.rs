@@ -35,6 +35,7 @@ pub fn verify_identity_signed_by_trust_anchor(
         now,
         supported_algs,
     )
+    .map(|_| ())
 }
 
 /// Verify that the `cert` has an alternative name matching the `server_name`.
@@ -185,19 +186,17 @@ pub(crate) fn verify_identity_signed_by_trust_anchor_impl(
     revocation: Option<webpki::RevocationOptions<'_>>,
     now: UnixTime,
     supported_algs: &[&dyn SignatureVerificationAlgorithm],
-) -> Result<(), Error> {
-    let result = PathBuilder::new(
+) -> Result<UnixTime, Error> {
+    PathBuilder::new(
         intermediates,
         revocation,
         &ExtendedKeyUsage::SERVER_AUTH,
         supported_algs,
         &roots.roots,
     )
-    .build(&cert.0, now);
-    match result {
-        Ok(_) => Ok(()),
-        Err(e) => Err(pki_error(e)),
-    }
+    .build(&cert.0, now)
+    .map(|path| path.not_after())
+    .map_err(pki_error)
 }
 
 #[cfg(test)]

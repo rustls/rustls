@@ -162,7 +162,7 @@ impl Codec<'_> for CommonServerSessionValue<'_> {
         self.cipher_suite.encode(bytes);
         if let Some(identity) = &self.peer_identity {
             1u8.encode(bytes);
-            identity.encode(bytes);
+            identity.identity().encode(bytes);
         } else {
             0u8.encode(bytes);
         }

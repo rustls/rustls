@@ -659,8 +659,7 @@ impl State<ClientSide> for ExpectEncryptedExtensions {
 
                 // We *don't* reverify the certificate chain here: resumption is a
                 // continuation of the previous session in terms of security policy.
-                let peer_identity =
-                    VerifiedIdentity::assertion(resuming_session.peer_identity().clone());
+                let peer_identity = resuming_session.peer_identity().clone();
                 let sig_verified = HandshakeSignatureValid::assertion();
                 Ok(Box::new(ExpectFinished {
                     hs: self.hs,

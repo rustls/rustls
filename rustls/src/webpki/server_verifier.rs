@@ -240,7 +240,7 @@ impl ServerVerifier for WebPkiServerVerifier {
 
         // Note: we use the crate-internal `_impl` fn here in order to provide revocation
         // checking information, if applicable.
-        verify_identity_signed_by_trust_anchor_impl(
+        let expiry = verify_identity_signed_by_trust_anchor_impl(
             &cert,
             &self.roots,
             &certificates.intermediates,
@@ -250,7 +250,7 @@ impl ServerVerifier for WebPkiServerVerifier {
         )?;
 
         verify_server_name(&cert, identity.server_name)?;
-        Ok(VerifiedIdentity::assertion(identity.identity.clone()))
+        Ok(VerifiedIdentity::assertion(identity.identity.clone()).with_expiry(expiry))
     }
 
     fn verify_tls12_signature(

@@ -187,8 +187,7 @@ mod server_hello {
                     output.output(OutputEvent::HandshakeKind(HandshakeKind::Resumed));
                     // Since we're resuming, we verified the certificate and
                     // proof of possession in the prior session.
-                    let peer_identity =
-                        VerifiedIdentity::assertion(resuming.peer_identity().clone());
+                    let peer_identity = resuming.peer_identity().clone();
                     let sig_verified = HandshakeSignatureValid::assertion();
 
                     let hs = HandshakeState {

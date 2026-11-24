@@ -3,11 +3,12 @@
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
 use core::fmt::Debug;
+use core::time::Duration;
 use std::borrow::Cow;
 use std::io;
 use std::sync::{Arc, Mutex};
 
-use pki_types::{DnsName, FipsStatus, SubjectPublicKeyInfoDer};
+use pki_types::{DnsName, FipsStatus, SubjectPublicKeyInfoDer, UnixTime};
 use provider::cipher_suite;
 use rustls::client::{EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption};
 use rustls::crypto::cipher::{EncodableVersion, Payload, Record};
@@ -461,6 +462,22 @@ fn client_can_get_server_cert() {
         );
     }
 }
+
+#[test]
+fn server_identity_expiry_is_chain_not_after() {
+    let not_after = Some(UnixTime::since_unix_epoch(Duration::from_secs(
+        TEST_CERTS_NOT_AFTER,
+    )));
+    for (client_config, server_config, _) in MultiTest::new(provider::DEFAULT_PROVIDER) {
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(client.peer_identity().unwrap().expiry(), not_after);
+    }
+}
+
+/// 4096-01-01T00:00:00Z, the `notAfter` of every certificate in `test-ca`.
+const TEST_CERTS_NOT_AFTER: u64 = 67_090_118_400;
 
 #[test]
 fn client_can_get_server_cert_after_resumption() {
