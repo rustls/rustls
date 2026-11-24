@@ -13,7 +13,7 @@ use crate::conn::{
 };
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, Label, OkmBlock};
-use crate::error::{ApiMisuse, Error};
+use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 use crate::msgs::{Message, MessagePayload, ServerExtensionsInput, TransportParameters};
 use crate::server::{ServerConfig, ServerSide};
 use crate::suites::SupportedCipherSuite;
@@ -214,7 +214,10 @@ impl<Side: SideData> NeedsInput<Side> {
     ///
     /// The input should be ordered QUIC CRYPTO stream data for one encryption level.
     ///
-    /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
+    /// Handshake data obtained from separate encryption levels should be supplied in separate calls,
+    /// with `space` set to the packet number space the data was received in. A handshake message
+    /// must not span packet number spaces, so supplying data for a different `space` while a
+    /// previously supplied handshake message is incomplete is an error.
     ///
     /// How much of the `input` buffer is consumed is recorded by a call to
     /// [`TlsInputBuffer::discard()`].  Unconsumed data should be presented again on the next call.
@@ -231,12 +234,9 @@ impl<Side: SideData> NeedsInput<Side> {
         mut self,
         input: &mut dyn TlsInputBuffer,
         output: &mut Vec<QuicEvent>,
+        space: Space,
     ) -> Result<Side::QuicHandshake, Error> {
-        self.0
-            .common
-            .recv
-            .deframer
-            .input_quic(input.slice_mut())?;
+        self.0.input_hs(input, space)?;
 
         Side::QuicHandshake::from_conn(
             self.0
@@ -302,15 +302,15 @@ pub enum QuicEvent {
 impl<Side: SideData> Connection<Side, Quic> {
     /// Consume unencrypted TLS handshake data.
     ///
-    /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
+    /// Handshake data obtained from separate encryption levels should be supplied in separate calls,
+    /// with `space` set to the packet number space the data was received in.  A handshake message
+    /// must not span packet number spaces, so supplying data for a different `space` while a
+    /// previously supplied handshake message is incomplete is an error.
     ///
     /// How much of the `input` buffer is consumed is recorded by a call to
     /// [`TlsInputBuffer::discard()`].  Unconsumed data should be presented again on the next call.
-    pub fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
-        self.common
-            .recv
-            .deframer
-            .input_quic(input.slice_mut())?;
+    pub fn read_hs(&mut self, input: &mut dyn TlsInputBuffer, space: Space) -> Result<(), Error> {
+        self.input_hs(input, space)?;
 
         let mut tls = Vec::new();
         let mut iter = MessageIter::new(input, &mut tls, self, MessageIterMode::All);
@@ -322,6 +322,28 @@ impl<Side: SideData> Connection<Side, Quic> {
 
         input.discard(self.common.recv.deframer.take_discard());
         result
+    }
+
+    fn input_hs(&mut self, input: &mut dyn TlsInputBuffer, space: Space) -> Result<(), Error> {
+        if space != self.transport.space {
+            // Changing the packet number space must not split a handshake message.
+            if self
+                .common
+                .recv
+                .deframer
+                .aligned()
+                .is_none()
+            {
+                return Err(PeerMisbehaved::KeyEpochWithPendingFragment.into());
+            }
+            self.transport.space = space;
+        }
+
+        self.common
+            .recv
+            .deframer
+            .input_quic(input.slice_mut())?;
+        Ok(())
     }
 
     /// Obtain pending events that the caller should process.
@@ -352,6 +374,7 @@ impl<Side: SideData> Connection<Side, Quic> {
 #[derive(Default)]
 pub struct Quic {
     pub(crate) version: Version,
+    pub(crate) space: Space,
     /// QUIC transport parameters received from the peer during the handshake
     pub(crate) params: Option<Vec<u8>>,
     pub(crate) events: Vec<QuicEvent>,
@@ -978,6 +1001,16 @@ impl Version {
             Self::V2 => Label::fixed(b"quicv2 ku"),
         }
     }
+}
+
+/// QUIC packet number space.
+#[allow(clippy::exhaustive_enums, missing_docs)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum Space {
+    #[default]
+    Initial,
+    Handshake,
+    ApplicationData,
 }
 
 #[cfg(all(test, any(target_arch = "aarch64", target_arch = "x86_64")))]

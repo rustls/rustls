@@ -12,7 +12,7 @@ use rustls::error::{
     AlertDescription, ApiMisuse, CertificateError, Error, InvalidMessage, PeerIncompatible,
     PeerMisbehaved,
 };
-use rustls::quic::{self, ClientHandshake, Quic, QuicEvent, ServerHandshake, Side};
+use rustls::quic::{self, ClientHandshake, Quic, QuicEvent, ServerHandshake, Side, Space};
 use rustls::server::Tls13Tickets;
 use rustls::{
     CipherSuiteCommon, ClientSide, Connection, HandshakeKind, ServerSide, SideData, SliceInput,
@@ -282,14 +282,22 @@ fn test_quic_acceptor() {
         println!("client_initial: {client_initial:x?}");
 
         let ServerHandshake::NeedsInput(needs_input) = needs_input
-            .process(&mut SliceInput::new(&mut client_initial[..8]), &mut vec![])
+            .process(
+                &mut SliceInput::new(&mut client_initial[..8]),
+                &mut vec![],
+                Space::Initial,
+            )
             .unwrap()
         else {
             panic!("unexpected state after partial hello");
         };
 
         let ServerHandshake::Accepted(accepted) = needs_input
-            .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
+            .process(
+                &mut SliceInput::new(&mut client_initial),
+                &mut vec![],
+                Space::Initial,
+            )
             .unwrap()
         else {
             panic!("unexpected state after full hello");
@@ -349,7 +357,7 @@ fn test_quic_acceptor() {
         let mut data = flatten_events(&mut client);
         let mut server_input = SliceInput::new(&mut data);
         let server = server
-            .process(&mut server_input, &mut server_flight)
+            .process(&mut server_input, &mut server_flight, Space::Handshake)
             .unwrap();
 
         let mut server = match server {
@@ -369,7 +377,7 @@ fn test_quic_acceptor() {
                     panic!("unexpected state");
                 };
                 let ServerHandshake::Complete(server) = server
-                    .process(&mut server_input, &mut server_flight)
+                    .process(&mut server_input, &mut server_flight, Space::Handshake)
                     .unwrap()
                 else {
                     panic!("unexpected state");
@@ -428,9 +436,10 @@ fn test_quic_client_handshake() {
         let ClientHandshake::NeedsInput(needs_input) = state else {
             panic!("unexpected state {state:?}");
         };
+        let space = space(&message);
         let mut input = SliceInput::new(&mut message);
         state = needs_input
-            .process(&mut input, &mut client_flight)
+            .process(&mut input, &mut client_flight, space)
             .unwrap();
 
         if let ClientHandshake::VerifyServerIdentity(verify) = state {
@@ -441,7 +450,7 @@ fn test_quic_client_handshake() {
                 .unwrap()
             {
                 ClientHandshake::NeedsInput(needs_input) => needs_input
-                    .process(&mut input, &mut client_flight)
+                    .process(&mut input, &mut client_flight, space)
                     .unwrap(),
                 other => other,
             };
@@ -507,7 +516,11 @@ fn test_quic_acceptor_exposes_zero_rtt_keys_before_completion() {
     let mut client_initial = flatten_events(&mut client);
     assert!(client.zero_rtt_keys().is_some());
     let ServerHandshake::Accepted(accepted) = ServerHandshake::start(quic::Version::V1)
-        .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
+        .process(
+            &mut SliceInput::new(&mut client_initial),
+            &mut vec![],
+            Space::Initial,
+        )
         .unwrap()
     else {
         panic!("unexpected state after ClientHello");
@@ -539,7 +552,11 @@ fn test_quic_acceptor_external_verifier_rejects_client_cert() {
         let mut client_initial = flatten_events(&mut client);
 
         let ServerHandshake::Accepted(accepted) = needs_input
-            .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
+            .process(
+                &mut SliceInput::new(&mut client_initial),
+                &mut vec![],
+                Space::Initial,
+            )
             .unwrap()
         else {
             panic!("unexpected state after full hello");
@@ -557,7 +574,7 @@ fn test_quic_acceptor_external_verifier_rejects_client_cert() {
         let mut data = flatten_events(&mut client);
         let mut server_input = SliceInput::new(&mut data);
         let ServerHandshake::VerifyClientIdentity(verify_client) = server
-            .process(&mut server_input, &mut server_flight)
+            .process(&mut server_input, &mut server_flight, Space::Handshake)
             .unwrap()
         else {
             panic!("unexpected state");
@@ -605,7 +622,11 @@ fn test_quic_acceptor_continues_with_server_config_chosen_from_client_hello() {
     let mut client_initial = flatten_events(&mut client);
 
     let ServerHandshake::Accepted(accepted) = needs_input
-        .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
+        .process(
+            &mut SliceInput::new(&mut client_initial),
+            &mut vec![],
+            Space::Initial,
+        )
         .unwrap()
     else {
         panic!("unexpected state after full hello");
@@ -649,6 +670,7 @@ fn test_quic_acceptor_continues_with_server_config_chosen_from_client_hello() {
         .process(
             &mut SliceInput::new(&mut flatten_events(&mut client)),
             &mut server_flight,
+            Space::Handshake,
         )
         .unwrap()
     else {
@@ -684,7 +706,11 @@ fn test_quic_acceptor_invalid_early_data_size() {
     let mut client_initial = flatten_events(&mut client);
 
     let ServerHandshake::Accepted(accepted) = needs_input
-        .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
+        .process(
+            &mut SliceInput::new(&mut client_initial),
+            &mut vec![],
+            Space::Initial,
+        )
         .unwrap()
     else {
         panic!("unexpected state after hello");
@@ -713,6 +739,7 @@ fn test_quic_acceptor_read_error_is_terminal() {
                 vec![0x00; 32],
             )),
             &mut vec![],
+            Space::Initial,
         )
         .err()
         .unwrap();
@@ -816,10 +843,13 @@ fn test_quic_read_deframer_failure() {
         Connection::new_quic(server_config, quic::Version::V1, b"server params".to_vec()).unwrap();
 
     let err = server
-        .read_hs(&mut SliceInput::new(&mut encoding::handshake_framing(
-            HandshakeType::ClientHello,
-            vec![0x00; 32],
-        )))
+        .read_hs(
+            &mut SliceInput::new(&mut encoding::handshake_framing(
+                HandshakeType::ClientHello,
+                vec![0x00; 32],
+            )),
+            Space::Initial,
+        )
         .err()
         .unwrap();
     assert_eq!(err, InvalidMessage::MissingData("Random").into());
@@ -840,7 +870,7 @@ fn test_quic_server_no_params_received() {
 
     let mut buf = encoding::basic_client_hello(vec![]);
     let err = server
-        .read_hs(&mut SliceInput::new(&mut buf))
+        .read_hs(&mut SliceInput::new(&mut buf), Space::Initial)
         .err()
         .unwrap();
     assert_eq!(
@@ -869,7 +899,7 @@ fn test_quic_server_no_tls12() {
         encoding::Extension::new_kx_groups(),
     ]);
     let err = server
-        .read_hs(&mut SliceInput::new(&mut buf))
+        .read_hs(&mut SliceInput::new(&mut buf), Space::Initial)
         .err()
         .unwrap();
     assert_eq!(
@@ -895,13 +925,16 @@ fn test_quic_server_rejects_tls12_hello() {
     .unwrap();
     assert_eq!(
         server
-            .read_hs(&mut SliceInput::new(&mut encoding::client_hello(
-                ProtocolVersion::TLSv1_2,
-                &[0x12; 32],
-                &[0x00],
-                vec![CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256],
-                vec![encoding::Extension::new_sig_algs()],
-            )))
+            .read_hs(
+                &mut SliceInput::new(&mut encoding::client_hello(
+                    ProtocolVersion::TLSv1_2,
+                    &[0x12; 32],
+                    &[0x00],
+                    vec![CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256],
+                    vec![encoding::Extension::new_sig_algs()],
+                )),
+                Space::Initial
+            )
             .err(),
         Some(PeerIncompatible::Tls13RequiredForQuic.into())
     );
@@ -920,19 +953,22 @@ fn test_quic_server_rejects_non_empty_session_id() {
     .unwrap();
     assert_eq!(
         server
-            .read_hs(&mut SliceInput::new(&mut encoding::client_hello(
-                ProtocolVersion::TLSv1_2,
-                &[0x12; 32],
-                &[0x01, 0xaa],
-                vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
-                vec![
-                    encoding::Extension::new_sig_algs(),
-                    encoding::Extension::new_versions(),
-                    encoding::Extension::new_dummy_key_share(),
-                    encoding::Extension::new_kx_groups(),
-                    encoding::Extension::new_quic_transport_params(b"blurgh"),
-                ],
-            )))
+            .read_hs(
+                &mut SliceInput::new(&mut encoding::client_hello(
+                    ProtocolVersion::TLSv1_2,
+                    &[0x12; 32],
+                    &[0x01, 0xaa],
+                    vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
+                    vec![
+                        encoding::Extension::new_sig_algs(),
+                        encoding::Extension::new_versions(),
+                        encoding::Extension::new_dummy_key_share(),
+                        encoding::Extension::new_kx_groups(),
+                        encoding::Extension::new_quic_transport_params(b"blurgh"),
+                    ],
+                )),
+                Space::Initial
+            )
             .err(),
         Some(PeerMisbehaved::NonEmptySessionIdInQuic.into())
     );
@@ -950,13 +986,16 @@ fn test_quic_client_rejects_tls12_server() {
     let _ = client.events();
     assert_eq!(
         client
-            .read_hs(&mut SliceInput::new(&mut encoding::server_hello(
-                ProtocolVersion::TLSv1_2,
-                &[0x12; 32],
-                &[0],
-                CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-                vec![]
-            )))
+            .read_hs(
+                &mut SliceInput::new(&mut encoding::server_hello(
+                    ProtocolVersion::TLSv1_2,
+                    &[0x12; 32],
+                    &[0],
+                    CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                    vec![]
+                )),
+                Space::Initial
+            )
             .err(),
         Some(PeerIncompatible::ServerTlsVersionIsDisabledByOurConfig.into()),
     );
@@ -989,7 +1028,10 @@ fn quic_insert(
 
     for e in events {
         match e {
-            QuicEvent::Message(mut m) => receiver.read_hs(&mut SliceInput::new(&mut m))?,
+            QuicEvent::Message(mut m) => {
+                let space = space(&m);
+                receiver.read_hs(&mut SliceInput::new(&mut m), space)?
+            }
 
             // In a real QUIC implementation, we would handle key changes here
             QuicEvent::KeyChange(kc @ quic::KeyChange::Handshake { .. }) => {
@@ -1003,6 +1045,15 @@ fn quic_insert(
     }
 
     Ok(changes)
+}
+
+/// The packet number space in which the handshake message(s) in `message` are sent
+fn space(message: &[u8]) -> Space {
+    match HandshakeType(message[0]) {
+        HandshakeType::ClientHello | HandshakeType::ServerHello => Space::Initial,
+        HandshakeType::NewSessionTicket => Space::ApplicationData,
+        _ => Space::Handshake,
+    }
 }
 
 #[derive(Default)]
@@ -1424,7 +1475,7 @@ fn test_fragmented_append() {
     // Read the message - this will put us into a joining handshake message state, buffering
     // 4096 bytes into the deframer buffer.
     client
-        .read_hs(&mut SliceInput::new(&mut out))
+        .read_hs(&mut SliceInput::new(&mut out), Space::Initial)
         .unwrap();
 
     // Read the message again - once more it isn't a complete message, so we'll try to
@@ -1434,7 +1485,7 @@ fn test_fragmented_append() {
     // an index out of range error:
     //   range end index 8192 out of range for slice of length 4096
     client
-        .read_hs(&mut SliceInput::new(&mut out))
+        .read_hs(&mut SliceInput::new(&mut out), Space::Initial)
         .unwrap();
 }
 
@@ -1459,10 +1510,72 @@ fn server_rejects_client_hello_with_trailing_fragment() {
 
     assert_eq!(
         server
-            .read_hs(&mut SliceInput::new(&mut hello))
+            .read_hs(&mut SliceInput::new(&mut hello), Space::Initial)
             .unwrap_err(),
         PeerMisbehaved::KeyEpochWithPendingFragment.into()
     );
+}
+
+#[test]
+fn server_rejects_client_hello_spanning_spaces() {
+    let mut server = Connection::new_quic(
+        Arc::new(make_server_config(
+            KeyType::default(),
+            &provider::DEFAULT_TLS13_PROVIDER,
+        )),
+        quic::Version::V2,
+        b"server params".to_vec(),
+    )
+    .unwrap();
+
+    let mut hello =
+        encoding::basic_client_hello(vec![encoding::Extension::new_quic_transport_params(
+            b"client params",
+        )]);
+    server
+        .read_hs(&mut SliceInput::new(&mut hello[..10]), Space::Initial)
+        .unwrap();
+
+    // the remainder of the ClientHello arrives in a different space
+    assert_eq!(
+        server
+            .read_hs(&mut SliceInput::new(&mut hello), Space::Handshake)
+            .unwrap_err(),
+        PeerMisbehaved::KeyEpochWithPendingFragment.into()
+    );
+}
+
+#[test]
+fn test_quic_acceptor_rejects_client_hello_spanning_spaces() {
+    let mut client = Arc::new(make_client_config(
+        KeyType::default(),
+        &provider::DEFAULT_TLS13_PROVIDER,
+    ))
+    .connect(server_name("localhost"))
+    .build_quic(quic::Version::V1, b"client params".into())
+    .unwrap();
+    let mut client_initial = flatten_events(&mut client);
+
+    let ServerHandshake::NeedsInput(needs_input) = ServerHandshake::start(quic::Version::V1)
+        .process(
+            &mut SliceInput::new(&mut client_initial[..8]),
+            &mut vec![],
+            Space::Initial,
+        )
+        .unwrap()
+    else {
+        panic!("unexpected state after partial hello");
+    };
+
+    // the remainder of the ClientHello arrives in a different space
+    let err = needs_input
+        .process(
+            &mut SliceInput::new(&mut client_initial),
+            &mut vec![],
+            Space::Handshake,
+        )
+        .unwrap_err();
+    assert_eq!(err, PeerMisbehaved::KeyEpochWithPendingFragment.into());
 }
 
 #[test]
@@ -1485,16 +1598,19 @@ fn client_rejects_server_choosing_non_quic_suite() {
     let _ = client.events();
     assert_eq!(
         client
-            .read_hs(&mut SliceInput::new(&mut encoding::server_hello(
-                ProtocolVersion::TLSv1_2,
-                &[0x12; 32],
-                &[0],
-                CipherSuite::TLS13_AES_128_GCM_SHA256,
-                vec![
-                    encoding::Extension::new_versions_server_tls13(),
-                    encoding::Extension::new_dummy_key_share_server()
-                ]
-            )))
+            .read_hs(
+                &mut SliceInput::new(&mut encoding::server_hello(
+                    ProtocolVersion::TLSv1_2,
+                    &[0x12; 32],
+                    &[0],
+                    CipherSuite::TLS13_AES_128_GCM_SHA256,
+                    vec![
+                        encoding::Extension::new_versions_server_tls13(),
+                        encoding::Extension::new_dummy_key_share_server()
+                    ]
+                )),
+                Space::Initial
+            )
             .err(),
         Some(PeerMisbehaved::SelectedUnofferedCipherSuite.into()),
     );
@@ -1518,19 +1634,22 @@ fn server_rejects_client_choosing_non_quic_suite() {
     .unwrap();
     assert_eq!(
         server
-            .read_hs(&mut SliceInput::new(&mut encoding::client_hello(
-                ProtocolVersion::TLSv1_2,
-                &[0x12; 32],
-                &[0x00],
-                vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
-                vec![
-                    encoding::Extension::new_sig_algs(),
-                    encoding::Extension::new_versions(),
-                    encoding::Extension::new_dummy_key_share(),
-                    encoding::Extension::new_kx_groups(),
-                    encoding::Extension::new_quic_transport_params(b"blurgh")
-                ],
-            )))
+            .read_hs(
+                &mut SliceInput::new(&mut encoding::client_hello(
+                    ProtocolVersion::TLSv1_2,
+                    &[0x12; 32],
+                    &[0x00],
+                    vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
+                    vec![
+                        encoding::Extension::new_sig_algs(),
+                        encoding::Extension::new_versions(),
+                        encoding::Extension::new_dummy_key_share(),
+                        encoding::Extension::new_kx_groups(),
+                        encoding::Extension::new_quic_transport_params(b"blurgh")
+                    ],
+                )),
+                Space::Initial
+            )
             .err(),
         Some(PeerIncompatible::NoCipherSuitesInCommon.into())
     );
@@ -1572,7 +1691,7 @@ fn quic_client_rejects_ticket_with_invalid_max_early_data_size() {
         let mut ticket = encoding::handshake_framing(HandshakeType::NewSessionTicket, body);
 
         assert_eq!(
-            client.read_hs(&mut SliceInput::new(&mut ticket)),
+            client.read_hs(&mut SliceInput::new(&mut ticket), Space::Initial),
             expected,
             "max_early_data_size {max_early_data_size:#x}"
         );
