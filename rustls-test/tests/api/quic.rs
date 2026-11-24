@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use rustls::client::Resumption;
 use rustls::crypto::{CipherSuite, CryptoProvider};
-use rustls::enums::ProtocolVersion;
+use rustls::enums::{HandshakeType, ProtocolVersion};
 use rustls::error::{
     AlertDescription, ApiMisuse, CertificateError, Error, InvalidMessage, PeerIncompatible,
     PeerMisbehaved,
@@ -709,7 +709,7 @@ fn test_quic_acceptor_read_error_is_terminal() {
     let err = needs_input
         .process(
             &mut SliceInput::new(&mut encoding::handshake_framing(
-                rustls::enums::HandshakeType::ClientHello,
+                HandshakeType::ClientHello,
                 vec![0x00; 32],
             )),
             &mut vec![],
@@ -817,7 +817,7 @@ fn test_quic_read_deframer_failure() {
 
     let err = server
         .read_hs(&mut SliceInput::new(&mut encoding::handshake_framing(
-            rustls::enums::HandshakeType::ClientHello,
+            HandshakeType::ClientHello,
             vec![0x00; 32],
         )))
         .err()
@@ -1534,6 +1534,49 @@ fn server_rejects_client_choosing_non_quic_suite() {
             .err(),
         Some(PeerIncompatible::NoCipherSuitesInCommon.into())
     );
+}
+
+#[test]
+fn quic_client_rejects_ticket_with_invalid_max_early_data_size() {
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let client_config = Arc::new(make_client_config(KeyType::default(), &provider));
+    let server_config = Arc::new(make_server_config(KeyType::default(), &provider));
+
+    for (max_early_data_size, expected) in [
+        (0xffff_ffff_u32, Ok(())),
+        (0, Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into())),
+        (16_384, Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into())),
+    ] {
+        let mut client = client_config
+            .connect(server_name("localhost"))
+            .build_quic(quic::Version::V1, b"client params".to_vec())
+            .unwrap();
+        let mut server = Connection::new_quic(
+            server_config.clone(),
+            quic::Version::V1,
+            b"server params".to_vec(),
+        )
+        .unwrap();
+        do_quic_handshake(&mut client, &mut server);
+
+        let mut body = vec![];
+        body.extend_from_slice(&3600u32.to_be_bytes()); // ticket_lifetime
+        body.extend_from_slice(&[0; 4]); // ticket_age_add
+        body.extend(encoding::len_u8(vec![0])); // ticket_nonce
+        body.extend(encoding::len_u16(vec![0x12; 32])); // ticket
+        let mut exts = vec![];
+        exts.extend_from_slice(&encoding::Extension::EARLY_DATA.to_be_bytes());
+        exts.extend_from_slice(&4u16.to_be_bytes());
+        exts.extend_from_slice(&max_early_data_size.to_be_bytes());
+        body.extend(encoding::len_u16(exts));
+        let mut ticket = encoding::handshake_framing(HandshakeType::NewSessionTicket, body);
+
+        assert_eq!(
+            client.read_hs(&mut SliceInput::new(&mut ticket)),
+            expected,
+            "max_early_data_size {max_early_data_size:#x}"
+        );
+    }
 }
 
 // A session stored from a TCP connection may name a cipher suite that cannot be

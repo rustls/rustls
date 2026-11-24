@@ -2471,6 +2471,7 @@ pub mod encoding {
 
         pub const ELLIPTIC_CURVES: u16 = 0x000a;
         pub const SIGNATURE_ALGORITHMS: u16 = 0x000d;
+        pub const EARLY_DATA: u16 = 0x002a;
         pub const SUPPORTED_VERSIONS: u16 = 0x002b;
         pub const KEY_SHARE: u16 = 0x0033;
         pub const TRANSPORT_PARAMETERS: u16 = 0x0039;
