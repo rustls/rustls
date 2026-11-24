@@ -1535,8 +1535,9 @@ impl ExpectTraffic {
         );
 
         if cx.is_quic() {
+            // RFC 9001 section 4.6.1: the only valid `max_early_data_size` is 0xffffffff.
             if let Some(sz) = nst.extensions.max_early_data_size {
-                if sz != 0 && sz != 0xffff_ffff {
+                if sz != 0xffff_ffff {
                     return Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into());
                 }
             }
