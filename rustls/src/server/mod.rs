@@ -3,8 +3,8 @@ use core::time::Duration;
 
 use pki_types::{DnsName, UnixTime};
 
+use crate::crypto::CipherSuite;
 use crate::crypto::cipher::Payload;
-use crate::crypto::{CipherSuite, Identity};
 use crate::enums::{ApplicationProtocol, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::{Codec, MaybeEmpty, Reader, SessionId, SizedPayload};
@@ -165,7 +165,7 @@ impl Codec<'_> for CommonServerSessionValue<'_> {
         self.cipher_suite.encode(bytes);
         if let Some(identity) = &self.peer_identity {
             1u8.encode(bytes);
-            identity.identity().encode(bytes);
+            identity.encode(bytes);
         } else {
             0u8.encode(bytes);
         }
@@ -200,7 +200,7 @@ impl Codec<'_> for CommonServerSessionValue<'_> {
             sni,
             cipher_suite: CipherSuite::read(r)?,
             peer_identity: match u8::read(r)? {
-                1 => Some(VerifiedIdentity::assertion(Identity::read(r)?.into_owned())),
+                1 => Some(VerifiedIdentity::read(r)?.into_owned()),
                 _ => None,
             },
             alpn: match u8::read(r)? {
