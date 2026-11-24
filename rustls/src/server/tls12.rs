@@ -27,8 +27,8 @@ use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbe
 use crate::hash_hs::HandshakeHash;
 use crate::msgs::{
     CertificateChain, ChangeCipherSpecPayload, ClientKeyExchangeParams, Codec,
-    HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload, Message, MessagePayload,
-    NewSessionTicketPayload, NewSessionTicketPayloadTls13, Reader, SessionId,
+    HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload, MAX_TICKET_LIFETIME, Message,
+    MessagePayload, NewSessionTicketPayload, NewSessionTicketPayloadTls13, Reader, SessionId,
 };
 use crate::server::ServerSide;
 use crate::suites::PartiallyExtractedSecrets;
@@ -268,13 +268,7 @@ mod client_hello {
             return (ticket, None);
         }
 
-        // Tickets are bounded by the ticketer's key rotation; sessions from
-        // `session_storage` by the lifetime we advertise for them.
-        if !ticket
-            && session
-                .common
-                .has_expired(now, STATEFUL_SESSION_LIFETIME)
-        {
+        if session.common.has_expired(now) {
             debug!("stored session has expired");
             return (ticket, None);
         }
@@ -902,6 +896,7 @@ fn emit_ticket(
             alpn_protocol.map(|p| p.to_owned()),
             resumption_data,
             now,
+            MAX_TICKET_LIFETIME,
         ),
         secrets.master_secret(),
         using_ems,
@@ -1006,6 +1001,7 @@ impl State<ServerSide> for ExpectFinished {
                     self.hs.alpn_protocol.clone(),
                     self.hs.resumption_data.to_vec(),
                     self.hs.config.current_time()?,
+                    STATEFUL_SESSION_LIFETIME,
                 ),
                 self.secrets.master_secret(),
                 self.hs.using_ems,

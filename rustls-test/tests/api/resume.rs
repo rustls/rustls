@@ -1528,6 +1528,62 @@ fn client_sessions_do_not_outlive_server_certificate() {
     }
 }
 
+#[test]
+fn server_rejects_ticket_older_than_max_lifetime() {
+    for provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
+        let client_config = Arc::new(make_client_config(KeyType::default(), &provider));
+
+        let clock = Arc::new(AdjustableClock::new());
+        let mut server_config = make_server_config(KeyType::default(), &provider);
+        server_config.ticketer = Some(Arc::new(LongLifetimeTicketer(
+            provider
+                .ticketer_factory
+                .ticketer()
+                .unwrap(),
+        )));
+        server_config.time_provider = clock.clone();
+        let server_config = Arc::new(server_config);
+
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+
+        clock.advance(Duration::from_secs(6 * 24 * 60 * 60));
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
+
+        clock.advance(Duration::from_secs(8 * 24 * 60 * 60));
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+    }
+}
+
+/// Issues tickets with a `ticket_lifetime` of 30 days.
+#[derive(Debug)]
+struct LongLifetimeTicketer(Arc<dyn TicketProducer>);
+
+impl TicketProducer for LongLifetimeTicketer {
+    fn encrypt(&self, plain: &[u8]) -> Option<Vec<u8>> {
+        self.0.encrypt(plain)
+    }
+
+    fn decrypt(&self, cipher: &[u8]) -> Option<Vec<u8>> {
+        self.0.decrypt(cipher)
+    }
+
+    fn lifetime(&self) -> Duration {
+        Duration::from_secs(30 * 24 * 60 * 60)
+    }
+}
+
 /// A `TimeProvider` that starts at the current time and only moves when told to.
 #[derive(Debug)]
 struct AdjustableClock(AtomicU64);
