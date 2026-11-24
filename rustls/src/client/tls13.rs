@@ -1607,15 +1607,16 @@ pub(super) struct ExpectTraffic {
 
 impl ExpectTraffic {
     fn handle_new_ticket_impl(&self, nst: &NewSessionTicketPayloadTls13) -> Result<(), Error> {
+        // RFC 9001 section 4.6.1: the only valid `max_early_data_size` is 0xffffffff.
         if self.key_schedule_recv.is_quic() {
             if let Some(sz) = nst.extensions.max_early_data_size {
-                if sz != 0 && sz != 0xffff_ffff {
+                if sz != 0xffff_ffff {
                     return Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into());
                 }
             }
         }
 
-        // RFC 9846 section 4.6.1: a zero `ticket_lifetime` means the ticket
+        // RFC 9846 section 4.7.1: a zero `ticket_lifetime` means the ticket
         // should be discarded immediately.
         if nst.lifetime.is_zero() {
             return Ok(());
