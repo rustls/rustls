@@ -87,6 +87,7 @@ fn tls12_client_session_value_roundtrip() {
     assert_eq!(decoded.extended_ms, session.extended_ms);
     assert_eq!(decoded.common.ticket(), session.common.ticket());
     assert_eq!(decoded.common.epoch, session.common.epoch);
+    assert_eq!(decoded.common.lifetime, Duration::from_secs(2110));
     assert_eq!(*decoded.common.peer_identity(), peer_identity);
 }
 

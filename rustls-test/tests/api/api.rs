@@ -477,7 +477,7 @@ fn server_identity_expiry_is_chain_not_after() {
 }
 
 /// 4096-01-01T00:00:00Z, the `notAfter` of every certificate in `test-ca`.
-const TEST_CERTS_NOT_AFTER: u64 = 67_090_118_400;
+pub(super) const TEST_CERTS_NOT_AFTER: u64 = 67_090_118_400;
 
 #[test]
 fn client_can_get_server_cert_after_resumption() {

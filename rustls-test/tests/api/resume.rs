@@ -14,7 +14,7 @@ use rustls::client::{
 use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{CertificateIdentity, Identity, SelectedCredential, TicketProducer};
 use rustls::enums::{CertificateType, ProtocolVersion};
-use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
+use rustls::error::{ApiMisuse, CertificateError, Error, PeerMisbehaved};
 use rustls::pki_types::UnixTime;
 use rustls::server::{ServerSessionKey, Tls13Tickets};
 use rustls::time_provider::TimeProvider;
@@ -29,6 +29,7 @@ use rustls_test::{
 };
 
 use super::provider;
+use super::tests::TEST_CERTS_NOT_AFTER;
 
 #[test]
 fn client_only_attempts_resumption_with_compatible_security() {
@@ -1483,13 +1484,61 @@ fn tls12_client_resumption_does_not_extend_session_lifetime() {
     assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
 }
 
+#[test]
+fn client_sessions_do_not_outlive_server_certificate() {
+    for provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
+        let clock = Arc::new(AdjustableClock::at(TEST_CERTS_NOT_AFTER - 60 * 60));
+        let client_config = Arc::new(
+            ClientConfig::builder_with_details(provider.clone().into(), clock.clone())
+                .finish(KeyType::default()),
+        );
+        let server_config = Arc::new(make_server_config(KeyType::default(), &provider));
+
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+
+        clock.advance(Duration::from_secs(30 * 60));
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+
+        clock.advance(Duration::from_secs(60 * 60));
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        assert_eq!(
+            buf.handshake_until_error(&mut client, &mut server),
+            Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                CertificateError::ExpiredContext {
+                    time: UnixTime::since_unix_epoch(Duration::from_secs(
+                        TEST_CERTS_NOT_AFTER + 30 * 60
+                    )),
+                    not_after: UnixTime::since_unix_epoch(Duration::from_secs(
+                        TEST_CERTS_NOT_AFTER
+                    )),
+                }
+            ))),
+        );
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+    }
+}
+
 /// A `TimeProvider` that starts at the current time and only moves when told to.
 #[derive(Debug)]
 struct AdjustableClock(AtomicU64);
 
 impl AdjustableClock {
     fn new() -> Self {
-        Self(AtomicU64::new(UnixTime::now().as_secs()))
+        Self::at(UnixTime::now().as_secs())
+    }
+
+    fn at(secs: u64) -> Self {
+        Self(AtomicU64::new(secs))
     }
 
     fn advance(&self, by: Duration) {

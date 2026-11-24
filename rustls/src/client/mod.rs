@@ -372,14 +372,25 @@ impl ClientSessionCommon {
     ) -> Self {
         // A TLS 1.2 session id, or a ticket with no lifetime hint, has no
         // lifetime of its own: bound it like a ticket, see RFC 5246 appendix F.1.4.
-        let lifetime = match lifetime.is_zero() {
+        let epoch = time_now.as_secs();
+        let mut lifetime = match lifetime.is_zero() {
             true => MAX_TICKET_LIFETIME,
             false => Ord::min(lifetime, MAX_TICKET_LIFETIME),
+        };
+        if let Some(identity_expiry) = peer_identity.expiry() {
+            lifetime = Ord::min(
+                lifetime,
+                Duration::from_secs(
+                    identity_expiry
+                        .as_secs()
+                        .saturating_sub(epoch),
+                ),
+            );
         };
 
         Self {
             ticket,
-            epoch: time_now.as_secs(),
+            epoch,
             lifetime,
             peer_identity: Arc::new(peer_identity),
         }
