@@ -6068,6 +6068,66 @@ mod test_quic {
     }
 
     #[test]
+    fn test_quic_client_rejects_ticket_with_invalid_max_early_data_size() {
+        let provider = provider::default_provider();
+        let client_config = Arc::new(make_client_config_with_versions(
+            KeyType::Ed25519,
+            &[&rustls::version::TLS13],
+            &provider,
+        ));
+        let server_config = Arc::new(make_server_config_with_versions(
+            KeyType::Ed25519,
+            &[&rustls::version::TLS13],
+            &provider,
+        ));
+
+        for (max_early_data_size, expected) in [
+            (0xffff_ffff_u32, Ok(())),
+            (0, Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into())),
+            (16_384, Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into())),
+        ] {
+            let mut client = quic::ClientConnection::new(
+                client_config.clone(),
+                quic::Version::V1,
+                server_name("localhost"),
+                b"client params".to_vec(),
+            )
+            .unwrap();
+            let mut server = quic::ServerConnection::new(
+                server_config.clone(),
+                quic::Version::V1,
+                b"server params".to_vec(),
+            )
+            .unwrap();
+            step(&mut client, &mut server).unwrap();
+            step(&mut server, &mut client).unwrap();
+            step(&mut client, &mut server).unwrap();
+            step(&mut server, &mut client).unwrap();
+            step(&mut client, &mut server).unwrap();
+            assert!(!client.is_handshaking());
+            assert!(!server.is_handshaking());
+
+            let mut body = vec![];
+            body.extend_from_slice(&3600u32.to_be_bytes()); // ticket_lifetime
+            body.extend_from_slice(&[0; 4]); // ticket_age_add
+            body.extend(encoding::len_u8(vec![0])); // ticket_nonce
+            body.extend(encoding::len_u16(vec![0x12; 32])); // ticket
+            let mut exts = vec![];
+            exts.extend_from_slice(&ExtensionType::EarlyData.to_array());
+            exts.extend_from_slice(&4u16.to_be_bytes());
+            exts.extend_from_slice(&max_early_data_size.to_be_bytes());
+            body.extend(encoding::len_u16(exts));
+            let ticket = encoding::handshake_framing(HandshakeType::NewSessionTicket, body);
+
+            assert_eq!(
+                client.read_hs(&ticket),
+                expected,
+                "max_early_data_size {max_early_data_size:#x}"
+            );
+        }
+    }
+
+    #[test]
     fn test_quic_server_rejects_tls12_hello() {
         let mut server = quic::ServerConnection::new(
             Arc::new(make_server_config(
