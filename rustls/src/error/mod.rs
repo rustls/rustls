@@ -1645,6 +1645,9 @@ pub enum ApiMisuse {
     /// QUIC attempted with a configuration that does not support a ciphersuite that supports QUIC.
     NoQuicCompatibleCipherSuites,
 
+    /// QUIC attempted without a QUIC-compatible `TLS13_AES_128_GCM_SHA256` for initial packets.
+    NoQuicInitialCipherSuite,
+
     /// An empty certificate chain was provided.
     EmptyCertificateChain,
 
