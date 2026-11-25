@@ -12,7 +12,9 @@ use rustls::client::{
     ClientCredentialResolver, CredentialRequest, Resumption, TicketRequest, Tls12Resumption,
 };
 use rustls::crypto::kx::NamedGroup;
-use rustls::crypto::{CertificateIdentity, Identity, SelectedCredential, TicketProducer};
+use rustls::crypto::{
+    CertificateIdentity, CryptoProvider, Identity, SelectedCredential, TicketProducer,
+};
 use rustls::enums::{CertificateType, ProtocolVersion};
 use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
 use rustls::pki_types::UnixTime;
@@ -1099,6 +1101,7 @@ struct ServerStorage {
     put_count: AtomicUsize,
     get_count: AtomicUsize,
     take_count: AtomicUsize,
+    lifetime: Option<Duration>,
 }
 
 impl ServerStorage {
@@ -1108,6 +1111,14 @@ impl ServerStorage {
             put_count: AtomicUsize::new(0),
             get_count: AtomicUsize::new(0),
             take_count: AtomicUsize::new(0),
+            lifetime: None,
+        }
+    }
+
+    fn with_lifetime(lifetime: Duration) -> Self {
+        Self {
+            lifetime: Some(lifetime),
+            ..Self::new()
         }
     }
 
@@ -1153,6 +1164,11 @@ impl rustls::server::StoresServerSessions for ServerStorage {
 
     fn can_cache(&self) -> bool {
         true
+    }
+
+    fn lifetime(&self) -> Duration {
+        self.lifetime
+            .unwrap_or_else(|| self.storage.lifetime())
     }
 }
 
@@ -1481,6 +1497,108 @@ fn tls12_client_resumption_does_not_extend_session_lifetime() {
         make_pair_for_arc_configs(&client_config, &server_config);
     buf.handshake(&mut client, &mut server);
     assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+}
+
+/// Client and server on one clock, the server storing sessions in `storage`.
+fn configs_sharing_a_clock(
+    provider: &CryptoProvider,
+    storage: &Arc<ServerStorage>,
+) -> (Arc<ClientConfig>, Arc<ServerConfig>, Arc<AdjustableClock>) {
+    let clock = Arc::new(AdjustableClock::new());
+    let client_config = Arc::new(
+        ClientConfig::builder_with_details(provider.clone().into(), clock.clone())
+            .finish(KeyType::default()),
+    );
+    let mut server_config = make_server_config(KeyType::default(), provider);
+    server_config.session_storage = storage.clone();
+    server_config.time_provider = clock.clone();
+    (client_config, Arc::new(server_config), clock)
+}
+
+fn handshake_kind_after(
+    client_config: &Arc<ClientConfig>,
+    server_config: &Arc<ServerConfig>,
+) -> Option<HandshakeKind> {
+    let (mut client, mut server, mut buf) = make_pair_for_arc_configs(client_config, server_config);
+    buf.handshake(&mut client, &mut server);
+    server.handshake_kind()
+}
+
+#[test]
+fn tls13_stateful_session_lives_as_long_as_its_store_says() {
+    let storage = Arc::new(ServerStorage::with_lifetime(Duration::from_secs(
+        3 * 24 * 60 * 60,
+    )));
+    let (client_config, server_config, clock) =
+        configs_sharing_a_clock(&provider::DEFAULT_TLS13_PROVIDER, &storage);
+    assert_eq!(
+        handshake_kind_after(&client_config, &server_config),
+        Some(HandshakeKind::Full)
+    );
+
+    // past the default 24 hours: the client still holds the ticket, since the
+    // server advertised three days, and the server resumes it
+    clock.advance(Duration::from_secs(25 * 60 * 60));
+    assert_eq!(
+        handshake_kind_after(&client_config, &server_config),
+        Some(HandshakeKind::Resumed)
+    );
+
+    // past three days, counted from the session the last handshake stored
+    clock.advance(Duration::from_secs(73 * 60 * 60));
+    assert_eq!(
+        handshake_kind_after(&client_config, &server_config),
+        Some(HandshakeKind::Full)
+    );
+}
+
+#[test]
+fn tls13_stored_session_is_never_resumed_after_seven_days() {
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let client_config = Arc::new(make_client_config(KeyType::default(), &provider));
+
+    let clock = Arc::new(AdjustableClock::new());
+    let storage = Arc::new(ServerStorage::with_lifetime(Duration::from_secs(
+        30 * 24 * 60 * 60,
+    )));
+    let mut server_config = make_server_config(KeyType::default(), &provider);
+    server_config.session_storage = storage.clone();
+    server_config.time_provider = clock.clone();
+    let server_config = Arc::new(server_config);
+    assert_eq!(
+        handshake_kind_after(&client_config, &server_config),
+        Some(HandshakeKind::Full)
+    );
+    let takes = storage.takes();
+
+    // 8 days later by the server's clock only: the client still offers the
+    // ticket, and the server, though its store says 30 days, refuses it
+    clock.advance(Duration::from_secs(8 * 24 * 60 * 60));
+    assert_eq!(
+        handshake_kind_after(&client_config, &server_config),
+        Some(HandshakeKind::Full)
+    );
+    assert_eq!(storage.takes(), takes + 1);
+}
+
+#[test]
+fn tls12_stored_session_keeps_24_hours_whatever_the_store_says() {
+    let storage = Arc::new(ServerStorage::with_lifetime(Duration::from_secs(
+        3 * 24 * 60 * 60,
+    )));
+    let (client_config, server_config, clock) =
+        configs_sharing_a_clock(&provider::DEFAULT_TLS12_PROVIDER, &storage);
+    assert_eq!(
+        handshake_kind_after(&client_config, &server_config),
+        Some(HandshakeKind::Full)
+    );
+
+    clock.advance(Duration::from_secs(25 * 60 * 60));
+    assert_eq!(
+        handshake_kind_after(&client_config, &server_config),
+        Some(HandshakeKind::Full)
+    );
+    assert_eq!(storage.gets(), 1);
 }
 
 /// A `TimeProvider` that starts at the current time and only moves when told to.

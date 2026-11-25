@@ -230,8 +230,9 @@ impl AsRef<[u8]> for ServerSessionKey<'_> {
     }
 }
 
-/// How long a session in [`ServerConfig::session_storage`] stays resumable.
+/// How long a TLS 1.2 session in [`ServerConfig::session_storage`] stays
+/// resumable, and the default for [`StoresServerSessions::lifetime()`].
 ///
-/// Advertised as `ticket_lifetime` for stateful TLS 1.3 tickets.  Tickets from
-/// [`ServerConfig::ticketer`] are bounded by its key rotation instead.
+/// 24 hours is the upper limit RFC 5246 appendix F.1.4 suggests for session
+/// IDs.
 pub(crate) const STATEFUL_SESSION_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);

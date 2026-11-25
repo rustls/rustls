@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::time::Duration;
 
 pub(crate) use client_hello::TLS13_HANDLER;
 use pki_types::{DnsName, UnixTime};
@@ -9,9 +10,7 @@ use zeroize::Zeroizing;
 
 use super::config::ServerConfig;
 use super::hs::ServerState;
-use super::{
-    CommonServerSessionValue, STATEFUL_SESSION_LIFETIME, ServerSessionKey, ServerSessionValue,
-};
+use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{Event, HandshakeFlightTls13, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
@@ -28,8 +27,9 @@ use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbe
 use crate::hash_hs::HandshakeHash;
 use crate::msgs::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, Codec, HandshakeMessagePayload,
-    HandshakePayload, KeyUpdateRequest, Message, MessagePayload, NewSessionTicketPayloadTls13,
-    PresharedKeyIdentity, Reader, ServerTicketRequestHint, SizedPayload,
+    HandshakePayload, KeyUpdateRequest, MAX_TICKET_LIFETIME, Message, MessagePayload,
+    NewSessionTicketPayloadTls13, PresharedKeyIdentity, Reader, ServerTicketRequestHint,
+    SizedPayload,
 };
 use crate::server::ServerSide;
 use crate::suites::PartiallyExtractedSecrets;
@@ -1437,7 +1437,7 @@ impl<'a> Tls13ServerSessionValue<'a> {
         if config.ticketer.is_none()
             && tls13
                 .common
-                .has_expired(now, STATEFUL_SESSION_LIFETIME)
+                .has_expired(now, stateful_session_lifetime(config))
         {
             debug!("stored session has expired");
             return None;
@@ -1590,7 +1590,7 @@ impl ExpectFinished {
                 trace!("resumption not available; not issuing ticket");
                 return Ok(());
             }
-            (id.to_vec(), STATEFUL_SESSION_LIFETIME)
+            (id.to_vec(), stateful_session_lifetime(config))
         };
 
         let mut payload = NewSessionTicketPayloadTls13::new(lifetime, age_add, nonce, ticket);
@@ -1867,3 +1867,13 @@ impl From<Box<ExpectQuicTraffic>> for ServerState {
 /// times in case packet loss occurs when the client sends the ClientHello
 /// or receives the NewSessionTicket, _and_ actual clock skew over this period.
 static MAX_FRESHNESS_SKEW_MS: u32 = 60 * 1000;
+
+/// How long a TLS 1.3 session in `session_storage` stays resumable: what the
+/// store says, but never more than the seven days RFC 8446 section 4.6.1
+/// allows a ticket.
+fn stateful_session_lifetime(config: &ServerConfig) -> Duration {
+    config
+        .session_storage
+        .lifetime()
+        .min(MAX_TICKET_LIFETIME)
+}
