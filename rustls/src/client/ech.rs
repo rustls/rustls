@@ -169,6 +169,11 @@ impl EchConfig {
                 continue; // Unsupported, or malformed extensions.
             }
 
+            let Some(public_name) = contents.public_name() else {
+                warn!("ECH config has invalid public_name: {contents:?}");
+                continue;
+            };
+
             let key_config = &contents.key_config;
             for cipher_suite in &key_config.symmetric_cipher_suites {
                 if cipher_suite.aead_id.tag_len().is_none() {
@@ -185,7 +190,7 @@ impl EchConfig {
                 {
                     debug!(
                         "selected ECH config ID {:?} suite {:?} public_name {:?}",
-                        key_config.config_id, suite, contents.public_name
+                        key_config.config_id, suite, public_name
                     );
                     return Ok(Self {
                         config: config.clone(),
@@ -243,17 +248,16 @@ impl EchGreaseConfig {
         // this is for GREASE.
         let mut grease_state = EchState::new(
             &EchConfig {
-                config: EchConfigPayload::V18(EchConfigContents {
-                    key_config: HpkeKeyConfig {
+                config: EchConfigPayload::V18(EchConfigContents::new(
+                    HpkeKeyConfig {
                         config_id: config_id[0],
                         kem_id: HpkeKem::DHKEM_P256_HKDF_SHA256,
                         public_key: SizedPayload::from(self.placeholder_key.0.clone()),
                         symmetric_cipher_suites: vec![suite.sym],
                     },
-                    maximum_name_length: 0,
-                    public_name: DnsName::try_from("filler").unwrap(),
-                    extensions: Vec::default(),
-                }),
+                    0,
+                    &DnsName::try_from("filler").unwrap(),
+                )),
                 suite: self.suite,
             },
             inner_name,
@@ -360,6 +364,11 @@ impl EchState {
             // configurations.
             unreachable!("ECH config version mismatch");
         };
+        let Some(outer_name) = config_contents.public_name() else {
+            // ...and that its public_name is valid.
+            unreachable!("ECH config public_name invalid");
+        };
+        let outer_name = outer_name.to_owned();
         let key_config = &config_contents.key_config;
 
         // Encapsulate a secret for the server's public key, and set up a sender context
@@ -376,7 +385,7 @@ impl EchState {
         }
 
         Ok(Self {
-            outer_name: config_contents.public_name.clone(),
+            outer_name,
             early_data_key_schedule: None,
             inner_hello_random: Random::new(secure_random)?,
             inner_hello_transcript,
@@ -1234,17 +1243,16 @@ mod tests {
 
         let config = ClientConfig::builder(Arc::new(provider))
             .with_ech(EchMode::Enable(EchConfig {
-                config: EchConfigPayload::V18(EchConfigContents {
-                    key_config: HpkeKeyConfig {
+                config: EchConfigPayload::V18(EchConfigContents::new(
+                    HpkeKeyConfig {
                         config_id: 0,
                         kem_id: MockHpke::SUITE.kem,
                         public_key: vec![0; 32].into(),
                         symmetric_cipher_suites: vec![MockHpke::SUITE.sym],
                     },
-                    maximum_name_length: 255,
-                    public_name: DnsName::try_from("public.example.com").unwrap(),
-                    extensions: vec![],
-                }),
+                    255,
+                    &DnsName::try_from("public.example.com").unwrap(),
+                )),
                 suite: &MockHpke,
             }))
             .with_root_certificates(roots)
@@ -1326,17 +1334,16 @@ mod tests {
 
     fn ech_state() -> EchState {
         let config = EchConfig {
-            config: EchConfigPayload::V18(EchConfigContents {
-                key_config: HpkeKeyConfig {
+            config: EchConfigPayload::V18(EchConfigContents::new(
+                HpkeKeyConfig {
                     config_id: 0,
                     kem_id: MockHpke::SUITE.kem,
                     public_key: vec![0; 32].into(),
                     symmetric_cipher_suites: vec![MockHpke::SUITE.sym],
                 },
-                maximum_name_length: 255,
-                public_name: public_name(),
-                extensions: vec![],
-            }),
+                255,
+                &public_name(),
+            )),
             suite: &MockHpke,
         };
 
@@ -1476,17 +1483,16 @@ mod tests {
         enable_sni: bool,
     ) -> Result<Vec<u8>, Error> {
         let config = EchConfig {
-            config: EchConfigPayload::V18(EchConfigContents {
-                key_config: HpkeKeyConfig {
+            config: EchConfigPayload::V18(EchConfigContents::new(
+                HpkeKeyConfig {
                     config_id: 0,
                     kem_id: MockHpke::SUITE.kem,
                     public_key: vec![0; 32].into(),
                     symmetric_cipher_suites: vec![],
                 },
-                maximum_name_length: 255,
-                public_name: DnsName::try_from("public").unwrap(),
-                extensions: vec![],
-            }),
+                255,
+                &DnsName::try_from("public").unwrap(),
+            )),
             suite: &MockHpke,
         };
 
