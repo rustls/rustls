@@ -2,12 +2,13 @@ use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::marker::PhantomData;
+use core::time::Duration;
 
 #[cfg(feature = "webpki")]
 use pki_types::PrivateKeyDer;
 use pki_types::{DnsName, FipsStatus, UnixTime};
 
-use super::{ServerSessionKey, handy};
+use super::{STATEFUL_SESSION_LIFETIME, ServerSessionKey, handy};
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::common_state::Protocol;
 #[cfg(doc)]
@@ -390,6 +391,24 @@ pub trait StoresServerSessions: Debug + Send + Sync {
     /// whether their session can be resumed; the implementation is not required to remember
     /// a session even if it returns `true` here.
     fn can_cache(&self) -> bool;
+
+    /// How long a TLS 1.3 session in this store stays resumable.
+    ///
+    /// It is advertised as `ticket_lifetime` on stateful TLS 1.3 tickets,
+    /// and a stored session older than it is not resumed.  It should match
+    /// how long the store actually keeps a session.  Values above seven
+    /// days are clamped to seven days, the most RFC 8446 section 4.6.1
+    /// allows a ticket to live.
+    ///
+    /// TLS 1.2 sessions are not affected: they stay resumable for 24
+    /// hours, the upper limit RFC 5246 appendix F.1.4 suggests for session
+    /// IDs.  Tickets from [`ServerConfig::ticketer`] are bounded by its key
+    /// rotation instead.
+    ///
+    /// The default is 24 hours.
+    fn lifetime(&self) -> Duration {
+        STATEFUL_SESSION_LIFETIME
+    }
 }
 
 /// How to choose a certificate chain and signing key for use
