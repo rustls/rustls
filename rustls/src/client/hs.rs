@@ -22,7 +22,7 @@ use crate::crypto::{CipherSuite, CryptoProvider, rand};
 use crate::enums::{
     ApplicationProtocol, CertificateType, ContentType, HandshakeType, ProtocolVersion,
 };
-use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
+use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::kernel::KernelState;
 use crate::msgs::{
@@ -881,6 +881,14 @@ fn emit_client_hello_for_retry(
             }
         }
         _ => {}
+    }
+
+    if retryreq
+        .and_then(|hrr| hrr.cookie.as_ref())
+        .is_some()
+        && chp_payload.extensions.encoded_len() > u16::MAX as usize
+    {
+        return Err(InvalidMessage::MessageTooLarge.into());
     }
 
     // Note what extensions we sent.

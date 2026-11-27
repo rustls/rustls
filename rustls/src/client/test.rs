@@ -24,15 +24,15 @@ use crate::crypto::{
     SingleCredential, TEST_PROVIDER, TLS13_TEST_SUITE, tls12_only, tls13_only, tls13_suite,
 };
 use crate::enums::{ApplicationProtocol, CertificateType, HandshakeType, ProtocolVersion};
-use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
+use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::{
     CertificateChain, ChangeCipherSpecPayload, ClientHelloPayload, Codec, Compression, ECCurveType,
-    EcParameters, EncryptedExtensions, ExtensionType, HandshakeMessagePayload, HandshakePayload,
-    HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, LengthPrefixedBuffer,
-    ListLength, MaybeEmpty, Message, MessagePayload, NewSessionTicketExtensions,
-    NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams, ServerExtensions,
-    ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
-    SessionId, SingleProtocolName, SizedPayload,
+    EcParameters, EncryptedExtensions, ExtensionType, Fragmenter, HandshakeMessagePayload,
+    HandshakePayload, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry,
+    LengthPrefixedBuffer, ListLength, MaybeEmpty, Message, MessagePayload,
+    NewSessionTicketExtensions, NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams,
+    ServerExtensions, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams,
+    ServerKeyExchangePayload, SessionId, SingleProtocolName, SizedPayload,
 };
 use crate::pki_types::PrivateKeyDer;
 use crate::pki_types::pem::PemObject;
@@ -46,8 +46,8 @@ use crate::verify::{
     VerifiedIdentity,
 };
 use crate::{
-    ClientSide, Connection, DigitallySignedStruct, DistinguishedName, KeyLog, RootCertStore, Tcp,
-    VecInput,
+    ClientSide, Connection, DigitallySignedStruct, DistinguishedName, KeyLog, RootCertStore,
+    SliceInput, Tcp, VecInput,
 };
 
 #[test]
@@ -302,6 +302,51 @@ fn test_client_rejects_hrr_with_cookie_and_offered_group() {
     assert_eq!(
         process(&mut input, &mut conn).unwrap_err(),
         PeerMisbehaved::IllegalHelloRetryRequestWithOfferedGroup.into()
+    );
+}
+
+#[test]
+fn test_client_rejects_hrr_cookie_that_overflows_client_hello_extensions() {
+    let mut config = ClientConfig::builder(Arc::new(TEST_PROVIDER.clone()))
+        .with_root_certificates(roots())
+        .with_no_client_auth()
+        .unwrap();
+    config.alpn_protocols = vec![ApplicationProtocol::from(vec![0; 255])];
+    let mut tls = Vec::new();
+    let mut conn = Arc::new(config)
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build(&mut tls)
+        .unwrap();
+    let hrr = Message {
+        version: EncodableVersion::Legacy(ProtocolVersion::TLSv1_3),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(
+            HandshakePayload::HelloRetryRequest(HelloRetryRequest {
+                cipher_suite: TLS13_TEST_SUITE.suite(),
+                legacy_version: ProtocolVersion::TLSv1_2,
+                session_id: client_hello_in(&tls).session_id,
+                extensions: HelloRetryRequestExtensions {
+                    cookie: Some(SizedPayload::from(vec![0; 65_451])),
+                    supported_versions: Some(ProtocolVersion::TLSv1_3),
+                    ..HelloRetryRequestExtensions::default()
+                },
+            }),
+        )),
+    };
+
+    let record = Record::<Payload<'_>>::from(hrr);
+    let record = record.borrow_outbound();
+    let fragments = Fragmenter::default().fragment(record.typ, record.version, record.payload, 0);
+    let mut bytes = Vec::new();
+    for fragment in fragments {
+        bytes.extend(fragment.to_unencrypted_bytes());
+    }
+    let mut input = SliceInput::new(&mut bytes);
+    let mut output = Vec::new();
+    assert_eq!(
+        conn.read_tls(&mut input, &mut output)
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        InvalidMessage::MessageTooLarge.into()
     );
 }
 

@@ -330,6 +330,14 @@ impl ClientExtensions<'_> {
         exts
     }
 
+    pub(crate) fn encoded_len(&self) -> usize {
+        let mut bytes = Vec::new();
+        for item in self.used_extensions_in_encoding_order() {
+            self.encode_one(item, &mut bytes);
+        }
+        bytes.len()
+    }
+
     /// Returns extensions which don't need a specific order, in randomized order.
     ///
     /// Extensions are encoded in three portions:
