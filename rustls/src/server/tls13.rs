@@ -28,8 +28,9 @@ use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbe
 use crate::hash_hs::HandshakeHash;
 use crate::msgs::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, Codec, HandshakeMessagePayload,
-    HandshakePayload, KeyUpdateRequest, Message, MessagePayload, NewSessionTicketPayloadTls13,
-    PresharedKeyIdentity, Reader, ServerTicketRequestHint, SizedPayload,
+    HandshakePayload, KeyUpdateRequest, MAX_TICKET_LIFETIME, Message, MessagePayload,
+    NewSessionTicketPayloadTls13, PresharedKeyIdentity, Reader, ServerTicketRequestHint,
+    SizedPayload,
 };
 use crate::server::ServerSide;
 use crate::suites::PartiallyExtractedSecrets;
@@ -1434,11 +1435,7 @@ impl<'a> Tls13ServerSessionValue<'a> {
             return None;
         };
 
-        if config.ticketer.is_none()
-            && tls13
-                .common
-                .has_expired(now, STATEFUL_SESSION_LIFETIME)
-        {
+        if tls13.common.has_expired(now) {
             debug!("stored session has expired");
             return None;
         }
@@ -1560,6 +1557,11 @@ impl ExpectFinished {
         let age_add = rand::random_u32(secure_random)?;
 
         let now = config.current_time()?;
+        let ticketer = config.ticketer.as_deref();
+        let session_lifetime = match ticketer {
+            Some(_) => MAX_TICKET_LIFETIME,
+            None => STATEFUL_SESSION_LIFETIME,
+        };
         let secret = resumption.derive_ticket_psk(&nonce);
         let plain = ServerSessionValue::from(Tls13ServerSessionValue::new(
             CommonServerSessionValue::new(
@@ -1569,13 +1571,13 @@ impl ExpectFinished {
                 chosen_alpn_protocol,
                 resumption_data.to_vec(),
                 now,
+                session_lifetime,
             ),
             secret.as_ref(),
             age_add,
         ))
         .encoding();
 
-        let ticketer = config.ticketer.as_deref();
         let (ticket, lifetime) = if let Some(ticketer) = ticketer {
             let Some(ticket) = ticketer.encrypt(&plain) else {
                 return Ok(());

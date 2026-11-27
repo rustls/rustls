@@ -3,6 +3,7 @@ use core::any::Any;
 use core::fmt::Debug;
 use core::hash::Hasher;
 use core::ops::Deref;
+use core::time::Duration;
 
 use pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime};
 
@@ -13,16 +14,6 @@ use crate::error::{Error, InvalidMessage};
 use crate::msgs::{Codec, ListLength, MaybeEmpty, NonEmpty, Reader, SizedPayload, TlsListElement};
 use crate::sync::Arc;
 use crate::x509::wrap_in_sequence;
-
-// Marker types.  These are used to bind the fact some verification
-// (certificate chain or handshake signature) has taken place into
-// protocol states.  We use this to have the compiler check that there
-// are no 'goto fail'-style elisions of important checks before we
-// reach the traffic stage.
-//
-// These types are public, but cannot be directly constructed.  This
-// means their origins can be precisely determined by looking
-// for their `assertion` constructors.
 
 /// Something that can verify a server certificate chain, and verify
 /// signatures made by certificates.
@@ -401,6 +392,16 @@ impl TlsListElement for DistinguishedName {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
+// Marker types.  These are used to bind the fact some verification
+// (certificate chain or handshake signature) has taken place into
+// protocol states.  We use this to have the compiler check that there
+// are no 'goto fail'-style elisions of important checks before we
+// reach the traffic stage.
+//
+// These types are public, but cannot be directly constructed.  This
+// means their origins can be precisely determined by looking
+// for their `assertion` constructors.
+
 /// Zero-sized marker type representing verification of a signature.
 #[derive(Debug)]
 pub struct HandshakeSignatureValid(());
@@ -427,24 +428,54 @@ pub(crate) struct PeerVerified(());
 
 /// A peer's identity, which has been verified.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct VerifiedIdentity<'a>(Identity<'a>);
+pub struct VerifiedIdentity<'a> {
+    identity: Identity<'a>,
+    expiry: Option<UnixTime>,
+}
 
 impl<'a> VerifiedIdentity<'a> {
     /// Make a `VerifiedIdentity`, noting that `identity` has been verified somehow.
+    ///
+    /// The verification has no known expiry; use [`VerifiedIdentity::with_expiry()`]
+    /// to add one.
     pub fn assertion(identity: Identity<'a>) -> Self {
-        VerifiedIdentity(identity)
+        Self {
+            identity,
+            expiry: None,
+        }
+    }
+
+    /// Note the verification of this identity at/after `expiry`.
+    ///
+    /// For example, this could be the earliest `notAfter` time of the certificates
+    /// used to verify the identity.  rustls uses this to limit the lifetime of
+    /// resumption sessions, so that they cannot outlive the verification of the
+    /// identity they were established with.
+    pub fn with_expiry(self, expiry: UnixTime) -> Self {
+        Self {
+            expiry: Some(expiry),
+            ..self
+        }
     }
 
     /// Borrow the verified [`Identity`].
     pub fn identity(&self) -> &Identity<'a> {
-        &self.0
+        &self.identity
+    }
+
+    /// The last moment at which the verification of this identity holds, if known.
+    pub fn expiry(&self) -> Option<UnixTime> {
+        self.expiry
     }
 
     /// Convert the value into an owned one.
     ///
     /// This is a straight move if the value is already owned.
     pub fn into_owned(self) -> VerifiedIdentity<'static> {
-        VerifiedIdentity(self.0.into_owned())
+        VerifiedIdentity {
+            identity: self.identity.into_owned(),
+            expiry: self.expiry,
+        }
     }
 
     pub(crate) fn as_marker(&self) -> PeerVerified {
@@ -452,13 +483,37 @@ impl<'a> VerifiedIdentity<'a> {
     }
 
     pub(crate) fn into_inner(self) -> Identity<'a> {
-        self.0
+        self.identity
+    }
+}
+
+impl<'a> Codec<'a> for VerifiedIdentity<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.identity.encode(bytes);
+        match self.expiry {
+            Some(expiry) => {
+                1u8.encode(bytes);
+                expiry.as_secs().encode(bytes);
+            }
+            None => 0u8.encode(bytes),
+        }
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let identity = Identity::read(r)?;
+        let expiry = match u8::read(r)? {
+            1 => Some(UnixTime::since_unix_epoch(Duration::from_secs(u64::read(
+                r,
+            )?))),
+            _ => None,
+        };
+        Ok(Self { identity, expiry })
     }
 }
 
 impl PartialEq<Identity<'_>> for VerifiedIdentity<'_> {
     fn eq(&self, other: &Identity<'_>) -> bool {
-        self.0 == *other
+        self.identity == *other
     }
 }
 
@@ -466,7 +521,7 @@ impl<'a> Deref for VerifiedIdentity<'a> {
     type Target = Identity<'a>;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.identity
     }
 }
 

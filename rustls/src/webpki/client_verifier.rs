@@ -359,7 +359,9 @@ impl ClientVerifier for WebPkiClientVerifier {
         )
         .build(&cert.0, identity.now)
         .map_err(pki_error)
-        .map(|_| VerifiedIdentity::assertion(identity.identity.clone()))
+        .map(|path| {
+            VerifiedIdentity::assertion(identity.identity.clone()).with_expiry(path.not_after())
+        })
     }
 
     fn verify_tls12_signature(

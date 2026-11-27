@@ -14,7 +14,7 @@ use rustls::client::{
 use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{CertificateIdentity, Identity, SelectedCredential, TicketProducer};
 use rustls::enums::{CertificateType, ProtocolVersion};
-use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
+use rustls::error::{ApiMisuse, CertificateError, Error, PeerMisbehaved};
 use rustls::pki_types::UnixTime;
 use rustls::server::{ServerSessionKey, Tls13Tickets};
 use rustls::time_provider::TimeProvider;
@@ -23,12 +23,14 @@ use rustls::{
 };
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, HandshakeBuffers, KeyType,
-    MultiTest, ServerConfigExt, make_client_config, make_client_config_with_kx_groups, make_pair,
-    make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
-    make_server_config_with_kx_groups, transfer, webpki_server_verifier_builder,
+    MultiTest, ServerConfigExt, make_client_config, make_client_config_with_auth,
+    make_client_config_with_kx_groups, make_pair, make_pair_for_arc_configs, make_pair_for_configs,
+    make_server_config, make_server_config_with_kx_groups,
+    make_server_config_with_mandatory_client_auth, transfer, webpki_server_verifier_builder,
 };
 
 use super::provider;
+use super::tests::TEST_CERTS_NOT_AFTER;
 
 #[test]
 fn client_only_attempts_resumption_with_compatible_security() {
@@ -1483,13 +1485,172 @@ fn tls12_client_resumption_does_not_extend_session_lifetime() {
     assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
 }
 
+#[test]
+fn client_sessions_do_not_outlive_server_certificate() {
+    for provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
+        let clock = Arc::new(AdjustableClock::at(TEST_CERTS_NOT_AFTER - 60 * 60));
+        let client_config = Arc::new(
+            ClientConfig::builder_with_details(provider.clone().into(), clock.clone())
+                .finish(KeyType::default()),
+        );
+        let server_config = Arc::new(make_server_config(KeyType::default(), &provider));
+
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+
+        clock.advance(Duration::from_secs(30 * 60));
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+
+        clock.advance(Duration::from_secs(60 * 60));
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        assert_eq!(
+            buf.handshake_until_error(&mut client, &mut server),
+            Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                CertificateError::ExpiredContext {
+                    time: UnixTime::since_unix_epoch(Duration::from_secs(
+                        TEST_CERTS_NOT_AFTER + 30 * 60
+                    )),
+                    not_after: UnixTime::since_unix_epoch(Duration::from_secs(
+                        TEST_CERTS_NOT_AFTER
+                    )),
+                }
+            ))),
+        );
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+    }
+}
+
+#[test]
+fn server_rejects_ticket_older_than_max_lifetime() {
+    for provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
+        let client_config = Arc::new(make_client_config(KeyType::default(), &provider));
+
+        let clock = Arc::new(AdjustableClock::new());
+        let mut server_config = make_server_config(KeyType::default(), &provider);
+        server_config.ticketer = Some(Arc::new(LongLifetimeTicketer(
+            provider
+                .ticketer_factory
+                .ticketer()
+                .unwrap(),
+        )));
+        server_config.time_provider = clock.clone();
+        let server_config = Arc::new(server_config);
+
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+
+        clock.advance(Duration::from_secs(6 * 24 * 60 * 60));
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
+
+        clock.advance(Duration::from_secs(8 * 24 * 60 * 60));
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+    }
+}
+
+/// Issues tickets with a `ticket_lifetime` of 30 days.
+#[derive(Debug)]
+struct LongLifetimeTicketer(Arc<dyn TicketProducer>);
+
+impl TicketProducer for LongLifetimeTicketer {
+    fn encrypt(&self, plain: &[u8]) -> Option<Vec<u8>> {
+        self.0.encrypt(plain)
+    }
+
+    fn decrypt(&self, cipher: &[u8]) -> Option<Vec<u8>> {
+        self.0.decrypt(cipher)
+    }
+
+    fn lifetime(&self) -> Duration {
+        Duration::from_secs(30 * 24 * 60 * 60)
+    }
+}
+
+#[test]
+fn server_sessions_do_not_outlive_client_certificate() {
+    for (provider, stateless) in [
+        (provider::DEFAULT_TLS12_PROVIDER, false),
+        (provider::DEFAULT_TLS12_PROVIDER, true),
+        (provider::DEFAULT_TLS13_PROVIDER, false),
+        (provider::DEFAULT_TLS13_PROVIDER, true),
+    ] {
+        let client_config = Arc::new(make_client_config_with_auth(KeyType::default(), &provider));
+
+        let clock = Arc::new(AdjustableClock::at(TEST_CERTS_NOT_AFTER - 60 * 60));
+        let mut server_config =
+            make_server_config_with_mandatory_client_auth(KeyType::default(), &provider);
+        server_config.time_provider = clock.clone();
+        if stateless {
+            server_config.ticketer = Some(
+                provider
+                    .ticketer_factory
+                    .ticketer()
+                    .unwrap(),
+            );
+        }
+        let server_config = Arc::new(server_config);
+
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+
+        clock.advance(Duration::from_secs(30 * 60));
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        buf.handshake(&mut client, &mut server);
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
+
+        clock.advance(Duration::from_secs(60 * 60));
+        let (mut client, mut server, mut buf) =
+            make_pair_for_arc_configs(&client_config, &server_config);
+        assert_eq!(
+            buf.handshake_until_error(&mut client, &mut server),
+            Err(ErrorFromPeer::Server(Error::InvalidCertificate(
+                CertificateError::ExpiredContext {
+                    time: UnixTime::since_unix_epoch(Duration::from_secs(
+                        TEST_CERTS_NOT_AFTER + 30 * 60
+                    )),
+                    not_after: UnixTime::since_unix_epoch(Duration::from_secs(
+                        TEST_CERTS_NOT_AFTER
+                    )),
+                }
+            ))),
+        );
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+    }
+}
+
 /// A `TimeProvider` that starts at the current time and only moves when told to.
 #[derive(Debug)]
 struct AdjustableClock(AtomicU64);
 
 impl AdjustableClock {
     fn new() -> Self {
-        Self(AtomicU64::new(UnixTime::now().as_secs()))
+        Self::at(UnixTime::now().as_secs())
+    }
+
+    fn at(secs: u64) -> Self {
+        Self(AtomicU64::new(secs))
     }
 
     fn advance(&self, by: Duration) {

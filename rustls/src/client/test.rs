@@ -63,7 +63,8 @@ fn tls12_client_session_value_roundtrip() {
         VerifiedIdentity::assertion(Identity::X509(crate::crypto::CertificateIdentity {
             end_entity: CertificateDer::from(&b"test cert"[..]),
             intermediates: vec![],
-        }));
+        }))
+        .with_expiry(UnixTime::since_unix_epoch(Duration::from_secs(1234570000)));
 
     let session = Tls12Session::new(
         TEST_PROVIDER.tls12_cipher_suites[0],
@@ -86,7 +87,8 @@ fn tls12_client_session_value_roundtrip() {
     assert_eq!(decoded.extended_ms, session.extended_ms);
     assert_eq!(decoded.common.ticket(), session.common.ticket());
     assert_eq!(decoded.common.epoch, session.common.epoch);
-    assert_eq!(*decoded.common.peer_identity(), peer_identity.into());
+    assert_eq!(decoded.common.lifetime, Duration::from_secs(2110));
+    assert_eq!(*decoded.common.peer_identity(), peer_identity);
 }
 
 #[test]
@@ -133,7 +135,7 @@ fn tls13_client_session_value_roundtrip() {
     assert_eq!(decoded.alpn, session.alpn);
     assert_eq!(decoded.common.ticket(), session.common.ticket());
     assert_eq!(decoded.common.epoch, session.common.epoch);
-    assert_eq!(*decoded.common.peer_identity(), peer_identity.into());
+    assert_eq!(*decoded.common.peer_identity(), peer_identity);
 }
 
 /// Tests that session_ticket(35) extension

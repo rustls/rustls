@@ -3,8 +3,8 @@ use core::time::Duration;
 
 use pki_types::{DnsName, UnixTime};
 
+use crate::crypto::CipherSuite;
 use crate::crypto::cipher::Payload;
-use crate::crypto::{CipherSuite, Identity};
 use crate::enums::{ApplicationProtocol, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::{Codec, MaybeEmpty, Reader, SessionId, SizedPayload};
@@ -87,6 +87,7 @@ impl<'a> Codec<'a> for ServerSessionValue<'a> {
 
 pub(crate) struct CommonServerSessionValue<'a> {
     pub(crate) creation_time_sec: u64,
+    expiry_sec: u64,
     pub(crate) sni: Option<DnsName<'a>>,
     pub(crate) cipher_suite: CipherSuite,
     pub(crate) peer_identity: Option<VerifiedIdentity<'a>>,
@@ -102,9 +103,20 @@ impl<'a> CommonServerSessionValue<'a> {
         alpn: Option<ApplicationProtocol<'a>>,
         application_data: Vec<u8>,
         creation_time: UnixTime,
+        lifetime: Duration,
     ) -> Self {
+        let creation_time_sec = creation_time.as_secs();
+        let mut expiry_sec = creation_time_sec.saturating_add(lifetime.as_secs());
+        if let Some(identity_expiry) = peer_identity
+            .as_ref()
+            .and_then(|identity| identity.expiry())
+        {
+            expiry_sec = Ord::min(expiry_sec, identity_expiry.as_secs());
+        }
+
         Self {
-            creation_time_sec: creation_time.as_secs(),
+            creation_time_sec,
+            expiry_sec,
             sni: sni.map(|s| s.to_owned()),
             cipher_suite,
             peer_identity,
@@ -116,6 +128,7 @@ impl<'a> CommonServerSessionValue<'a> {
     fn into_owned(self) -> CommonServerSessionValue<'static> {
         CommonServerSessionValue {
             creation_time_sec: self.creation_time_sec,
+            expiry_sec: self.expiry_sec,
             sni: self.sni.map(|s| s.into_owned()),
             cipher_suite: self.cipher_suite,
             peer_identity: self
@@ -126,11 +139,8 @@ impl<'a> CommonServerSessionValue<'a> {
         }
     }
 
-    /// Whether this session was created more than `lifetime` ago.
-    pub(crate) fn has_expired(&self, now: UnixTime, lifetime: Duration) -> bool {
-        self.creation_time_sec
-            .saturating_add(lifetime.as_secs())
-            < now.as_secs()
+    pub(crate) fn has_expired(&self, now: UnixTime) -> bool {
+        self.expiry_sec < now.as_secs()
     }
 
     pub(crate) fn can_resume(&self, suite: CipherSuite, sni: Option<&DnsName<'_>>) -> bool {
@@ -151,6 +161,7 @@ impl<'a> CommonServerSessionValue<'a> {
 impl Codec<'_> for CommonServerSessionValue<'_> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.creation_time_sec.encode(bytes);
+        self.expiry_sec.encode(bytes);
         if let Some(sni) = &self.sni {
             1u8.encode(bytes);
             let sni_bytes: &str = sni.as_ref();
@@ -177,6 +188,7 @@ impl Codec<'_> for CommonServerSessionValue<'_> {
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let creation_time_sec = u64::read(r)?;
+        let expiry_sec = u64::read(r)?;
         let sni = match u8::read(r)? {
             1 => {
                 let dns_name = SizedPayload::<u8, MaybeEmpty>::read(r)?;
@@ -192,10 +204,11 @@ impl Codec<'_> for CommonServerSessionValue<'_> {
 
         Ok(Self {
             creation_time_sec,
+            expiry_sec,
             sni,
             cipher_suite: CipherSuite::read(r)?,
             peer_identity: match u8::read(r)? {
-                1 => Some(VerifiedIdentity::assertion(Identity::read(r)?.into_owned())),
+                1 => Some(VerifiedIdentity::read(r)?.into_owned()),
                 _ => None,
             },
             alpn: match u8::read(r)? {
@@ -233,5 +246,6 @@ impl AsRef<[u8]> for ServerSessionKey<'_> {
 /// How long a session in [`ServerConfig::session_storage`] stays resumable.
 ///
 /// Advertised as `ticket_lifetime` for stateful TLS 1.3 tickets.  Tickets from
-/// [`ServerConfig::ticketer`] are bounded by its key rotation instead.
+/// [`ServerConfig::ticketer`] are bounded by its key rotation instead, and by
+/// the maximum ticket lifetime.
 pub(crate) const STATEFUL_SESSION_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);

@@ -120,9 +120,8 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.104.0-alpha.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4f05eb03bb89c8b88908947d1add6fbe564e58db7b686dbda59691aaec0e450"
+version = "0.104.0-alpha.9"
+source = "git+https://github.com/rustls/webpki?branch=jbp-verified-path-for#248fd11e5fe3bc605e403337e60ff5c9831290d4"
 dependencies = [
  "rustls-pki-types",
  "untrusted",
