@@ -296,10 +296,12 @@ mod tests {
             },
             Tls13ClientSessionInput {
                 suite: Tls13ProtocolSuite::Tcp(tls13_suite(CipherSuite(0xff13), &TEST_PROVIDER)),
-                peer_identity: VerifiedIdentity::assertion(Identity::X509(CertificateIdentity {
-                    end_entity: CertificateDer::from(&[][..]),
-                    intermediates: Vec::new(),
-                })),
+                peer_identity: Arc::new(VerifiedIdentity::assertion(Identity::X509(
+                    CertificateIdentity {
+                        end_entity: CertificateDer::from(&[][..]),
+                        intermediates: Vec::new(),
+                    },
+                ))),
                 quic_params: None,
                 alpn: None,
             },

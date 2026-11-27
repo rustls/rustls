@@ -258,7 +258,7 @@ impl fmt::Debug for Tls13Session {
 #[derive(Clone)]
 pub(crate) struct Tls13ClientSessionInput {
     pub(crate) suite: Tls13ProtocolSuite,
-    pub(crate) peer_identity: VerifiedIdentity<'static>,
+    pub(crate) peer_identity: Arc<VerifiedIdentity<'static>>,
     pub(crate) quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     pub(crate) alpn: Option<ApplicationProtocol<'static>>,
 }
@@ -314,7 +314,7 @@ impl Tls12Session {
             session_id,
             master_secret: Zeroizing::new(*master_secret),
             extended_ms,
-            common: ClientSessionCommon::new(ticket, time_now, lifetime, peer_identity),
+            common: ClientSessionCommon::new(ticket, time_now, lifetime, Arc::new(peer_identity)),
         }
     }
 
@@ -374,13 +374,13 @@ impl ClientSessionCommon {
         ticket: Arc<SizedPayload<'static, u16>>,
         time_now: UnixTime,
         lifetime: Duration,
-        peer_identity: VerifiedIdentity<'static>,
+        peer_identity: Arc<VerifiedIdentity<'static>>,
     ) -> Self {
         Self {
             ticket,
             epoch: time_now.as_secs(),
             lifetime: Ord::min(lifetime, MAX_TICKET_LIFETIME),
-            peer_identity: Arc::new(peer_identity),
+            peer_identity,
         }
     }
 
@@ -541,9 +541,9 @@ mod tests {
             ),
             Tls13ClientSessionInput {
                 suite: Tls13ProtocolSuite::Tcp(TEST_PROVIDER.tls13_cipher_suites[0]),
-                peer_identity: VerifiedIdentity::assertion(Identity::RawPublicKey(
+                peer_identity: Arc::new(VerifiedIdentity::assertion(Identity::RawPublicKey(
                     SubjectPublicKeyInfoDer::from(&b"spki"[..]),
-                )),
+                ))),
                 quic_params: None,
                 alpn: None,
             },
