@@ -666,7 +666,7 @@ impl State<ClientSide> for ExpectEncryptedExtensions {
                     hs: self.hs,
                     session_input: Tls13ClientSessionInput {
                         suite: self.suite,
-                        peer_identity,
+                        peer_identity: Arc::new(peer_identity),
                         quic_params,
                         alpn: selected_alpn.cloned(),
                     },
@@ -1275,7 +1275,7 @@ impl VerifySidePeerIdentity<ClientSide> for AwaitServerIdentityVerification {
             hs: self.hs,
             session_input: Tls13ClientSessionInput {
                 suite: self.suite,
-                peer_identity: peer_identity.into_owned(),
+                peer_identity: Arc::new(peer_identity.into_owned()),
                 quic_params: self.quic_params,
                 alpn,
             },
@@ -1542,7 +1542,7 @@ impl State<ClientSide> for ExpectFinished {
             .peer_identity
             .as_marker();
         output.output(OutputEvent::PeerIdentity(
-            st.session_input.peer_identity.clone(),
+            (*st.session_input.peer_identity).clone(),
         ));
         output.output(OutputEvent::Exporter(Box::new(exporter)));
         output

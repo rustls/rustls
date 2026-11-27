@@ -1272,9 +1272,9 @@ mod tests {
                 ),
                 Tls13ClientSessionInput {
                     suite: Tls13ProtocolSuite::Tcp(TEST_PROVIDER.tls13_cipher_suites[0]),
-                    peer_identity: VerifiedIdentity::assertion(Identity::RawPublicKey(
+                    peer_identity: Arc::new(VerifiedIdentity::assertion(Identity::RawPublicKey(
                         SubjectPublicKeyInfoDer::from(&b"spki"[..]),
-                    )),
+                    ))),
                     quic_params: None,
                     alpn: None,
                 },

@@ -108,7 +108,7 @@ fn tls13_client_session_value_roundtrip() {
         },
         Tls13ClientSessionInput {
             suite: Tls13ProtocolSuite::Tcp(TEST_PROVIDER.tls13_cipher_suites[0]),
-            peer_identity: peer_identity.clone(),
+            peer_identity: Arc::new(peer_identity.clone()),
             quic_params: Some(SizedPayload::<u16, MaybeEmpty>::from(vec![
                 0xaa, 0xbb, 0xcc, 0xdd,
             ])),
@@ -134,6 +134,31 @@ fn tls13_client_session_value_roundtrip() {
     assert_eq!(decoded.common.ticket(), session.common.ticket());
     assert_eq!(decoded.common.epoch, session.common.epoch);
     assert_eq!(*decoded.common.peer_identity(), peer_identity.into());
+}
+
+#[test]
+fn tls13_ticket_sessions_share_peer_identity() {
+    let ticket = NewSessionTicketPayloadTls13::new(
+        Duration::from_secs(1800),
+        0x1234_5678,
+        [0u8; 32],
+        vec![0x11, 0x22, 0x33],
+    );
+    let input = Tls13ClientSessionInput {
+        suite: Tls13ProtocolSuite::Tcp(TEST_PROVIDER.tls13_cipher_suites[0]),
+        peer_identity: Arc::new(VerifiedIdentity::assertion(Identity::RawPublicKey(
+            pki_types::SubjectPublicKeyInfoDer::from(&b"raw public key"[..]),
+        ))),
+        quic_params: None,
+        alpn: None,
+    };
+    let first = Tls13Session::new(&ticket, input.clone(), &[0x55; 48], UnixTime::now());
+    let second = Tls13Session::new(&ticket, input, &[0x55; 48], UnixTime::now());
+
+    assert!(Arc::ptr_eq(
+        &first.common.peer_identity,
+        &second.common.peer_identity
+    ));
 }
 
 /// Tests that session_ticket(35) extension
@@ -472,9 +497,9 @@ fn test_client_rejects_tls12_server_hello_echoing_compatibility_session_id() {
             ),
             Tls13ClientSessionInput {
                 suite: Tls13ProtocolSuite::Tcp(TEST_PROVIDER.tls13_cipher_suites[0]),
-                peer_identity: VerifiedIdentity::assertion(Identity::RawPublicKey(
+                peer_identity: Arc::new(VerifiedIdentity::assertion(Identity::RawPublicKey(
                     pki_types::SubjectPublicKeyInfoDer::from(&b"spki"[..]),
-                )),
+                ))),
                 quic_params: None,
                 alpn: None,
             },
@@ -1231,9 +1256,9 @@ fn client_receives_ee_accepting_early_data(
             &ticket,
             Tls13ClientSessionInput {
                 suite: Tls13ProtocolSuite::Tcp(TLS13_TEST_SUITE),
-                peer_identity: VerifiedIdentity::assertion(Identity::RawPublicKey(
+                peer_identity: Arc::new(VerifiedIdentity::assertion(Identity::RawPublicKey(
                     pki_types::SubjectPublicKeyInfoDer::from(&b"spki"[..]),
-                )),
+                ))),
                 quic_params: None,
                 alpn: Some(ApplicationProtocol::Http2),
             },
