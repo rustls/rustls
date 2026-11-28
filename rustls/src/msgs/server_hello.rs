@@ -439,11 +439,35 @@ impl Codec<'_> for EchConfigPayload {
 pub(crate) struct EchConfigContents {
     pub key_config: HpkeKeyConfig,
     pub maximum_name_length: u8,
-    pub public_name: DnsName<'static>,
+    public_name: SizedPayload<'static, u8, MaybeEmpty>,
     pub extensions: Vec<EchConfigExtension>,
 }
 
 impl EchConfigContents {
+    pub(crate) fn new(
+        key_config: HpkeKeyConfig,
+        maximum_name_length: u8,
+        public_name: &DnsName<'_>,
+    ) -> Self {
+        let public_name: &str = public_name.as_ref();
+        Self {
+            key_config,
+            maximum_name_length,
+            public_name: SizedPayload::from(public_name.as_bytes().to_vec()),
+            extensions: Vec::new(),
+        }
+    }
+
+    /// Returns the `public_name`, or `None` if RFC 9849 section 6.1.7 says to ignore this config.
+    ///
+    /// `DnsName` rejects names whose final label looks like an IPv4 address, but not a trailing dot.
+    pub(crate) fn public_name(&self) -> Option<DnsName<'_>> {
+        match self.public_name.bytes() {
+            [.., b'.'] => None,
+            name => DnsName::try_from(name).ok(),
+        }
+    }
+
     /// Returns true if there is more than one extension of a given
     /// type.
     pub(crate) fn has_duplicate_extension(&self) -> bool {
@@ -467,9 +491,7 @@ impl Codec<'_> for EchConfigContents {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.key_config.encode(bytes);
         self.maximum_name_length.encode(bytes);
-        let dns_name = &self.public_name.borrow();
-        SizedPayload::<u8, MaybeEmpty>::from(Payload::Borrowed(dns_name.as_ref().as_ref()))
-            .encode(bytes);
+        self.public_name.encode(bytes);
         self.extensions.encode(bytes);
     }
 
@@ -477,11 +499,7 @@ impl Codec<'_> for EchConfigContents {
         Ok(Self {
             key_config: HpkeKeyConfig::read(r)?,
             maximum_name_length: u8::read(r)?,
-            public_name: {
-                DnsName::try_from(SizedPayload::<u8, MaybeEmpty>::read(r)?.bytes())
-                    .map_err(|_| InvalidMessage::InvalidServerName)?
-                    .into_owned()
-            },
+            public_name: SizedPayload::read(r)?.into_owned(),
             extensions: Vec::read(r)?,
         })
     }
@@ -642,7 +660,7 @@ mod tests {
                 }],
             },
             maximum_name_length: 0,
-            public_name: DnsName::try_from("example.com").unwrap(),
+            public_name: SizedPayload::from(b"example.com".to_vec()),
             extensions: vec![],
         }
     }
